@@ -123,16 +123,19 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 	var largeCacheDivisor int = 1
 	if v := os.Getenv("HTND_LARGE_CACHE_DIVISOR"); v != "" {
-		if mb, err := strconv.Atoi(v); err == nil && mb > 0 {
-			largeCacheDivisor = mb << 20
+		if divisor, err := strconv.Atoi(v); err == nil && divisor > 0 {
+			if divisor > 50 {
+				divisor = 50
+			}
+			largeCacheDivisor = divisor << 20
 		}
 	}
 
-	pruningWindowSizeForCaches := int(config.PruningDepth())
-	finalityWindowSizeForCaches := int(config.FinalityDepth())
+	pruningWindowSizeForCaches := int(config.PruningDepth()) / largeCacheDivisor
+	finalityWindowSizeForCaches := int(config.FinalityDepth()) / largeCacheDivisor
 	// This is used for caches that are used as part of deletePastBlocks that need to traverse until
 	// the previous pruning point.
-	pruningWindowSizePlusFinalityDepthForCache := int(pruningWindowSizeForCaches+finalityWindowSizeForCaches) / largeCacheDivisor
+	pruningWindowSizePlusFinalityDepthForCache := int(pruningWindowSizeForCaches + finalityWindowSizeForCaches)
 	log.Infof("Largest cache sizes %d, %d, %d", finalityWindowSizeForCaches, pruningWindowSizeForCaches, pruningWindowSizePlusFinalityDepthForCache)
 
 	var preallocateCaches bool
