@@ -91,7 +91,7 @@ func (bhs *blockHeaderStore) blockHeader(dbContext model.DBReader, stagingShard 
 
 	headerCached, ok := bhs.cache.Get(blockHash)
 	if ok && headerCached != nil {
-		return headerCached.(externalapi.BlockHeader), nil
+		return headerCached, nil
 	}
 
 	headerBytes, err := dbContext.Get(bhs.hashAsKey(blockHash))

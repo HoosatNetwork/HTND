@@ -176,7 +176,7 @@ func newErrorResponse(err error, reason appmessage.RejectReason) *appmessage.Sub
 
 // logBlockAcceptance logs successful block acceptance
 func logBlockAcceptance(block *externalapi.DomainBlock, txCount int) {
-	log.Infof("Accepted block %s via submit\t\t\t with %d tx",
+	log.Infof("Accepted block %s via submit with %d tx",
 		consensushashing.BlockHash(block), txCount)
 	log.Debugf("Accepted PoW hash %s", block.PoWHash)
 }
