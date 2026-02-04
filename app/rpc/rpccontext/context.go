@@ -21,6 +21,8 @@ type Context struct {
 	UTXOIndex         *utxoindex.UTXOIndex
 	ShutDownChan      chan<- struct{}
 
+	GetBlockDAGInfoCache GetBlockDAGInfoCache
+
 	NotificationManager *NotificationManager
 }
 

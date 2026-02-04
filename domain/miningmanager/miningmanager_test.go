@@ -436,7 +436,10 @@ func TestHighPriorityTransactions(t *testing.T) {
 			t.Fatalf("error submitting low-priority transaction: %+v", err)
 		}
 		expectedLowPriorityAcceptedTransactions := []*externalapi.DomainTransaction{lowPriorityParentTransaction}
-		if !reflect.DeepEqual(lowPriorityAcceptedTransactions, expectedLowPriorityAcceptedTransactions) {
+		if !reflect.DeepEqual(
+			transactionIDsAsValues(lowPriorityAcceptedTransactions),
+			transactionIDsAsValues(expectedLowPriorityAcceptedTransactions),
+		) {
 			t.Errorf("Expected only lowPriorityParent (%v) to be in lowPriorityAcceptedTransactions, but got %v",
 				consensushashing.TransactionIDs(expectedLowPriorityAcceptedTransactions),
 				consensushashing.TransactionIDs(lowPriorityAcceptedTransactions))
@@ -452,11 +455,14 @@ func TestHighPriorityTransactions(t *testing.T) {
 		}
 		expectedFirstHighPriorityAcceptedTransactions :=
 			[]*externalapi.DomainTransaction{firstHighPriorityParentTransaction, firstHighPriorityChildTransaction}
-		if !reflect.DeepEqual(firstHighPriorityAcceptedTransactions, expectedFirstHighPriorityAcceptedTransactions) {
+		if !reflect.DeepEqual(
+			transactionIDsAsValues(firstHighPriorityAcceptedTransactions),
+			transactionIDsAsValues(expectedFirstHighPriorityAcceptedTransactions),
+		) {
 			t.Errorf(
 				"Expected both firstHighPriority transaction (%v) to be in firstHighPriorityAcceptedTransactions, but got %v",
-				consensushashing.TransactionIDs(firstHighPriorityAcceptedTransactions),
-				consensushashing.TransactionIDs(expectedFirstHighPriorityAcceptedTransactions))
+				consensushashing.TransactionIDs(expectedFirstHighPriorityAcceptedTransactions),
+				consensushashing.TransactionIDs(firstHighPriorityAcceptedTransactions))
 		}
 		// Insert secondHighPriorityParentTransaction
 		secondHighPriorityAcceptedTransactions, err :=
@@ -466,13 +472,25 @@ func TestHighPriorityTransactions(t *testing.T) {
 		}
 		expectedSecondHighPriorityAcceptedTransactions :=
 			[]*externalapi.DomainTransaction{secondHighPriorityParentTransaction, secondHighPriorityChildTransaction}
-		if !reflect.DeepEqual(secondHighPriorityAcceptedTransactions, expectedSecondHighPriorityAcceptedTransactions) {
+		if !reflect.DeepEqual(
+			transactionIDsAsValues(secondHighPriorityAcceptedTransactions),
+			transactionIDsAsValues(expectedSecondHighPriorityAcceptedTransactions),
+		) {
 			t.Errorf(
 				"Expected both secondHighPriority transaction (%v) to be in secondHighPriorityAcceptedTransactions, but got %v",
-				consensushashing.TransactionIDs(secondHighPriorityAcceptedTransactions),
-				consensushashing.TransactionIDs(expectedSecondHighPriorityAcceptedTransactions))
+				consensushashing.TransactionIDs(expectedSecondHighPriorityAcceptedTransactions),
+				consensushashing.TransactionIDs(secondHighPriorityAcceptedTransactions))
 		}
 	})
+}
+
+func transactionIDsAsValues(txs []*externalapi.DomainTransaction) []externalapi.DomainTransactionID {
+	ids := consensushashing.TransactionIDs(txs)
+	values := make([]externalapi.DomainTransactionID, len(ids))
+	for i, id := range ids {
+		values[i] = *id
+	}
+	return values
 }
 
 func TestRevalidateHighPriorityTransactions(t *testing.T) {

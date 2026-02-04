@@ -35,12 +35,15 @@ func (bss *blockWindowHeapSliceStore) IsStaged(stagingArea *model.StagingArea) b
 func (bss *blockWindowHeapSliceStore) Get(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	stagingShard := bss.stagingShard(stagingArea)
 
-	if heapSlice, ok := stagingShard.toAdd[newShardKey(blockHash, windowSize)]; ok {
+	heapSlice, ok := stagingShard.toAdd[newShardKey(blockHash, windowSize)]
+
+	if ok && heapSlice != nil {
 		return heapSlice, nil
 	}
 
-	if heapSlice, ok := bss.cache.Get(blockHash, windowSize); ok {
-		return heapSlice, nil
+	heapSliceCached, ok := bss.cache.Get(blockHash, windowSize)
+	if ok && heapSliceCached != nil {
+		return heapSliceCached, nil
 	}
 
 	return nil, errors.Wrap(database.ErrNotFound, "Window heap slice not found")

@@ -1,6 +1,7 @@
 package pruningmanager
 
 import (
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -149,8 +150,11 @@ func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.Staging
 
 	virtualGHOSTDAGData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, model.VirtualBlockHash, false)
 	if database.IsNotFoundError(err) {
-		log.Infof("UpdatePruningPointByVirtual failed to retrieve with %s\n", model.VirtualBlockHash)
-		return err
+		// Virtual GHOSTDAG data may not exist yet (e.g., after an aborted IBD stage or
+		// in a staging consensus that hasn't initialized virtual). In such cases there
+		// is nothing to update yet.
+		log.Infof("UpdatePruningPointByVirtual skipped: virtual GHOSTDAG data not found (%s)", model.VirtualBlockHash)
+		return nil
 	}
 	if err != nil {
 		return err
@@ -1069,6 +1073,7 @@ func (pm *pruningManager) CheckIfShouldDeletePastBlocks(stagingArea *model.Stagi
 	if currentPruningPointHeader.BlueScore()-previousDeletionPointHeader.BlueScore() < pm.pruningDepth {
 		return false, nil
 	}
+	debug.FreeOSMemory()
 	return true, previousDeletionPoint
 }
 
@@ -1154,7 +1159,7 @@ func (pm *pruningManager) PruneAllBlocksBelow(stagingArea *model.StagingArea, pr
 			return err
 		}
 	}
-
+	debug.FreeOSMemory()
 	return nil
 }
 
@@ -1210,6 +1215,20 @@ func (pm *pruningManager) PruningPointAndItsAnticone() ([]*externalapi.DomainHas
 func (pm *pruningManager) ExpectedHeaderPruningPoint(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
 	ghostdagData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, blockHash, false)
 	if database.IsNotFoundError(err) {
+		// Virtual GHOSTDAG data might be missing during early init / IBD teardown.
+		// For virtual, fall back to current pruning point (or genesis if unset) so we
+		// don't hard-fail block template building.
+		if blockHash.Equal(model.VirtualBlockHash) {
+			pruningPoint, ppErr := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+			if database.IsNotFoundError(ppErr) {
+				return pm.genesisHash, nil
+			}
+			if ppErr != nil {
+				return nil, ppErr
+			}
+			return pruningPoint, nil
+		}
+
 		log.Infof("ExpectedHeaderPruningPoint failed to retrieve with %s\n", blockHash)
 		return nil, err
 	}

@@ -3,7 +3,6 @@ package ping
 import (
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/protocol/common"
 	"github.com/Hoosat-Oy/HTND/app/protocol/flowcontext"
 	"github.com/pkg/errors"
 
@@ -62,7 +61,7 @@ func (flow *sendPingsFlow) start() error {
 			return err
 		}
 
-		message, err := flow.incomingRoute.DequeueWithTimeout(common.DefaultTimeout)
+		message, err := flow.incomingRoute.DequeueWithTimeout(30 * time.Second)
 		if err != nil {
 			if errors.Is(err, router.ErrTimeout) {
 				return errors.Wrap(flowcontext.ErrPingTimeout, err.Error())

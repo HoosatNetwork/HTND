@@ -28,10 +28,6 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	}
 
 	ghostdagData, err := v.ghostdagDataStores[0].Get(v.databaseContext, stagingArea, blockHash, false)
-	if database.IsNotFoundError(err) {
-		log.Infof("checkMergeSizeLimit failed to retrieve with %s\n", blockHash)
-		return err
-	}
 	if err != nil {
 		return err
 	}
@@ -86,7 +82,6 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
-	v.updateBlockVersion(header)
 
 	if !isBlockWithTrustedData {
 		// TODO: Enable these on block v5 after finding reason for the issues with the blocks

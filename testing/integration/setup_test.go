@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
@@ -38,6 +39,7 @@ type harnessParams struct {
 
 // setupHarness creates a single appHarness with given parameters
 func setupHarness(t *testing.T, params *harnessParams) (harness *appHarness, teardownFunc func()) {
+	constants.ForceSetBlockVersion(1)
 	harness = &appHarness{
 		p2pAddress:              params.p2pAddress,
 		rpcAddress:              params.rpcAddress,
@@ -60,6 +62,7 @@ func setupHarness(t *testing.T, params *harnessParams) (harness *appHarness, tea
 
 // setupHarnesses creates multiple appHarnesses, according to number of parameters passed
 func setupHarnesses(t *testing.T, harnessesParams []*harnessParams) (harnesses []*appHarness, teardownFunc func()) {
+	constants.ForceSetBlockVersion(1)
 	var teardowns []func()
 	for _, params := range harnessesParams {
 		harness, teardownFunc := setupHarness(t, params)
@@ -76,6 +79,7 @@ func setupHarnesses(t *testing.T, harnessesParams []*harnessParams) (harnesses [
 
 // standardSetup creates a standard setup of 3 appHarnesses that should work for most tests
 func standardSetup(t *testing.T) (appHarness1, appHarness2, appHarness3 *appHarness, teardownFunc func()) {
+	constants.ForceSetBlockVersion(1)
 	harnesses, teardown := setupHarnesses(t, []*harnessParams{
 		{
 			p2pAddress:              p2pAddress1,
@@ -100,6 +104,7 @@ func standardSetup(t *testing.T) (appHarness1, appHarness2, appHarness3 *appHarn
 }
 
 func setRPCClient(t *testing.T, harness *appHarness) {
+	constants.ForceSetBlockVersion(1)
 	var err error
 	harness.rpcClient, err = newTestRPCClient(harness.rpcAddress)
 	if err != nil {
@@ -118,6 +123,7 @@ func teardownHarness(t *testing.T, harness *appHarness) {
 }
 
 func setApp(t *testing.T, harness *appHarness) {
+	constants.ForceSetBlockVersion(1)
 	var err error
 	harness.app, err = app.NewComponentManager(harness.config, harness.database, make(chan struct{}))
 	if err != nil {
@@ -126,6 +132,7 @@ func setApp(t *testing.T, harness *appHarness) {
 }
 
 func setDatabaseContext(t *testing.T, harness *appHarness) {
+	constants.ForceSetBlockVersion(1)
 	var err error
 	harness.database, err = openDB(harness.config)
 	if err != nil {

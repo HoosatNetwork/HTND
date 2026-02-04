@@ -59,7 +59,7 @@ func (c *LRUCache) Get(blockHash *externalapi.DomainHash, index uint64) (*extern
 	// defer c.lock.RUnlock()
 	key := newKey(blockHash, index)
 	value, ok := c.cache[key]
-	if !ok {
+	if !ok || value == nil {
 		return nil, false
 	}
 	return value, true
@@ -70,8 +70,8 @@ func (c *LRUCache) Has(blockHash *externalapi.DomainHash, index uint64) bool {
 	// c.lock.RLock()
 	// defer c.lock.RUnlock()
 	key := newKey(blockHash, index)
-	_, ok := c.cache[key]
-	return ok
+	dagdata, ok := c.cache[key]
+	return ok && dagdata != nil
 }
 
 // Remove removes the entry for the the given key. Does nothing if

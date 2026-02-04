@@ -1,24 +1,34 @@
 package rpchandlers
 
 import (
+	"time"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 )
 
+const getBlockDAGInfoCacheTTL = 250 * time.Millisecond
+
 // HandleGetBlockDAGInfo handles the respectively named RPC command
-func HandleGetBlockDAGInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.Message) (appmessage.Message, error) {
+func HandleGetBlockDAGInfo(context *rpccontext.Context, rpcRouter *router.Router, _ appmessage.Message) (appmessage.Message, error) {
+	now := time.Now()
+	if cached, ok := context.GetBlockDAGInfoCache.Get(now); ok {
+		return cached, nil
+	}
+
 	params := context.Config.ActiveNetParams
 	consensus := context.Domain.Consensus()
-
-	response := appmessage.NewGetBlockDAGInfoResponseMessage()
-	response.NetworkName = params.Name
 
 	syncInfo, err := consensus.GetSyncInfo()
 	if err != nil {
 		return nil, err
 	}
+
+	response := appmessage.NewGetBlockDAGInfoResponseMessage()
+	response.NetworkName = params.Name
+
 	response.BlockCount = syncInfo.BlockCount
 	response.HeaderCount = syncInfo.HeaderCount
 
@@ -43,6 +53,8 @@ func HandleGetBlockDAGInfo(context *rpccontext.Context, _ *router.Router, _ appm
 		return nil, err
 	}
 	response.PruningPointHash = pruningPoint.String()
+
+	context.GetBlockDAGInfoCache.Set(response, getBlockDAGInfoCacheTTL, now)
 
 	return response, nil
 }

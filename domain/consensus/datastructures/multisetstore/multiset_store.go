@@ -14,7 +14,7 @@ var bucketName = []byte("multisets")
 // multisetStore represents a store of Multisets
 type multisetStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache
+	cache   *lrucache.LRUCache[model.Multiset]
 	bucket  model.DBBucket
 }
 
@@ -22,7 +22,7 @@ type multisetStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.MultisetStore {
 	return &multisetStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New(cacheSize, preallocate),
+		cache:   lrucache.New[model.Multiset](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -41,13 +41,13 @@ func (ms *multisetStore) IsStaged(stagingArea *model.StagingArea) bool {
 // Get gets the multiset associated with the given blockHash
 func (ms *multisetStore) Get(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (model.Multiset, error) {
 	stagingShard := ms.stagingShard(stagingArea)
-
-	if multiset, ok := stagingShard.toAdd[*blockHash]; ok {
+	multiset, ok := stagingShard.toAdd[*blockHash]
+	if ok && multiset != nil {
 		return multiset.Clone(), nil
 	}
-	multiset, ok := ms.cache.Get(blockHash)
-	if ok && multiset != nil {
-		return multiset.(model.Multiset).Clone(), nil
+	multisetCached, ok := ms.cache.Get(blockHash)
+	if ok && multisetCached != nil {
+		return multisetCached.Clone(), nil
 	}
 
 	multisetBytes, err := dbContext.Get(ms.hashAsKey(blockHash))
@@ -66,6 +66,7 @@ func (ms *multisetStore) Get(dbContext model.DBReader, stagingArea *model.Stagin
 // Delete deletes the multiset associated with the given blockHash
 func (ms *multisetStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := ms.stagingShard(stagingArea)
+	ms.cache.Remove(blockHash)
 
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
 		delete(stagingShard.toAdd, *blockHash)

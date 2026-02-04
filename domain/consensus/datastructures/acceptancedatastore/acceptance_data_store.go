@@ -14,7 +14,7 @@ var bucketName = []byte("acceptance-data")
 // acceptanceDataStore represents a store of AcceptanceData
 type acceptanceDataStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache
+	cache   *lrucache.LRUCache[externalapi.AcceptanceData]
 	bucket  model.DBBucket
 }
 
@@ -22,7 +22,7 @@ type acceptanceDataStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.AcceptanceDataStore {
 	return &acceptanceDataStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New(cacheSize, preallocate),
+		cache:   lrucache.New[externalapi.AcceptanceData](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -40,13 +40,13 @@ func (ads *acceptanceDataStore) IsStaged(stagingArea *model.StagingArea) bool {
 // Get gets the acceptanceData associated with the given blockHash
 func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (externalapi.AcceptanceData, error) {
 	stagingShard := ads.stagingShard(stagingArea)
-
-	if acceptanceData, ok := stagingShard.toAdd[*blockHash]; ok {
+	acceptanceData, ok := stagingShard.toAdd[*blockHash]
+	if ok && acceptanceData != nil {
 		return acceptanceData.Clone(), nil
 	}
-	acceptanceData, ok := ads.cache.Get(blockHash)
-	if ok && acceptanceData != nil {
-		return acceptanceData.(externalapi.AcceptanceData).Clone(), nil
+	acceptanceDataCached, ok := ads.cache.Get(blockHash)
+	if ok && acceptanceDataCached != nil {
+		return acceptanceDataCached.Clone(), nil
 	}
 
 	acceptanceDataBytes, err := dbContext.Get(ads.hashAsKey(blockHash))
@@ -65,7 +65,7 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 // Delete deletes the acceptanceData associated with the given blockHash
 func (ads *acceptanceDataStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := ads.stagingShard(stagingArea)
-
+	ads.cache.Remove(blockHash)
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
 		delete(stagingShard.toAdd, *blockHash)
 		return

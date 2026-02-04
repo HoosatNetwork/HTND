@@ -144,66 +144,106 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 
 	disqualifiedCandidates := hashset.New()
 
+	// Hot-path optimizations:
+	// 1. Cache status lookups to avoid repeating DB reads for the same hashes.
+	// 2. For each parent, cache the number of relevant children (non-virtual, non-header-only).
+	// 3. Track per-parent disqualified-child counts and push a parent once its relevant children are all disqualified.
+	statusCache := make(map[externalapi.DomainHash]externalapi.BlockStatus)
+	relevantChildCountCache := make(map[externalapi.DomainHash]uint32)
+	disqualifiedChildCount := make(map[externalapi.DomainHash]uint32)
+	pushedToHeap := make(map[externalapi.DomainHash]struct{})
+
+	getStatus := func(hash *externalapi.DomainHash) (externalapi.BlockStatus, error) {
+		key := *hash
+		if status, ok := statusCache[key]; ok {
+			return status, nil
+		}
+		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, hash)
+		if err != nil {
+			return 0, err
+		}
+		statusCache[key] = status
+		return status, nil
+	}
+
+	getRelevantChildCount := func(parent *externalapi.DomainHash) (uint32, error) {
+		key := *parent
+		if count, ok := relevantChildCountCache[key]; ok {
+			return count, nil
+		}
+
+		allChildren, err := csm.dagTopologyManager.Children(stagingArea, parent)
+		if err != nil {
+			return 0, err
+		}
+
+		var count uint32
+		for _, child := range allChildren {
+			if child.Equal(model.VirtualBlockHash) {
+				continue
+			}
+			childStatus, err := getStatus(child)
+			if err != nil {
+				return 0, err
+			}
+			if childStatus == externalapi.StatusHeaderOnly {
+				continue
+			}
+			count++
+		}
+		relevantChildCountCache[key] = count
+		return count, nil
+	}
+
 	for {
 		if candidatesHeap.Len() == 0 {
 			return nil, errors.New("virtual has no valid parent candidates")
 		}
 		selectedParentCandidate := candidatesHeap.Pop()
 
-		log.Debugf("Checking block %s for selected parent eligibility", selectedParentCandidate)
-		selectedParentCandidateStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, selectedParentCandidate)
-		if database.IsNotFoundError(err) {
-			log.Infof("selectVirtualSelectedParent failed to retrieve with %s\n", selectedParentCandidate)
-			return nil, err
-		}
+		selectedParentCandidateStatus, err := getStatus(selectedParentCandidate)
 		if err != nil {
 			return nil, err
 		}
 		if selectedParentCandidateStatus == externalapi.StatusUTXOValid {
-			log.Debugf("Block %s is valid. Returning it as the selected parent", selectedParentCandidate)
 			return selectedParentCandidate, nil
 		}
 
-		log.Debugf("Block %s is not valid. Adding it to the disqualified set", selectedParentCandidate)
+		// Header-only blocks are not considered for the "all children disqualified" rule,
+		// so we can skip propagating disqualification through their parents.
+		if selectedParentCandidateStatus == externalapi.StatusHeaderOnly {
+			continue
+		}
+
 		disqualifiedCandidates.Add(selectedParentCandidate)
 
 		candidateParents, err := csm.dagTopologyManager.Parents(stagingArea, selectedParentCandidate)
 		if err != nil {
 			return nil, err
 		}
-		log.Debugf("The parents of block %s are: %s", selectedParentCandidate, candidateParents)
 		for _, parent := range candidateParents {
-			allParentChildren, err := csm.dagTopologyManager.Children(stagingArea, parent)
+			if parent.Equal(model.VirtualBlockHash) {
+				continue
+			}
+
+			relevantChildrenCount, err := getRelevantChildCount(parent)
 			if err != nil {
 				return nil, err
 			}
-			log.Debugf("The children of block %s are: %s", parent, allParentChildren)
 
-			// remove virtual and any headers-only blocks from parentChildren if such are there
-			nonHeadersOnlyParentChildren := make([]*externalapi.DomainHash, 0, len(allParentChildren))
-			for _, parentChild := range allParentChildren {
-				if parentChild.Equal(model.VirtualBlockHash) {
-					continue
-				}
-
-				parentChildStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, parentChild)
-				if err != nil {
-					return nil, err
-				}
-				if parentChildStatus == externalapi.StatusHeaderOnly {
-					continue
-				}
-				nonHeadersOnlyParentChildren = append(nonHeadersOnlyParentChildren, parentChild)
+			parentKey := *parent
+			disqualifiedChildCount[parentKey]++
+			if disqualifiedChildCount[parentKey] < relevantChildrenCount {
+				continue
 			}
-			log.Debugf("The non-virtual, non-headers-only children of block %s are: %s", parent, nonHeadersOnlyParentChildren)
+			if _, ok := pushedToHeap[parentKey]; ok {
+				continue
+			}
+			pushedToHeap[parentKey] = struct{}{}
 
-			if disqualifiedCandidates.ContainsAllInSlice(nonHeadersOnlyParentChildren) {
-				log.Debugf("The disqualified set contains all the "+
-					"children of %s. Adding it to the candidate heap", nonHeadersOnlyParentChildren)
-				err := candidatesHeap.Push(parent)
-				if err != nil {
-					return nil, err
-				}
+			err = candidatesHeap.Push(parent)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}

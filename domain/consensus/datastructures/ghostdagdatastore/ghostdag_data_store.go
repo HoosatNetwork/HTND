@@ -48,16 +48,17 @@ func (gds *ghostdagDataStore) Get(dbContext model.DBReader, stagingArea *model.S
 	stagingShard := gds.stagingShard(stagingArea)
 
 	key := newKey(blockHash, isTrustedData)
-	if blockGHOSTDAGData, ok := stagingShard.toAdd[key]; ok {
-		return blockGHOSTDAGData, nil
-	}
-	blockGHOSTDAGData, ok := gds.cache.Get(blockHash, isTrustedData)
+	blockGHOSTDAGData, ok := stagingShard.toAdd[key]
 	if ok && blockGHOSTDAGData != nil {
 		return blockGHOSTDAGData, nil
 	}
 
-	blockGHOSTDAGDataBytes, err := dbContext.Get(gds.serializeKey(key))
+	blockGHOSTDAGDataCached, ok := gds.cache.Get(blockHash, isTrustedData)
+	if ok && blockGHOSTDAGDataCached != nil {
+		return blockGHOSTDAGDataCached, nil
+	}
 
+	blockGHOSTDAGDataBytes, err := dbContext.Get(gds.serializeKey(key))
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +73,7 @@ func (gds *ghostdagDataStore) Get(dbContext model.DBReader, stagingArea *model.S
 
 func (gds *ghostdagDataStore) UnstageAll(stagingArea *model.StagingArea) {
 	stagingShard := gds.stagingShard(stagingArea)
-
+	gds.cache.Clear()
 	stagingShard.toAdd = make(map[key]*externalapi.BlockGHOSTDAGData)
 }
 

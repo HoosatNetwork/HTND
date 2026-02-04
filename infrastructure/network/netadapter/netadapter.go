@@ -1,6 +1,8 @@
 package netadapter
 
 import (
+	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -101,6 +103,16 @@ func (na *NetAdapter) Stop() error {
 // P2PConnect tells the NetAdapter's underlying p2p server to initiate a connection
 // to the given address
 func (na *NetAdapter) P2PConnect(address string) error {
+	if na.cfg != nil && na.cfg.DisallowLoopbackP2PConnections {
+		if host, _, err := net.SplitHostPort(address); err == nil {
+			if strings.EqualFold(host, "localhost") {
+				return errors.Errorf("refusing to P2P connect to loopback address %q", address)
+			}
+			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+				return errors.Errorf("refusing to P2P connect to loopback address %q", address)
+			}
+		}
+	}
 	_, err := na.p2pServer.Connect(address)
 	return err
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucachehashpairtoblockghostdagdatahashpair"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"google.golang.org/protobuf/proto"
 )
@@ -43,18 +42,16 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 	stagingShard := daaws.stagingShard(stagingArea)
 
 	dbKey := newDBKey(blockHash, index)
-	if pair, ok := stagingShard.toAdd[dbKey]; ok {
-		return pair, nil
-	}
-	pair, ok := daaws.cache.Get(blockHash, index)
+	pair, ok := stagingShard.toAdd[dbKey]
 	if ok && pair != nil {
 		return pair, nil
 	}
+	pairCached, ok := daaws.cache.Get(blockHash, index)
+	if ok && pairCached != nil {
+		return pairCached, nil
+	}
 
 	pairBytes, err := dbContext.Get(daaws.key(dbKey))
-	if database.IsNotFoundError(err) {
-		daaws.cache.Add(blockHash, index, nil)
-	}
 	if err != nil {
 		return nil, err
 	}

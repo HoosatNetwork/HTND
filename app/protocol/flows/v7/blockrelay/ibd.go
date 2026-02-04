@@ -2,6 +2,7 @@ package blockrelay
 
 import (
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -83,10 +84,11 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	}
 	flow.updateBlockVersionFromDAAScore(block.Header.DAAScore())
 	isFinishedSuccessfully := false
-	var err error
+	var err error = nil
 	defer func() {
 		flow.UnsetIBDRunning()
-		flow.logIBDFinished(isFinishedSuccessfully, err)
+		debug.FreeOSMemory()
+		err = flow.logIBDFinished(isFinishedSuccessfully, err)
 	}()
 
 	relayBlockHash := consensushashing.BlockHash(block)
@@ -163,7 +165,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	log.Infof("Finished syncing blocks up to %s", relayBlockHash)
 	isFinishedSuccessfully = true
 
-	return nil
+	return err
 }
 
 func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment() (*externalapi.DomainHash, *externalapi.DomainHash, error) {
@@ -315,7 +317,7 @@ func (flow *handleIBDFlow) isGenesisVirtualSelectedParent() (bool, error) {
 	return virtualSelectedParent.Equal(flow.Config().NetParams().GenesisHash), nil
 }
 
-func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error) {
+func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error) error {
 	successString := "successfully"
 	if !isFinishedSuccessfully {
 		if err != nil {
@@ -323,8 +325,10 @@ func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error
 		} else {
 			successString = "(interrupted)"
 		}
+		return err
 	}
 	log.Infof("IBD with peer %s finished %s", flow.peer, successString)
+	return nil
 }
 
 func (flow *handleIBDFlow) getSyncerChainBlockLocator(
@@ -354,14 +358,16 @@ func (flow *handleIBDFlow) getSyncerChainBlockLocator(
 	}
 }
 
-func (flow *handleIBDFlow) syncPruningPointFutureHeaders(consensus externalapi.Consensus,
+func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
+	consensus externalapi.Consensus,
 	syncerHeaderSelectedTipHash, highestKnownSyncerChainHash, relayBlockHash *externalapi.DomainHash,
-	highBlockDAAScoreHint uint64) error {
+	highBlockDAAScoreHint uint64,
+) error {
 
 	log.Infof("Downloading headers from %s", flow.peer)
 
 	if highestKnownSyncerChainHash.Equal(syncerHeaderSelectedTipHash) {
-		// No need to get syncer selected tip headers, so sync relay past and return
+		// No need to get syncer selected tip headers → sync relay past and return
 		return flow.syncMissingRelayPast(consensus, syncerHeaderSelectedTipHash, relayBlockHash)
 	}
 
@@ -374,78 +380,40 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(consensus externalapi.C
 	if err != nil {
 		return err
 	}
+
 	progressReporter := newIBDProgressReporter(highestSharedBlockHeader.DAAScore(), highBlockDAAScoreHint, "block headers")
 
-	// Keep a short queue of BlockHeadersMessages so that there's
-	// never a moment when the node is not validating and inserting
-	// headers
-	blockHeadersMessageChan := make(chan *appmessage.BlockHeadersMessage, 2)
-	errChan := make(chan error)
-	spawn("handleRelayInvsFlow-syncPruningPointFutureHeaders", func() {
-		for {
-			blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
-			if err != nil {
-				errChan <- err
-				return
-			}
-			if doneIBD {
-				close(blockHeadersMessageChan)
-				return
-			}
-			if len(blockHeadersMessage.BlockHeaders) == 0 {
-				// The syncer should have sent a done message if the search completed, and not an empty list
-				errChan <- protocolerrors.Errorf(true, "Received an empty headers message from peer %s", flow.peer)
-				return
-			}
+	for {
+		// Receive next batch of headers (this call blocks)
+		blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
+		if err != nil {
+			return err
+		}
 
-			blockHeadersMessageChan <- blockHeadersMessage
+		if doneIBD {
+			// IBD of headers is finished → proceed to sync relay past
+			return flow.syncMissingRelayPast(consensus, syncerHeaderSelectedTipHash, relayBlockHash)
+		}
 
-			err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestNextHeaders())
+		if len(blockHeadersMessage.BlockHeaders) == 0 {
+			return protocolerrors.Errorf(true, "Received an empty headers message from peer %s", flow.peer)
+		}
+
+		// Process all headers in this batch
+		for _, header := range blockHeadersMessage.BlockHeaders {
+			err = flow.processHeader(consensus, header)
 			if err != nil {
-				errChan <- err
-				return
+				return err
 			}
 		}
-	})
 
-	for {
-		select {
-		case ibdBlocksMessage, ok := <-blockHeadersMessageChan:
-			if !ok {
-				return flow.syncMissingRelayPast(consensus, syncerHeaderSelectedTipHash, relayBlockHash)
-			}
-			for _, header := range ibdBlocksMessage.BlockHeaders {
-				err = flow.processHeader(consensus, header)
-				if err != nil {
-					return err
-				}
-			}
+		// Report progress
+		lastReceivedHeader := blockHeadersMessage.BlockHeaders[len(blockHeadersMessage.BlockHeaders)-1]
+		progressReporter.reportProgress(len(blockHeadersMessage.BlockHeaders), lastReceivedHeader.DAAScore)
 
-			// var wg sync.WaitGroup
-			// var errs []error
-			// mu := sync.Mutex{} // Protects errs slice for concurrent access
-
-			// for _, header := range ibdBlocksMessage.BlockHeaders {
-			// 	wg.Add(1)
-			// 	go func(c externalapi.Consensus, h *appmessage.MsgBlockHeader) {
-			// 		defer wg.Done()
-			// 		if err := flow.processHeader(c, h); err != nil {
-			// 			mu.Lock()
-			// 			log.Errorf("Failed to process header: %v", err)
-			// 			errs = append(errs, err)
-			// 			mu.Unlock()
-			// 		}
-			// 	}(consensus, header)
-			// }
-			// wg.Wait()
-
-			// if len(errs) > 0 {
-			// 	return fmt.Errorf("encountered %d errors during header processing: %v", len(errs), errs)
-			// }
-
-			lastReceivedHeader := ibdBlocksMessage.BlockHeaders[len(ibdBlocksMessage.BlockHeaders)-1]
-			progressReporter.reportProgress(len(ibdBlocksMessage.BlockHeaders), lastReceivedHeader.DAAScore)
-		case err := <-errChan:
+		// Ask for the next batch
+		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestNextHeaders())
+		if err != nil {
 			return err
 		}
 	}
@@ -559,7 +527,13 @@ func (flow *handleIBDFlow) processHeader(consensus externalapi.Consensus, msgBlo
 	}
 	err = consensus.ValidateAndInsertBlock(block, false, true)
 	if err != nil {
-		log.Infof("Rejected block header %s from %s during IBD: %s", blockHash, flow.peer, err)
+		if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
+			return nil
+		} else {
+			log.Errorf("Rejected block header %s from %s during IBD: %+v", blockHash, flow.peer, errors.WithStack(err))
+			return err
+		}
+
 	}
 
 	return nil
@@ -728,7 +702,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
 					continue
 				} else {
-					log.Infof("Rejected block %s from %s during IBD: %s", expectedHash, flow.peer, err)
+					log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
 					continue
 				}
 			}
@@ -770,7 +744,7 @@ func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64)
 	})
 	if err != nil {
 		if database.IsNotFoundError(err) {
-			log.Infof("Resolve virtual failed because could not find block UTXO diff or some other required data, that is most likely because you are trying to sync to a chain which has disqualified blocks. Find another peer to connect to.")
+			log.Errorf("Error: Not found: %s", err)
 			return err
 		}
 		return err

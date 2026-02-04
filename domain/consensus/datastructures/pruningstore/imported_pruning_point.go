@@ -165,10 +165,6 @@ func (ps *pruningStore) ClearImportedPruningPointMultiset(dbContext model.DBWrit
 
 func (ps *pruningStore) ImportedPruningPointMultiset(dbContext model.DBReader) (model.Multiset, error) {
 	multisetBytes, err := dbContext.Get(ps.importedPruningPointMultisetKey)
-	// if database.IsNotFoundError(err) {
-	// 	log.Infof("ImportedPruningPointMultiset failed to retrieve with %s\n", ps.importedPruningPointMultisetKey)
-	// 	return nil, err
-	// }
 	if err != nil {
 		return nil, err
 	}

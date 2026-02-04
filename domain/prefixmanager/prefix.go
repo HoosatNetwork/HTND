@@ -1,6 +1,8 @@
 package prefixmanager
 
 import (
+	"runtime/debug"
+
 	"github.com/Hoosat-Oy/HTND/domain/prefixmanager/prefix"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 )
@@ -73,7 +75,12 @@ func DeleteInactivePrefix(db database.Database) error {
 	}
 
 	log.Infof("Compacting database after prefix delete")
-	return db.Compact()
+	err = db.Compact()
+	if err != nil {
+		return err
+	}
+	debug.FreeOSMemory()
+	return nil
 }
 
 func deletePrefix(dataAccessor database.DataAccessor, prefix *prefix.Prefix) error {

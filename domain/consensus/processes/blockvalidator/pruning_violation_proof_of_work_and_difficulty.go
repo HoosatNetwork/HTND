@@ -226,6 +226,7 @@ func (v *blockValidator) checkParentHeadersExist(stagingArea *model.StagingArea,
 
 	return nil
 }
+
 func (v *blockValidator) checkPruningPointViolation(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) error {
 	// check if the pruning point is on past of at least one parent of the header's parents.
 

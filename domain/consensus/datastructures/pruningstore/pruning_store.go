@@ -69,10 +69,6 @@ func (ps *pruningStore) PruningPointCandidate(dbContext model.DBReader, stagingA
 	}
 
 	candidateBytes, err := dbContext.Get(ps.candidatePruningPointHashKey)
-	if database.IsNotFoundError(err) {
-		log.Infof("PruningPointCandidate failed to retrieve with %s\n", ps.candidatePruningPointHashKey)
-		return nil, err
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -176,30 +172,27 @@ func (ps *pruningStore) PruningPoint(dbContext model.DBReader, stagingArea *mode
 
 func (ps *pruningStore) PruningPointByIndex(dbContext model.DBReader, stagingArea *model.StagingArea, index uint64) (*externalapi.DomainHash, error) {
 	stagingShard := ps.stagingShard(stagingArea)
-
-	if hash, exists := stagingShard.pruningPointByIndex[index]; exists {
-		return hash, nil
+	prunintpoint, exists := stagingShard.pruningPointByIndex[index]
+	if exists && prunintpoint != nil {
+		return prunintpoint, nil
 	}
 
-	if hash, exists := ps.pruningPointByIndexCache.Get(index); exists {
-		return hash, nil
+	prunintpointCached, exists := ps.pruningPointByIndexCache.Get(index)
+	if exists && prunintpointCached != nil {
+		return prunintpointCached, nil
 	}
 
 	pruningPointBytes, err := dbContext.Get(ps.indexAsKey(index))
-	if database.IsNotFoundError(err) {
-		log.Infof("PruningPointByIndex failed to retrieve with %d\n", index)
-		return nil, err
-	}
 	if err != nil {
 		return nil, err
 	}
 
-	pruningPoint, err := ps.deserializePruningPoint(pruningPointBytes)
+	pruningPointDeserialized, err := ps.deserializePruningPoint(pruningPointBytes)
 	if err != nil {
 		return nil, err
 	}
-	ps.pruningPointByIndexCache.Add(index, pruningPoint)
-	return pruningPoint, nil
+	ps.pruningPointByIndexCache.Add(index, pruningPointDeserialized)
+	return pruningPointDeserialized, nil
 }
 
 func (ps *pruningStore) serializeHash(hash *externalapi.DomainHash) ([]byte, error) {
@@ -346,10 +339,6 @@ func (ps *pruningStore) CurrentPruningPointIndex(dbContext model.DBReader, stagi
 	}
 
 	pruningPointIndexBytes, err := dbContext.Get(ps.currentPruningPointIndexKey)
-	// if database.IsNotFoundError(err) {
-	// 	log.Infof("CurrentPruningPointIndex failed to retrieve with %s\n", ps.currentPruningPointIndexKey)
-	// 	return 0, err
-	// }
 	if err != nil {
 		return 0, err
 	}

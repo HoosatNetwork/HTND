@@ -14,7 +14,7 @@ var bucketName = []byte("block-relations")
 // blockRelationStore represents a store of BlockRelations
 type blockRelationStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache
+	cache   *lrucache.LRUCache[*model.BlockRelations]
 	bucket  model.DBBucket
 }
 
@@ -22,7 +22,7 @@ type blockRelationStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.BlockRelationStore {
 	return &blockRelationStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New(cacheSize, preallocate),
+		cache:   lrucache.New[*model.BlockRelations](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -39,20 +39,17 @@ func (brs *blockRelationStore) IsStaged(stagingArea *model.StagingArea) bool {
 
 func (brs *blockRelationStore) BlockRelation(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*model.BlockRelations, error) {
 	stagingShard := brs.stagingShard(stagingArea)
-
-	if blockRelations, ok := stagingShard.toAdd[*blockHash]; ok {
+	blockRelations, ok := stagingShard.toAdd[*blockHash]
+	if ok && blockRelations != nil {
 		return blockRelations.Clone(), nil
 	}
-	blockRelations, ok := brs.cache.Get(blockHash)
-	if ok || blockRelations != nil {
-		return blockRelations.(*model.BlockRelations).Clone(), nil
+
+	blockRelationsCached, ok := brs.cache.Get(blockHash)
+	if ok && blockRelationsCached != nil {
+		return blockRelationsCached.Clone(), nil
 	}
 
 	blockRelationsBytes, err := dbContext.Get(brs.hashAsKey(blockHash))
-	// if database.IsNotFoundError(err) {
-	// 	log.Infof("BlockRelation failed to retrieve with %s\n", blockHash)
-	// 	return nil, err
-	// }
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +78,7 @@ func (brs *blockRelationStore) Has(dbContext model.DBReader, stagingArea *model.
 
 func (brs *blockRelationStore) UnstageAll(stagingArea *model.StagingArea) {
 	stagingShard := brs.stagingShard(stagingArea)
+	brs.cache.Clear()
 	stagingShard.toAdd = make(map[externalapi.DomainHash]*model.BlockRelations)
 }
 

@@ -16,7 +16,7 @@ var bucketName = []byte("blocks")
 // blockStore represents a store of blocks
 type blockStore struct {
 	shardID     model.StagingShardID
-	cache       *lrucache.LRUCache
+	cache       *lrucache.LRUCache[*externalapi.DomainBlock]
 	countCached uint64
 	bucket      model.DBBucket
 	countKey    model.DBKey
@@ -26,7 +26,7 @@ type blockStore struct {
 func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockStore, error) {
 	blockStore := &blockStore{
 		shardID:  staging.GenerateShardingID(),
-		cache:    lrucache.New(cacheSize, preallocate),
+		cache:    lrucache.New[*externalapi.DomainBlock](cacheSize, preallocate),
 		bucket:   prefixBucket.Bucket(bucketName),
 		countKey: prefixBucket.Key([]byte("blocks-count")),
 	}
@@ -81,19 +81,18 @@ func (bs *blockStore) Block(dbContext model.DBReader, stagingArea *model.Staging
 }
 
 func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStagingShard, blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
-	if block, ok := stagingShard.toAdd[*blockHash]; ok {
+
+	block, ok := stagingShard.toAdd[*blockHash]
+	if ok && block != nil {
 		return block.Clone(), nil
 	}
-	block, ok := bs.cache.Get(blockHash)
-	if ok && block != nil {
-		return block.(*externalapi.DomainBlock).Clone(), nil
+
+	blockCached, ok := bs.cache.Get(blockHash)
+	if ok && blockCached != nil {
+		return blockCached.Clone(), nil
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
-	if database.IsNotFoundError(err) {
-		log.Debugf("Block failed to retrieve with %s\n", blockHash)
-		return nil, err
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +108,8 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 // HasBlock returns whether a block with a given hash exists in the store.
 func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	stagingShard := bs.stagingShard(stagingArea)
-
-	if _, ok := stagingShard.toAdd[*blockHash]; ok {
+	block, ok := stagingShard.toAdd[*blockHash]
+	if ok && block != nil {
 		return true, nil
 	}
 
@@ -144,6 +143,7 @@ func (bs *blockStore) Blocks(dbContext model.DBReader, stagingArea *model.Stagin
 // Delete deletes the block associated with the given blockHash
 func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := bs.stagingShard(stagingArea)
+	bs.cache.Remove(blockHash)
 
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
 		delete(stagingShard.toAdd, *blockHash)

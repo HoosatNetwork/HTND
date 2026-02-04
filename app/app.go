@@ -24,7 +24,7 @@ import (
 
 const (
 	leveldbCacheSizeMiB  = 256
-	pebbledbCacheSizeMiB = 1024
+	pebbledbCacheSizeMiB = 2048
 	defaultDataDirname   = "datadir2"
 )
 

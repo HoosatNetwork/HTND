@@ -16,7 +16,7 @@ var countKeyName = []byte("block-headers-count")
 // blockHeaderStore represents a store of blocks
 type blockHeaderStore struct {
 	shardID     model.StagingShardID
-	cache       *lrucache.LRUCache
+	cache       *lrucache.LRUCache[externalapi.BlockHeader]
 	countCached uint64
 	bucket      model.DBBucket
 	countKey    model.DBKey
@@ -26,7 +26,7 @@ type blockHeaderStore struct {
 func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockHeaderStore, error) {
 	blockHeaderStore := &blockHeaderStore{
 		shardID:  staging.GenerateShardingID(),
-		cache:    lrucache.New(cacheSize, preallocate),
+		cache:    lrucache.New[externalapi.BlockHeader](cacheSize, preallocate),
 		bucket:   prefixBucket.Bucket(bucketName),
 		countKey: prefixBucket.Key(countKeyName),
 	}
@@ -84,20 +84,17 @@ func (bhs *blockHeaderStore) BlockHeader(dbContext model.DBReader, stagingArea *
 
 func (bhs *blockHeaderStore) blockHeader(dbContext model.DBReader, stagingShard *blockHeaderStagingShard,
 	blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error) {
-
-	if header, ok := stagingShard.toAdd[*blockHash]; ok {
+	header, ok := stagingShard.toAdd[*blockHash]
+	if ok && header != nil {
 		return header, nil
 	}
-	header, ok := bhs.cache.Get(blockHash)
-	if ok && header != nil {
-		return header.(externalapi.BlockHeader), nil
+
+	headerCached, ok := bhs.cache.Get(blockHash)
+	if ok && headerCached != nil {
+		return headerCached, nil
 	}
 
 	headerBytes, err := dbContext.Get(bhs.hashAsKey(blockHash))
-	if database.IsNotFoundError(err) {
-		log.Debugf("blockHeader failed to retrieve with %s\n", blockHash)
-		return nil, err
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -113,8 +110,8 @@ func (bhs *blockHeaderStore) blockHeader(dbContext model.DBReader, stagingShard 
 // HasBlock returns whether a block header with a given hash exists in the store.
 func (bhs *blockHeaderStore) HasBlockHeader(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	stagingShard := bhs.stagingShard(stagingArea)
-
-	if _, ok := stagingShard.toAdd[*blockHash]; ok {
+	block, ok := stagingShard.toAdd[*blockHash]
+	if ok && block != nil {
 		return true, nil
 	}
 
@@ -150,7 +147,7 @@ func (bhs *blockHeaderStore) BlockHeaders(dbContext model.DBReader, stagingArea 
 // Delete deletes the block associated with the given blockHash
 func (bhs *blockHeaderStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := bhs.stagingShard(stagingArea)
-
+	bhs.cache.Remove(blockHash)
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
 		delete(stagingShard.toAdd, *blockHash)
 		return

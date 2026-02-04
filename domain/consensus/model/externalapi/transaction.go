@@ -28,17 +28,19 @@ type DomainTransaction struct {
 
 // Clone returns a clone of DomainTransaction
 func (tx *DomainTransaction) Clone() *DomainTransaction {
-	payloadClone := make([]byte, len(tx.Payload))
-	copy(payloadClone, tx.Payload)
-
-	inputsClone := make([]*DomainTransactionInput, len(tx.Inputs))
-	for i, input := range tx.Inputs {
-		inputsClone[i] = input.Clone()
+	inputsClone := make([]*DomainTransactionInput, 0, len(tx.Inputs))
+	for _, input := range tx.Inputs {
+		inputsClone = append(inputsClone, input.Clone())
 	}
 
-	outputsClone := make([]*DomainTransactionOutput, len(tx.Outputs))
-	for i, output := range tx.Outputs {
-		outputsClone[i] = output.Clone()
+	outputsClone := make([]*DomainTransactionOutput, 0, len(tx.Outputs))
+	for _, output := range tx.Outputs {
+		outputsClone = append(outputsClone, output.Clone())
+	}
+
+	var payloadClone []byte
+	if len(tx.Payload) > 0 {
+		payloadClone = append([]byte(nil), tx.Payload...)
 	}
 
 	var idClone *DomainTransactionID

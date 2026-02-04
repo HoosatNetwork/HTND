@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"os"
+	"strconv"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/blockwindowheapslicestore"
@@ -120,7 +121,22 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	dbManager := consensusdatabase.New(db)
 	prefixBucket := consensusdatabase.MakeBucket(dbPrefix.Serialize())
 
-	pruningWindowSizeForCaches := int(config.PruningDepth())
+	var largeCacheDivisor int = 1
+	if v := os.Getenv("HTND_LARGE_CACHE_DIVISOR"); v != "" {
+		if divisor, err := strconv.Atoi(v); err == nil && divisor > 0 {
+			if divisor > 50 {
+				divisor = 50
+			}
+			largeCacheDivisor = divisor << 20
+		}
+	}
+
+	pruningWindowSizeForCaches := int(config.PruningDepth()) / largeCacheDivisor
+	finalityWindowSizeForCaches := int(config.FinalityDepth()) / largeCacheDivisor
+	// This is used for caches that are used as part of deletePastBlocks that need to traverse until
+	// the previous pruning point.
+	pruningWindowSizePlusFinalityDepthForCache := int(pruningWindowSizeForCaches + finalityWindowSizeForCaches)
+	log.Infof("Largest cache sizes %d, %d, %d", finalityWindowSizeForCaches, pruningWindowSizeForCaches, pruningWindowSizePlusFinalityDepthForCache)
 
 	var preallocateCaches bool
 	if f.preallocateCaches != nil {
@@ -128,10 +144,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	} else {
 		preallocateCaches = defaultPreallocateCaches
 	}
-
-	// This is used for caches that are used as part of deletePastBlocks that need to traverse until
-	// the previous pruning point.
-	pruningWindowSizePlusFinalityDepthForCache := int(config.PruningDepth() + config.FinalityDepth())
 
 	// Data Structures
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
@@ -155,7 +167,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	headersSelectedTipStore := headersselectedtipstore.New(prefixBucket)
 	finalityStore := finalitystore.New(prefixBucket, 1000, preallocateCaches)
 	headersSelectedChainStore := headersselectedchainstore.New(prefixBucket, pruningWindowSizeForCaches, preallocateCaches)
-	daaBlocksStore := daablocksstore.New(prefixBucket, pruningWindowSizeForCaches, int(config.FinalityDepth()), preallocateCaches)
+	daaBlocksStore := daablocksstore.New(prefixBucket, pruningWindowSizeForCaches, finalityWindowSizeForCaches, preallocateCaches)
 	windowHeapSliceStore := blockwindowheapslicestore.New(1000, preallocateCaches)
 
 	newReachabilityDataStore := reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
@@ -596,10 +608,12 @@ func (f *factory) NewTestConsensus(config *Config, testName string) (
 	}
 
 	testConsensusDBPrefix := &prefix.Prefix{}
+	constants.ForceSetBlockVersion(1)
 	consensusAsInterface, shouldMigrate, err := f.NewConsensus(config, db, testConsensusDBPrefix, nil)
 	if err != nil {
 		return nil, nil, err
 	}
+	constants.ForceSetBlockVersion(1)
 
 	if shouldMigrate {
 		return nil, nil, errors.Errorf("A fresh consensus should never return shouldMigrate=true")
@@ -622,7 +636,7 @@ func (f *factory) NewTestConsensus(config *Config, testName string) (
 	teardown = func(keepDataDir bool) {
 		db.Close()
 		if !keepDataDir {
-			err := os.RemoveAll(f.dataDir)
+			err := os.RemoveAll(datadir)
 			if err != nil {
 				log.Errorf("Error removing data directory for test consensus: %s", err)
 			}

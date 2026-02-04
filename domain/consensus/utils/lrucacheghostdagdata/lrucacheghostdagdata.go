@@ -70,8 +70,8 @@ func (c *LRUCache) Has(blockHash *externalapi.DomainHash, isTrustedData bool) bo
 	// c.lock.RLock()
 	// defer c.lock.RUnlock()
 	key := newKey(blockHash, isTrustedData)
-	_, ok := c.cache[key]
-	return ok
+	dagdata, ok := c.cache[key]
+	return ok && dagdata != nil
 }
 
 // Remove removes the entry for the the given key. Does nothing if
@@ -91,4 +91,11 @@ func (c *LRUCache) evictRandom() {
 	}
 	key := newKey(&keyToEvict.blockHash, keyToEvict.isTrustedData)
 	delete(c.cache, key)
+}
+func (c *LRUCache) Clear() {
+	var keyToEvict lruKey
+	for key := range c.cache {
+		keyToDelete := newKey(&key.blockHash, keyToEvict.isTrustedData)
+		delete(c.cache, keyToDelete)
+	}
 }

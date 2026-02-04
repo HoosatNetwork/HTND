@@ -51,8 +51,8 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 		return err
 	}
 
-	log.Infof("Header download stage of IBD with pruning proof completed successfully from %s. "+
-		"Committing the staging consensus and deleting the previous obsolete one if such exists.", flow.peer)
+	log.Infof("Header download stage of IBD with pruning proof completed successfully from %s.", flow.peer)
+	log.Infof("Committing the staging consensus and deleting the previous obsolete one if such exists.")
 	err = flow.Domain().CommitStagingConsensus()
 	if err != nil {
 		return err

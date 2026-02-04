@@ -55,8 +55,8 @@ func (c *LRUCache) Get(key uint64) (*externalapi.DomainHash, bool) {
 func (c *LRUCache) Has(key uint64) bool {
 	// c.lock.RLock()
 	// defer c.lock.RUnlock()
-	_, ok := c.cache[key]
-	return ok
+	number, ok := c.cache[key]
+	return ok && number != nil
 }
 
 // Remove removes the entry for the the given key. Does nothing if

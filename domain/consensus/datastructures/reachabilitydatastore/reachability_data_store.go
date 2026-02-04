@@ -16,7 +16,7 @@ var reachabilityReindexRootKeyName = []byte("reachability-reindex-root")
 // reachabilityDataStore represents a store of ReachabilityData
 type reachabilityDataStore struct {
 	shardID                      model.StagingShardID
-	reachabilityDataCache        *lrucache.LRUCache
+	reachabilityDataCache        *lrucache.LRUCache[model.ReachabilityData]
 	reachabilityReindexRootCache *externalapi.DomainHash
 
 	reachabilityDataBucket     model.DBBucket
@@ -27,7 +27,7 @@ type reachabilityDataStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.ReachabilityDataStore {
 	return &reachabilityDataStore{
 		shardID:                    staging.GenerateShardingID(),
-		reachabilityDataCache:      lrucache.New(cacheSize, preallocate),
+		reachabilityDataCache:      lrucache.New[model.ReachabilityData](cacheSize, preallocate),
 		reachabilityDataBucket:     prefixBucket.Bucket(reachabilityDataBucketName),
 		reachabilityReindexRootKey: prefixBucket.Key(reachabilityReindexRootKeyName),
 	}
@@ -45,6 +45,7 @@ func (rds *reachabilityDataStore) Delete(dbContext model.DBWriter) error {
 	if err != nil {
 		return err
 	}
+	rds.reachabilityDataCache.Clear()
 
 	for ok := cursor.First(); ok; ok = cursor.Next() {
 		key, err := cursor.Key()
@@ -76,19 +77,17 @@ func (rds *reachabilityDataStore) IsStaged(stagingArea *model.StagingArea) bool 
 func (rds *reachabilityDataStore) ReachabilityData(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (model.ReachabilityData, error) {
 	stagingShard := rds.stagingShard(stagingArea)
 
-	if reachabilityData, ok := stagingShard.reachabilityData[*blockHash]; ok {
+	reachabilityData, ok := stagingShard.reachabilityData[*blockHash]
+	if ok && reachabilityData != nil {
 		return reachabilityData, nil
 	}
 
-	reachabilityData, ok := rds.reachabilityDataCache.Get(blockHash)
-	if ok && reachabilityData != nil {
-		return reachabilityData.(model.ReachabilityData), nil
+	reachabilityDataCached, ok := rds.reachabilityDataCache.Get(blockHash)
+	if ok && reachabilityDataCached != nil {
+		return reachabilityDataCached, nil
 	}
 
 	reachabilityDataBytes, err := dbContext.Get(rds.reachabilityDataBlockHashAsKey(blockHash))
-	if database.IsNotFoundError(err) {
-		rds.reachabilityDataCache.Add(blockHash, nil)
-	}
 	if err != nil {
 		return nil, err
 	}

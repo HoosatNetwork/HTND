@@ -1,7 +1,6 @@
 package utxodiffstore
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -17,8 +16,8 @@ var utxoDiffChildBucketName = []byte("utxo-diff-children")
 // utxoDiffStore represents a store of UTXODiffs
 type utxoDiffStore struct {
 	shardID             model.StagingShardID
-	utxoDiffCache       *lrucache.LRUCache
-	utxoDiffChildCache  *lrucache.LRUCache
+	utxoDiffCache       *lrucache.LRUCache[externalapi.UTXODiff]
+	utxoDiffChildCache  *lrucache.LRUCache[*externalapi.DomainHash]
 	utxoDiffBucket      model.DBBucket
 	utxoDiffChildBucket model.DBBucket
 }
@@ -27,8 +26,8 @@ type utxoDiffStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.UTXODiffStore {
 	return &utxoDiffStore{
 		shardID:             staging.GenerateShardingID(),
-		utxoDiffCache:       lrucache.New(cacheSize, preallocate),
-		utxoDiffChildCache:  lrucache.New(cacheSize, preallocate),
+		utxoDiffCache:       lrucache.New[externalapi.UTXODiff](cacheSize, preallocate),
+		utxoDiffChildCache:  lrucache.New[*externalapi.DomainHash](cacheSize, preallocate),
 		utxoDiffBucket:      prefixBucket.Bucket(utxoDiffBucketName),
 		utxoDiffChildBucket: prefixBucket.Bucket(utxoDiffChildBucketName),
 	}
@@ -63,13 +62,14 @@ func (uds *utxoDiffStore) isBlockHashStaged(stagingShard *utxoDiffStagingShard, 
 func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (externalapi.UTXODiff, error) {
 	stagingShard := uds.stagingShard(stagingArea)
 
-	if utxoDiff, ok := stagingShard.utxoDiffToAdd[*blockHash]; ok {
+	utxoDiff, ok := stagingShard.utxoDiffToAdd[*blockHash]
+	if ok && utxoDiff != nil {
 		return utxoDiff, nil
 	}
 
-	utxoDiff, ok := uds.utxoDiffCache.Get(blockHash)
-	if ok && utxoDiff != nil {
-		return utxoDiff.(externalapi.UTXODiff), nil
+	utxoDiffCached, ok := uds.utxoDiffCache.Get(blockHash)
+	if ok && utxoDiffCached != nil {
+		return utxoDiffCached, nil
 	}
 
 	utxoDiffBytes, err := dbContext.Get(uds.utxoDiffHashAsKey(blockHash))
@@ -81,6 +81,7 @@ func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.
 	if err != nil {
 		return nil, err
 	}
+
 	uds.utxoDiffCache.Add(blockHash, utxoDiffDeserialized)
 	return utxoDiffDeserialized, nil
 }
@@ -89,29 +90,25 @@ func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.
 func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
 	stagingShard := uds.stagingShard(stagingArea)
 
-	if utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]; ok {
+	utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
+	if ok && utxoDiffChild != nil {
 		return utxoDiffChild, nil
 	}
-
-	if utxoDiffChild, ok := uds.utxoDiffChildCache.Get(blockHash); ok {
-		return utxoDiffChild.(*externalapi.DomainHash), nil
+	utxoDiffChildCached, ok := uds.utxoDiffChildCache.Get(blockHash)
+	if ok && utxoDiffChildCached != nil {
+		return utxoDiffChildCached, nil
 	}
 
 	utxoDiffChildBytes, err := dbContext.Get(uds.utxoDiffChildHashAsKey(blockHash))
-	if database.IsNotFoundError(err) {
-		// Previously this logged the wrong key; show the child key bytes in hex
-		log.Infof("UTXODiffChild failed to retrieve with %s, key=%x\n", blockHash, uds.utxoDiffChildHashAsKey(blockHash).Bytes())
-		return nil, err
-	}
 	if err != nil {
 		return nil, err
 	}
 
-	utxoDiffChild, err := uds.deserializeUTXODiffChild(utxoDiffChildBytes)
+	utxoDiffChildDeserialized, err := uds.deserializeUTXODiffChild(utxoDiffChildBytes)
 	if err != nil {
 		return nil, err
 	}
-	uds.utxoDiffChildCache.Add(blockHash, utxoDiffChild)
+	uds.utxoDiffChildCache.Add(blockHash, utxoDiffChildDeserialized)
 	return utxoDiffChild, nil
 }
 
@@ -119,7 +116,8 @@ func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *m
 func (uds *utxoDiffStore) HasUTXODiffChild(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	stagingShard := uds.stagingShard(stagingArea)
 
-	if _, ok := stagingShard.utxoDiffChildToAdd[*blockHash]; ok {
+	utxoDiff, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
+	if ok && utxoDiff != nil {
 		return true, nil
 	}
 
@@ -133,6 +131,8 @@ func (uds *utxoDiffStore) HasUTXODiffChild(dbContext model.DBReader, stagingArea
 // Delete deletes the utxoDiff associated with the given blockHash
 func (uds *utxoDiffStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := uds.stagingShard(stagingArea)
+	uds.utxoDiffCache.Remove(blockHash)
+	uds.utxoDiffChildCache.Remove(blockHash)
 
 	if uds.isBlockHashStaged(stagingShard, blockHash) {
 		delete(stagingShard.utxoDiffToAdd, *blockHash)

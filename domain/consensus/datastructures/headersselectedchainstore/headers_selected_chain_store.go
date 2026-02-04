@@ -21,7 +21,7 @@ var highestChainBlockIndexKeyName = []byte("highest-chain-block-index")
 type headersSelectedChainStore struct {
 	shardID                     model.StagingShardID
 	cacheByIndex                *lrucacheuint64tohash.LRUCache
-	cacheByHash                 *lrucache.LRUCache
+	cacheByHash                 *lrucache.LRUCache[uint64]
 	cacheHighestChainBlockIndex uint64
 	bucketChainBlockHashByIndex model.DBBucket
 	bucketChainBlockIndexByHash model.DBBucket
@@ -33,7 +33,7 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.Hea
 	return &headersSelectedChainStore{
 		shardID:                     staging.GenerateShardingID(),
 		cacheByIndex:                lrucacheuint64tohash.New(cacheSize, preallocate),
-		cacheByHash:                 lrucache.New(cacheSize, preallocate),
+		cacheByHash:                 lrucache.New[uint64](cacheSize, preallocate),
 		bucketChainBlockHashByIndex: prefixBucket.Bucket(bucketChainBlockHashByIndexName),
 		bucketChainBlockIndexByHash: prefixBucket.Bucket(bucketChainBlockIndexByHashName),
 		highestChainBlockIndexKey:   prefixBucket.Key(highestChainBlockIndexKeyName),
@@ -93,26 +93,22 @@ func (hscs *headersSelectedChainStore) GetIndexByHash(dbContext model.DBReader, 
 		return 0, errors.Wrapf(database.ErrNotFound, "couldn't find block %s", blockHash)
 	}
 
-	if index, ok := hscs.cacheByHash.Get(blockHash); ok {
-		return index.(uint64), nil
+	if indexCached, ok := hscs.cacheByHash.Get(blockHash); ok {
+		return indexCached, nil
 	}
 
 	indexBytes, err := dbContext.Get(hscs.hashAsKey(blockHash))
-	if database.IsNotFoundError(err) {
-		log.Infof("GetIndexByHash failed to retrieve with %s\n", blockHash)
-		return 0, err
-	}
 	if err != nil {
 		return 0, err
 	}
 
-	index, err := hscs.deserializeIndex(indexBytes)
+	indexDeserialized, err := hscs.deserializeIndex(indexBytes)
 	if err != nil {
 		return 0, err
 	}
 
-	hscs.cacheByHash.Add(blockHash, index)
-	return index, nil
+	hscs.cacheByHash.Add(blockHash, indexDeserialized)
+	return indexDeserialized, nil
 }
 
 func (hscs *headersSelectedChainStore) GetHashByIndex(dbContext model.DBReader, stagingArea *model.StagingArea, index uint64) (*externalapi.DomainHash, error) {

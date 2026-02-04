@@ -104,6 +104,7 @@ type Flags struct {
 	GRPCSeed                        string        `long:"grpcseed" description:"Hostname of gRPC server for seeding peers"`
 	ExternalIPs                     []string      `long:"externalip" description:"Add an ip to the list of local addresses we claim to listen on to peers"`
 	Proxy                           string        `long:"proxy" description:"Connect via SOCKS5 proxy (eg. 127.0.0.1:9050)"`
+	DisallowLoopbackP2PConnections  bool          `long:"disallow-loopback-p2p" description:"Disallow outbound P2P connections to loopback addresses (127.0.0.1/::1/localhost). Useful to avoid accidental self-connections."`
 	ProxyUser                       string        `long:"proxyuser" description:"Username for proxy server"`
 	ProxyPass                       string        `long:"proxypass" default-mask:"-" description:"Password for proxy server"`
 	DbType                          string        `long:"dbtype" description:"Database backend to use for the Block DAG"`
@@ -184,25 +185,26 @@ func newConfigParser(cfgFlags *Flags, options flags.Options) *flags.Parser {
 
 func defaultFlags() *Flags {
 	return &Flags{
-		ConfigFile:           defaultConfigFile,
-		LogLevel:             defaultLogLevel,
-		TargetOutboundPeers:  defaultTargetOutboundPeers,
-		MaxInboundPeers:      defaultMaxInboundPeers,
-		BanDuration:          defaultBanDuration,
-		BanThreshold:         defaultBanThreshold,
-		RPCMaxClients:        DefaultMaxRPCClients,
-		RPCMaxWebsockets:     defaultMaxRPCWebsockets,
-		RPCMaxConcurrentReqs: defaultMaxRPCConcurrentReqs,
-		AppDir:               defaultDataDir,
-		RPCKey:               defaultRPCKeyFile,
-		RPCCert:              defaultRPCCertFile,
-		BlockMaxMass:         defaultBlockMaxMass,
-		MaxOrphanTxs:         defaultMaxOrphanTransactions,
-		SigCacheMaxSize:      defaultSigCacheMaxSize,
-		MinRelayTxFee:        defaultMinRelayTxFee,
-		MaxUTXOCacheSize:     defaultMaxUTXOCacheSize,
-		ServiceOptions:       &ServiceOptions{},
-		ProtocolVersion:      defaultProtocolVersion,
+		ConfigFile:                     defaultConfigFile,
+		LogLevel:                       defaultLogLevel,
+		TargetOutboundPeers:            defaultTargetOutboundPeers,
+		MaxInboundPeers:                defaultMaxInboundPeers,
+		BanDuration:                    defaultBanDuration,
+		BanThreshold:                   defaultBanThreshold,
+		RPCMaxClients:                  DefaultMaxRPCClients,
+		RPCMaxWebsockets:               defaultMaxRPCWebsockets,
+		RPCMaxConcurrentReqs:           defaultMaxRPCConcurrentReqs,
+		AppDir:                         defaultDataDir,
+		RPCKey:                         defaultRPCKeyFile,
+		RPCCert:                        defaultRPCCertFile,
+		BlockMaxMass:                   defaultBlockMaxMass,
+		MaxOrphanTxs:                   defaultMaxOrphanTransactions,
+		SigCacheMaxSize:                defaultSigCacheMaxSize,
+		MinRelayTxFee:                  defaultMinRelayTxFee,
+		MaxUTXOCacheSize:               defaultMaxUTXOCacheSize,
+		ServiceOptions:                 &ServiceOptions{},
+		ProtocolVersion:                defaultProtocolVersion,
+		DisallowLoopbackP2PConnections: false,
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 	"github.com/pkg/errors"
@@ -48,25 +47,34 @@ func (v *blockValidator) checkParentsLimit(header externalapi.BlockHeader) error
 		return errors.Wrapf(ruleerrors.ErrNoParents, "block has no parents")
 	}
 
-	if uint64(len(header.DirectParents())) > uint64(v.maxBlockParents[int(constants.GetBlockVersion())-1]) {
+	expectedVersion := v.expectedBlockVersion(header.DAAScore())
+	if uint64(len(header.DirectParents())) > uint64(v.maxBlockParents[int(expectedVersion)-1]) {
 		return errors.Wrapf(ruleerrors.ErrTooManyParents, "block header has %d parents, but the maximum allowed amount "+
 			"is %d", len(header.DirectParents()), v.maxBlockParents)
 	}
 	return nil
 }
 
-func (v *blockValidator) checkBlockVersion(header externalapi.BlockHeader) error {
-	var version uint16 = 1
-	daaScore := header.DAAScore()
+func (v *blockValidator) expectedBlockVersion(daaScore uint64) uint16 {
+	if daaScore == 0 {
+		return 1
+	}
+	version := uint16(1)
 	for _, powScore := range v.POWScores {
 		if daaScore >= powScore {
-			version = version + 1
+			version++
 		}
 	}
-	constants.SetBlockVersion(version)
-	if header.Version() != constants.GetBlockVersion() {
+	return version
+}
+
+func (v *blockValidator) checkBlockVersion(header externalapi.BlockHeader) error {
+	expectedVersion := v.expectedBlockVersion(header.DAAScore())
+	// Keep track of the highest version encountered, but validate this header
+	// against the version implied by its own DAA score.
+	if header.Version() != expectedVersion {
 		return errors.Wrapf(
-			ruleerrors.ErrWrongBlockVersion, "The block version %d should be %d", header.Version(), constants.GetBlockVersion())
+			ruleerrors.ErrWrongBlockVersion, "The block version %d should be %d", header.Version(), expectedVersion)
 	}
 	return nil
 }

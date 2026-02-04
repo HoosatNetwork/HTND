@@ -72,16 +72,22 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 		return nil, err
 	}
 
+	// Determine whether `current` has a trusted DAA window.
+	// We keep the index-0 pair (if exists) so we won't fetch it again.
+	var currentTrustedPair0 *externalapi.BlockGHOSTDAGDataHashPair
+	pair0, err := dtm.daaWindowStore.DAAWindowBlock(dtm.databaseContext, stagingArea, current, 0)
+	currentIsNonTrustedBlock := database.IsNotFoundError(err)
+	if !currentIsNonTrustedBlock && err != nil {
+		return nil, err
+	}
+	if !currentIsNonTrustedBlock {
+		currentTrustedPair0 = pair0
+	}
+
 	// If the block has a trusted DAA window attached, we just take it as is and don't use cache of selected parent to
 	// build the window. This is because tryPushMergeSet might not be able to find all the GHOSTDAG data that is
 	// associated with the block merge set.
-	_, err = dtm.daaWindowStore.DAAWindowBlock(dtm.databaseContext, stagingArea, current, 0)
-	isNonTrustedBlock := database.IsNotFoundError(err)
-	if !isNonTrustedBlock && err != nil {
-		return nil, err
-	}
-
-	if isNonTrustedBlock && currentGHOSTDAGData.SelectedParent() != nil {
+	if currentIsNonTrustedBlock && currentGHOSTDAGData.SelectedParent() != nil {
 		windowHeapSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, currentGHOSTDAGData.SelectedParent(), windowSize)
 		selectedParentNotCached := database.IsNotFoundError(err)
 		if !selectedParentNotCached && err != nil {
@@ -113,14 +119,14 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 			break
 		}
 
-		_, err := dtm.daaWindowStore.DAAWindowBlock(dtm.databaseContext, stagingArea, current, 0)
-		currentIsNonTrustedBlock := database.IsNotFoundError(err)
-		if !currentIsNonTrustedBlock && err != nil {
-			return nil, err
-		}
-
 		if !currentIsNonTrustedBlock {
-			for i := uint64(0); ; i++ {
+			if currentTrustedPair0 != nil {
+				_, err = windowHeap.tryPushWithGHOSTDAGData(currentTrustedPair0.Hash, currentTrustedPair0.GHOSTDAGData)
+				if err != nil {
+					return nil, err
+				}
+			}
+			for i := uint64(1); ; i++ {
 				daaBlock, err := dtm.daaWindowStore.DAAWindowBlock(dtm.databaseContext, stagingArea, current, i)
 				if database.IsNotFoundError(err) {
 					break
@@ -157,6 +163,16 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 
 		current = currentGHOSTDAGData.SelectedParent()
 		currentGHOSTDAGData = selectedParentGHOSTDAGData
+
+		currentTrustedPair0 = nil
+		pair0, err := dtm.daaWindowStore.DAAWindowBlock(dtm.databaseContext, stagingArea, current, 0)
+		currentIsNonTrustedBlock = database.IsNotFoundError(err)
+		if !currentIsNonTrustedBlock && err != nil {
+			return nil, err
+		}
+		if !currentIsNonTrustedBlock {
+			currentTrustedPair0 = pair0
+		}
 	}
 
 	return windowHeap, nil

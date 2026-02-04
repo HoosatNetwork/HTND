@@ -32,9 +32,9 @@ func TestNetAdapter(t *testing.T) {
 		nonce   = uint64(1)
 
 		host  = "127.0.0.1"
-		portA = 3000
-		portB = 3001
-		portC = 3002
+		portA = 26000
+		portB = 26001
+		portC = 26002
 	)
 
 	addressA := fmt.Sprintf("%s:%d", host, portA)
