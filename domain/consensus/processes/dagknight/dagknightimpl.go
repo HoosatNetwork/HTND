@@ -47,7 +47,7 @@ type dagknighthelper struct {
 
 	// Cross-invocation cache for expensive Algorithm-3 rank calculations.
 	// Keyed by a hash of (context id, P).
-	rankInContextLRU *lrucache.LRUCache
+	rankInContextLRU *lrucache.LRUCache[int]
 }
 
 // New creates a new instance of this alternative ghostdag impl
@@ -66,7 +66,7 @@ func New(
 		headerStore:        headerStore,
 		k:                  k,
 		genesis:            genesisHash,
-		rankInContextLRU:   lrucache.New(8192, true),
+		rankInContextLRU:   lrucache.New[int](8192, true),
 	}
 }
 
@@ -314,8 +314,8 @@ func (dk *dagknighthelper) OrderDAG(stagingArea *model.StagingArea, tips []*exte
 func (dk *dagknighthelper) calculateRankInContext(stagingArea *model.StagingArea, p []*externalapi.DomainHash, g dagContext) (int, error) {
 	if dk.rankInContextLRU != nil {
 		key := dk.rankInContextCacheKey(g, p)
-		if v, ok := dk.rankInContextLRU.Get(key); ok && v != nil {
-			return v.(int), nil
+		if v, ok := dk.rankInContextLRU.Get(key); ok {
+			return v, nil
 		}
 	}
 
