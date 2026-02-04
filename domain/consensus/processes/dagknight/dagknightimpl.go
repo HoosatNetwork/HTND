@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"sync"
 
 	"github.com/Hoosat-Oy/HTND/util/difficulty"
 
@@ -19,6 +20,7 @@ import (
 )
 
 type dagknighthelper struct {
+	mu                 sync.Mutex
 	k                  []externalapi.KType
 	dataStore          model.GHOSTDAGDataStore
 	dbAccess           model.DBReader
@@ -85,6 +87,8 @@ func (dk *dagknighthelper) rankInContextCacheKey(g dagContext, p []*externalapi.
 
 // GHOSTDAG implements model.GHOSTDAGManager.
 func (dk *dagknighthelper) GHOSTDAG(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) error {
+	dk.mu.Lock()
+	defer dk.mu.Unlock()
 	return dk.DAGKNIGHT(stagingArea, blockHash)
 }
 
@@ -173,7 +177,6 @@ func (dk *dagknighthelper) DAGKNIGHT(stagingArea *model.StagingArea, blockCandid
 	if err != nil {
 		return err
 	}
-
 	idx := int(constants.GetBlockVersion()) - 1
 	if lastRank == 0 {
 		dk.k[idx] = externalapi.KType(lastRank + 1)
@@ -181,7 +184,7 @@ func (dk *dagknighthelper) DAGKNIGHT(stagingArea *model.StagingArea, blockCandid
 		dk.k[idx] = externalapi.KType(lastRank)
 	}
 	if !blockCandidate.Equal(model.VirtualBlockHash) && !blockCandidate.Equal(model.VirtualGenesisBlockHash) {
-		log.Debugf("paperRank=%d parents=%d hadConflict=%v k=%v", lastRank, len(blockParents), hadConflict, int(dk.k[idx]))
+		log.Debugf("paperRank=%d parents=%d hadConflict=%v lastRank=%v", lastRank, len(blockParents), hadConflict, dk.k[idx])
 	}
 
 	for _, mergeSetBlock := range mergeSetArr {
@@ -659,14 +662,24 @@ func (dk *dagknighthelper) KColouringInContext(stagingArea *model.StagingArea, c
 		return []*externalapi.DomainHash{}, []*externalapi.DomainHash{}, nil
 	}
 	// Only consider parents that are in the context.
-	parents, err := dk.ParentsCached(stagingArea, c)
-	if err != nil {
-		return nil, nil, err
-	}
-	parentsInG := make([]*externalapi.DomainHash, 0, len(parents))
-	for _, p := range parents {
-		if g.has(p) {
-			parentsInG = append(parentsInG, p)
+	// Special-case the paper's conceptual virtual node: parents(virtual) := tips(G).
+	var parentsInG []*externalapi.DomainHash
+	if c.Equal(model.VirtualBlockHash) {
+		tips, err := dk.tipsInContext(stagingArea, g)
+		if err != nil {
+			return nil, nil, err
+		}
+		parentsInG = tips
+	} else {
+		parents, err := dk.ParentsCached(stagingArea, c)
+		if err != nil {
+			return nil, nil, err
+		}
+		parentsInG = make([]*externalapi.DomainHash, 0, len(parents))
+		for _, p := range parents {
+			if g.has(p) {
+				parentsInG = append(parentsInG, p)
+			}
 		}
 	}
 	if len(parentsInG) == 0 {
@@ -790,21 +803,42 @@ func (dk *dagknighthelper) KColouringConditionedInContext(stagingArea *model.Sta
 		return dk.KColouringInContext(stagingArea, c, g, k, freeSearch)
 	}
 	condBase := conditioned[0]
-	parents, err := dk.ParentsCached(stagingArea, c)
-	if err != nil {
-		return nil, nil, err
-	}
-	parentsInG := make([]*externalapi.DomainHash, 0, len(parents))
-	for _, p := range parents {
-		if !g.has(p) {
-			continue
-		}
-		agreesCond, err := dk.agreesInContext(stagingArea, g, p, condBase)
+	var parentsInG []*externalapi.DomainHash
+	if c.Equal(model.VirtualBlockHash) {
+		tips, err := dk.tipsInContext(stagingArea, g)
 		if err != nil {
 			return nil, nil, err
 		}
-		if agreesCond {
-			parentsInG = append(parentsInG, p)
+		parentsInG = make([]*externalapi.DomainHash, 0, len(tips))
+		for _, p := range tips {
+			if !g.has(p) {
+				continue
+			}
+			agreesCond, err := dk.agreesInContext(stagingArea, g, p, condBase)
+			if err != nil {
+				return nil, nil, err
+			}
+			if agreesCond {
+				parentsInG = append(parentsInG, p)
+			}
+		}
+	} else {
+		parents, err := dk.ParentsCached(stagingArea, c)
+		if err != nil {
+			return nil, nil, err
+		}
+		parentsInG = make([]*externalapi.DomainHash, 0, len(parents))
+		for _, p := range parents {
+			if !g.has(p) {
+				continue
+			}
+			agreesCond, err := dk.agreesInContext(stagingArea, g, p, condBase)
+			if err != nil {
+				return nil, nil, err
+			}
+			if agreesCond {
+				parentsInG = append(parentsInG, p)
+			}
 		}
 	}
 	if len(parentsInG) == 0 {
@@ -1313,6 +1347,7 @@ func (dk *dagknighthelper) tipsInContext(stagingArea *model.StagingArea, ctx dag
 			tips = append(tips, h)
 		}
 	}
+	sort.Slice(tips, func(i, j int) bool { return ismoreHash(tips[i], tips[j]) })
 	return tips, nil
 }
 
@@ -1716,6 +1751,9 @@ func (dk *dagknighthelper) orderSubsetBottomUp(stagingArea *model.StagingArea, c
 // This is Definition 5-ish: the min-rank of the last conflict while selecting chain-parent in past(C).
 func (dk *dagknighthelper) rankOfBlockPaper(stagingArea *model.StagingArea, c *externalapi.DomainHash) (int, error) {
 	if c == nil {
+		return 0, nil
+	}
+	if c.Equal(model.VirtualBlockHash) || c.Equal(model.VirtualGenesisBlockHash) {
 		return 0, nil
 	}
 	key := c.String()

@@ -35,6 +35,14 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	if err != nil {
 		return nil, err
 	}
+	virtualSelectedParentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, virtualSelectedParent)
+	if err != nil {
+		return nil, err
+	}
+	if virtualSelectedParentStatus != externalapi.StatusUTXOValid {
+		return nil, errors.Errorf("virtual selected parent %s is expected to be %s but got %s",
+			virtualSelectedParent, externalapi.StatusUTXOValid, virtualSelectedParentStatus)
+	}
 	log.Debugf("The selected parent of the virtual is: %s", virtualSelectedParent)
 
 	// Limit to maxBlockParents*3 candidates, that way we don't go over thousands of tips when the network isn't healthy.
@@ -44,7 +52,18 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	candidateAllocationSize := math.MinInt(maxCandidates, candidatesHeap.Len())
 	candidates := make([]*externalapi.DomainHash, 0, candidateAllocationSize)
 	for len(candidates) < maxCandidates && candidatesHeap.Len() > 0 {
-		candidates = append(candidates, candidatesHeap.Pop())
+		candidate := candidatesHeap.Pop()
+		candidateStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, candidate)
+		if database.IsNotFoundError(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if candidateStatus != externalapi.StatusUTXOValid {
+			continue
+		}
+		candidates = append(candidates, candidate)
 	}
 
 	// prioritize half the blocks with highest blueWork and half with lowest, so the network will merge splits faster.

@@ -176,10 +176,10 @@ func newErrorResponse(err error, reason appmessage.RejectReason) *appmessage.Sub
 
 // logBlockAcceptance logs successful block acceptance
 func logBlockAcceptance(context *rpccontext.Context, block *externalapi.DomainBlock, txCount int) {
-	log.Infof("Accepted block %s via submit with %d tx",
-		consensushashing.BlockHash(block), txCount)
 	k := int(context.Config.ActiveNetParams.K[int(constants.GetBlockVersion())-1])
-	log.Debugf("Accepted PoW hash %s, k=%v", block.PoWHash, k)
+	log.Infof("Accepted block %s via submit with %d tx, k=%v",
+		consensushashing.BlockHash(block), txCount, k)
+	log.Debugf("Accepted PoW hash %s", block.PoWHash)
 }
 
 // stripHexPrefix removes "0x" prefix from hex string
