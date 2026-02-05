@@ -4,6 +4,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashset"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 )
@@ -141,8 +142,6 @@ func (csm *consensusStateManager) calculateNewTips(
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("The number of tips is: %d", len(currentTips))
-	log.Tracef("The current tips are: %s", currentTips)
 
 	newTipParents, err := csm.dagTopologyManager.Parents(stagingArea, newTipHash)
 	if err != nil {
@@ -150,22 +149,19 @@ func (csm *consensusStateManager) calculateNewTips(
 	}
 	log.Debugf("The parents of the new tip are: %s", newTipParents)
 
-	newTips := []*externalapi.DomainHash{newTipHash}
+	newTipParentsSet := hashset.New()
+	for _, parent := range newTipParents {
+		newTipParentsSet.Add(parent)
+	}
 
+	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
+	newTips = append(newTips, newTipHash)
 	for _, currentTip := range currentTips {
-		isCurrentTipInNewTipParents := false
-		for _, newTipParent := range newTipParents {
-			if currentTip.Equal(newTipParent) {
-				isCurrentTipInNewTipParents = true
-				break
-			}
-		}
-		if !isCurrentTipInNewTipParents {
+		if !newTipParentsSet.Contains(currentTip) {
 			newTips = append(newTips, currentTip)
 		}
 	}
-	log.Debugf("The new number of tips is: %d", len(newTips))
-	log.Tracef("The new tips are: %s", newTips)
+	log.Infof("The new number of tips is: %d", len(newTips))
 
 	return newTips, nil
 }

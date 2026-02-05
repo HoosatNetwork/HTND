@@ -40,8 +40,9 @@ func (css *consensusStateStore) Tips(stagingArea *model.StagingArea, dbContext m
 
 func (css *consensusStateStore) StageTips(stagingArea *model.StagingArea, tipHashes []*externalapi.DomainHash) {
 	stagingShard := css.stagingShard(stagingArea)
-
-	stagingShard.tipsStaging = externalapi.CloneHashes(tipHashes)
+	// Note: We intentionally avoid cloning here to reduce allocations on large tip sets.
+	// `Tips` still returns cloned slices, so external callers cannot mutate internal state.
+	stagingShard.tipsStaging = tipHashes
 }
 
 func (css *consensusStateStore) serializeTips(tips []*externalapi.DomainHash) ([]byte, error) {

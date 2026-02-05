@@ -15,6 +15,7 @@ type GHOSTDAGManagerConstructor func(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
 	k []externalapi.KType,
+	maxBlockParents []externalapi.KType,
 	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager
 
 // DifficultyManagerConstructor is the function signature for a constructor of a type implementing model.DifficultyManager

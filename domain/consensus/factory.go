@@ -745,6 +745,7 @@ func (f *factory) dagProcesses(config *Config,
 			ghostdagDataStores[i],
 			blockHeaderStore,
 			config.K,
+			config.MaxBlockParents,
 			config.GenesisHash)
 
 		dagTraversalManagers[i] = dagtraversalmanager.New(
