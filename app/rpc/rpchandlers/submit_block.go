@@ -151,16 +151,20 @@ func validateDAAScore(context *rpccontext.Context, block *externalapi.DomainBloc
 
 // handleBlockAddError processes errors from adding block to consensus
 func handleBlockAddError(block *externalapi.DomainBlock, err error) *appmessage.SubmitBlockResponseMessage {
+	blockHash := consensushashing.BlockHash(block)
+
 	isProtocolOrRuleError := errors.As(err, &ruleerrors.RuleError{}) || errors.As(err, &protocolerrors.ProtocolError{})
 	if !isProtocolOrRuleError {
+		// Print full stack trace for unexpected/internal errors.
+		log.Errorf("SubmitBlock failed for block %s: %+v", blockHash, err)
 		return newErrorResponse(fmt.Errorf("block rejected: %w", err), appmessage.RejectReasonBlockInvalid)
 	}
 
 	if errors.Is(err, ruleerrors.ErrInvalidPoW) {
-		log.Warnf("Invalid PoW for block %s: %v", block.PoWHash, err)
+		log.Warnf("Invalid PoW for block %s (block %s): %+v", block.PoWHash, blockHash, err)
 		// Note: Consider implementing banning logic here
 	} else {
-		log.Warnf("Rule/protocol error for block: %v", err)
+		log.Warnf("Rule/protocol error for block %s: %+v", blockHash, err)
 	}
 
 	return newErrorResponse(fmt.Errorf("block rejected: %w", err), appmessage.RejectReasonBlockInvalid)

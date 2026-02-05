@@ -22,7 +22,6 @@ import (
 type dagknighthelper struct {
 	mu                 sync.Mutex
 	k                  []externalapi.KType
-	maxBlockParents    []externalapi.KType
 	dataStore          model.GHOSTDAGDataStore
 	dbAccess           model.DBReader
 	dagTopologyManager model.DAGTopologyManager
@@ -60,7 +59,6 @@ func New(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
 	k []externalapi.KType,
-	maxBlockParents []externalapi.KType,
 	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
 
 	return &dagknighthelper{
@@ -69,7 +67,6 @@ func New(
 		dataStore:          ghostdagDataStore,
 		headerStore:        headerStore,
 		k:                  k,
-		maxBlockParents:    maxBlockParents,
 		genesis:            genesisHash,
 		rankInContextLRU:   lrucache.New[int](8192, true),
 	}
@@ -1294,44 +1291,22 @@ func newDAGContext(nodes []*externalapi.DomainHash, root *externalapi.DomainHash
 }
 
 func (dk *dagknighthelper) contextFromTipsInclusivePast(stagingArea *model.StagingArea, tips []*externalapi.DomainHash) (dagContext, error) {
-	idx := int(constants.GetBlockVersion()) - 1
-	maxSeedTips := int(dk.maxBlockParents[idx]) * 3
-
-	// De-dup and (if needed) deterministically choose a bounded subset of seed tips.
-	seedVisited := make(map[externalapi.DomainHash]struct{}, len(tips))
-	seed := make([]*externalapi.DomainHash, 0, len(tips))
+	visited := make(map[externalapi.DomainHash]struct{}, len(tips))
+	queue := make([]*externalapi.DomainHash, 0, len(tips))
 	for _, t := range tips {
 		if t == nil {
 			continue
 		}
-		if _, ok := seedVisited[*t]; ok {
+		if _, ok := visited[*t]; ok {
 			continue
 		}
-		seedVisited[*t] = struct{}{}
-		seed = append(seed, t)
-	}
-	if len(seed) > 1 {
-		// Prefer the "best" tips (highest blueWork/blueScore) in a deterministic order.
-		// This prevents the seed cap from depending on the caller's slice order.
-		if err := dk.sortByBlueWork(stagingArea, seed); err != nil {
-			return dagContext{}, err
-		}
-	}
-	if maxSeedTips > 0 && len(seed) > maxSeedTips {
-		seed = seed[:maxSeedTips]
-	}
-
-	visited := make(map[externalapi.DomainHash]struct{}, len(seed))
-	queue := make([]*externalapi.DomainHash, len(seed))
-	copy(queue, seed)
-	for _, t := range seed {
 		visited[*t] = struct{}{}
+		queue = append(queue, t)
 	}
-
-	nodes := make([]*externalapi.DomainHash, 0, len(queue))
-	for head := 0; head < len(queue); head++ {
-		cur := queue[head]
-		queue[head] = nil // allow GC of processed entries when contexts are huge
+	nodes := make([]*externalapi.DomainHash, 0)
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
 		if cur == nil {
 			continue
 		}
@@ -1339,10 +1314,6 @@ func (dk *dagknighthelper) contextFromTipsInclusivePast(stagingArea *model.Stagi
 		parents, err := dk.ParentsCached(stagingArea, cur)
 		if err != nil {
 			return dagContext{}, err
-		}
-		// Ensure deterministic traversal order (parent slice order may not be stable).
-		if len(parents) > 1 {
-			sort.Slice(parents, func(i, j int) bool { return parents[i].Less(parents[j]) })
 		}
 		for _, p := range parents {
 			if p == nil {
