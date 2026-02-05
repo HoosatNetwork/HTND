@@ -238,9 +238,9 @@ The `dagContext.root` field represents genesis(G) in the conflict context. The `
 ## Summary Table
 
 | Component                  | Faithfulness | Notes                                                                     |
-| -------------------------- | ------------ | ------------------------------------------------------------------------- | --- | -------------------------------- |
+| -------------------------- | ------------ | ------------------------------------------------------------------------- |
 | Algorithm 2 (OrderDAG)     | ✅ Faithful  | Full recursion available via `fullOrdering=true`; fast mode for consensus |
-| Algorithm 3 (Rank)         | ✅ Faithful  | k bounded by context size                                                 | G   | ; k-1 backtrack for true minimum |
+| Algorithm 3 (Rank)         | ✅ Faithful  | k bounded by context size \|G\|; k-1 backtrack for true minimum           |
 | Algorithm 4 (Tie-breaking) | ✅ Faithful  | Correct k/2 ceiling fix applied                                           |
 | Algorithm 5 (K-colouring)  | ✅ Faithful  | Complete implementation                                                   |
 | Algorithm 6 (UMC Voting)   | ✅ Faithful  | Complete implementation                                                   |
