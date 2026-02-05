@@ -105,13 +105,13 @@ OrderDAG(stagingArea, tips, true)
 
 **Implementation:** Lines 627-765
 
-| Aspect                   | Paper            | Implementation                 | Status      |
-| ------------------------ | ---------------- | ------------------------------ | ----------- | --------------------- | ----------- | ----------------------------------- | ----------- |
-| Agreement check          | —                | `agreesInContext()`            | ✅ Faithful |
-| free_search flag         | Line 9 condition | `if freeSearch \|\| k > rankC` | ✅ Faithful |
-| B_max selection          | argmax           | blues                          |             | Correctly implemented | ✅ Faithful |
-| Anticone k-cluster check |                  | anticone ∩ chain               | ≤ k AND     | anticone ∩ blues      | < k         | `countChain <= k && countBlues < k` | ✅ Faithful |
-| Topological ordering     | Bottom-up        | `orderSubsetBottomUp()`        | ✅ Faithful |
+| Aspect                   | Paper                                                 | Implementation                      | Status      |
+| ------------------------ | ----------------------------------------------------- | ----------------------------------- | ----------- |
+| Agreement check          | —                                                     | `agreesInContext()`                 | ✅ Faithful |
+| free_search flag         | Line 9 condition                                      | `if freeSearch \|\| k > rankC`      | ✅ Faithful |
+| B_max selection          | argmax \|blues\|                                      | Correctly implemented               | ✅ Faithful |
+| Anticone k-cluster check | \|anticone ∩ chain\| ≤ k AND \|anticone ∩ blues\| < k | `countChain <= k && countBlues < k` | ✅ Faithful |
+| Topological ordering     | Bottom-up                                             | `orderSubsetBottomUp()`             | ✅ Faithful |
 
 ---
 
@@ -125,12 +125,12 @@ OrderDAG(stagingArea, tips, true)
 
 **Implementation:** Lines 1407-1479
 
-| Aspect                     | Paper     | Implementation            | Status          |
-| -------------------------- | --------- | ------------------------- | --------------- | ---------------------- | ----------- |
-| Recursive future shrinking | future(B) | `futureWithinExclusive()` | ✅ Faithful     |
-| Vote formula               | sign(v -  | G\U                       | + ε)            | `v - deficit + e >= 0` | ✅ Faithful |
-| Return values              | +1 / -1   | `res = 1` or `res = -1`   | ✅ Faithful     |
-| Caching                    | —         | `umcVotingCache`          | ✅ Optimization |
+| Aspect                     | Paper                 | Implementation            | Status          |
+| -------------------------- | --------------------- | ------------------------- | --------------- |
+| Recursive future shrinking | future(B)             | `futureWithinExclusive()` | ✅ Faithful     |
+| Vote formula               | sign(v - \|G\U\| + ε) | `v - deficit + e >= 0`    | ✅ Faithful     |
+| Return values              | +1 / -1               | `res = 1` or `res = -1`   | ✅ Faithful     |
+| Caching                    | —                     | `umcVotingCache`          | ✅ Optimization |
 
 ---
 
@@ -240,7 +240,7 @@ The `dagContext.root` field represents genesis(G) in the conflict context. The `
 | Component                  | Faithfulness | Notes                                                                     |
 | -------------------------- | ------------ | ------------------------------------------------------------------------- |
 | Algorithm 2 (OrderDAG)     | ✅ Faithful  | Full recursion available via `fullOrdering=true`; fast mode for consensus |
-| Algorithm 3 (Rank)         | ✅ Faithful  | k bounded by context size \|G\|; k-1 backtrack for true minimum           |
+| Algorithm 3 (Rank)         | ✅ Faithful  | k bounded by context size; k-1 backtrack for true minimum                 |
 | Algorithm 4 (Tie-breaking) | ✅ Faithful  | Correct k/2 ceiling fix applied                                           |
 | Algorithm 5 (K-colouring)  | ✅ Faithful  | Complete implementation                                                   |
 | Algorithm 6 (UMC Voting)   | ✅ Faithful  | Complete implementation                                                   |
