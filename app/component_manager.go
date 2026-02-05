@@ -61,6 +61,9 @@ func (a *ComponentManager) Stop() {
 
 	log.Warnf("htnd shutting down")
 
+	// Stop RPC statistics tracking
+	rpc.RPCStats.Stop()
+
 	a.connectionManager.Stop()
 
 	err := a.netAdapter.Stop()

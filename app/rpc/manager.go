@@ -48,6 +48,9 @@ func NewManager(
 
 	manager.initConsensusEventsHandler(consensusEventsChan)
 
+	// Start RPC statistics tracking
+	RPCStats.Start()
+
 	return &manager
 }
 
