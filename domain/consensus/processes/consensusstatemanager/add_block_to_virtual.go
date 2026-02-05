@@ -154,8 +154,20 @@ func (csm *consensusStateManager) calculateNewTips(
 		newTipParentsSet.Add(parent)
 	}
 
+	// Check if the new tip is UTXO valid - only add it as a tip if so
+	// This prevents fork blocks with StatusUTXOPendingVerification from accumulating as tips
+	newTipStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, newTipHash)
+	if err != nil {
+		return nil, err
+	}
+
 	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
-	newTips = append(newTips, newTipHash)
+	if newTipStatus == externalapi.StatusUTXOValid {
+		newTips = append(newTips, newTipHash)
+	} else {
+		log.Debugf("calculateNewTips: not adding new tip %s with status %s (not UTXO valid)", newTipHash, newTipStatus)
+	}
+
 	for _, currentTip := range currentTips {
 		if !newTipParentsSet.Contains(currentTip) {
 			newTips = append(newTips, currentTip)
