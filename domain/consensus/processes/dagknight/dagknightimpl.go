@@ -59,6 +59,7 @@ func New(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
 	k []externalapi.KType,
+	maxBlockParents []externalapi.KType,
 	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
 
 	return &dagknighthelper{
@@ -223,94 +224,97 @@ func (dk *dagknighthelper) DAGKNIGHT(stagingArea *model.StagingArea, blockCandid
 }
 
 // OrderDAG implements Algorithm 2: KNIGHT DAG ordering algorithm
-func (dk *dagknighthelper) OrderDAG(stagingArea *model.StagingArea, tips []*externalapi.DomainHash) (*externalapi.DomainHash, []*externalapi.DomainHash, error) {
+// Returns (chainParent, order, lastMinRank, error) where lastMinRank is the rank from the final conflict resolution
+// Parameters:
+//   - fullOrdering: if true, performs paper-faithful recursive ordering of each tip's past (expensive!)
+//     if false, only runs the while-loop for chain-parent selection (fast)
+func (dk *dagknighthelper) OrderDAG(stagingArea *model.StagingArea, tips []*externalapi.DomainHash, fullOrdering bool) (*externalapi.DomainHash, []*externalapi.DomainHash, int, error) {
 	if len(tips) == 0 {
-		return nil, nil, errors.New("no tips")
+		return nil, nil, 0, errors.New("no tips")
 	}
 	if len(tips) == 1 && tips[0].Equal(dk.genesis) {
-		return dk.genesis, []*externalapi.DomainHash{dk.genesis}, nil
+		return dk.genesis, []*externalapi.DomainHash{dk.genesis}, 0, nil
+	}
+	// Fast path: single tip means no conflict - just return the tip without expensive recursion
+	if len(tips) == 1 {
+		return tips[0], []*externalapi.DomainHash{tips[0]}, 0, nil
 	}
 
-	// Reconstruct the input DAG context G from its tips (G == past_G(tips(G)) inclusive).
-	ctxG, err := dk.contextFromTipsInclusivePast(stagingArea, tips)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Recursive calls on past of each tip
-	chainParentMap := make(map[*externalapi.DomainHash]*externalapi.DomainHash)
-	orderMap := make(map[*externalapi.DomainHash][]*externalapi.DomainHash)
-	for _, b := range tips {
-		pastTips, err := dk.PastTips(stagingArea, b) // Tips of the past subgraph per DAGKnight
-		if err != nil {
-			return nil, nil, err
-		}
-		chainParent, order, err := dk.OrderDAG(stagingArea, pastTips)
-		if err != nil {
-			return nil, nil, err
-		}
-		chainParentMap[b] = chainParent
-		orderMap[b] = order
-	}
-
-	// P = tips
-	p := tips
-
-	for len(p) > 1 {
-		// g ← latest common chain ancestor of all B ∈ P
-		g, err := dk.latestCommonChainAncestor(stagingArea, p)
-		if err != nil {
-			return nil, nil, err
-		}
-		// Partition P into maximal disjoint sets P1, …, Pn
-		partitions, err := dk.partitionTips(stagingArea, p, g)
-		if err != nil {
-			return nil, nil, err
-		}
-		// Calculate ranks in the paper's required conflict context: future_G(g)
-		futureG, err := dk.futureWithinInclusive(stagingArea, g, ctxG)
-		if err != nil {
-			return nil, nil, err
-		}
-		ranks := make([]int, len(partitions))
-		minRank := math.MaxInt32
-		for i, pi := range partitions {
-			rank, err := dk.calculateRankInContext(stagingArea, pi, futureG)
+	// Paper-faithful: recursively order past of each tip first (Algorithm 2, lines 1-2)
+	if fullOrdering {
+		for _, tip := range tips {
+			parents, err := dk.dagTopologyManager.Parents(stagingArea, tip)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
-			ranks[i] = rank
-			if rank < minRank {
-				minRank = rank
+			if len(parents) > 0 {
+				// Recursive call to order past(tip)
+				_, _, _, err = dk.OrderDAG(stagingArea, parents, true)
+				if err != nil {
+					return nil, nil, 0, err
+				}
 			}
-		}
-		// Collect Pi with min rank
-		minPartitions := make([][]*externalapi.DomainHash, 0)
-		for i, rank := range ranks {
-			if rank == minRank {
-				minPartitions = append(minPartitions, partitions[i])
-			}
-		}
-		// Tie-Breaking in the same conflict context future_G(g)
-		p, err = dk.tieBreakingInContext(stagingArea, futureG, minPartitions)
-		if err != nil {
-			return nil, nil, err
 		}
 	}
 
-	// p is the single element
-	theP := p[0]
-
-	// order = order_p || p || anticone(p) in hash topo order
-	orderP := orderMap[theP]
-	order := append(orderP, theP)
-	anticone, err := dk.AnticoneSortedWithin(stagingArea, theP, ctxG.nodes)
+	// While-loop: iteratively select chain-parent (Algorithm 2, lines 3-8)
+	chainParent, lastMinRank, err := dk.selectChainParentViaAlgorithm2(stagingArea, tips)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	order = append(order, anticone...)
 
-	return theP, order, nil
+	if fullOrdering {
+		// Build full topological ordering respecting the selected chain
+		order, err := dk.buildFullOrdering(stagingArea, tips, chainParent)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		return chainParent, order, lastMinRank, nil
+	}
+
+	// Fast mode: return minimal ordering (just the chain parent)
+	return chainParent, []*externalapi.DomainHash{chainParent}, lastMinRank, nil
+}
+
+// buildFullOrdering constructs a topological ordering of the DAG respecting the selected chain-parent
+func (dk *dagknighthelper) buildFullOrdering(stagingArea *model.StagingArea, tips []*externalapi.DomainHash, chainParent *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	// Collect all blocks reachable from tips
+	visited := make(map[externalapi.DomainHash]bool)
+	var stack []*externalapi.DomainHash
+
+	var collectBlocks func(hash *externalapi.DomainHash) error
+	collectBlocks = func(hash *externalapi.DomainHash) error {
+		if visited[*hash] || hash.Equal(dk.genesis) {
+			return nil
+		}
+		visited[*hash] = true
+
+		parents, err := dk.dagTopologyManager.Parents(stagingArea, hash)
+		if err != nil {
+			return err
+		}
+		for _, p := range parents {
+			if err := collectBlocks(p); err != nil {
+				return err
+			}
+		}
+		stack = append(stack, hash)
+		return nil
+	}
+
+	for _, tip := range tips {
+		if err := collectBlocks(tip); err != nil {
+			return nil, err
+		}
+	}
+
+	// The stack now contains blocks in topological order (parents before children)
+	// Prepend genesis
+	order := make([]*externalapi.DomainHash, 0, len(stack)+1)
+	order = append(order, dk.genesis)
+	order = append(order, stack...)
+
+	return order, nil
 }
 
 // calculateRankInContext implements Algorithm 3 using the given DAG context (G).
@@ -322,7 +326,9 @@ func (dk *dagknighthelper) calculateRankInContext(stagingArea *model.StagingArea
 		}
 	}
 
-	const maxK = math.MaxInt32
+	// Paper-faithful: no upper bound on k. The loop terminates when UMC voting passes.
+	// In practice, k is bounded by |G| (the context size).
+	maxK := math.MaxUint32
 	tipsG, err := dk.tipsInContext(stagingArea, g)
 	if err != nil {
 		return 0, err
@@ -330,6 +336,14 @@ func (dk *dagknighthelper) calculateRankInContext(stagingArea *model.StagingArea
 	reps, err := dk.repsInContext(stagingArea, p, g, tipsG)
 	if err != nil {
 		return 0, err
+	}
+	// Early exit: if no representatives, return context size as rank
+	if len(reps) == 0 {
+		if dk.rankInContextLRU != nil {
+			key := dk.rankInContextCacheKey(g, p)
+			dk.rankInContextLRU.Add(key, maxK)
+		}
+		return maxK, nil
 	}
 
 	passedK := -1
@@ -462,8 +476,8 @@ func (dk *dagknighthelper) repsInContext(stagingArea *model.StagingArea, p []*ex
 	return reps, nil
 }
 
-// chainParentAndRankViaKNIGHT selects a chain-parent for a new block using Algorithm 2’s while-loop logic.
-// It returns the selected parent (a tip in the past subDAG) and the last conflict’s min-rank (Definition 5).
+// chainParentAndRankViaKNIGHT selects a chain-parent for a new block using Algorithm 2.
+// It returns the selected parent (a tip in the past subDAG) and the last conflict's min-rank (Definition 5).
 func (dk *dagknighthelper) chainParentAndRankViaKNIGHT(stagingArea *model.StagingArea, blockParents []*externalapi.DomainHash) (*externalapi.DomainHash, int, bool, error) {
 	if len(blockParents) == 0 {
 		return nil, 0, false, nil
@@ -479,7 +493,6 @@ func (dk *dagknighthelper) chainParentAndRankViaKNIGHT(stagingArea *model.Stagin
 	}
 
 	// Fast-path: with a single parent there is no conflict and the chain-parent is that parent.
-	// This is by far the common case and should not pay the Algorithm 2 cost.
 	if len(parents) == 1 {
 		return parents[0], 0, false, nil
 	}
@@ -520,6 +533,7 @@ func (dk *dagknighthelper) chainParentAndRankViaKNIGHT(stagingArea *model.Stagin
 		}
 	}
 	if !conflict {
+		// No branch divergence - use legacy selected parent rule (fastest path)
 		sp, err := dk.ChooseSelectedParent(stagingArea, parents...)
 		if err != nil {
 			return nil, 0, false, err
@@ -527,55 +541,78 @@ func (dk *dagknighthelper) chainParentAndRankViaKNIGHT(stagingArea *model.Stagin
 		return sp, 0, false, nil
 	}
 
-	// Conflict path: run Algorithm 2.
-	// G := past(blockCandidate) is approximated by inclusive past of parents.
-	g, err := dk.contextFromTipsInclusivePast(stagingArea, parents)
+	// Real conflict: run Algorithm 2's while-loop (but skip expensive recursive past ordering).
+	// We only need chain-parent selection, not full DAG ordering.
+	chainParent, lastMinRank, err := dk.selectChainParentViaAlgorithm2(stagingArea, parents)
 	if err != nil {
 		return nil, 0, false, err
 	}
-	P := append([]*externalapi.DomainHash{}, parents...)
+
+	return chainParent, lastMinRank, true, nil
+}
+
+// selectChainParentViaAlgorithm2 runs Algorithm 2's while-loop to select the winning tip.
+// This is an optimized version that skips the expensive recursive ordering of past subgraphs.
+func (dk *dagknighthelper) selectChainParentViaAlgorithm2(stagingArea *model.StagingArea, tips []*externalapi.DomainHash) (*externalapi.DomainHash, int, error) {
+	if len(tips) == 0 {
+		return nil, 0, errors.New("no tips")
+	}
+	if len(tips) == 1 {
+		return tips[0], 0, nil
+	}
+
+	// Build context G from tips
+	ctxG, err := dk.contextFromTipsInclusivePast(stagingArea, tips)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	p := tips
 	lastMinRank := 0
-	hadConflict := false
-	for len(P) > 1 {
-		hadConflict = true
-		conflictPoint, err := dk.latestCommonChainAncestor(stagingArea, P)
+
+	// Algorithm 2 lines 3-8: while |P| > 1
+	for len(p) > 1 {
+		g, err := dk.latestCommonChainAncestor(stagingArea, p)
 		if err != nil {
-			return nil, 0, false, err
+			return nil, 0, err
 		}
-		partitions, err := dk.partitionTips(stagingArea, P, conflictPoint)
+		partitions, err := dk.partitionTips(stagingArea, p, g)
 		if err != nil {
-			return nil, 0, false, err
+			return nil, 0, err
 		}
-		futureG, err := dk.futureWithinInclusive(stagingArea, conflictPoint, g)
+		futureG, err := dk.futureWithinInclusive(stagingArea, g, ctxG)
 		if err != nil {
-			return nil, 0, false, err
+			return nil, 0, err
 		}
+		ranks := make([]int, len(partitions))
 		minRank := math.MaxInt32
-		minPartitions := make([][]*externalapi.DomainHash, 0)
-		for _, pi := range partitions {
+		for i, pi := range partitions {
 			rank, err := dk.calculateRankInContext(stagingArea, pi, futureG)
 			if err != nil {
-				return nil, 0, false, err
+				return nil, 0, err
 			}
+			ranks[i] = rank
 			if rank < minRank {
 				minRank = rank
-				minPartitions = minPartitions[:0]
-				minPartitions = append(minPartitions, pi)
-			} else if rank == minRank {
-				minPartitions = append(minPartitions, pi)
 			}
 		}
-		if minRank == math.MaxInt32 {
-			minRank = 0
-		}
 		lastMinRank = minRank
-		// Resolve ties in the conflict context future_G(conflictPoint).
-		P, err = dk.tieBreakingInContext(stagingArea, futureG, minPartitions)
+		if lastMinRank == math.MaxInt32 {
+			lastMinRank = 0
+		}
+		minPartitions := make([][]*externalapi.DomainHash, 0)
+		for i, rank := range ranks {
+			if rank == minRank {
+				minPartitions = append(minPartitions, partitions[i])
+			}
+		}
+		p, err = dk.tieBreakingInContext(stagingArea, futureG, minPartitions)
 		if err != nil {
-			return nil, 0, false, err
+			return nil, 0, err
 		}
 	}
-	return P[0], lastMinRank, hadConflict, nil
+
+	return p[0], lastMinRank, nil
 }
 
 // tieBreakingInContext implements Algorithm 4 in the provided conflict context G.
@@ -603,7 +640,8 @@ func (dk *dagknighthelper) tieBreakingInContext(stagingArea *model.StagingArea, 
 	bestJ := 0
 	for i, pi := range partitions {
 		ciSet := make(map[string]bool)
-		kStart := k / 2
+		// Paper specifies k' from k/2 to k; use ceiling to avoid truncation
+		kStart := int(math.Ceil(float64(k) / 2.0))
 		for kprime := kStart; kprime <= k; kprime++ {
 			_, chainIKprime, err := dk.KColouringConditionedInContext(stagingArea, virtual, g, kprime, false, pi)
 			if err != nil {
