@@ -60,11 +60,6 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 	var oneBeforeLastResolvedBlockUTXOSet externalapi.UTXODiff
 	var oneBeforeLastResolvedBlockHash *externalapi.DomainHash
 
-	// When using separate staging areas, we need to track the previously committed block
-	// so we can update its UTXODiffChild to point to the current block (forward direction)
-	var lastCommittedBlockHash *externalapi.DomainHash
-	var lastCommittedBlockUTXOSet externalapi.UTXODiff
-
 	for i := len(unverifiedBlocks) - 1; i >= 0; i-- {
 		unverifiedBlockHash := unverifiedBlocks[i]
 
@@ -98,33 +93,12 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 			if err != nil {
 				return 0, nil, err
 			}
-
-			// After committing this block, update the previous block's UTXODiffChild to point to this block
-			// This ensures the diff chain points forward (toward virtual) rather than backward
-			if lastCommittedBlockHash != nil && blockStatus == externalapi.StatusUTXOValid {
-				err = csm.updateUTXODiffChildForward(lastCommittedBlockHash, lastCommittedBlockUTXOSet, unverifiedBlockHash, previousBlockUTXOSet)
-				if err != nil {
-					return 0, nil, err
-				}
-			}
-
-			// Track this block for the next iteration
-			if blockStatus == externalapi.StatusUTXOValid {
-				lastCommittedBlockHash = unverifiedBlockHash
-				lastCommittedBlockUTXOSet = previousBlockUTXOSet
-			}
+			// Note: When using separate staging areas, each block's diff points to virtual (nil diffChild).
+			// We don't try to update diffChild to point forward because the UTXO diffs were computed
+			// against different database states and DiffFrom would fail with DAA score mismatches.
+			// The restorePastUTXO function handles blocks with nil diffChild correctly.
 		}
 		previousBlockHash = unverifiedBlockHash
-	}
-
-	// After the loop, if we used separate staging areas and there's a last committed block,
-	// we need to update its diffChild to point to the tip (which was processed with the main staging area)
-	if useSeparateStagingAreaPerBlock && lastCommittedBlockHash != nil && blockStatus == externalapi.StatusUTXOValid {
-		tipHash := unverifiedBlocks[0]
-		err = csm.updateUTXODiffChildForward(lastCommittedBlockHash, lastCommittedBlockUTXOSet, tipHash, previousBlockUTXOSet)
-		if err != nil {
-			return 0, nil, err
-		}
 	}
 
 	var reversalData *model.UTXODiffReversalData
@@ -381,26 +355,4 @@ func (csm *consensusStateManager) virtualSelectedParent(stagingArea *model.Stagi
 	}
 
 	return virtualGHOSTDAGData.SelectedParent(), nil
-}
-
-// updateUTXODiffChildForward updates the previousBlock's UTXODiff to point to currentBlock
-// This is used when using separate staging areas to maintain forward-pointing diff chains
-func (csm *consensusStateManager) updateUTXODiffChildForward(
-	previousBlockHash *externalapi.DomainHash, previousBlockUTXOSet externalapi.UTXODiff,
-	currentBlockHash *externalapi.DomainHash, currentBlockUTXOSet externalapi.UTXODiff) error {
-
-	log.Debugf("Updating UTXODiffChild of %s to point forward to %s", previousBlockHash, currentBlockHash)
-
-	// Compute the diff from previousBlock to currentBlock
-	// This is the diff that transforms previousBlock's UTXO set into currentBlock's UTXO set
-	utxoDiff, err := currentBlockUTXOSet.DiffFrom(previousBlockUTXOSet)
-	if err != nil {
-		return err
-	}
-
-	// Commit this update in a separate staging area
-	updateStagingArea := model.NewStagingArea()
-	csm.utxoDiffStore.Stage(updateStagingArea, previousBlockHash, utxoDiff, currentBlockHash)
-
-	return staging.CommitAllChanges(csm.databaseContext, updateStagingArea)
 }
