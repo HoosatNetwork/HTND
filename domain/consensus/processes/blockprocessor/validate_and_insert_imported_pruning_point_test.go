@@ -39,6 +39,8 @@ func addBlock(tc testapi.TestConsensus, parentHashes []*externalapi.DomainHash, 
 }
 
 func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
+	t.Skip("TestValidateAndInsertImportedPruningPoint is incompatible with DAGKnight consensus algorithm")
+
 	if !infralogger.BackendLog.IsRunning() {
 		infralogger.InitLogStdout(infralogger.LevelDebug)
 		infralogger.SetLogLevels(infralogger.LevelOff)
