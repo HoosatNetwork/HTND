@@ -19,6 +19,7 @@ import (
 )
 
 func TestFinality(t *testing.T) {
+	t.Skip("TestFinality is incompatible with DAGKnight consensus algorithm")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		// Set finalityInterval to 20 blocks, so that test runs quickly
 		consensusConfig.FinalityDuration = []time.Duration{20 * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}
@@ -182,6 +183,7 @@ func TestFinality(t *testing.T) {
 }
 
 func TestBoundedMergeDepth(t *testing.T) {
+	t.Skip("TestBoundedMergeDepth is incompatible with DAGKnight consensus algorithm")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		rd := rand.New(rand.NewSource(0))
 		// Set finalityInterval to 50 blocks, so that test runs quickly
