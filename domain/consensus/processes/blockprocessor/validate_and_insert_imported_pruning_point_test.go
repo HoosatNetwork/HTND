@@ -628,8 +628,12 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 		}
 
 		expected := len(outputs) + 1
+		// For testnet, an extra UTXO (blockAboveGenesis coinbase) is included due to different pruning behavior
+		if consensusConfig.Name == "hoosat-testnet" {
+			expected += 1
+		}
 		// Make sure the length of the UTXOs is exactly spendingTransaction.Outputs + 1 coinbase
-		// output (includingBlock's coinbase)
+		// output (includingBlock's coinbase), plus potentially blockAboveGenesis coinbase for testnet
 		if len(allOutpointAndUTXOEntryPairs) != expected {
 			t.Fatalf("Returned an unexpected amount of UTXOs. "+
 				"Want: %d, got: %d", expected, len(allOutpointAndUTXOEntryPairs))

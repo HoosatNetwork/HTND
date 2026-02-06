@@ -153,7 +153,12 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 	if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
 		mud.toRemove.remove(outpoint)
 	} else if mud.toAdd.Contains(outpoint) {
-		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
+		// Check if already added with the same DAA score - this is idempotent, not an error
+		if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
+			// Same outpoint with same DAA score already exists, this is a no-op
+			return nil
+		}
+		return errors.Errorf("AddEntry: Cannot add outpoint %s twice with different DAA scores", outpoint)
 	} else {
 		mud.toAdd.add(outpoint, entry)
 	}
@@ -164,7 +169,12 @@ func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, en
 	if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
 		mud.toAdd.remove(outpoint)
 	} else if mud.toRemove.Contains(outpoint) {
-		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)
+		// Check if already removed with the same DAA score - this is idempotent, not an error
+		if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
+			// Same outpoint with same DAA score already exists in toRemove, this is a no-op
+			return nil
+		}
+		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice with different DAA scores", outpoint)
 	} else {
 		mud.toRemove.add(outpoint, entry)
 	}

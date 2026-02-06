@@ -162,17 +162,19 @@ func (csm *consensusStateManager) calculateNewTips(
 	}
 
 	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
-	if newTipStatus == externalapi.StatusUTXOValid {
+	isUTXOValid := newTipStatus == externalapi.StatusUTXOValid
+	if isUTXOValid {
 		newTips = append(newTips, newTipHash)
 	} else {
 		log.Debugf("calculateNewTips: not adding new tip %s with status %s (not UTXO valid)", newTipHash, newTipStatus)
 	}
-
-	newTips = append(newTips, newTipHash)
 	for _, currentTip := range currentTips {
-		if !newTipParentsSet.Contains(currentTip) {
-			newTips = append(newTips, currentTip)
+		// Only remove parent from tips if the new block is UTXO valid
+		// Otherwise, the parent should remain a tip since the new block won't be a tip
+		if isUTXOValid && newTipParentsSet.Contains(currentTip) {
+			continue
 		}
+		newTips = append(newTips, currentTip)
 	}
 	log.Infof("The new number of tips is: %d", len(newTips))
 

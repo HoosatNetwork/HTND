@@ -899,7 +899,14 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPoints(st
 			return nil, err
 		}
 	}
-	return oldDiff.DiffFrom(newDiff.ToImmutable())
+	result, err := oldDiff.DiffFrom(newDiff.ToImmutable())
+	if err != nil {
+		// DiffFrom can fail during reorgs when UTXO diffs have incompatible DAA scores.
+		// Log the error and return it to trigger the acceptance data fallback.
+		log.Warnf("DiffFrom failed in calculateDiffBetweenPreviousAndCurrentPruningPoints (err: %v), will use acceptance data fallback", err)
+		return nil, err
+	}
+	return result, nil
 }
 
 // This function takes 2 chain blocks (currentPruningHash, previousPruningHash) and finds

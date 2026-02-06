@@ -177,9 +177,24 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 // WithDiffInPlace applies provided diff to this diff in-place, that would be the result if
 // first d, and than diff were applied to the same base
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
+	// First check for duplicate removals with same DAA score - treat as idempotent
 	if offendingOutpoint, ok := checkIntersectionWithRule(other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, existingEntry externalapi.UTXOEntry) bool {
-			return !this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
+			return entryToAdd.BlockDAAScore() == existingEntry.BlockDAAScore() &&
+				!this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
+		}); ok {
+		// Both diffs want to remove the same outpoint with the same DAA score.
+		// This can happen during reorgs in DAGKnight when diffs have consistent DAA scores.
+		// Log the conflict and treat it as idempotent (removing the same outpoint twice is a no-op).
+		log.Warnf("withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove with same DAA score, treating as idempotent", offendingOutpoint)
+		// Continue processing - the duplicate removal will be handled naturally below
+	}
+
+	// Then check for duplicate removals with different DAA scores - this is an error
+	if offendingOutpoint, ok := checkIntersectionWithRule(other.toRemove, this.toRemove,
+		func(outpoint *externalapi.DomainOutpoint, entryToAdd, existingEntry externalapi.UTXOEntry) bool {
+			return entryToAdd.BlockDAAScore() != existingEntry.BlockDAAScore() &&
+				!this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
 		}); ok {
 		return errors.Errorf(
 			"withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove", offendingOutpoint)

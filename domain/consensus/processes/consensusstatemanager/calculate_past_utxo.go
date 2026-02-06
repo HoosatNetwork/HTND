@@ -175,6 +175,20 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Deduplicate merge set to handle potential duplicates from DAGKnight blue/red merge
+	seenHashes := make(map[externalapi.DomainHash]struct{}, len(mergeSetHashes))
+	deduplicatedHashes := make([]*externalapi.DomainHash, 0, len(mergeSetHashes))
+	for _, hash := range mergeSetHashes {
+		if _, seen := seenHashes[*hash]; !seen {
+			seenHashes[*hash] = struct{}{}
+			deduplicatedHashes = append(deduplicatedHashes, hash)
+		} else {
+			log.Warnf("Duplicate block %s found in merge set for block %s, skipping", hash, blockHash)
+		}
+	}
+	mergeSetHashes = deduplicatedHashes
+
 	log.Debugf("Merge set for block %s is %v", blockHash, mergeSetHashes)
 	mergeSetBlocks, err := csm.blockStore.Blocks(csm.databaseContext, stagingArea, mergeSetHashes)
 	if err != nil {

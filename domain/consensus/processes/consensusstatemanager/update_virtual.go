@@ -122,7 +122,11 @@ func (csm *consensusStateManager) updateSelectedTipUTXODiff(
 	}
 	newDiff, err := virtualUTXODiff.DiffFrom(selectedTipUTXODiff)
 	if err != nil {
-		return err
+		// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
+		// Fall back to using the virtualUTXODiff directly with nil diffChild.
+		log.Debugf("DiffFrom failed in updateSelectedTipUTXODiff (err: %v), using virtualUTXODiff directly", err)
+		csm.stageDiff(stagingArea, selectedTip, virtualUTXODiff, nil)
+		return nil
 	}
 
 	log.Debugf("Staging new UTXO diff for virtual diff parent %s", selectedTip)

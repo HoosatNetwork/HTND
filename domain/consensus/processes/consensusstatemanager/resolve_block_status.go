@@ -59,6 +59,7 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 	previousBlockUTXOSet := selectedParentUTXOSet
 	var oneBeforeLastResolvedBlockUTXOSet externalapi.UTXODiff
 	var oneBeforeLastResolvedBlockHash *externalapi.DomainHash
+	hadIntermediateCommits := false
 
 	for i := len(unverifiedBlocks) - 1; i >= 0; i-- {
 		unverifiedBlockHash := unverifiedBlocks[i]
@@ -77,7 +78,7 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 			oneBeforeLastResolvedBlockHash = previousBlockHash
 
 			blockStatus, previousBlockUTXOSet, err = csm.resolveSingleBlockStatus(
-				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockHash, previousBlockUTXOSet, isResolveTip, useSeparateStagingArea)
+				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockHash, previousBlockUTXOSet, isResolveTip, useSeparateStagingArea, hadIntermediateCommits)
 			if err != nil {
 				return 0, nil, err
 			}
@@ -93,6 +94,7 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 			if err != nil {
 				return 0, nil, err
 			}
+			hadIntermediateCommits = true
 			// Note: When using separate staging areas, each block's diff points to virtual (nil diffChild).
 			// We don't try to update diffChild to point forward because the UTXO diffs were computed
 			// against different database states and DiffFrom would fail with DAA score mismatches.
@@ -116,12 +118,14 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 		// needed data (tip's selectedParent and selectedParent's UTXODiff)
 		selectedParentUTXODiff, err := previousBlockUTXOSet.DiffFrom(oneBeforeLastResolvedBlockUTXOSet)
 		if err != nil {
-			return 0, nil, err
-		}
-
-		reversalData = &model.UTXODiffReversalData{
-			SelectedParentHash:     oneBeforeLastResolvedBlockHash,
-			SelectedParentUTXODiff: selectedParentUTXODiff,
+			// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
+			// Skip the reversal optimization in this case - blocks will keep their current diff paths.
+			log.Debugf("DiffFrom failed during reversal data preparation (err: %v), skipping reversal optimization", err)
+		} else {
+			reversalData = &model.UTXODiffReversalData{
+				SelectedParentHash:     oneBeforeLastResolvedBlockHash,
+				SelectedParentUTXODiff: selectedParentUTXODiff,
+			}
 		}
 	}
 
@@ -222,7 +226,7 @@ func (csm *consensusStateManager) getUnverifiedChainBlocks(stagingArea *model.St
 }
 
 func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.StagingArea,
-	blockHash, selectedParentHash *externalapi.DomainHash, selectedParentPastUTXOSet externalapi.UTXODiff, isResolveTip bool, useSeparateStagingArea bool) (
+	blockHash, selectedParentHash *externalapi.DomainHash, selectedParentPastUTXOSet externalapi.UTXODiff, isResolveTip bool, useSeparateStagingArea bool, hadIntermediateCommits bool) (
 	externalapi.BlockStatus, externalapi.UTXODiff, error) {
 
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveSingleBlockStatus for %s", blockHash))
@@ -277,36 +281,53 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 	}
 
 	if isResolveTip {
-		oldSelectedTipUTXOSet, err := csm.restorePastUTXO(stagingArea, oldSelectedTip)
-		if err != nil {
-			return 0, nil, err
-		}
-		isNewSelectedTip, err := csm.isNewSelectedTip(stagingArea, blockHash, oldSelectedTip)
-		if err != nil {
-			return 0, nil, err
-		}
-
-		if isNewSelectedTip {
-			log.Debugf("Block %s is the new selected tip, therefore setting it as old selected tip's diffChild", blockHash)
-
-			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
-			if err != nil {
-				return 0, nil, err
-			}
-			log.Debugf("Setting the old selected tip's (%s) diffChild to be the new selected tip (%s)",
-				oldSelectedTip, blockHash)
-			csm.stageDiff(stagingArea, oldSelectedTip, updatedOldSelectedTipUTXOSet, blockHash)
-
-			log.Tracef("Staging the utxoDiff of block %s, with virtual as diffChild", blockHash)
+		// If there were intermediate commits (useSeparateStagingArea was used for previous blocks),
+		// we can't safely do DiffFrom because the UTXO diffs were computed against different database states
+		// and may have different DAA scores for the same outpoints.
+		if hadIntermediateCommits {
+			log.Debugf("Block %s is the resolve tip but had intermediate commits, "+
+				"setting virtual as diffChild to avoid DiffFrom DAA score mismatches", blockHash)
 			csm.stageDiff(stagingArea, blockHash, pastUTXOSet, nil)
 		} else {
-			log.Debugf("Block %s is the tip of currently resolved chain, but not the new selected tip,"+
-				"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
-			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
+			oldSelectedTipUTXOSet, err := csm.restorePastUTXO(stagingArea, oldSelectedTip)
 			if err != nil {
 				return 0, nil, err
 			}
-			csm.stageDiff(stagingArea, blockHash, utxoDiff, oldSelectedTip)
+			isNewSelectedTip, err := csm.isNewSelectedTip(stagingArea, blockHash, oldSelectedTip)
+			if err != nil {
+				return 0, nil, err
+			}
+
+			if isNewSelectedTip {
+				log.Debugf("Block %s is the new selected tip, therefore setting it as old selected tip's diffChild", blockHash)
+
+				updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
+				if err != nil {
+					// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
+					// Fall back to storing with nil diffChild (pointing to virtual).
+					log.Debugf("DiffFrom failed for new selected tip %s (err: %v), storing with virtual as diffChild", blockHash, err)
+					csm.stageDiff(stagingArea, blockHash, pastUTXOSet, nil)
+				} else {
+					log.Debugf("Setting the old selected tip's (%s) diffChild to be the new selected tip (%s)",
+						oldSelectedTip, blockHash)
+					csm.stageDiff(stagingArea, oldSelectedTip, updatedOldSelectedTipUTXOSet, blockHash)
+
+					log.Tracef("Staging the utxoDiff of block %s, with virtual as diffChild", blockHash)
+					csm.stageDiff(stagingArea, blockHash, pastUTXOSet, nil)
+				}
+			} else {
+				log.Debugf("Block %s is the tip of currently resolved chain, but not the new selected tip,"+
+					"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
+				utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
+				if err != nil {
+					// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
+					// Fall back to storing with nil diffChild (pointing to virtual).
+					log.Debugf("DiffFrom failed for block %s (err: %v), storing with virtual as diffChild", blockHash, err)
+					csm.stageDiff(stagingArea, blockHash, pastUTXOSet, nil)
+				} else {
+					csm.stageDiff(stagingArea, blockHash, utxoDiff, oldSelectedTip)
+				}
+			}
 		}
 	} else {
 		// If the block is not the tip of the currently resolved chain, we set it's diffChild to be the selectedParent,
@@ -323,10 +344,13 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 				"therefore temporarily setting selectedParent as it's diffChild", blockHash)
 			utxoDiff, err := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
 			if err != nil {
-				return 0, nil, err
+				// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
+				// Fall back to storing with nil diffChild (pointing to virtual).
+				log.Debugf("DiffFrom failed for non-tip block %s (err: %v), storing with virtual as diffChild", blockHash, err)
+				csm.stageDiff(stagingArea, blockHash, pastUTXOSet, nil)
+			} else {
+				csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 			}
-
-			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 		}
 	}
 
