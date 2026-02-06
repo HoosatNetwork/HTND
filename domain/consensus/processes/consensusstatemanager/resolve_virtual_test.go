@@ -304,7 +304,9 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		}
 
 		// Resolve one step
-		virtualChangeSet, _, err := tc.ResolveVirtualWithMaxParam(3)
+		virtualChangeSet, isCompletelyResolved, err := tc.ResolveVirtualWithMaxParam(3)
+		t.Logf("After ResolveVirtualWithMaxParam: virtualChangeSet=%v, isCompletelyResolved=%v, err=%v",
+			virtualChangeSet, isCompletelyResolved, err)
 		if err != nil {
 			printUtxoDiffChildren(t, tc, hashes, blocks)
 			t.Fatalf("Error resolving virtual in re-org chain: %+v", err)
@@ -317,6 +319,18 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 
 		// Make sure the reported change-set is compatible with actual changes.
 		// Checking this for one call should suffice to avoid possible bugs.
+		if virtualChangeSet == nil {
+			t.Logf("previousVirtualSelectedParent=%s, newVirtualSelectedParent=%s", previousVirtualSelectedParent, newVirtualSelectedParent)
+			t.Fatalf("virtualChangeSet is nil")
+		}
+		if virtualChangeSet.VirtualSelectedParentChainChanges == nil {
+			t.Fatalf("VirtualSelectedParentChainChanges is nil")
+		}
+		if len(virtualChangeSet.VirtualSelectedParentChainChanges.Removed) == 0 {
+			t.Logf("Removed array is empty, previousVirtualSelectedParent=%s, newVirtualSelectedParent=%s",
+				previousVirtualSelectedParent, newVirtualSelectedParent)
+			t.Fatalf("Expected Removed to be non-empty")
+		}
 		reportedPreviousVirtualSelectedParent := virtualChangeSet.VirtualSelectedParentChainChanges.Removed[0]
 		reportedNewVirtualSelectedParent := virtualChangeSet.VirtualSelectedParentChainChanges.
 			Added[len(virtualChangeSet.VirtualSelectedParentChainChanges.Added)-1]
@@ -329,7 +343,7 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		}
 
 		// Resolve one more step
-		_, isCompletelyResolved, err := tc.ResolveVirtualWithMaxParam(3)
+		_, isCompletelyResolved, err = tc.ResolveVirtualWithMaxParam(3)
 		if err != nil {
 			t.Fatalf("Error resolving virtual in re-org chain: %+v", err)
 		}
@@ -349,13 +363,12 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		previousBlockHash = firstChainTip
 		for i := 0; i < reorgChainLength; i++ {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
-			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", initialChainLength+i)
-			hashes = append(hashes, previousBlockHash)
-			printfDebug("A_%d: %s\n", initialChainLength+i, previousBlockHash)
-
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in initial chain: %+v", initialChainLength+i, err)
 			}
+			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", initialChainLength+i)
+			hashes = append(hashes, previousBlockHash)
+			printfDebug("A_%d: %s\n", initialChainLength+i, previousBlockHash)
 		}
 
 		printfDebug("\n")

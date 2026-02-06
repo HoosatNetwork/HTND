@@ -37,6 +37,38 @@ func (csm *consensusStateManager) tipsInDecreasingGHOSTDAGParentSelectionOrder(s
 }
 
 func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingArea) (*externalapi.DomainHash, externalapi.BlockStatus, error) {
+	// First, check the headers selected tip - this is the block with the most blue work
+	// based on header validation, regardless of UTXO status.
+	// This is important because blocks with StatusUTXOPendingVerification are not added
+	// to the tips store, so we need to check the headers selected tip separately.
+	hasHeadersSelectedTip, err := csm.headersSelectedTipStore.Has(csm.databaseContext, stagingArea)
+	if err != nil {
+		return nil, externalapi.StatusInvalid, err
+	}
+	if hasHeadersSelectedTip {
+		headersSelectedTip, err := csm.headersSelectedTipStore.HeadersSelectedTip(csm.databaseContext, stagingArea)
+		if err != nil {
+			return nil, externalapi.StatusInvalid, err
+		}
+
+		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, headersSelectedTip)
+		if err != nil && !database.IsNotFoundError(err) {
+			return nil, externalapi.StatusInvalid, err
+		}
+		if err == nil && status == externalapi.StatusUTXOPendingVerification {
+			// The headers selected tip needs UTXO verification - use it
+			isViolatingFinality, _, err := csm.isViolatingFinality(stagingArea, headersSelectedTip)
+			if err != nil {
+				return nil, externalapi.StatusInvalid, err
+			}
+			if !isViolatingFinality {
+				log.Debugf("findNextPendingTip: using headers selected tip %s with status %s", headersSelectedTip, status)
+				return headersSelectedTip, status, nil
+			}
+		}
+	}
+
+	// Fall back to checking tips from the tips store
 	orderedTips, err := csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
@@ -120,7 +152,11 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		return nil, false, err
 	}
 
+	log.Debugf("ResolveVirtual: pendingTip=%s, pendingTipStatus=%s, previousVirtualSelectedParent=%s",
+		pendingTip, pendingTipStatus, previousVirtualSelectedParent)
+
 	if pendingTipStatus == externalapi.StatusUTXOValid && previousVirtualSelectedParent.Equal(pendingTip) {
+		log.Debugf("ResolveVirtual: early return because pendingTip is already UTXO valid and equals previousVirtualSelectedParent")
 		return nil, true, nil
 	}
 
@@ -186,16 +222,29 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	updateVirtualStagingArea := model.NewStagingArea()
 
+	// If the resolution is complete, we need to add the resolved tip to the tips store
+	// This is necessary because blocks with StatusUTXOPendingVerification are not added
+	// to the tips store when they are inserted, so we need to add them now that they
+	// are validated.
+	if isCompletelyResolved {
+		newTips, err := csm.calculateNewTips(updateVirtualStagingArea, pendingTip)
+		if err != nil {
+			return nil, false, err
+		}
+		csm.consensusStateStore.StageTips(updateVirtualStagingArea, newTips)
+		log.Debugf("Added resolved tip %s to tips, new tips count: %d", pendingTip, len(newTips))
+	}
+
 	virtualParents := []*externalapi.DomainHash{processingPoint}
 	// If `isCompletelyResolved`, set virtual correctly with all tips which have less blue work than pending
 	if isCompletelyResolved {
-		lowerTips, err := csm.getGHOSTDAGLowerTips(readStagingArea, pendingTip)
+		lowerTips, err := csm.getGHOSTDAGLowerTips(updateVirtualStagingArea, pendingTip)
 		if err != nil {
 			return nil, false, err
 		}
 		log.Debugf("Picking virtual parents from relevant tips len: %d", len(lowerTips))
 
-		virtualParents, err = csm.pickVirtualParents(readStagingArea, lowerTips)
+		virtualParents, err = csm.pickVirtualParents(updateVirtualStagingArea, lowerTips)
 		if err != nil {
 			return nil, false, err
 		}
