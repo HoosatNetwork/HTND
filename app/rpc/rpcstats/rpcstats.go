@@ -26,6 +26,7 @@ type Stats struct {
 	totalRequests    uint64
 	startTime        time.Time
 	stopChan         chan struct{}
+	stopped          bool
 }
 
 // IPRequestCount represents a request count for a specific IP
@@ -65,6 +66,12 @@ func (s *Stats) Start() {
 
 // Stop stops the statistics tracker
 func (s *Stats) Stop() {
+	s.Lock()
+	defer s.Unlock()
+	if s.stopped {
+		return
+	}
+	s.stopped = true
 	close(s.stopChan)
 	log.Infof("RPC statistics tracking stopped")
 }
