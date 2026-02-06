@@ -10,7 +10,13 @@ import (
 
 // HandleGetMempoolEntry handles the respectively named RPC command
 func HandleGetMempoolEntry(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
-
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewGetMempoolEntryResponseMessage(0, nil, false), nil
+	}
 	transaction := &externalapi.DomainTransaction{}
 	var found bool
 	var isOrphan bool

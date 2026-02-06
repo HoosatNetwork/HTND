@@ -18,6 +18,13 @@ import (
 
 // HandleSubmitBlock processes the SubmitBlock RPC command
 func HandleSubmitBlock(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewSubmitBlockResponseMessage(), nil
+	}
 	submitBlockRequest, ok := request.(*appmessage.SubmitBlockRequestMessage)
 	if !ok {
 		return nil, fmt.Errorf("invalid request type: expected *appmessage.SubmitBlockRequestMessage")

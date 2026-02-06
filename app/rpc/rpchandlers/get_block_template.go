@@ -14,6 +14,14 @@ import (
 func HandleGetBlockTemplate(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlockTemplateRequest := request.(*appmessage.GetBlockTemplateRequestMessage)
 
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewGetBlockTemplateResponseMessage(nil, context.ProtocolManager.Context().HasPeers() && isNearlySynced), nil
+	}
+
 	payAddress, err := util.DecodeAddress(getBlockTemplateRequest.PayAddress, context.Config.ActiveNetParams.Prefix)
 	if err != nil {
 		errorMessage := &appmessage.GetBlockTemplateResponseMessage{}

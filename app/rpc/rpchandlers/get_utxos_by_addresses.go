@@ -10,6 +10,13 @@ import (
 
 // HandleGetUTXOsByAddresses handles the respectively named RPC command
 func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewGetUTXOsByAddressesResponseMessage(nil), nil
+	}
 	if !context.Config.UTXOIndex {
 		errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Method unavailable when htnd is run without --utxoindex")

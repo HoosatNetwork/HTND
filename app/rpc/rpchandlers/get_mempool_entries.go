@@ -8,6 +8,13 @@ import (
 
 // HandleGetMempoolEntries handles the respectively named RPC command
 func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewGetMempoolEntriesResponseMessage(nil), nil
+	}
 	getMempoolEntriesRequest := request.(*appmessage.GetMempoolEntriesRequestMessage)
 
 	entries := make([]*appmessage.MempoolEntry, 0)
