@@ -18,7 +18,7 @@ func HandleGetBlockTemplate(context *rpccontext.Context, _ *router.Router, reque
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && !context.Config.AllowSubmitBlockWhenNotSynced {
 		return appmessage.NewGetBlockTemplateResponseMessage(nil, context.ProtocolManager.Context().HasPeers() && isNearlySynced), nil
 	}
 

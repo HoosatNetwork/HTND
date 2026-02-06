@@ -15,7 +15,7 @@ func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, re
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Method unavailable when htnd is out of sync")
 		return errorMessage, nil

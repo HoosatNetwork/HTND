@@ -16,7 +16,7 @@ func HandleShutDown(context *rpccontext.Context, _ *router.Router, _ appmessage.
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewShutDownResponseMessage(), nil
 	}
 	if context.Config.SafeRPC {

@@ -9,7 +9,7 @@ import (
 // HandleGetMempoolEntries handles the respectively named RPC command
 func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
+	if err != nil && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return nil, err
 	}
 	if !isNearlySynced {

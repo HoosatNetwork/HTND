@@ -14,7 +14,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewGetUTXOsByAddressesResponseMessage(nil), nil
 	}
 	if !context.Config.UTXOIndex {

@@ -12,7 +12,7 @@ func HandleGetVirtualSelectedParentBlueScore(context *rpccontext.Context, _ *rou
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewGetVirtualSelectedParentBlueScoreResponseMessage(0), nil
 	}
 	c := context.Domain.Consensus()

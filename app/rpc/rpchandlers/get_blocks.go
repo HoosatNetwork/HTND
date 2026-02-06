@@ -16,7 +16,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewGetBlocksResponseMessage(), nil
 	}
 

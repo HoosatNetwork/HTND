@@ -91,7 +91,7 @@ func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *r
 		}
 
 		// Record the RPC request for statistics
-		RPCStats.RecordRequest(clientAddress, string(request.Command()))
+		RPCStats.RecordRequest(clientAddress, request.Command().String())
 
 		response, err := handler(m.context, router, request)
 		if err != nil {

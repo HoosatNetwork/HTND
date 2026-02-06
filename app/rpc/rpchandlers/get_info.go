@@ -10,7 +10,7 @@ import (
 // HandleGetInfo handles the respectively named RPC command
 func HandleGetInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.Message) (appmessage.Message, error) {
 	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
+	if err != nil && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return nil, err
 	}
 

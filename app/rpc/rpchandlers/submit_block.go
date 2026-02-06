@@ -22,7 +22,7 @@ func HandleSubmitBlock(context *rpccontext.Context, _ *router.Router, request ap
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && !context.Config.AllowSubmitBlockWhenNotSynced {
 		return appmessage.NewSubmitBlockResponseMessage(), nil
 	}
 	submitBlockRequest, ok := request.(*appmessage.SubmitBlockRequestMessage)

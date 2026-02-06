@@ -12,7 +12,7 @@ func HandleGetBlockCount(context *rpccontext.Context, _ *router.Router, _ appmes
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		errorMessage := &appmessage.GetBlockCountResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Method unavailable when htnd is out of sync")
 		return errorMessage, nil

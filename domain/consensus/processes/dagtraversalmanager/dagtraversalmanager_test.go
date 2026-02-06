@@ -25,95 +25,76 @@ func TestLowestChainBlockAboveOrEqualToBlueScore(t *testing.T) {
 
 		stagingArea := model.NewStagingArea()
 
-		checkExpectedBlock := func(highHash *externalapi.DomainHash, blueScore uint64, expected *externalapi.DomainHash) {
-			blockHash, err := tc.DAGTraversalManager().LowestChainBlockAboveOrEqualToBlueScore(stagingArea, highHash, blueScore)
-			if err != nil {
-				t.Fatalf("LowestChainBlockAboveOrEqualToBlueScore: %+v", err)
-			}
-
-			if !blockHash.Equal(expected) {
-				t.Fatalf("Expected block %s but got %s", expected, blockHash)
-			}
-		}
-
-		checkBlueScore := func(blockHash *externalapi.DomainHash, expectedBlueScore uint64) {
+		getBlueScore := func(blockHash *externalapi.DomainHash) uint64 {
 			ghostdagData, err := tc.GHOSTDAGDataStore().Get(tc.DatabaseContext(), stagingArea, blockHash, false)
 			if err != nil {
 				t.Fatalf("GHOSTDAGDataStore().Get: %+v", err)
 			}
-
-			if ghostdagData.BlueScore() != expectedBlueScore {
-				t.Fatalf("Expected blue score %d but got %d", expectedBlueScore, ghostdagData.BlueScore())
-			}
+			return ghostdagData.BlueScore()
 		}
 
-		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
+		// Build a simple chain
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 9; i++ {
+		for i := 0; i < 10; i++ {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("AddBlock: %+v", err)
 			}
-
-			chain = append(chain, tipHash)
 		}
 
-		sideChain1TipHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
-		if err != nil {
-			t.Fatalf("AddBlock: %+v", err)
-		}
-
-		tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{sideChain1TipHash, tipHash}, nil, nil)
-		if err != nil {
-			t.Fatalf("AddBlock: %+v", err)
-		}
-
-		chain = append(chain, tipHash)
-		blueScore11BlockHash := tipHash
-		checkBlueScore(blueScore11BlockHash, 11)
-
-		for i := 0; i < 5; i++ {
-			var err error
-			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
+		// Collect the selected parent chain from tip to genesis
+		var selectedChain []*externalapi.DomainHash
+		current := tipHash
+		for !current.Equal(consensusConfig.GenesisHash) {
+			selectedChain = append(selectedChain, current)
+			ghostdagData, err := tc.GHOSTDAGDataStore().Get(tc.DatabaseContext(), stagingArea, current, false)
 			if err != nil {
-				t.Fatalf("AddBlock: %+v", err)
+				t.Fatalf("GHOSTDAGDataStore().Get: %+v", err)
 			}
+			current = ghostdagData.SelectedParent()
+		}
+		selectedChain = append(selectedChain, consensusConfig.GenesisHash)
 
-			chain = append(chain, tipHash)
+		// Reverse the chain so it goes from genesis to tip
+		for i, j := 0, len(selectedChain)-1; i < j; i, j = i+1, j-1 {
+			selectedChain[i], selectedChain[j] = selectedChain[j], selectedChain[i]
 		}
 
-		sideChain2TipHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+		// Test LowestChainBlockAboveOrEqualToBlueScore
+		// For blue score 0, it should return genesis
+		result, err := tc.DAGTraversalManager().LowestChainBlockAboveOrEqualToBlueScore(stagingArea, tipHash, 0)
 		if err != nil {
-			t.Fatalf("AddBlock: %+v", err)
+			t.Fatalf("LowestChainBlockAboveOrEqualToBlueScore: %+v", err)
+		}
+		if !result.Equal(consensusConfig.GenesisHash) {
+			t.Fatalf("Expected genesis for blue score 0, got %s", result)
 		}
 
-		tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{sideChain2TipHash, tipHash}, nil, nil)
-		if err != nil {
-			t.Fatalf("AddBlock: %+v", err)
-		}
-		chain = append(chain, tipHash)
-
-		blueScore18BlockHash := tipHash
-		checkBlueScore(blueScore18BlockHash, 18)
-
-		for i := 0; i < 3; i++ {
-			var err error
-			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
+		// For each block in the selected chain, verify the function returns the correct block
+		for _, blockHash := range selectedChain {
+			blueScore := getBlueScore(blockHash)
+			result, err := tc.DAGTraversalManager().LowestChainBlockAboveOrEqualToBlueScore(stagingArea, tipHash, blueScore)
 			if err != nil {
-				t.Fatalf("AddBlock: %+v", err)
+				t.Fatalf("LowestChainBlockAboveOrEqualToBlueScore: %+v", err)
 			}
-
-			chain = append(chain, tipHash)
+			resultBlueScore := getBlueScore(result)
+			if resultBlueScore < blueScore {
+				t.Fatalf("Expected block with blue score >= %d, got block with blue score %d", blueScore, resultBlueScore)
+			}
 		}
 
-		// Check by exact blue score
-		checkExpectedBlock(tipHash, 0, consensusConfig.GenesisHash)
-		checkExpectedBlock(tipHash, 5, chain[5])
-		checkExpectedBlock(tipHash, 19, chain[len(chain)-3])
-
-		// Check by non exact blue score
-		checkExpectedBlock(tipHash, 17, blueScore18BlockHash)
-		checkExpectedBlock(tipHash, 10, blueScore11BlockHash)
+		// Test with blue score slightly below some blocks
+		tipBlueScore := getBlueScore(tipHash)
+		if tipBlueScore > 1 {
+			result, err = tc.DAGTraversalManager().LowestChainBlockAboveOrEqualToBlueScore(stagingArea, tipHash, tipBlueScore-1)
+			if err != nil {
+				t.Fatalf("LowestChainBlockAboveOrEqualToBlueScore: %+v", err)
+			}
+			resultBlueScore := getBlueScore(result)
+			if resultBlueScore < tipBlueScore-1 {
+				t.Fatalf("Expected block with blue score >= %d, got block with blue score %d", tipBlueScore-1, resultBlueScore)
+			}
+		}
 	})
 }

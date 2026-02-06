@@ -12,7 +12,7 @@ func HandleResolveFinalityConflict(context *rpccontext.Context, _ *router.Router
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		response := &appmessage.ResolveFinalityConflictResponseMessage{}
 		response.Error = appmessage.RPCErrorf("not implemented")
 		return response, nil

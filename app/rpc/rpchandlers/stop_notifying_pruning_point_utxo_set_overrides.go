@@ -12,7 +12,7 @@ func HandleStopNotifyingPruningPointUTXOSetOverrideRequest(context *rpccontext.C
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewStopNotifyingPruningPointUTXOSetOverrideResponseMessage(), nil
 	}
 	listener, err := context.NotificationManager.Listener(router)

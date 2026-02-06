@@ -12,7 +12,7 @@ func HandleNotifyBlockAdded(context *rpccontext.Context, router *router.Router, 
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewNotifyBlockAddedResponseMessage(), nil
 	}
 	listener, err := context.NotificationManager.Listener(router)

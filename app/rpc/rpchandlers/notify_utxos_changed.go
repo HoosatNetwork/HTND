@@ -12,7 +12,7 @@ func HandleNotifyUTXOsChanged(context *rpccontext.Context, router *router.Router
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewNotifyUTXOsChangedResponseMessage(), nil
 	}
 	if !context.Config.UTXOIndex {

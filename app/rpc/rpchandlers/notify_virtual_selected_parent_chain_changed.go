@@ -13,7 +13,7 @@ func HandleNotifyVirtualSelectedParentChainChanged(context *rpccontext.Context, 
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewNotifyVirtualSelectedParentChainChangedResponseMessage(), nil
 	}
 	notifyVirtualSelectedParentChainChangedRequest := request.(*appmessage.NotifyVirtualSelectedParentChainChangedRequestMessage)

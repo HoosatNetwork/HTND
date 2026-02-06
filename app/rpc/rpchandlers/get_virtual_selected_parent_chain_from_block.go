@@ -15,7 +15,7 @@ func HandleGetVirtualSelectedParentChainFromBlock(context *rpccontext.Context, _
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.ActiveNetParams.Net == appmessage.Mainnet {
 		return appmessage.NewGetVirtualSelectedParentBlueScoreResponseMessage(0), nil
 	}
 	getVirtualSelectedParentChainFromBlockRequest := request.(*appmessage.GetVirtualSelectedParentChainFromBlockRequestMessage)
