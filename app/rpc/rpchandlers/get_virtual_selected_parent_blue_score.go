@@ -8,6 +8,13 @@ import (
 
 // HandleGetVirtualSelectedParentBlueScore handles the respectively named RPC command
 func HandleGetVirtualSelectedParentBlueScore(context *rpccontext.Context, _ *router.Router, _ appmessage.Message) (appmessage.Message, error) {
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewGetVirtualSelectedParentBlueScoreResponseMessage(0), nil
+	}
 	c := context.Domain.Consensus()
 	selectedParent, err := c.GetVirtualSelectedParent()
 	if err != nil {

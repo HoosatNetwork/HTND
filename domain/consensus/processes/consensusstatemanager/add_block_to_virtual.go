@@ -168,6 +168,7 @@ func (csm *consensusStateManager) calculateNewTips(
 		log.Debugf("calculateNewTips: not adding new tip %s with status %s (not UTXO valid)", newTipHash, newTipStatus)
 	}
 
+	newTips = append(newTips, newTipHash)
 	for _, currentTip := range currentTips {
 		if !newTipParentsSet.Contains(currentTip) {
 			newTips = append(newTips, currentTip)

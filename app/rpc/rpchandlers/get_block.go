@@ -62,6 +62,14 @@ func shouldRetryError(err error) bool {
 func HandleGetBlock(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlockRequest := request.(*appmessage.GetBlockRequestMessage)
 
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewGetBlockResponseMessage(), nil
+	}
+
 	// Load the raw block bytes from the database.
 	hash, err := externalapi.NewDomainHashFromString(getBlockRequest.Hash)
 	if err != nil {

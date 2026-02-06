@@ -12,6 +12,13 @@ const pauseBeforeShutDown = time.Second
 
 // HandleShutDown handles the respectively named RPC command
 func HandleShutDown(context *rpccontext.Context, _ *router.Router, _ appmessage.Message) (appmessage.Message, error) {
+	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+	if err != nil {
+		return nil, err
+	}
+	if !isNearlySynced {
+		return appmessage.NewShutDownResponseMessage(), nil
+	}
 	if context.Config.SafeRPC {
 		log.Warn("ShutDown RPC command called while node in safe RPC mode -- ignoring.")
 		response := appmessage.NewShutDownResponseMessage()

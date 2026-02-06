@@ -4,10 +4,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpchandlers"
+	"github.com/Hoosat-Oy/HTND/app/rpc/rpcstats"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
 )
+
+// RPCStats is the global RPC statistics tracker
+var RPCStats = rpcstats.NewStats()
 
 type handler func(context *rpccontext.Context, router *router.Router, request appmessage.Message) (appmessage.Message, error)
 
@@ -68,12 +72,13 @@ func (m *Manager) routerInitializer(router *router.Router, netConnection *netada
 	spawn("routerInitializer-handleIncomingMessages", func() {
 		defer m.context.NotificationManager.RemoveListener(router)
 
-		err := m.handleIncomingMessages(router, incomingRoute)
+		err := m.handleIncomingMessages(router, incomingRoute, netConnection)
 		m.handleError(err, netConnection)
 	})
 }
 
-func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *router.Route) error {
+func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *router.Route, netConnection *netadapter.NetConnection) error {
+	clientAddress := netConnection.Address()
 	outgoingRoute := router.OutgoingRoute()
 	for {
 		request, err := incomingRoute.Dequeue()
@@ -84,6 +89,10 @@ func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *r
 		if !ok {
 			return err
 		}
+
+		// Record the RPC request for statistics
+		RPCStats.RecordRequest(clientAddress, string(request.Command()))
+
 		response, err := handler(m.context, router, request)
 		if err != nil {
 			return err
