@@ -623,8 +623,10 @@ func (ppm *pruningProofManager) dagProcesses(
 		ghostdagManagers[i] = ghostdagmanager.New(
 			ppm.databaseContext,
 			dagTopologyManagers[i],
+			nil,
 			ghostdagDataStores[i],
 			blockHeaderStore,
+			nil,
 			ppm.k,
 			ppm.genesisHash)
 	}
@@ -659,7 +661,7 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	targetReachabilityManager := reachabilitymanager.New(ppm.databaseContext, ghostdagDataStoreForTargetReachabilityManager, targetReachabilityDataStore)
 	blockRelationStoreForTargetReachabilityManager := blockrelationstore.New(bucket, 0, false)
 	dagTopologyManagerForTargetReachabilityManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, blockRelationStoreForTargetReachabilityManager, nil)
-	ghostdagManagerForTargetReachabilityManager := ghostdagmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, ghostdagDataStoreForTargetReachabilityManager, ppm.blockHeaderStore, ppm.k, nil)
+	ghostdagManagerForTargetReachabilityManager := ghostdagmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, nil, ghostdagDataStoreForTargetReachabilityManager, ppm.blockHeaderStore, nil, ppm.k, nil)
 	err := dagTopologyManagerForTargetReachabilityManager.SetParents(stagingArea, model.VirtualGenesisBlockHash, nil)
 	if err != nil {
 		return err
@@ -667,7 +669,7 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 
 	dagTopologyManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, nil, nil)
 	ghostdagDataStore := ghostdagdatastore.New(bucket, 0, false)
-	tmpGHOSTDAGManager := ghostdagmanager.New(ppm.databaseContext, nil, ghostdagDataStore, nil, []externalapi.KType{0}, nil)
+	tmpGHOSTDAGManager := ghostdagmanager.New(ppm.databaseContext, nil, nil, ghostdagDataStore, nil, nil, []externalapi.KType{0}, nil)
 	dagTraversalManager := dagtraversalmanager.New(ppm.databaseContext, nil, ghostdagDataStore, nil, tmpGHOSTDAGManager, nil, nil, nil, []int{0})
 	allProofBlocksUpHeap := dagTraversalManager.NewUpHeap(tmpStagingArea)
 	dag := make(map[externalapi.DomainHash]struct {

@@ -12,8 +12,10 @@ import (
 type GHOSTDAGManagerConstructor func(
 	databaseContext model.DBReader,
 	dagTopologyManager model.DAGTopologyManager,
+	dagTraversalManager model.DAGTraversalManager,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
+	consensusStateStore model.ConsensusStateStore,
 	k []externalapi.KType,
 	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager
 

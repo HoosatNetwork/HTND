@@ -56,6 +56,20 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 		return err
 	}
 
+	// Calculate rank using DAGKnight algorithm to determine dynamic K
+	var k externalapi.KType
+	if len(blockParents) == 0 {
+		// Genesis block uses default K
+		k = gm.k[constants.GetBlockVersion()-1]
+	} else {
+		rank, err := gm.CalculateRank(stagingArea, blockParents, blockParents)
+		if err != nil {
+			return err
+		}
+		k = externalapi.KType(rank)
+		gm.k[constants.GetBlockVersion()-1] = k
+	}
+
 	isGenesis := len(blockParents) == 0
 	if !isGenesis {
 		selectedParent, err := gm.findSelectedParent(stagingArea, blockParents)
@@ -69,14 +83,14 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 	}
 
 	mergeSetWithoutSelectedParent, err := gm.mergeSetWithoutSelectedParent(
-		stagingArea, newBlockData.selectedParent, blockParents)
+		stagingArea, newBlockData.selectedParent, blockParents, k)
 	if err != nil {
 		return err
 	}
 
 	for _, blueCandidate := range mergeSetWithoutSelectedParent {
 		isBlue, candidateAnticoneSize, candidateBluesAnticoneSizes, err := gm.checkBlueCandidate(
-			stagingArea, newBlockData.toModel(), blueCandidate)
+			stagingArea, newBlockData.toModel(), blueCandidate, k)
 		if err != nil {
 			return err
 		}
@@ -135,16 +149,16 @@ type chainBlockData struct {
 }
 
 func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, newBlockData *externalapi.BlockGHOSTDAGData,
-	blueCandidate *externalapi.DomainHash) (isBlue bool, candidateAnticoneSize externalapi.KType,
+	blueCandidate *externalapi.DomainHash, k externalapi.KType) (isBlue bool, candidateAnticoneSize externalapi.KType,
 	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType, err error) {
 
 	// The maximum length of node.blues can be K+1 because
 	// it contains the selected parent.
-	if externalapi.KType(len(newBlockData.MergeSetBlues())) == gm.k[constants.GetBlockVersion()-1]+1 {
+	if externalapi.KType(len(newBlockData.MergeSetBlues())) == k+1 {
 		return false, 0, nil, nil
 	}
 
-	candidateBluesAnticoneSizes = make(map[externalapi.DomainHash]externalapi.KType, gm.k[constants.GetBlockVersion()-1])
+	candidateBluesAnticoneSizes = make(map[externalapi.DomainHash]externalapi.KType, k)
 
 	// Iterate over all blocks in the blue set of newNode that are not in the past
 	// of blueCandidate, and check for each one of them if blueCandidate potentially
@@ -156,7 +170,7 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 
 	for {
 		isBlue, isRed, err := gm.checkBlueCandidateWithChainBlock(stagingArea, newBlockData, chainBlock, blueCandidate,
-			candidateBluesAnticoneSizes, &candidateAnticoneSize)
+			candidateBluesAnticoneSizes, &candidateAnticoneSize, k)
 		if err != nil {
 			return false, 0, nil, err
 		}
@@ -189,7 +203,7 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.StagingArea,
 	newBlockData *externalapi.BlockGHOSTDAGData, chainBlock chainBlockData, blueCandidate *externalapi.DomainHash,
 	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType,
-	candidateAnticoneSize *externalapi.KType) (isBlue, isRed bool, err error) {
+	candidateAnticoneSize *externalapi.KType, k externalapi.KType) (isBlue, isRed bool, err error) {
 
 	// If blueCandidate is in the future of chainBlock, it means
 	// that all remaining blues are in the past of chainBlock and thus
@@ -228,12 +242,12 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 		}
 		*candidateAnticoneSize++
 
-		if *candidateAnticoneSize > gm.k[constants.GetBlockVersion()-1] {
+		if *candidateAnticoneSize > k {
 			// k-cluster violation: The candidate's blue anticone exceeded k
 			return false, true, nil
 		}
 
-		if candidateBluesAnticoneSizes[*block] == gm.k[constants.GetBlockVersion()-1] {
+		if candidateBluesAnticoneSizes[*block] == k {
 			// k-cluster violation: A block in candidate's blue anticone already
 			// has k blue blocks in its own anticone
 			return false, true, nil
@@ -241,8 +255,8 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 
 		// This is a sanity check that validates that a blue
 		// block's blue anticone is not already larger than K.
-		if candidateBluesAnticoneSizes[*block] > gm.k[constants.GetBlockVersion()-1] {
-			return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], gm.k[constants.GetBlockVersion()-1]))
+		if candidateBluesAnticoneSizes[*block] > k {
+			return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
 		}
 	}
 

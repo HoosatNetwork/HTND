@@ -195,7 +195,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	}
 	reachabilityDataStore := reachabilityDataStores[0]
 
-	dagTopologyManagers, ghostdagManagers, dagTraversalManagers := f.dagProcesses(config, dbManager, blockHeaderStore, daaWindowStore, windowHeapSliceStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores, isOldReachabilityInitialized)
+	dagTopologyManagers, ghostdagManagers, dagTraversalManagers := f.dagProcesses(config, dbManager, blockHeaderStore, daaWindowStore, windowHeapSliceStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores, consensusStateStore, isOldReachabilityInitialized)
 
 	blockRelationStore := blockRelationStores[0]
 
@@ -707,6 +707,7 @@ func (f *factory) dagProcesses(config *Config,
 	blockRelationStores []model.BlockRelationStore,
 	reachabilityDataStores []model.ReachabilityDataStore,
 	ghostdagDataStores []model.GHOSTDAGDataStore,
+	consensusStateStore model.ConsensusStateStore,
 	isOldReachabilityInitialized bool) (
 	[]model.DAGTopologyManager,
 	[]model.GHOSTDAGManager,
@@ -742,8 +743,10 @@ func (f *factory) dagProcesses(config *Config,
 		ghostdagManagers[i] = f.ghostdagConstructor(
 			dbManager,
 			dagTopologyManagers[i],
+			dagTraversalManagers[i],
 			ghostdagDataStores[i],
 			blockHeaderStore,
+			consensusStateStore,
 			config.K,
 			config.GenesisHash)
 
@@ -757,7 +760,8 @@ func (f *factory) dagProcesses(config *Config,
 			windowHeapSliceStore,
 			config.GenesisHash,
 			config.DifficultyAdjustmentWindowSize)
+		// Set the DAG traversal manager in the ghostdag manager to resolve circular dependency
+		ghostdagManagers[i].SetDAGTraversalManager(dagTraversalManagers[i])
 	}
-
 	return dagTopologyManagers, ghostdagManagers, dagTraversalManagers
 }

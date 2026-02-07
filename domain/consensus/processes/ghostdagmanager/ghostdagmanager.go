@@ -7,10 +7,12 @@ import (
 
 // ghostdagManager resolves and manages GHOSTDAG block data
 type ghostdagManager struct {
-	databaseContext    model.DBReader
-	dagTopologyManager model.DAGTopologyManager
-	ghostdagDataStore  model.GHOSTDAGDataStore
-	headerStore        model.BlockHeaderStore
+	databaseContext     model.DBReader
+	dagTopologyManager  model.DAGTopologyManager
+	dagTraversalManager model.DAGTraversalManager
+	ghostdagDataStore   model.GHOSTDAGDataStore
+	headerStore         model.BlockHeaderStore
+	consensusStateStore model.ConsensusStateStore
 
 	k           []externalapi.KType
 	genesisHash *externalapi.DomainHash
@@ -20,16 +22,25 @@ type ghostdagManager struct {
 func New(
 	databaseContext model.DBReader,
 	dagTopologyManager model.DAGTopologyManager,
+	dagTraversalManager model.DAGTraversalManager,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
+	consensusStateStore model.ConsensusStateStore,
 	k []externalapi.KType,
 	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
 	return &ghostdagManager{
-		databaseContext:    databaseContext,
-		dagTopologyManager: dagTopologyManager,
-		ghostdagDataStore:  ghostdagDataStore,
-		headerStore:        headerStore,
-		k:                  k,
-		genesisHash:        genesisHash,
+		databaseContext:     databaseContext,
+		dagTopologyManager:  dagTopologyManager,
+		dagTraversalManager: dagTraversalManager,
+		ghostdagDataStore:   ghostdagDataStore,
+		headerStore:         headerStore,
+		consensusStateStore: consensusStateStore,
+		k:                   k,
+		genesisHash:         genesisHash,
 	}
+}
+
+// SetDAGTraversalManager sets the DAG traversal manager for this ghostdag manager
+func (gm *ghostdagManager) SetDAGTraversalManager(dagTraversalManager model.DAGTraversalManager) {
+	gm.dagTraversalManager = dagTraversalManager
 }

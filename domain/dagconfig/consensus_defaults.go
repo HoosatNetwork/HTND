@@ -41,7 +41,7 @@ const (
 	// Formula (1) in section 4.2 of the PHANTOM paper shows how to calculate defaultGHOSTDAGK. The delta term represents a bound
 	// on the expected fraction of the network life in which the width was higher than defaultGHOSTDAGK. The current value of K
 	// was calculated for d = 5 seconds and delta = 0.05.
-	defaultGHOSTDAGK = 18
+	defaultGHOSTDAGK = 18 // Updated for DAGKnight integration or other reasons
 	// defaultMergeSetSizeLimit is a bound on the size of the past of a block and the size of the past
 	// of its selected parent. Any block which violates this bound is invalid.
 	// Should be at least an order of magnitude smaller than defaultFinalityDuration * defaultTargetTimePerBlock.

@@ -11,33 +11,37 @@ import (
 	"github.com/pkg/errors"
 )
 
-// tipsInDecreasingGHOSTDAGParentSelectionOrder returns the current DAG tips in decreasing parent selection order.
-// This means that the first tip in the resulting list would be the GHOSTDAG selected parent, and if removed from the list,
-// the second tip would be the selected parent, and so on.
-func (csm *consensusStateManager) tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea *model.StagingArea) ([]*externalapi.DomainHash, error) {
+// tipsInDecreasingDAGKnightOrder returns the current DAG tips in decreasing DAGKnight ordering.
+// This means that the first tip in the resulting list would be the DAGKnight selected tip, and if removed from the list,
+// the second tip would be the next in the ordering, and so on.
+func (csm *consensusStateManager) tipsInDecreasingDAGKnightOrder(stagingArea *model.StagingArea) ([]*externalapi.DomainHash, error) {
 	tips, err := csm.consensusStateStore.Tips(stagingArea, csm.databaseContext)
 	if err != nil {
 		return nil, err
 	}
 
-	var sortErr error
-	sort.Slice(tips, func(i, j int) bool {
-		selectedParent, err := csm.ghostdagManager.ChooseSelectedParent(stagingArea, tips[i], tips[j])
-		if err != nil {
-			sortErr = err
-			return false
-		}
-
-		return selectedParent.Equal(tips[i])
-	})
-	if sortErr != nil {
-		return nil, sortErr
+	// Use DAGKnight OrderDAG to get the ordering of the tips
+	_, ordering, err := csm.ghostdagManager.OrderDAG(stagingArea, tips)
+	if err != nil {
+		return nil, err
 	}
+
+	// Create a map from hash to its position in the ordering (lower index = higher priority)
+	orderMap := make(map[externalapi.DomainHash]int)
+	for i, hash := range ordering {
+		orderMap[*hash] = i
+	}
+
+	// Sort tips by their position in the ordering (ascending order index)
+	sort.Slice(tips, func(i, j int) bool {
+		return orderMap[*tips[i]] < orderMap[*tips[j]]
+	})
+
 	return tips, nil
 }
 
 func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingArea) (*externalapi.DomainHash, externalapi.BlockStatus, error) {
-	orderedTips, err := csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
+	orderedTips, err := csm.tipsInDecreasingDAGKnightOrder(stagingArea)
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
 	}

@@ -42,8 +42,10 @@ type implManager struct {
 	function func(
 		databaseContext model.DBReader,
 		dagTopologyManager model.DAGTopologyManager,
+		dagTraversalManager model.DAGTraversalManager,
 		ghostdagDataStore model.GHOSTDAGDataStore,
 		headerStore model.BlockHeaderStore,
+		consensusStateStore model.ConsensusStateStore,
 		k []externalapi.KType,
 		genesisHash *externalapi.DomainHash) model.GHOSTDAGManager
 	implName string
@@ -60,7 +62,8 @@ func TestGHOSTDAG(t *testing.T) {
 	}
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		dagTopology := &DAGTopologyManagerImpl{
-			parentsMap: make(map[externalapi.DomainHash][]*externalapi.DomainHash),
+			parentsMap:  make(map[externalapi.DomainHash][]*externalapi.DomainHash),
+			childrenMap: make(map[externalapi.DomainHash][]*externalapi.DomainHash),
 		}
 
 		ghostdagDataStore := &GHOSTDAGDataStoreImpl{
@@ -105,11 +108,15 @@ func TestGHOSTDAG(t *testing.T) {
 			blockHeadersStore.dagMap[genesisHash] = genesisHeader
 
 			for _, factory := range implementationFactories {
-				g := factory.function(nil, dagTopology, ghostdagDataStore, blockHeadersStore, []externalapi.KType{test.K}, &genesisHash)
+				g := factory.function(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{test.K}, &genesisHash)
 
 				for _, testBlockData := range test.Blocks {
 					blockID := StringToDomainHash(testBlockData.ID)
 					dagTopology.parentsMap[*blockID] = StringToDomainHashSlice(testBlockData.Parents)
+					for _, parentID := range testBlockData.Parents {
+						parentHash := StringToDomainHash(parentID)
+						dagTopology.childrenMap[*parentHash] = append(dagTopology.childrenMap[*parentHash], blockID)
+					}
 					blockHeadersStore.dagMap[*blockID] = blockheader.NewImmutableBlockHeader(
 						constants.GetBlockVersion(),
 						[]externalapi.BlockLevelParents{StringToDomainHashSlice(testBlockData.Parents)},
@@ -190,7 +197,8 @@ func TestGHOSTDAG(t *testing.T) {
 // 2 blocks chain tip as its selected parent.
 func TestBlueWork(t *testing.T) {
 	dagTopology := &DAGTopologyManagerImpl{
-		parentsMap: make(map[externalapi.DomainHash][]*externalapi.DomainHash),
+		parentsMap:  make(map[externalapi.DomainHash][]*externalapi.DomainHash),
+		childrenMap: make(map[externalapi.DomainHash][]*externalapi.DomainHash),
 	}
 
 	ghostdagDataStore := &GHOSTDAGDataStoreImpl{
@@ -229,15 +237,19 @@ func TestBlueWork(t *testing.T) {
 	blockHeadersStore.dagMap[*fakeGenesisHash] = lowDifficultyHeader
 
 	dagTopology.parentsMap[*longestChainBlock1Hash] = []*externalapi.DomainHash{fakeGenesisHash}
+	dagTopology.childrenMap[*fakeGenesisHash] = append(dagTopology.childrenMap[*fakeGenesisHash], longestChainBlock1Hash)
 	blockHeadersStore.dagMap[*longestChainBlock1Hash] = lowDifficultyHeader
 
 	dagTopology.parentsMap[*longestChainBlock2Hash] = []*externalapi.DomainHash{longestChainBlock1Hash}
+	dagTopology.childrenMap[*longestChainBlock1Hash] = append(dagTopology.childrenMap[*longestChainBlock1Hash], longestChainBlock2Hash)
 	blockHeadersStore.dagMap[*longestChainBlock2Hash] = lowDifficultyHeader
 
 	dagTopology.parentsMap[*longestChainBlock3Hash] = []*externalapi.DomainHash{longestChainBlock2Hash}
+	dagTopology.childrenMap[*longestChainBlock2Hash] = append(dagTopology.childrenMap[*longestChainBlock2Hash], longestChainBlock3Hash)
 	blockHeadersStore.dagMap[*longestChainBlock3Hash] = lowDifficultyHeader
 
 	dagTopology.parentsMap[*heaviestChainBlock1Hash] = []*externalapi.DomainHash{fakeGenesisHash}
+	dagTopology.childrenMap[*fakeGenesisHash] = append(dagTopology.childrenMap[*fakeGenesisHash], heaviestChainBlock1Hash)
 	blockHeadersStore.dagMap[*heaviestChainBlock1Hash] = blockheader.NewImmutableBlockHeader(
 		0,
 		nil,
@@ -254,12 +266,15 @@ func TestBlueWork(t *testing.T) {
 	)
 
 	dagTopology.parentsMap[*heaviestChainBlock2Hash] = []*externalapi.DomainHash{heaviestChainBlock1Hash}
+	dagTopology.childrenMap[*heaviestChainBlock1Hash] = append(dagTopology.childrenMap[*heaviestChainBlock1Hash], heaviestChainBlock2Hash)
 	blockHeadersStore.dagMap[*heaviestChainBlock2Hash] = lowDifficultyHeader
 
 	dagTopology.parentsMap[*tipHash] = []*externalapi.DomainHash{heaviestChainBlock2Hash, longestChainBlock3Hash}
+	dagTopology.childrenMap[*heaviestChainBlock2Hash] = append(dagTopology.childrenMap[*heaviestChainBlock2Hash], tipHash)
+	dagTopology.childrenMap[*longestChainBlock3Hash] = append(dagTopology.childrenMap[*longestChainBlock3Hash], tipHash)
 	blockHeadersStore.dagMap[*tipHash] = lowDifficultyHeader
 
-	manager := ghostdagmanager.New(nil, dagTopology, ghostdagDataStore, blockHeadersStore, []externalapi.KType{18}, fakeGenesisHash)
+	manager := ghostdagmanager.New(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{18}, fakeGenesisHash)
 	blocksForGHOSTDAG := []*externalapi.DomainHash{
 		longestChainBlock1Hash,
 		longestChainBlock2Hash,
@@ -337,7 +352,8 @@ func (ds *GHOSTDAGDataStoreImpl) UnstageAll(stagingArea *model.StagingArea) {
 }
 
 type DAGTopologyManagerImpl struct {
-	parentsMap map[externalapi.DomainHash][]*externalapi.DomainHash
+	parentsMap  map[externalapi.DomainHash][]*externalapi.DomainHash
+	childrenMap map[externalapi.DomainHash][]*externalapi.DomainHash
 }
 
 func (dt *DAGTopologyManagerImpl) ChildInSelectedParentChainOf(stagingArea *model.StagingArea, lowHash, highHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
@@ -362,7 +378,12 @@ func (dt *DAGTopologyManagerImpl) Parents(stagingArea *model.StagingArea, blockH
 }
 
 func (dt *DAGTopologyManagerImpl) Children(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-	panic("unimplemented")
+	v, ok := dt.childrenMap[*blockHash]
+	if !ok {
+		return []*externalapi.DomainHash{}, nil
+	}
+
+	return v, nil
 }
 
 func (dt *DAGTopologyManagerImpl) IsParentOf(stagingArea *model.StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {

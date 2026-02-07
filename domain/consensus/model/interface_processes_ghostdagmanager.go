@@ -9,4 +9,6 @@ type GHOSTDAGManager interface {
 	Less(blockHashA *externalapi.DomainHash, ghostdagDataA *externalapi.BlockGHOSTDAGData,
 		blockHashB *externalapi.DomainHash, ghostdagDataB *externalapi.BlockGHOSTDAGData) bool
 	GetSortedMergeSet(stagingArea *StagingArea, current *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
+	OrderDAG(stagingArea *StagingArea, G []*externalapi.DomainHash) (*externalapi.DomainHash, []*externalapi.DomainHash, error)
+	SetDAGTraversalManager(dagTraversalManager DAGTraversalManager)
 }

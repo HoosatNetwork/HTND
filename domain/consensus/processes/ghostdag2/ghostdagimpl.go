@@ -14,28 +14,39 @@ import (
 )
 
 type ghostdagHelper struct {
-	k                  []externalapi.KType
-	dataStore          model.GHOSTDAGDataStore
-	dbAccess           model.DBReader
-	dagTopologyManager model.DAGTopologyManager
-	headerStore        model.BlockHeaderStore
+	k                   []externalapi.KType
+	dataStore           model.GHOSTDAGDataStore
+	dbAccess            model.DBReader
+	dagTopologyManager  model.DAGTopologyManager
+	dagTraversalManager model.DAGTraversalManager
+	headerStore         model.BlockHeaderStore
+	consensusStateStore model.ConsensusStateStore
+}
+
+// SetDAGTraversalManager sets the dagTraversalManager
+func (gh *ghostdagHelper) SetDAGTraversalManager(dagTraversalManager model.DAGTraversalManager) {
+	gh.dagTraversalManager = dagTraversalManager
 }
 
 // New creates a new instance of this alternative ghostdag impl
 func New(
 	databaseContext model.DBReader,
 	dagTopologyManager model.DAGTopologyManager,
+	dagTraversalManager model.DAGTraversalManager,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
+	consensusStateStore model.ConsensusStateStore,
 	k []externalapi.KType,
 	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
 
 	return &ghostdagHelper{
-		dbAccess:           databaseContext,
-		dagTopologyManager: dagTopologyManager,
-		dataStore:          ghostdagDataStore,
-		headerStore:        headerStore,
-		k:                  k,
+		dbAccess:            databaseContext,
+		dagTopologyManager:  dagTopologyManager,
+		dagTraversalManager: dagTraversalManager,
+		dataStore:           ghostdagDataStore,
+		headerStore:         headerStore,
+		consensusStateStore: consensusStateStore,
+		k:                   k,
 	}
 }
 
@@ -388,5 +399,9 @@ func (gh *ghostdagHelper) Less(blockHashA *externalapi.DomainHash, ghostdagDataA
 }
 
 func (gh *ghostdagHelper) GetSortedMergeSet(*model.StagingArea, *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	panic("implement me")
+}
+
+func (gh *ghostdagHelper) OrderDAG(stagingArea *model.StagingArea, G []*externalapi.DomainHash) (*externalapi.DomainHash, []*externalapi.DomainHash, error) {
 	panic("implement me")
 }

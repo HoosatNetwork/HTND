@@ -5,16 +5,15 @@ import (
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
 func (gm *ghostdagManager) mergeSetWithoutSelectedParent(stagingArea *model.StagingArea,
-	selectedParent *externalapi.DomainHash, blockParents []*externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	selectedParent *externalapi.DomainHash, blockParents []*externalapi.DomainHash, k externalapi.KType) ([]*externalapi.DomainHash, error) {
 
-	mergeSetMap := make(map[externalapi.DomainHash]struct{}, gm.k[constants.GetBlockVersion()-1])
-	mergeSetSlice := make([]*externalapi.DomainHash, 0, gm.k[constants.GetBlockVersion()-1])
+	mergeSetMap := make(map[externalapi.DomainHash]struct{}, k)
+	mergeSetSlice := make([]*externalapi.DomainHash, 0, k)
 	selectedParentPast := make(map[externalapi.DomainHash]struct{})
 	queue := []*externalapi.DomainHash{}
 	// Queueing all parents (other than the selected parent itself) for processing.

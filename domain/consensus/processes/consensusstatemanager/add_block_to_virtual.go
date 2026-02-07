@@ -161,7 +161,7 @@ func (csm *consensusStateManager) calculateNewTips(
 			newTips = append(newTips, currentTip)
 		}
 	}
-	log.Debugf("The new number of tips is: %d", len(newTips))
+	log.Infof("The new number of tips is: %d", len(newTips))
 
 	return newTips, nil
 }
