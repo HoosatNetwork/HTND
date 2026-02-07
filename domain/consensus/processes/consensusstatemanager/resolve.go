@@ -6,6 +6,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
@@ -40,8 +41,37 @@ func (csm *consensusStateManager) tipsInDecreasingDAGKnightOrder(stagingArea *mo
 	return tips, nil
 }
 
+func (csm *consensusStateManager) tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea *model.StagingArea) ([]*externalapi.DomainHash, error) {
+	tips, err := csm.consensusStateStore.Tips(stagingArea, csm.databaseContext)
+	if err != nil {
+		return nil, err
+	}
+
+	var sortErr error
+	sort.Slice(tips, func(i, j int) bool {
+		selectedParent, err := csm.ghostdagManager.ChooseSelectedParent(stagingArea, tips[i], tips[j])
+		if err != nil {
+			sortErr = err
+			return false
+		}
+
+		return selectedParent.Equal(tips[i])
+	})
+	if sortErr != nil {
+		return nil, sortErr
+	}
+	return tips, nil
+}
+
 func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingArea) (*externalapi.DomainHash, externalapi.BlockStatus, error) {
-	orderedTips, err := csm.tipsInDecreasingDAGKnightOrder(stagingArea)
+	var orderedTips []*externalapi.DomainHash
+	var err error
+	// DAGKnight TODO: modify blockversions before mainnet release.
+	if constants.GetBlockVersion() < 0 {
+		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
+	} else if constants.GetBlockVersion() > 0 {
+		orderedTips, err = csm.tipsInDecreasingDAGKnightOrder(stagingArea)
+	}
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
 	}
