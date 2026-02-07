@@ -204,7 +204,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	dagTopologyManager := dagTopologyManagers[0]
 	ghostdagManager := ghostdagManagers[0]
 	dagTraversalManager := dagTraversalManagers[0]
-
 	// Processes
 	parentsManager := parentssanager.New(config.GenesisHash, config.MaxBlockLevel)
 	blockParentBuilder := blockparentbuilder.New(
@@ -273,6 +272,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	headerTipsManager := headersselectedtipmanager.New(dbManager, dagTopologyManager, dagTraversalManager,
 		ghostdagManager, headersSelectedTipStore, headersSelectedChainStore)
 	genesisHash := config.GenesisHash
+
 	finalityManager := finalitymanager.New(
 		dbManager,
 		dagTopologyManager,
@@ -495,9 +495,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	c := &consensus{
 		lock:            &sync.Mutex{},
 		databaseContext: dbManager,
-
-		genesisBlock: config.GenesisBlock,
-		genesisHash:  config.GenesisHash,
+		genesisBlock:    config.GenesisBlock,
+		genesisHash:     config.GenesisHash,
 
 		expectedDAAWindowDurationInMilliseconds: config.TargetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds() * int64(config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]),
 

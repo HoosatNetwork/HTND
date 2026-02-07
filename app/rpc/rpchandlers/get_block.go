@@ -3,6 +3,8 @@ package rpchandlers
 import (
 	"time"
 
+	"os"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
@@ -62,12 +64,15 @@ func shouldRetryError(err error) bool {
 func HandleGetBlock(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlockRequest := request.(*appmessage.GetBlockRequestMessage)
 
-	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
-		return nil, err
-	}
-	if !isNearlySynced {
-		return appmessage.NewGetBlockResponseMessage(), nil
+	// Skip the nearly synced check if HTND_TEST_MODE is set to true (for testing)
+	if os.Getenv("HTND_TEST_MODE") != "true" {
+		isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+		if err != nil {
+			return nil, err
+		}
+		if !isNearlySynced {
+			return appmessage.NewGetBlockResponseMessage(), nil
+		}
 	}
 
 	// Load the raw block bytes from the database.

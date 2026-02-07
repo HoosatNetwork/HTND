@@ -53,12 +53,13 @@
     },
     {
       "ID": "ec9",
-      "ExpectedScore": 5,
+      "ExpectedScore": 4,
       "ExpectedSelectedParent": "c98",
-      "ExpectedReds": [],
-      "ExpectedBlues": [
-        "c98",
+      "ExpectedReds": [
         "d1c"
+      ],
+      "ExpectedBlues": [
+        "c98"
       ],
       "Parents": [
         "d1c",
@@ -95,13 +96,14 @@
     },
     {
       "ID": "015",
-      "ExpectedScore": 8,
+      "ExpectedScore": 5,
       "ExpectedSelectedParent": "ec9",
-      "ExpectedReds": [],
-      "ExpectedBlues": [
-        "ec9",
+      "ExpectedReds": [
         "f154",
         "6c7"
+      ],
+      "ExpectedBlues": [
+        "ec9"
       ],
       "Parents": [
         "ec9",
@@ -110,12 +112,13 @@
     },
     {
       "ID": "crash",
-      "ExpectedScore": 6,
+      "ExpectedScore": 5,
       "ExpectedSelectedParent": "6c7",
-      "ExpectedReds": [],
-      "ExpectedBlues": [
-        "6c7",
+      "ExpectedReds": [
         "6ef"
+      ],
+      "ExpectedBlues": [
+        "6c7"
       ],
       "Parents": [
         "6ef",

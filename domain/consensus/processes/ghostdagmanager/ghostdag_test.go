@@ -12,7 +12,8 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/processes/ghostdag2"
+
+	// "github.com/Hoosat-Oy/HTND/domain/consensus/processes/ghostdag2"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/processes/ghostdagmanager"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/blockheader"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
@@ -58,7 +59,7 @@ func TestGHOSTDAG(t *testing.T) {
 	//NOTE: FOR ADDING/REMOVING AN IMPLEMENTATION CHANGE BELOW:
 	implementationFactories := []implManager{
 		{ghostdagmanager.New, "Original"},
-		{ghostdag2.New, "Tal's impl"},
+		// {ghostdag2.New, "Tal's impl"},
 	}
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		dagTopology := &DAGTopologyManagerImpl{

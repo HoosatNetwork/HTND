@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 )
 
 func Test16IncomingConnections(t *testing.T) {
+	os.Setenv("HTND_TEST_MODE", "true")
+	defer os.Unsetenv("HTND_TEST_MODE")
 	// Much more than 16 hosts creates a risk of running out of available file descriptors for leveldb
 	const numBullies = 16
 	harnessesParams := make([]*harnessParams, numBullies+1)

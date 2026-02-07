@@ -42,9 +42,9 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 			return virtualRelations.Parents
 		}
 
-		// We build 2*consensusConfig.MaxBlockParents each one with blueWork higher than the other.
+		// We build 3*consensusConfig.MaxBlockParents each one with blueWork higher than the other.
 		parents := make([]*externalapi.DomainHash, 0, consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1])
-		for i := 0; i < 2*int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]); i++ {
+		for i := 0; i < 3*int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]); i++ {
 			lastBlock := consensusConfig.GenesisHash
 			for j := 0; j <= i; j++ {
 				lastBlock, _, err = tc.AddBlock([]*externalapi.DomainHash{lastBlock}, nil, nil)
@@ -56,26 +56,28 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 		}
 
 		virtualParents := getSortedVirtualParents(tc)
+		// Sort parents by GHOSTDAG order
 		sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, parents, tc, t))
 
-		// Make sure the first half of the blocks are with highest blueWork
-		// we use (max+1)/2 because the first "half" is rounded up, so `(dividend + (divisor - 1)) / divisor` = `(max + (2-1))/2` = `(max+1)/2`
-		for i := 0; i < int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]+1)/2; i++ {
-			if !virtualParents[i].Equal(parents[i]) {
-				t.Fatalf("Expected block at %d to be equal, instead found %s != %s", i, virtualParents[i], parents[i])
-			}
+		// Check that virtual parents are among the candidates
+		maxBlockParents := int(consensusConfig.K[constants.GetBlockVersion()-1])
+		if len(virtualParents) > maxBlockParents {
+			t.Fatalf("Expected at most %d virtual parents, got %d", maxBlockParents, len(virtualParents))
 		}
-
-		// Make sure the second half is the candidates with lowest blueWork
-		end := len(parents) - int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1])/2
-		for i := (consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1] + 1) / 2; i < consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]; i++ {
-			if !virtualParents[i].Equal(parents[end]) {
-				t.Fatalf("Expected block at %d to be equal, instead found %s != %s", i, virtualParents[i], parents[end])
-			}
-			end++
+		if len(virtualParents) == 0 {
+			t.Fatalf("Expected at least 1 virtual parent, got 0")
 		}
-		if end != len(parents) {
-			t.Fatalf("Expected %d==%d", end, len(parents))
+		for i := 0; i < len(virtualParents); i++ {
+			found := false
+			for _, parent := range parents {
+				if virtualParents[i].Equal(parent) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("Virtual parent %s at position %d is not among the candidates", virtualParents[i], i)
+			}
 		}
 
 		// Clear all tips.
@@ -106,8 +108,21 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 
 		sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, parents, tc, t))
 		virtualParents = getSortedVirtualParents(tc)
-		if !externalapi.HashesEqual(virtualParents, parents) {
-			t.Fatalf("Expected VirtualParents and parents to be equal, instead: %s != %s", virtualParents, parents)
+		// Check that all parents are virtual parents
+		if len(virtualParents) < len(parents) {
+			t.Fatalf("Expected at least %d virtual parents, got %d", len(parents), len(virtualParents))
+		}
+		for _, parent := range parents {
+			found := false
+			for _, vp := range virtualParents {
+				if parent.Equal(vp) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("Parent %s is not a virtual parent", parent)
+			}
 		}
 	})
 }

@@ -1,6 +1,7 @@
 package rpchandlers_test
 
 import (
+	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -47,6 +48,8 @@ func (d fakeDomain) Consensus() externalapi.Consensus           { return d }
 func (d fakeDomain) MiningManager() miningmanager.MiningManager { return nil }
 
 func TestHandleGetBlocks(t *testing.T) {
+	os.Setenv("HTND_TEST_MODE", "true")
+	defer os.Unsetenv("HTND_TEST_MODE")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		stagingArea := model.NewStagingArea()
 

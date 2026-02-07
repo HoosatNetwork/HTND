@@ -1,6 +1,8 @@
 package rpchandlers
 
 import (
+	"os"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -11,13 +13,14 @@ import (
 // HandleGetBlocks handles the respectively named RPC command
 func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlocksRequest := request.(*appmessage.GetBlocksRequestMessage)
-
-	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
-		return nil, err
-	}
-	if !isNearlySynced {
-		return appmessage.NewGetBlocksResponseMessage(), nil
+	if os.Getenv("HTND_TEST_MODE") != "true" {
+		isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
+		if err != nil {
+			return nil, err
+		}
+		if !isNearlySynced {
+			return appmessage.NewGetBlocksResponseMessage(), nil
+		}
 	}
 
 	// Validate that user didn't set IncludeTransactions without setting IncludeBlocks

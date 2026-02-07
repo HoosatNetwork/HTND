@@ -38,8 +38,8 @@ func TestPruning(t *testing.T) {
 			dagconfig.SimnetParams.Name:  "1582",
 		},
 		"dag-for-test-pruning.json": {
-			dagconfig.MainnetParams.Name: "503",
-			dagconfig.TestnetParams.Name: "503",
+			dagconfig.MainnetParams.Name: "1871",
+			dagconfig.TestnetParams.Name: "1866",
 			dagconfig.DevnetParams.Name:  "502",
 			dagconfig.SimnetParams.Name:  "503",
 		},
@@ -56,6 +56,8 @@ func TestPruning(t *testing.T) {
 				return nil
 			}
 
+			constants.ForceSetBlockVersion(5)
+
 			jsonFile, err := os.Open(path)
 			if err != nil {
 				t.Fatalf("TestPruning : failed opening json file %s: %s", path, err)
@@ -70,9 +72,9 @@ func TestPruning(t *testing.T) {
 				t.Fatalf("TestPruning: failed decoding json: %v", err)
 			}
 
-			consensusConfig.FinalityDuration = []time.Duration{time.Duration(test.FinalityDepth) * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}
+			consensusConfig.FinalityDuration = []time.Duration{time.Duration(test.FinalityDepth) * consensusConfig.TargetTimePerBlock[0]}
 			consensusConfig.MergeSetSizeLimit = test.MergeSetSizeLimit
-			consensusConfig.DifficultyAdjustmentWindowSize = []int{400}
+			consensusConfig.DifficultyAdjustmentWindowSize = []int{400, 400, 400, 400, 400, 400}
 
 			factory := consensus.NewFactory()
 			factory.SetTestLevelDBCacheSize(128)
@@ -81,6 +83,10 @@ func TestPruning(t *testing.T) {
 				t.Fatalf("Error setting up consensus: %+v", err)
 			}
 			defer teardown(false)
+
+			if consensusConfig.Name == "hoosat-testnet" {
+				constants.ForceSetBlockVersion(5)
+			}
 
 			blockIDToHash := map[string]*externalapi.DomainHash{
 				"0": consensusConfig.GenesisHash,

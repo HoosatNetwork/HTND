@@ -107,13 +107,14 @@
         },
         {
             "ID": "J",
-            "ExpectedScore": 30,
+            "ExpectedScore": 5,
             "ExpectedSelectedParent": "E",
-            "ExpectedReds": [],
-            "ExpectedBlues": [
-                "E",
+            "ExpectedReds": [
                 "F",
                 "G"
+            ],
+            "ExpectedBlues": [
+                "E"
             ],
             "Parents": [
                 "E",
@@ -122,7 +123,7 @@
         },
         {
             "ID": "K",
-            "ExpectedScore": 8,
+            "ExpectedScore": 6,
             "ExpectedSelectedParent": "J",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -134,7 +135,7 @@
         },
         {
             "ID": "L",
-            "ExpectedScore": 9,
+            "ExpectedScore": 7,
             "ExpectedSelectedParent": "K",
             "ExpectedReds": [
                 "I"
@@ -149,7 +150,7 @@
         },
         {
             "ID": "M",
-            "ExpectedScore": 10,
+            "ExpectedScore": 8,
             "ExpectedSelectedParent": "L",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -161,7 +162,7 @@
         },
         {
             "ID": "N",
-            "ExpectedScore": 11,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "M",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -173,7 +174,7 @@
         },
         {
             "ID": "O",
-            "ExpectedScore": 11,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "M",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -185,7 +186,7 @@
         },
         {
             "ID": "2",
-            "ExpectedScore": 11,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "M",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -197,7 +198,7 @@
         },
         {
             "ID": "Q",
-            "ExpectedScore": 11,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "M",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -209,7 +210,7 @@
         },
         {
             "ID": "R",
-            "ExpectedScore": 11,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "M",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -221,7 +222,7 @@
         },
         {
             "ID": "S",
-            "ExpectedScore": 12,
+            "ExpectedScore": 10,
             "ExpectedSelectedParent": "R",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -233,16 +234,15 @@
         },
         {
             "ID": "T",
-            "ExpectedScore": 16,
+            "ExpectedScore": 15,
             "ExpectedSelectedParent": "S",
-            "ExpectedReds": [
-                "Q"
-            ],
+            "ExpectedReds": [],
             "ExpectedBlues": [
                 "S",
                 "2",
                 "N",
-                "O"
+                "O",
+                "Q"
             ],
             "Parents": [
                 "N",

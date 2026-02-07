@@ -118,15 +118,19 @@
       "ID": "10",
       "ExpectedScore": 6,
       "ExpectedSelectedParent": "5",
-      "ExpectedReds": ["6", "7", "8", "9"],
+      "ExpectedReds": [
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
       "ExpectedBlues": [
-       "5"
+        "5"
       ],
       "Parents": [
         "5",
         "9"
       ]
     }
-
   ]
 }

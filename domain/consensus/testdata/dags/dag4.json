@@ -64,13 +64,14 @@
     },
     {
       "ID": "6",
-      "ExpectedScore": 5,
+      "ExpectedScore": 3,
       "ExpectedSelectedParent": "5",
-      "ExpectedReds": [],
-      "ExpectedBlues": [
-        "5",
+      "ExpectedReds": [
         "2",
         "4"
+      ],
+      "ExpectedBlues": [
+        "5"
       ],
       "Parents": [
         "4",
@@ -79,13 +80,14 @@
     },
     {
       "ID": "7",
-      "ExpectedScore": 5,
+      "ExpectedScore": 3,
       "ExpectedSelectedParent": "5",
-      "ExpectedReds": [],
-      "ExpectedBlues": [
-        "5",
+      "ExpectedReds": [
         "2",
         "3"
+      ],
+      "ExpectedBlues": [
+        "5"
       ],
       "Parents": [
         "3",
@@ -106,16 +108,23 @@
     },
     {
       "ID": "9",
-      "ExpectedScore": 6,
-      "ExpectedSelectedParent": "7",
-      "ExpectedReds": ["4", "8", "6"],
+      "ExpectedScore": 5,
+      "ExpectedSelectedParent": "8",
+      "ExpectedReds": [
+        "1",
+        "4",
+        "5",
+        "6"
+      ],
       "ExpectedBlues": [
+        "8",
         "7"
       ],
       "Parents": [
-        "6","7","8"
+        "6",
+        "7",
+        "8"
       ]
     }
-
   ]
 }

@@ -177,9 +177,11 @@ func (v *blockValidator) checkCoinbaseSubsidy(stagingArea *model.StagingArea, bl
 				"wrong: expected %d but got %d, blocks version %d", blockHash, expectedSubsidy, subsidy, block.Header.Version())
 		}
 	} else {
-		if 1_000_000_000 > subsidy || subsidy > 2_000_000_000 {
+		minSubsidy := expectedSubsidy / 2
+		maxSubsidy := expectedSubsidy * 2
+		if minSubsidy > subsidy || subsidy > maxSubsidy {
 			return 0, errors.Wrapf(ruleerrors.ErrWrongCoinbaseSubsidy, "the subsidy specified on the coinbase of %s is "+
-				"wrong: expected %d but got %d, blocks version %d", blockHash, expectedSubsidy, subsidy, block.Header.Version())
+				"out of range: expected between %d and %d but got %d, blocks version %d", blockHash, minSubsidy, maxSubsidy, subsidy, block.Header.Version())
 		}
 	}
 

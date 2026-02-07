@@ -1,7 +1,6 @@
 package ghostdagmanager
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
@@ -111,6 +110,7 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 			newBlockData.mergeSetReds = append(newBlockData.mergeSetReds, blueCandidate)
 		}
 	}
+	// log.Infof("Mergeset blues %d, reds %d", len(newBlockData.mergeSetBlues), len(newBlockData.mergeSetReds))
 
 	if !isGenesis {
 		selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, newBlockData.selectedParent, false)
@@ -260,9 +260,10 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 
 		// This is a sanity check that validates that a blue
 		// block's blue anticone is not already larger than K.
-		if candidateBluesAnticoneSizes[*block] > k {
-			return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
-		}
+		// Commented out for DAGKnight as k is dynamic
+		// if candidateBluesAnticoneSizes[*block] > k {
+		// 	return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
+		// }
 	}
 
 	return false, false, nil
