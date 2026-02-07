@@ -22,7 +22,7 @@ func HandleSubmitBlock(context *rpccontext.Context, _ *router.Router, request ap
 	if err != nil {
 		return nil, err
 	}
-	if !isNearlySynced {
+	if !isNearlySynced && context.Config.AllowSubmitBlockWhenNotSynced == false {
 		return appmessage.NewSubmitBlockResponseMessage(), nil
 	}
 	submitBlockRequest, ok := request.(*appmessage.SubmitBlockRequestMessage)
@@ -63,7 +63,7 @@ func HandleSubmitBlock(context *rpccontext.Context, _ *router.Router, request ap
 		return handleBlockAddError(domainBlock, err), nil
 	}
 
-	logBlockAcceptance(domainBlock, len(submitBlockRequest.Block.Transactions))
+	logBlockAcceptance(context, domainBlock, len(submitBlockRequest.Block.Transactions))
 	return appmessage.NewSubmitBlockResponseMessage(), nil
 }
 
@@ -182,9 +182,10 @@ func newErrorResponse(err error, reason appmessage.RejectReason) *appmessage.Sub
 }
 
 // logBlockAcceptance logs successful block acceptance
-func logBlockAcceptance(block *externalapi.DomainBlock, txCount int) {
-	log.Infof("Accepted block %s via submit with %d tx",
-		consensushashing.BlockHash(block), txCount)
+func logBlockAcceptance(context *rpccontext.Context, block *externalapi.DomainBlock, txCount int) {
+	k := int(context.Config.ActiveNetParams.K[int(constants.GetBlockVersion())-1])
+	log.Infof("Accepted block %s via submit with %d tx, k=%v",
+		consensushashing.BlockHash(block), txCount, k)
 	log.Debugf("Accepted PoW hash %s", block.PoWHash)
 }
 
