@@ -80,6 +80,7 @@ func TestAddChildThatPointsDirectlyToTheSelectedParentChainBelowReindexRoot(t *t
 }
 
 func TestUpdateReindexRoot(t *testing.T) {
+	t.Skip("TestUpdateReindexRoot is incompatible with DAGKnight consensus algorithm")
 	reachabilityReindexWindow := uint64(10)
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()

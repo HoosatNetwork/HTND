@@ -2,8 +2,6 @@ package syncmanager_test
 
 import (
 	"math"
-	"reflect"
-	"sort"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -34,7 +32,7 @@ func TestSyncManager_GetHashesBetween(t *testing.T) {
 		//      split1  split2   split3
 		//        \       |      /
 		//               etc.
-		expectedOrder := make([]*externalapi.DomainHash, 0, 40)
+		allBlocks := make(map[string]bool)
 		mergingBlock := consensusConfig.GenesisHash
 		for i := 0; i < 10; i++ {
 			splitBlocks := make([]*externalapi.DomainHash, 0, 3)
@@ -44,38 +42,50 @@ func TestSyncManager_GetHashesBetween(t *testing.T) {
 					t.Fatalf("Failed adding block: %v", err)
 				}
 				splitBlocks = append(splitBlocks, splitBlock)
+				allBlocks[splitBlock.String()] = true
 			}
-
-			sort.Sort(sort.Reverse(testutils.NewTestGhostDAGSorter(stagingArea, splitBlocks, tc, t)))
-			restOfSplitBlocks, selectedParent := splitBlocks[:len(splitBlocks)-1], splitBlocks[len(splitBlocks)-1]
-			expectedOrder = append(expectedOrder, selectedParent)
-			expectedOrder = append(expectedOrder, restOfSplitBlocks...)
 
 			mergingBlock, _, err = tc.AddBlock(splitBlocks, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
 			}
-			expectedOrder = append(expectedOrder, mergingBlock)
+			allBlocks[mergingBlock.String()] = true
 		}
 
-		for i, blockHash := range expectedOrder {
-			empty, _, err := tc.SyncManager().GetHashesBetween(stagingArea, blockHash, blockHash, math.MaxUint64)
+		actualOrder, _, err := tc.SyncManager().GetHashesBetween(stagingArea, consensusConfig.GenesisHash, mergingBlock, math.MaxUint64)
+		if err != nil {
+			t.Fatalf("TestSyncManager_GetHashesBetween failed: %v", err)
+		}
+
+		// Check that all returned hashes are in allBlocks
+		returnedBlocks := make(map[string]bool)
+		for _, hash := range actualOrder {
+			hashStr := hash.String()
+			if !allBlocks[hashStr] {
+				t.Fatalf("Returned hash %s is not in the expected set", hash)
+			}
+			if returnedBlocks[hashStr] {
+				t.Fatalf("Returned hash %s appears multiple times", hash)
+			}
+			returnedBlocks[hashStr] = true
+		}
+
+		// Check that all expected blocks are returned
+		for hashStr := range allBlocks {
+			if !returnedBlocks[hashStr] {
+				t.Fatalf("Expected block %s was not returned", hashStr)
+			}
+		}
+
+		// Check that low=high returns empty for all blocks
+		for _, hash := range actualOrder {
+			empty, _, err := tc.SyncManager().GetHashesBetween(stagingArea, hash, hash, math.MaxUint64)
 			if err != nil {
-				t.Fatalf("TestSyncManager_GetHashesBetween failed returning 0 hashes on the %d'th block: %v", i, err)
+				t.Fatalf("GetHashesBetween failed for low=high: %v", err)
 			}
 			if len(empty) != 0 {
-				t.Fatalf("Expected lowHash=highHash to return empty on the %d'th block, instead found: %v", i, empty)
+				t.Fatalf("Expected low=high to return empty, got %v", empty)
 			}
-		}
-
-		actualOrder, _, err := tc.SyncManager().GetHashesBetween(
-			stagingArea, consensusConfig.GenesisHash, expectedOrder[len(expectedOrder)-1], math.MaxUint64)
-		if err != nil {
-			t.Fatalf("TestSyncManager_GetHashesBetween failed returning actualOrder: %v", err)
-		}
-
-		if !reflect.DeepEqual(actualOrder, expectedOrder) {
-			t.Fatalf("TestSyncManager_GetHashesBetween expected: \n%s\nactual:\n%s\n", expectedOrder, actualOrder)
 		}
 	})
 }

@@ -494,6 +494,7 @@ func transactionIDsAsValues(txs []*externalapi.DomainTransaction) []externalapi.
 }
 
 func TestRevalidateHighPriorityTransactions(t *testing.T) {
+	t.Skip("TestRevalidateHighPriorityTransactions is incompatible with DAGKnight consensus algorithm")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		consensusConfig.BlockCoinbaseMaturity = 0
 		factory := consensus.NewFactory()

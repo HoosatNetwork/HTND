@@ -6,6 +6,7 @@ require (
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd
 	github.com/btcsuite/winsvc v1.0.0
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/chewxy/math32 v1.11.1
 	github.com/cockroachdb/pebble/v2 v2.1.2
 	github.com/davecgh/go-spew v1.1.1
@@ -29,7 +30,6 @@ require (
 	github.com/RaduBerinde/axisds v0.0.0-20250419182453-5135a0650657 // indirect
 	github.com/RaduBerinde/btreemap v0.0.0-20250419232817-bf0d809ae648 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/crlib v0.0.0-20251122031428-fe658a2dbda1 // indirect
 	github.com/cockroachdb/errors v1.12.0 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506 // indirect

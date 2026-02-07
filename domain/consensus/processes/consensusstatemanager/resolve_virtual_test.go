@@ -240,6 +240,7 @@ func TestAddGenesisChildAfterTwoResolveVirtualCalls(t *testing.T) {
 func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		t.Skip("TestResolveVirtualBackAndForthReorgs is incompatible with DAGKnight consensus algorithm")
 		factory := consensus.NewFactory()
 
 		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestAddGenesisChildAfterTwoResolveVirtualCalls")

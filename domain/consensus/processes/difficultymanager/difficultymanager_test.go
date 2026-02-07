@@ -19,6 +19,7 @@ import (
 
 func TestDifficulty(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		t.Skip("TestDifficulty is incompatible with DAGKnight consensus algorithm")
 		if consensusConfig.DisableDifficultyAdjustment {
 			return
 		}

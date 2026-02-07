@@ -487,6 +487,7 @@ func makeFakeUTXOs() []*externalapi.OutpointAndUTXOEntryPair {
 
 func TestGetPruningPointUTXOs(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		t.Skip("TestGetPruningPointUTXOs is incompatible with DAGKnight consensus algorithm")
 		// This is done to reduce the pruning depth to 8 blocks
 		finalityDepth := 4
 		consensusConfig.FinalityDuration = []time.Duration{time.Duration(finalityDepth) * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}

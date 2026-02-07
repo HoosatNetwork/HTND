@@ -39,21 +39,48 @@ func TestBlockValidator_ValidateHeaderInIsolation(t *testing.T) {
 }
 
 func CheckParentsLimit(t *testing.T, tc testapi.TestConsensus, consensusConfig *consensus.Config) {
-	for i := externalapi.KType(0); i < consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]+1; i++ {
+	// Create some blocks to have parents to work with
+	for i := 0; i < 5; i++ {
 		_, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
 		if err != nil {
-			t.Fatalf("AddBlock: %+v", err)
+			t.Fatalf("AddBlock %d: %+v", i, err)
 		}
 	}
 
-	tips, err := tc.Tips()
-	if err != nil {
-		t.Fatalf("Tips: %+v", err)
+	// Create too many parent hashes
+	maxParents := int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1])
+	tooManyParents := make(externalapi.BlockLevelParents, maxParents+1)
+	for i := range tooManyParents {
+		hashBytes := [externalapi.DomainHashSize]byte{}
+		hashBytes[0] = byte(i + 1) // make them different
+		tooManyParents[i] = externalapi.NewDomainHashFromByteArray(&hashBytes)
 	}
 
-	_, _, err = tc.AddBlock(tips, nil, nil)
+	// Build a block with valid parents first
+	block, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+	if err != nil {
+		t.Fatalf("BuildBlockWithParents: %+v", err)
+	}
+
+	// Modify the header to have too many parents
+	block.Header = blockheader.NewImmutableBlockHeader(
+		block.Header.Version(),
+		[]externalapi.BlockLevelParents{tooManyParents}, // Too many parents at level 0
+		block.Header.HashMerkleRoot(),
+		block.Header.AcceptedIDMerkleRoot(),
+		block.Header.UTXOCommitment(),
+		block.Header.TimeInMilliseconds(),
+		block.Header.Bits(),
+		block.Header.Nonce(),
+		block.Header.DAAScore(),
+		block.Header.BlueScore(),
+		block.Header.BlueWork(),
+		block.Header.PruningPoint(),
+	)
+
+	err = tc.ValidateAndInsertBlock(block, true, true)
 	if !errors.Is(err, ruleerrors.ErrTooManyParents) {
-		t.Fatalf("Unexpected error: %+v", err)
+		t.Fatalf("Expected ErrTooManyParents, got: %+v", err)
 	}
 }
 
