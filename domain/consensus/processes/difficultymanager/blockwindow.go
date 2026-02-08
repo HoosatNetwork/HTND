@@ -69,18 +69,18 @@ func (dm *difficultyManager) blockWindow(
 	// Check if the last header has DAAScore == 43334187
 	// Note: This maintains the original behavior where the last header is processed twice
 	// (once in the loop above and once here), which may be intentional for difficulty calculation
-	if len(windowHashes) > 0 {
-		lastHash := windowHashes[len(windowHashes)-1]
-		lastHeader := headers[len(headers)-1]
-		if lastHeader.DAAScore() <= 43334187 {
-			lastBlock, err := dm.getDifficultyBlock(lastHeader, lastHash)
-			if err != nil {
-				return nil, nil, err
-			}
-			singleWindow := blockWindow{lastBlock}
-			return singleWindow, []*externalapi.DomainHash{lastHash}, nil
-		}
-	}
+	// if len(windowHashes) > 0 {
+	// 	lastHash := windowHashes[len(windowHashes)-1]
+	// 	lastHeader := headers[len(headers)-1]
+	// 	if lastHeader.DAAScore() <= 43334187 {
+	// 		lastBlock, err := dm.getDifficultyBlock(lastHeader, lastHash)
+	// 		if err != nil {
+	// 			return nil, nil, err
+	// 		}
+	// 		singleWindow := blockWindow{lastBlock}
+	// 		return singleWindow, []*externalapi.DomainHash{lastHash}, nil
+	// 	}
+	// }
 
 	return window, windowHashes, nil
 }
