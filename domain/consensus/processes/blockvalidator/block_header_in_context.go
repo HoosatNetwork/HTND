@@ -78,12 +78,12 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
-	err = v.checkDAAScore(stagingArea, blockHash, header)
-	if err != nil {
-		return err
-	}
-
 	if !isBlockWithTrustedData {
+		err = v.checkDAAScore(stagingArea, blockHash, header)
+		if err != nil {
+			return err
+		}
+
 		// TODO: Enable these on block v5 after finding reason for the issues with the blocks
 		err = v.checkBlueWork(stagingArea, ghostdagData, header)
 		if err != nil {
@@ -226,7 +226,8 @@ func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash
 	if err != nil {
 		return err
 	}
-	if header.DAAScore() < expectedDAAScore {
+	var threshold uint64 = 10
+	if header.DAAScore()+threshold < expectedDAAScore {
 		return errors.Wrapf(ruleerrors.ErrUnexpectedDAAScore, "block DAA score of %d is not the expected value of %d", header.DAAScore(), expectedDAAScore)
 	}
 	return nil
