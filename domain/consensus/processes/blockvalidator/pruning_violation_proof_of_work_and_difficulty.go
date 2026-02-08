@@ -135,14 +135,16 @@ func (v *blockValidator) validateDifficulty(stagingArea *model.StagingArea,
 		return err
 	}
 
-	headerBits := header.Bits()
-	// Calculate the acceptable range for difficulty bits
-	maxBits := expectedBits + bitsTolerance
+	if isBlockWithTrustedData {
+		headerBits := header.Bits()
+		// Calculate the acceptable range for difficulty bits
+		maxBits := expectedBits + bitsTolerance
 
-	if headerBits > maxBits {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedDifficulty,
-			"block difficulty of %d is ahead of the expected difficulty %d",
-			headerBits, expectedBits)
+		if headerBits > maxBits {
+			return errors.Wrapf(ruleerrors.ErrUnexpectedDifficulty,
+				"block difficulty of %d is ahead of the expected difficulty %d",
+				headerBits, expectedBits)
+		}
 	}
 
 	return nil
