@@ -63,7 +63,9 @@ func (dm *difficultyManager) blockWindow(
 		}
 		window = append(window, block)
 	}
-
+	// TODO: Findout how to remove this code as breaks block window for blocks below DAAScore
+	// of 43334187, affects basically only the testnet as this has been created to circumvent
+	// issues on mainet.
 	// Check if the last header has DAAScore == 43334187
 	// Note: This maintains the original behavior where the last header is processed twice
 	// (once in the loop above and once here), which may be intentional for difficulty calculation
