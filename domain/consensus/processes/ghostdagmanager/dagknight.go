@@ -1,12 +1,93 @@
 package ghostdagmanager
 
 import (
+	"crypto/md5"
 	"sort"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
+
+// makeKey creates a composite DomainHash key from block and G slice
+func makeKey(block *externalapi.DomainHash, g []*externalapi.DomainHash) externalapi.DomainHash {
+	h := md5.New()
+	h.Write(block.ByteSlice())
+	// Sort G for consistent hashing
+	sortedG := make([]*externalapi.DomainHash, len(g))
+	copy(sortedG, g)
+	sort.Slice(sortedG, func(i, j int) bool {
+		return sortedG[i].String() < sortedG[j].String()
+	})
+	for _, gh := range sortedG {
+		h.Write(gh.ByteSlice())
+	}
+	hash := h.Sum(nil)
+	var keyBytes [32]byte
+	copy(keyBytes[:16], hash)
+	copy(keyBytes[16:], hash)
+	key, _ := externalapi.NewDomainHashFromByteSlice(keyBytes[:])
+	return *key
+}
+
+// makeKColouringKey creates a key for KColouring cache
+func makeKColouringKey(c *externalapi.DomainHash, g []*externalapi.DomainHash, k int, freeSearch bool, conditioning *externalapi.DomainHash) externalapi.DomainHash {
+	h := md5.New()
+	h.Write(c.ByteSlice())
+	// Sort G
+	sortedG := make([]*externalapi.DomainHash, len(g))
+	copy(sortedG, g)
+	sort.Slice(sortedG, func(i, j int) bool {
+		return sortedG[i].String() < sortedG[j].String()
+	})
+	for _, gh := range sortedG {
+		h.Write(gh.ByteSlice())
+	}
+	h.Write([]byte{byte(k >> 24), byte(k >> 16), byte(k >> 8), byte(k)})
+	if freeSearch {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if conditioning != nil {
+		h.Write(conditioning.ByteSlice())
+	}
+	hash := h.Sum(nil)
+	var keyBytes [32]byte
+	copy(keyBytes[:16], hash)
+	copy(keyBytes[16:], hash)
+	key, _ := externalapi.NewDomainHashFromByteSlice(keyBytes[:])
+	return *key
+}
+
+// makeUMCVotingKey creates a key for UMCVoting cache
+func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainHash {
+	h := md5.New()
+	// Sort G and U
+	sortedG := make([]*externalapi.DomainHash, len(g))
+	copy(sortedG, g)
+	sort.Slice(sortedG, func(i, j int) bool {
+		return sortedG[i].String() < sortedG[j].String()
+	})
+	for _, gh := range sortedG {
+		h.Write(gh.ByteSlice())
+	}
+	sortedU := make([]*externalapi.DomainHash, len(u))
+	copy(sortedU, u)
+	sort.Slice(sortedU, func(i, j int) bool {
+		return sortedU[i].String() < sortedU[j].String()
+	})
+	for _, uh := range sortedU {
+		h.Write(uh.ByteSlice())
+	}
+	h.Write([]byte{byte(e >> 24), byte(e >> 16), byte(e >> 8), byte(e)})
+	hash := h.Sum(nil)
+	var keyBytes [32]byte
+	copy(keyBytes[:16], hash)
+	copy(keyBytes[16:], hash)
+	key, _ := externalapi.NewDomainHashFromByteSlice(keyBytes[:])
+	return *key
+}
 
 // OrderDAG implements Algorithm 2: KNIGHT DAG ordering algorithm from the DAGKnight paper
 // This algorithm orders the blocks in a DAG by iteratively selecting the "best" tip based on rank and tie-breaking.
@@ -500,13 +581,19 @@ func (gm *ghostdagManager) TieBreaking(stagingArea *model.StagingArea, G []*exte
 //
 // Output: (Blues, Chain) where Blues is the k-colouring of past_G(C), Chain is the k-chain
 func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externalapi.DomainHash, G []*externalapi.DomainHash, k int, freeSearch bool, conditioning *externalapi.DomainHash) (KColouringResult, error) {
+	key := makeKColouringKey(C, G, k, freeSearch, conditioning)
+	if value, ok := gm.kColouringCache.Get(&key); ok {
+		return value, nil
+	}
 	// Step 1: Compute past_G(C)
 	pastC, err := gm.getPast(stagingArea, C, G)
 	if err != nil {
 		return KColouringResult{}, err
 	}
 	if len(pastC) == 0 {
-		return KColouringResult{Blues: []*externalapi.DomainHash{}, Chain: []*externalapi.DomainHash{}}, nil
+		result := KColouringResult{Blues: []*externalapi.DomainHash{}, Chain: []*externalapi.DomainHash{}}
+		gm.kColouringCache.Add(&key, result)
+		return result, nil
 	}
 
 	// Step 2: Initialize P as the set of parents of C that satisfy the conditions
@@ -562,7 +649,9 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 
 	// Step 3: If P is empty, return empty colouring
 	if len(P) == 0 {
-		return KColouringResult{Blues: []*externalapi.DomainHash{}, Chain: []*externalapi.DomainHash{}}, nil
+		result := KColouringResult{Blues: []*externalapi.DomainHash{}, Chain: []*externalapi.DomainHash{}}
+		gm.kColouringCache.Add(&key, result)
+		return result, nil
 	}
 
 	// Step 4: Find Bmax = argmax_{B∈P} |blues_B|, break ties by largest hash
@@ -615,7 +704,9 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 	}
 
 	// Step 9: Return (blues_G, chain_G)
-	return KColouringResult{Blues: bluesG, Chain: chainG}, nil
+	result := KColouringResult{Blues: bluesG, Chain: chainG}
+	gm.kColouringCache.Add(&key, result)
+	return result, nil
 }
 
 // UMCVoting implements Algorithm 6: UMC cascade voting procedure from the DAGKnight paper
@@ -623,6 +714,10 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 // Input: G - a block DAG, U ⊆ G (typically a k-colouring), e - deficit threshold (gk in the paper)
 // Output: vote ∈ {-1, 1} where 1 means U wins, -1 means U loses
 func (gm *ghostdagManager) UMCVoting(stagingArea *model.StagingArea, G, U []*externalapi.DomainHash, e int) (int, error) {
+	key := makeUMCVotingKey(G, U, e)
+	if value, ok := gm.umcVotingCache.Get(&key); ok {
+		return value, nil
+	}
 	// Step 1: Initialize vote accumulator v = 0
 	v := 0
 
@@ -651,16 +746,24 @@ func (gm *ghostdagManager) UMCVoting(stagingArea *model.StagingArea, G, U []*ext
 	gMinusU := len(G) - len(U)
 
 	// Step 4: If v - (|G| - |U|) + e >= 0, return 1 (win), else return -1 (lose)
+	var result int
 	if v-gMinusU+e >= 0 {
-		return 1, nil
+		result = 1
+	} else {
+		result = -1
 	}
-	return -1, nil
+	gm.umcVotingCache.Add(&key, result)
+	return result, nil
 }
 
 // getFuture returns all blocks in the future of the given block (all descendants) within G.
 // This is computed by BFS traversal using the Children method, filtered to G.
 // Used in CalculateRank and UMCVoting to compute future sets.
 func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *externalapi.DomainHash, G []*externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	key := makeKey(block, G)
+	if value, ok := gm.futureCache.Get(&key); ok {
+		return value, nil
+	}
 	// Create a set for fast lookup of G
 	gSet := make(map[externalapi.DomainHash]struct{})
 	for _, g := range G {
@@ -694,6 +797,7 @@ func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *exte
 	if len(future) > 0 && future[0].Equal(block) {
 		future = future[1:]
 	}
+	gm.futureCache.Add(&key, future)
 	return future, nil
 }
 
@@ -735,6 +839,10 @@ func (gm *ghostdagManager) rank(stagingArea *model.StagingArea, C *externalapi.D
 // getPast returns all ancestors of block that are in G
 // Used extensively in DAGKnight algorithms to compute past sets.
 func (gm *ghostdagManager) getPast(stagingArea *model.StagingArea, block *externalapi.DomainHash, G []*externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	key := makeKey(block, G)
+	if value, ok := gm.pastCache.Get(&key); ok {
+		return value, nil
+	}
 	// Create a set for G for fast lookup
 	gSet := make(map[externalapi.DomainHash]struct{})
 	for _, g := range G {
@@ -766,11 +874,21 @@ func (gm *ghostdagManager) getPast(stagingArea *model.StagingArea, block *extern
 	if len(past) > 0 && past[0].Equal(block) {
 		past = past[1:]
 	}
+	gm.pastCache.Add(&key, past)
 	return past, nil
 }
 
 // getAnticone returns blocks in G that are in anticone of block
 // Used in KColouring and TieBreaking for anticone computations.
 func (gm *ghostdagManager) getAnticone(stagingArea *model.StagingArea, block *externalapi.DomainHash, G []*externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-	return gm.dagTraversalManager.AnticoneFromBlocks(stagingArea, G, block, 0)
+	key := makeKey(block, G)
+	if value, ok := gm.anticoneCache.Get(&key); ok {
+		return value, nil
+	}
+	result, err := gm.dagTraversalManager.AnticoneFromBlocks(stagingArea, G, block, 0)
+	if err != nil {
+		return nil, err
+	}
+	gm.anticoneCache.Add(&key, result)
+	return result, nil
 }

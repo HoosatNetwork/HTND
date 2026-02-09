@@ -3,6 +3,7 @@ package ghostdagmanager
 import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 )
 
 // ghostdagManager resolves and manages GHOSTDAG block data
@@ -16,6 +17,13 @@ type ghostdagManager struct {
 
 	k           []externalapi.KType
 	genesisHash *externalapi.DomainHash
+
+	// LRU caches for performance
+	pastCache       *lrucache.LRUCache[[]*externalapi.DomainHash]
+	futureCache     *lrucache.LRUCache[[]*externalapi.DomainHash]
+	anticoneCache   *lrucache.LRUCache[[]*externalapi.DomainHash]
+	kColouringCache *lrucache.LRUCache[KColouringResult]
+	umcVotingCache  *lrucache.LRUCache[int]
 }
 
 // New instantiates a new GHOSTDAGManager
@@ -37,6 +45,11 @@ func New(
 		consensusStateStore: consensusStateStore,
 		k:                   k,
 		genesisHash:         genesisHash,
+		pastCache:           lrucache.New[[]*externalapi.DomainHash](1000, true),
+		futureCache:         lrucache.New[[]*externalapi.DomainHash](1000, true),
+		anticoneCache:       lrucache.New[[]*externalapi.DomainHash](1000, true),
+		kColouringCache:     lrucache.New[KColouringResult](500, true),
+		umcVotingCache:      lrucache.New[int](500, true),
 	}
 }
 
