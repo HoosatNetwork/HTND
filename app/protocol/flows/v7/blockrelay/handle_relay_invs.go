@@ -336,7 +336,8 @@ func (flow *handleRelayInvsFlow) start() error {
 			}
 		}
 		txslen := len(block.Transactions)
-		log.Infof("Accepted block %s from node %s with %d tx", inv.Hash, flow.netConnection.Address(), txslen)
+		k := flow.Config().NetParams().K
+		log.Infof("Accepted block %s from node %s with %d tx, k=%v", inv.Hash, flow.netConnection.Address(), txslen, k)
 		err = flow.OnNewBlock(block)
 		if err != nil {
 			return err
