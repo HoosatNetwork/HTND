@@ -310,7 +310,9 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	// Step 2: For k = 0, 1, 2, ... until a winning k is found
 	currentVote := -1
 	votePassed := false
-	for k := 0; ; k++ {
+
+	k := 0
+	for {
 		// Step 3: For each block r in P
 		for _, r := range P {
 			// Step 3a: Compute the k-colouring Ck of past_G(r)
@@ -340,14 +342,16 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 
 			// Step 3f: If vote > 0, return k as the rank
 			if vote > 0 {
-				currentVote = vote
+				currentVote = k
 				votePassed = true
 				break
 			}
 		}
-		// Increment K by 2 every loop if vote does not pass after K has been 2.
-		if k >= 2 {
+		// Increment logic: +1 for k=0,1; +2 for k>=2
+		if k < 2 {
 			k++
+		} else {
+			k += 2
 		}
 		// Stop the loop if we found a solution.
 		if votePassed == true {
