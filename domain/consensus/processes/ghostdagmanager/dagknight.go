@@ -307,7 +307,7 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 		return 0, errors.New("CalculateRank: no valid blocks in P")
 	}
 
-	// Step 2: For k = 0, 1, 2, ... until a winning k is found
+	// Step 2: For k = 0, 1, 2, 4, 6, ... until a winning k is found
 	currentVote := -1
 	votePassed := false
 
@@ -340,22 +340,21 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 				return 0, err
 			}
 
-			// Step 3f: If vote > 0, return k as the rank
+			// Step 3f: If vote > 0, set currentVote to k
 			if vote > 0 {
 				currentVote = k
 				votePassed = true
 				break
 			}
 		}
-		// Increment logic: +1 for k=0,1; +2 for k>=2
+		if votePassed {
+			break
+		}
+		// Increment: +1 for k=0,1; +2 for k>=2
 		if k < 2 {
 			k++
 		} else {
 			k += 2
-		}
-		// Stop the loop if we found a solution.
-		if votePassed == true {
-			break
 		}
 	}
 	if currentVote >= 4 {
@@ -387,10 +386,9 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 				return 0, err
 			}
 
-			// Step 3f: If vote > 0, return k as the rank
+			// Step 3f: If vote > 0, set currentVote to k
 			if vote > 0 {
-				currentVote = vote
-				votePassed = true
+				currentVote = k
 				break
 			}
 		}
