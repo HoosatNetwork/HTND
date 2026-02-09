@@ -308,6 +308,8 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	}
 
 	// Step 2: For k = 0, 1, 2, ... until a winning k is found
+	currentVote := -1
+	votePassed := false
 	for k := 0; ; k++ {
 		// Step 3: For each block r in P
 		for _, r := range P {
@@ -338,10 +340,61 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 
 			// Step 3f: If vote > 0, return k as the rank
 			if vote > 0 {
-				return k, nil
+				currentVote = vote
+				votePassed = true
+				break
+			}
+		}
+		// Increment K by 2 every loop if vote does not pass after K has been 2.
+		if k >= 2 {
+			k++
+		}
+		// Stop the loop if we found a solution.
+		if votePassed == true {
+			break
+		}
+	}
+	if currentVote >= 4 {
+		k := currentVote - 1
+		// Step 3 again: For backtracking one block r in P
+		for _, r := range P {
+			// Step 3a: Compute the k-colouring Ck of past_G(r)
+			res, err := gm.KColouring(stagingArea, r, G, k, false, nil)
+			if err != nil {
+				return 0, err
+			}
+			Ck := res.Blues
+
+			// Step 3b: Compute future_G(r)
+			futureR, err := gm.getFuture(stagingArea, r, G)
+			if err != nil {
+				return 0, err
+			}
+
+			// Step 3c: Compute G \ future_G(r)
+			GMinusFutureR := difference(G, futureR)
+
+			// Step 3d: Assume g(k) = k (as per paper's assumption)
+			gk := k
+
+			// Step 3e: Run UMC voting on (G \ future_G(r), Ck, g(k))
+			vote, err := gm.UMCVoting(stagingArea, GMinusFutureR, Ck, gk)
+			if err != nil {
+				return 0, err
+			}
+
+			// Step 3f: If vote > 0, return k as the rank
+			if vote > 0 {
+				currentVote = vote
+				votePassed = true
+				break
 			}
 		}
 	}
+	if currentVote < 0 {
+		return 0, errors.New("Vote did not pass for unknown reason.")
+	}
+	return currentVote, nil
 }
 
 // TieBreaking implements Algorithm 4: Rank tie-breaking procedure from the DAGKnight paper
