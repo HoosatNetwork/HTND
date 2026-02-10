@@ -2,12 +2,15 @@ package ghostdagmanager
 
 import (
 	"crypto/md5"
+	"math"
 	"sort"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
+
+const paperFaithful = false
 
 // makeKey creates a composite DomainHash key from block and G slice
 func makeKey(block *externalapi.DomainHash, g []*externalapi.DomainHash) externalapi.DomainHash {
@@ -387,6 +390,23 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	if len(P) == 0 {
 		return 0, errors.New("CalculateRank: no valid blocks in P")
 	}
+	// paper-aligned small constant;
+	const maxReps = 5
+	// Sample representatives deterministically (paper allows sampling for efficiency)
+	// Sort by hash string (lex order) → consistent across runs
+	reps := make([]*externalapi.DomainHash, 0, maxReps)
+	if len(P) <= maxReps || paperFaithful == false {
+		reps = P
+	} else {
+		sorted := make([]*externalapi.DomainHash, len(P))
+		copy(sorted, P)
+
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].String() < sorted[j].String()
+		})
+
+		reps = sorted[:maxReps]
+	}
 
 	// Step 2: For k = 0, 1, 2, 4, 6, ... until a winning k is found
 	currentVote := -1
@@ -395,7 +415,7 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	k := 0
 	for {
 		// Step 3: For each block r in P
-		for _, r := range P {
+		for _, r := range reps {
 			// Step 3a: Compute the k-colouring Ck of past_G(r)
 			res, err := gm.KColouring(stagingArea, r, G, k, false, nil)
 			if err != nil {
@@ -412,8 +432,14 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 			// Step 3c: Compute G \ future_G(r)
 			GMinusFutureR := difference(G, futureR)
 
-			// Step 3d: Assume g(k) = k (as per paper's assumption)
-			gk := k
+			var gk int
+			if paperFaithful == true {
+				// Step 3d: g(k) = |sqrt(k)|
+				gk = int(math.Floor(math.Sqrt(float64(k))))
+			} else {
+				// Step 3d: Assume g(k) = k
+				gk = k
+			}
 
 			// Step 3e: Run UMC voting on (G \ future_G(r), Ck, g(k))
 			vote, err := gm.UMCVoting(stagingArea, GMinusFutureR, Ck, gk)
