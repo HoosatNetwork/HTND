@@ -11,16 +11,28 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app"
 )
 
-func periodicAggressiveRelease() {
-	ticker := time.NewTicker(60 * time.Second)
+func periodicAggressiveRelease() error {
+	minutes := 5
+	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
+	if htnd_gc_timer_argument != "" {
+		var err error
+		minutes, err = strconv.Atoi(htnd_gc_timer_argument)
+		if err != nil {
+			return err
+		}
+	}
+
+	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
 	for range ticker.C {
 		debug.FreeOSMemory()
 	}
+	return nil
 }
 
 func main() {

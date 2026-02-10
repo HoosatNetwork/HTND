@@ -1,77 +1,89 @@
 package lrucacheuint64tohash
 
 import (
-	// "sync"
+	"container/list"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
-// LRUCache is a least-recently-used cache from
-// uint64 to DomainHash
+type entry struct {
+	key   uint64
+	value *externalapi.DomainHash
+	elem  *list.Element
+}
+
 type LRUCache struct {
-	// lock     *sync.RWMutex
-	cache    map[uint64]*externalapi.DomainHash
+	cache    map[uint64]*entry
+	lru      *list.List
 	capacity int
 }
 
-// New creates a new LRUCache
 func New(capacity int, preallocate bool) *LRUCache {
-	var cache map[uint64]*externalapi.DomainHash
+	cache := make(map[uint64]*entry)
 	if preallocate {
-		cache = make(map[uint64]*externalapi.DomainHash, capacity+1)
-	} else {
-		cache = make(map[uint64]*externalapi.DomainHash)
+		cache = make(map[uint64]*entry, capacity+capacity/4)
 	}
 	return &LRUCache{
-		// lock:     &sync.RWMutex{},
 		cache:    cache,
+		lru:      list.New(),
 		capacity: capacity,
 	}
 }
 
-// Add adds an entry to the LRUCache
 func (c *LRUCache) Add(key uint64, value *externalapi.DomainHash) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	c.cache[key] = value
-
-	if len(c.cache) > c.capacity {
-		c.evictRandom()
+	if e, ok := c.cache[key]; ok {
+		e.value = value
+		c.lru.MoveToFront(e.elem)
+		return
+	}
+	e := &entry{
+		key:   key,
+		value: value,
+	}
+	e.elem = c.lru.PushFront(e)
+	c.cache[key] = e
+	if c.lru.Len() > c.capacity {
+		c.evict()
 	}
 }
 
-// Get returns the entry for the given key, or (nil, false) otherwise
 func (c *LRUCache) Get(key uint64) (*externalapi.DomainHash, bool) {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	value, ok := c.cache[key]
+	e, ok := c.cache[key]
 	if !ok {
 		return nil, false
 	}
-	return value, true
+	c.lru.MoveToFront(e.elem)
+	return e.value, true
 }
 
-// Has returns whether the LRUCache contains the given key
 func (c *LRUCache) Has(key uint64) bool {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	number, ok := c.cache[key]
-	return ok && number != nil
+	e, ok := c.cache[key]
+	return ok && e.value != nil
 }
 
-// Remove removes the entry for the the given key. Does nothing if
-// the entry does not exist
 func (c *LRUCache) Remove(key uint64) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
+	e, ok := c.cache[key]
+	if !ok {
+		return
+	}
+	c.lru.Remove(e.elem)
 	delete(c.cache, key)
 }
 
-func (c *LRUCache) evictRandom() {
-	var keyToEvict uint64
-	for key := range c.cache {
-		keyToEvict = key
-		break
+func (c *LRUCache) evict() {
+	if c.lru.Len() == 0 {
+		return
 	}
-	delete(c.cache, keyToEvict)
+	back := c.lru.Back()
+	if back == nil {
+		return
+	}
+	e := back.Value.(*entry)
+	c.lru.Remove(back)
+	delete(c.cache, e.key)
+}
+
+func (c *LRUCache) Clear() {
+	c.cache = make(map[uint64]*entry, len(c.cache)/2+1)
+	c.lru.Init()
 }

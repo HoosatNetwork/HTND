@@ -11,7 +11,7 @@ const validCharacters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
 const (
 	appMajor uint = 1
 	appMinor uint = 6
-	appPatch uint = 6
+	appPatch uint = 7
 )
 
 // appBuild is defined as a variable so it can be overridden during the build
@@ -28,7 +28,7 @@ func init() {
 
 		// Append build metadata if there is any.
 		// Panic if any invalid characters are encountered
-		if appBuild != "" {
+		if appBuild != "RC1" {
 			checkAppBuild(appBuild)
 
 			version = fmt.Sprintf("%s-%s", version, appBuild)
