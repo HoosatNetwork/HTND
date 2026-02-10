@@ -18,7 +18,7 @@ import (
 )
 
 func periodicAggressiveRelease() error {
-	minutes := 5
+	minutes := 30
 	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
 	if htnd_gc_timer_argument != "" {
 		var err error
@@ -45,8 +45,9 @@ func main() {
 			log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
 		}()
 	}
-
-	go periodicAggressiveRelease()
+	if os.Getenv("HTND_PERIODIC_RELEASE_DISABLE") == "" {
+		go periodicAggressiveRelease()
+	}
 	if err := app.StartApp(); err != nil {
 		os.Exit(1)
 	}
