@@ -9,9 +9,9 @@ import (
 const validCharacters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-"
 
 const (
-	appMajor uint = 1
-	appMinor uint = 6
-	appPatch uint = 7
+	appMajor uint = 2
+	appMinor uint = 0
+	appPatch uint = 0
 )
 
 // appBuild is defined as a variable so it can be overridden during the build
@@ -28,7 +28,7 @@ func init() {
 
 		// Append build metadata if there is any.
 		// Panic if any invalid characters are encountered
-		if appBuild != "RC1" {
+		if appBuild != "Testnet" {
 			checkAppBuild(appBuild)
 
 			version = fmt.Sprintf("%s-%s", version, appBuild)
