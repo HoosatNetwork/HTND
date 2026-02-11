@@ -16,6 +16,8 @@ func main() {
 		err = autoCompound(config.(*autoCompoundConfig))
 	case sendSubCmd:
 		err = send(config.(*sendConfig))
+	case voteSubCmd:
+		err = vote(config.(*voteConfig))
 	case createUnsignedTransactionSubCmd:
 		err = createUnsignedTransaction(config.(*createUnsignedTransactionConfig))
 	case signSubCmd:

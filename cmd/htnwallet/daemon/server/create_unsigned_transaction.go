@@ -27,7 +27,7 @@ func (s *server) CreateUnsignedTransactions(_ context.Context, request *pb.Creat
 	defer s.lock.Unlock()
 
 	unsignedTransactions, err := s.createUnsignedTransactions(request.Address, request.Amount, request.IsSendAll,
-		request.From, request.UseExistingChangeAddress)
+		request.From, request.UseExistingChangeAddress, request.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	}}
 	unsignedTransaction, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
 		s.keysFile.MinimumSignatures,
-		payments, selectedUTXOs)
+		payments, selectedUTXOs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 
 	return selectedUTXOs, totalValue, changeSompi, nil
 }
-func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool) ([][]byte, error) {
+func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte) ([][]byte, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
@@ -231,7 +231,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 	}
 	unsignedTransaction, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
 		s.keysFile.MinimumSignatures,
-		payments, selectedUTXOs)
+		payments, selectedUTXOs, payload)
 	if err != nil {
 		return nil, err
 	}

@@ -40,6 +40,7 @@ message CreateUnsignedTransactionsRequest {
   repeated string from = 3;
   bool useExistingChangeAddress = 4;
   bool isSendAll = 5;
+  bytes payload = 6;
 }
 
 message CreateUnsignedTransactionsResponse {

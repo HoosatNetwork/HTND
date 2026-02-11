@@ -184,6 +184,7 @@ type CreateUnsignedTransactionsRequest struct {
 	From                     []string               `protobuf:"bytes,3,rep,name=from,proto3" json:"from,omitempty"`
 	UseExistingChangeAddress bool                   `protobuf:"varint,4,opt,name=useExistingChangeAddress,proto3" json:"useExistingChangeAddress,omitempty"`
 	IsSendAll                bool                   `protobuf:"varint,5,opt,name=isSendAll,proto3" json:"isSendAll,omitempty"`
+	Payload                  []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -251,6 +252,13 @@ func (x *CreateUnsignedTransactionsRequest) GetIsSendAll() bool {
 		return x.IsSendAll
 	}
 	return false
+}
+
+func (x *CreateUnsignedTransactionsRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
 }
 
 type CreateUnsignedTransactionsResponse struct {
@@ -1377,13 +1385,14 @@ const file_htnwalletd_proto_rawDesc = "" +
 	"\x0fAddressBalances\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x1c\n" +
 	"\tavailable\x18\x02 \x01(\x04R\tavailable\x12\x18\n" +
-	"\apending\x18\x03 \x01(\x04R\apending\"\xc3\x01\n" +
+	"\apending\x18\x03 \x01(\x04R\apending\"\xdd\x01\n" +
 	"!CreateUnsignedTransactionsRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x16\n" +
 	"\x06amount\x18\x02 \x01(\x04R\x06amount\x12\x12\n" +
 	"\x04from\x18\x03 \x03(\tR\x04from\x12:\n" +
 	"\x18useExistingChangeAddress\x18\x04 \x01(\bR\x18useExistingChangeAddress\x12\x1c\n" +
-	"\tisSendAll\x18\x05 \x01(\bR\tisSendAll\"X\n" +
+	"\tisSendAll\x18\x05 \x01(\bR\tisSendAll\x12\x18\n" +
+	"\apayload\x18\x06 \x01(\fR\apayload\"X\n" +
 	"\"CreateUnsignedTransactionsResponse\x122\n" +
 	"\x14unsignedTransactions\x18\x01 \x03(\fR\x14unsignedTransactions\"\x94\x01\n" +
 	"(CreateUnsignedCompoundTransactionRequest\x12\x18\n" +
