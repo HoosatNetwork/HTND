@@ -12,6 +12,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/keys"
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/pkg/errors"
 )
 
@@ -49,8 +50,8 @@ func vote(conf *voteConfig) error {
 		return errors.Wrap(err, "Failed to marshal vote payload")
 	}
 
-	// Send a small amount (1 sompi = 0.00000001 HTN) to satisfy transaction requirements
-	sendAmountSompi := uint64(1)
+	// Send 1 HTN to the voting platform
+	sendAmountSompi := uint64(constants.SompiPerHoosat)
 
 retry:
 	for attempt := 0; attempt <= maxRetries; attempt++ {

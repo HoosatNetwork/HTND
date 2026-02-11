@@ -147,12 +147,17 @@ func createUnsignedTransaction(
 		}
 	}
 
+	subnetworkID := subnetworks.SubnetworkIDNative
+	if len(payload) > 0 {
+		subnetworkID = subnetworks.SubnetworkIDData
+	}
+
 	domainTransaction := &externalapi.DomainTransaction{
 		Version:      constants.MaxTransactionVersion,
 		Inputs:       inputs,
 		Outputs:      outputs,
 		LockTime:     0,
-		SubnetworkID: subnetworks.SubnetworkIDNative,
+		SubnetworkID: subnetworkID,
 		Gas:          0,
 		Payload:      payload,
 	}
