@@ -97,7 +97,7 @@ func (s *server) mergeTransaction(
 	}
 
 	mergeTransactionBytes, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
-		s.keysFile.MinimumSignatures, payments, utxos)
+		s.keysFile.MinimumSignatures, payments, utxos, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *server) createSplitTransaction(transaction *serialization.PartiallySign
 		[]*libhtnwallet.Payment{{
 			Address: changeAddress,
 			Amount:  totalSompi,
-		}}, selectedUTXOs)
+		}}, selectedUTXOs, nil)
 	if err != nil {
 		return nil, err
 	}

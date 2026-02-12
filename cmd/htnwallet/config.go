@@ -14,6 +14,7 @@ const (
 	balanceSubCmd                   = "balance"
 	sendSubCmd                      = "send"
 	autoCompoundSubCmd              = "auto-compound"
+	voteSubCmd                      = "vote"
 	sweepSubCmd                     = "sweep"
 	createUnsignedTransactionSubCmd = "create-unsigned-transaction"
 	signSubCmd                      = "sign"
@@ -74,6 +75,18 @@ type autoCompoundConfig struct {
 	CompoundRate             int      `long:"compound-rate" short:"c" description:"Time in seconds"`
 	DaemonAddress            string   `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
 	ToAddress                string   `long:"to-address" short:"t" description:"The public address to compound your HTN to" required:"true"`
+	FromAddresses            []string `long:"from-address" short:"a" description:"Specific public address to send Hoosat from. Repeat multiple times (adding -a before each) to accept several addresses" required:"false"`
+	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" description:"Will use an existing change address (in case no change address was ever used, it will use a new one)"`
+	Verbose                  bool     `long:"show-serialized" short:"s" description:"Show a list of hex encoded sent transactions"`
+	config.NetworkFlags
+}
+
+type voteConfig struct {
+	KeysFile                 string   `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	Password                 string   `long:"password" short:"p" description:"Wallet password"`
+	DaemonAddress            string   `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
+	PollId                   string   `long:"poll-id" short:"i" description:"The poll ID to vote on" required:"true"`
+	Votes                    []int    `long:"vote" short:"v" description:"Vote value(s). Repeat multiple times for multiple votes" required:"true"`
 	FromAddresses            []string `long:"from-address" short:"a" description:"Specific public address to send Hoosat from. Repeat multiple times (adding -a before each) to accept several addresses" required:"false"`
 	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" description:"Will use an existing change address (in case no change address was ever used, it will use a new one)"`
 	Verbose                  bool     `long:"show-serialized" short:"s" description:"Show a list of hex encoded sent transactions"`
@@ -173,6 +186,10 @@ func parseCommandLine() (subCommand string, config interface{}) {
 	_, _ = parser.AddCommand(sendSubCmd, "Sends a Hoosat transaction to a public address",
 		"Sends a Hoosat transaction to a public address", sendConf)
 
+	voteConf := &voteConfig{DaemonAddress: defaultListen}
+	_, _ = parser.AddCommand(voteSubCmd, "Votes on a poll by sending HTN with vote payload",
+		"Votes on a poll by sending HTN with vote payload to the voting platform", voteConf)
+
 	sweepConf := &sweepConfig{DaemonAddress: defaultListen}
 	_, _ = parser.AddCommand(sweepSubCmd, "Sends all funds associated with the given schnorr private key to a new address of the current wallet",
 		"Sends all funds associated with the given schnorr private key to a newly created external (i.e. not a change) address of the "+
@@ -261,6 +278,13 @@ func parseCommandLine() (subCommand string, config interface{}) {
 			printErrorAndExit(err)
 		}
 		config = sendConf
+	case voteSubCmd:
+		combineNetworkFlags(&voteConf.NetworkFlags, &cfg.NetworkFlags)
+		err := voteConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = voteConf
 	case sweepSubCmd:
 		combineNetworkFlags(&sweepConf.NetworkFlags, &cfg.NetworkFlags)
 		err := sweepConf.ResolveNetwork(parser)

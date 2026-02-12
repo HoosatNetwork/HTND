@@ -53,6 +53,7 @@ retry:
 				Amount:                   sendAmountSompi,
 				IsSendAll:                conf.IsSendAll,
 				UseExistingChangeAddress: conf.UseExistingChangeAddress,
+				Payload:                  nil,
 			})
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {

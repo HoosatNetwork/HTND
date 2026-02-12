@@ -107,7 +107,7 @@ func TestMultisig(t *testing.T) {
 				[]*libhtnwallet.Payment{{
 					Address: address,
 					Amount:  10,
-				}}, selectedUTXOs)
+				}}, selectedUTXOs, nil)
 			if err != nil {
 				t.Fatalf("CreateUnsignedTransactions: %+v", err)
 			}
@@ -268,7 +268,7 @@ func TestP2PK(t *testing.T) {
 				[]*libhtnwallet.Payment{{
 					Address: address,
 					Amount:  10,
-				}}, selectedUTXOs)
+				}}, selectedUTXOs, nil)
 			if err != nil {
 				t.Fatalf("CreateUnsignedTransactions: %+v", err)
 			}
@@ -430,7 +430,7 @@ func TestMaxSompi(t *testing.T) {
 			[]*libhtnwallet.Payment{{
 				Address: address,
 				Amount:  10,
-			}}, selectedUTXOsForTxWithLargeInputAmount)
+			}}, selectedUTXOsForTxWithLargeInputAmount, nil)
 		if err != nil {
 			t.Fatalf("CreateUnsignedTransactions: %+v", err)
 		}
@@ -481,7 +481,7 @@ func TestMaxSompi(t *testing.T) {
 			[]*libhtnwallet.Payment{{
 				Address: address,
 				Amount:  22e6 * constants.SompiPerHoosat,
-			}}, selectedUTXOsForTxWithLargeInputAndOutputAmount)
+			}}, selectedUTXOsForTxWithLargeInputAndOutputAmount, nil)
 		if err != nil {
 			t.Fatalf("CreateUnsignedTransactions: %+v", err)
 		}

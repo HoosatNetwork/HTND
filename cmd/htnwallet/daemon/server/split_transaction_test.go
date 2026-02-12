@@ -143,7 +143,7 @@ func testEstimateMassIncreaseForSignaturesSetUp(t *testing.T, consensusConfig *c
 		[]*libhtnwallet.Payment{{
 			Address: address,
 			Amount:  10,
-		}}, selectedUTXOs)
+		}}, selectedUTXOs, nil)
 	if err != nil {
 		t.Fatalf("CreateUnsignedTransactions: %+v", err)
 	}
