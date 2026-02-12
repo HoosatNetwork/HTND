@@ -18,7 +18,7 @@ import (
 )
 
 func periodicAggressiveRelease() error {
-	minutes := 5
+	minutes := 30
 	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
 	if htnd_gc_timer_argument != "" {
 		var err error
@@ -36,7 +36,7 @@ func periodicAggressiveRelease() error {
 }
 
 func main() {
-	debug.SetMemoryLimit(4_000_000_000)  // Set memory soft limit to 16GB
+	// debug.SetMemoryLimit(4_000_000_000)  // Set memory soft limit to 16GB
 	runtime.GOMAXPROCS(runtime.NumCPU()) // Set the maximum number of CPUs that can be executing simultaneously
 	if os.Getenv("HTND_PROFILER") != "" {
 		runtime.SetBlockProfileRate(1)     // Set block profile rate to 1 to enable block profiling

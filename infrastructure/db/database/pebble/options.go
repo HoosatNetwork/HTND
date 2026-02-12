@@ -85,7 +85,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Block cache size
 	// ────────────────────────────────────────────────
 	// Default is 512MiB to stay within an 8GiB node budget.
-	cacheBytes := int64(512) << 20
+	// For IBD with heavy reads (e.g., DAA window lookups), increase to reduce DB hits.
+	cacheBytes := int64(2048) << 20 // 2 GiB default for better read performance during IBD
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
 	}
@@ -113,8 +114,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		// L0 tuning – keep L0 read-amplification under control for faster point lookups.
 		// Lower thresholds reduce point-lookup work at the cost of more compaction.
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 6),
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 32),
+		// For IBD, balance to avoid excessive compactions during writes.
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 8),
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 24),
 		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 8),
 
 		TargetFileSizes: [7]int64{
@@ -199,6 +201,10 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	// Optional read-triggered compactions (can help point lookups if the DB is read-heavy).
 	// Defaults are conservative/off because IBD tends to be write-heavy.
+	// For IBD with heavy DAA window reads, enable with moderate rate.
+	opts.Experimental.ReadCompactionRate = 8 << 20 // 8 MB/s default for IBD read performance
+	opts.Experimental.ReadSamplingMultiplier = 4   // Sample every 4th read for compaction triggering
+
 	if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
 		if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
 			opts.Experimental.ReadCompactionRate = int64(kb) << 10
