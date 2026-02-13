@@ -53,7 +53,7 @@ func (d fakeDomain) CommitStagingConsensus() error {
 	panic("implement me")
 }
 
-func (d fakeDomain) Consensus() externalapi.Consensus           { return fakeConsensus{d.TestConsensus} }
+func (d fakeDomain) Consensus() externalapi.Consensus { return fakeConsensus{d.TestConsensus} }
 
 func (d fakeDomain) MiningManager() miningmanager.MiningManager { return nil }
 
