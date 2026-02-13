@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-
 	"github.com/Hoosat-Oy/HTND/domain/miningmanager/mempool"
 
 	"github.com/Hoosat-Oy/HTND/app/protocol"
@@ -72,7 +70,7 @@ func (a *ComponentManager) Stop() {
 	}
 
 	a.protocolManager.Close()
-	close(a.protocolManager.Context().Domain().ConsensusEventsChannel())
+	a.protocolManager.Context().Domain().ConsensusEventsQueue().Close()
 }
 
 // NewComponentManager returns a new ComponentManager instance.
@@ -141,7 +139,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	if err != nil {
 		return nil, err
 	}
-	rpcManager := setupRPC(cfg, domain, netAdapter, protocolManager, connectionManager, addressManager, utxoIndex, domain.ConsensusEventsChannel(), interrupt)
+	rpcManager := setupRPC(cfg, domain, netAdapter, protocolManager, connectionManager, addressManager, utxoIndex, domain.ConsensusEventsQueue(), interrupt)
 
 	return &ComponentManager{
 		cfg:               cfg,
@@ -162,7 +160,7 @@ func setupRPC(
 	connectionManager *connmanager.ConnectionManager,
 	addressManager *addressmanager.AddressManager,
 	utxoIndex *utxoindex.UTXOIndex,
-	consensusEventsChan chan externalapi.ConsensusEvent,
+	consensusEventsQueue *consensus.EventQueue,
 	shutDownChan chan<- struct{},
 ) *rpc.Manager {
 
@@ -174,7 +172,7 @@ func setupRPC(
 		connectionManager,
 		addressManager,
 		utxoIndex,
-		consensusEventsChan,
+		consensusEventsQueue,
 		shutDownChan,
 	)
 	protocolManager.SetOnNewBlockTemplateHandler(rpcManager.NotifyNewBlockTemplate)

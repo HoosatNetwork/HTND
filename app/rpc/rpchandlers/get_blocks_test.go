@@ -5,12 +5,12 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpchandlers"
-	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/testapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
@@ -23,8 +23,18 @@ type fakeDomain struct {
 	testapi.TestConsensus
 }
 
+type fakeConsensus struct {
+	externalapi.Consensus
+}
+
+func (fc fakeConsensus) IsNearlySynced() (bool, error) { return true, nil }
+
 func (d fakeDomain) ConsensusEventsChannel() chan externalapi.ConsensusEvent {
-	panic("implement me")
+	return nil
+}
+
+func (d fakeDomain) ConsensusEventsQueue() *consensus.EventQueue {
+	return nil
 }
 
 func (d fakeDomain) DeleteStagingConsensus() error {
@@ -43,7 +53,8 @@ func (d fakeDomain) CommitStagingConsensus() error {
 	panic("implement me")
 }
 
-func (d fakeDomain) Consensus() externalapi.Consensus           { return d }
+func (d fakeDomain) Consensus() externalapi.Consensus           { return fakeConsensus{d.TestConsensus} }
+
 func (d fakeDomain) MiningManager() miningmanager.MiningManager { return nil }
 
 func TestHandleGetBlocks(t *testing.T) {

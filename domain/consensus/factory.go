@@ -82,7 +82,7 @@ type Config struct {
 // Factory instantiates new Consensuses
 type Factory interface {
 	NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
-		consensusEventsChan chan externalapi.ConsensusEvent) (
+		consensusEventsQueue *EventQueue) (
 		externalapi.Consensus, bool, error)
 	NewTestConsensus(config *Config, testName string) (
 		tc testapi.TestConsensus, teardown func(keepDataDir bool), err error)
@@ -115,7 +115,7 @@ func NewFactory() Factory {
 
 // NewConsensus instantiates a new Consensus
 func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
-	consensusEventsChan chan externalapi.ConsensusEvent) (
+	consensusEventsQueue *EventQueue) (
 	consensusInstance externalapi.Consensus, shouldMigrate bool, err error) {
 
 	dbManager := consensusdatabase.New(db)
@@ -537,8 +537,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		daaBlocksStore:                      daaBlocksStore,
 		blocksWithTrustedDataDAAWindowStore: daaWindowStore,
 
-		consensusEventsChan: consensusEventsChan,
-		virtualNotUpdated:   true,
+		consensusEventsQueue: consensusEventsQueue,
+		virtualNotUpdated:    true,
 	}
 
 	if isOldReachabilityInitialized {
