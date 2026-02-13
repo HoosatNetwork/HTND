@@ -99,3 +99,7 @@ func (brs *blockRelationStore) deserializeBlockRelations(blockRelationsBytes []b
 	}
 	return serialization.DbBlockRelationsToDomainBlockRelations(dbBlockRelations)
 }
+
+func (brs *blockRelationStore) CacheLen() int {
+	return brs.cache.Len()
+}

@@ -89,3 +89,7 @@ func (c *LRUCache) evictRandom() {
 	}
 	delete(c.cache, keyToEvict)
 }
+
+func (c *LRUCache) Len() int {
+	return len(c.cache)
+}

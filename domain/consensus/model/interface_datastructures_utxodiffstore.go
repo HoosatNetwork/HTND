@@ -11,4 +11,5 @@ type UTXODiffStore interface {
 	UTXODiffChild(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error)
 	HasUTXODiffChild(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
+	CacheLen() int
 }

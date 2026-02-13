@@ -9,4 +9,5 @@ type GHOSTDAGDataStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	Get(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, error)
 	UnstageAll(stagingArea *StagingArea)
+	CacheLen() int
 }

@@ -48,3 +48,7 @@ func (bss *blockWindowHeapSliceStore) Get(stagingArea *model.StagingArea, blockH
 
 	return nil, errors.Wrap(database.ErrNotFound, "Window heap slice not found")
 }
+
+func (bss *blockWindowHeapSliceStore) CacheLen() int {
+	return bss.cache.Len()
+}

@@ -92,3 +92,7 @@ func (ms *multisetStore) deserializeMultiset(multisetBytes []byte) (model.Multis
 
 	return serialization.DBMultisetToMultiset(dbMultiset)
 }
+
+func (ms *multisetStore) CacheLen() int {
+	return ms.cache.Len()
+}

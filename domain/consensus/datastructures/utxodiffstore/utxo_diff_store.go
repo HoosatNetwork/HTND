@@ -191,3 +191,7 @@ func (uds *utxoDiffStore) deserializeUTXODiffChild(utxoDiffChildBytes []byte) (*
 
 	return serialization.DbHashToDomainHash(dbHash)
 }
+
+func (uds *utxoDiffStore) CacheLen() int {
+	return uds.utxoDiffCache.Len() + uds.utxoDiffChildCache.Len()
+}

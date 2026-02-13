@@ -11,4 +11,5 @@ type DAABlocksStore interface {
 	DAAAddedBlocks(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	DAAScore(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (uint64, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
+	CacheLen() int
 }

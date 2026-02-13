@@ -97,3 +97,7 @@ func (gds *ghostdagDataStore) deserializeBlockGHOSTDAGData(blockGHOSTDAGDataByte
 
 	return serialization.DBBlockGHOSTDAGDataToBlockGHOSTDAGData(dbBlockGHOSTDAGData)
 }
+
+func (gds *ghostdagDataStore) CacheLen() int {
+	return gds.cache.Len()
+}

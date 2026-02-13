@@ -336,6 +336,10 @@ func (ds *GHOSTDAGDataStoreImpl) UnstageAll(stagingArea *model.StagingArea) {
 	panic("implement me")
 }
 
+func (ds *GHOSTDAGDataStoreImpl) CacheLen() int {
+	return len(ds.dagMap)
+}
+
 type DAGTopologyManagerImpl struct {
 	parentsMap map[externalapi.DomainHash][]*externalapi.DomainHash
 }
@@ -453,6 +457,10 @@ func (b *blockHeadersStore) BlockHeaders(dbContext model.DBReader, stagingArea *
 
 func (b *blockHeadersStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	delete(b.dagMap, *blockHash)
+}
+
+func (b *blockHeadersStore) CacheLen() int {
+	return len(b.dagMap)
 }
 
 func (b *blockHeadersStore) Count(*model.StagingArea) uint64 {

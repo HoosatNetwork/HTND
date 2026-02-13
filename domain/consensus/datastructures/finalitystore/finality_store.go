@@ -62,3 +62,7 @@ func (fs *finalityStore) IsStaged(stagingArea *model.StagingArea) bool {
 func (fs *finalityStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
 	return fs.bucket.Key(hash.ByteSlice())
 }
+
+func (fs *finalityStore) CacheLen() int {
+	return fs.cache.Len()
+}

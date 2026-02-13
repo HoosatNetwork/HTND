@@ -20,4 +20,5 @@ type ConsensusStateStore interface {
 	HadStartedImportingPruningPointUTXOSet(dbContext DBWriter) (bool, error)
 	ImportPruningPointUTXOSetIntoVirtualUTXOSet(dbContext DBWriter, pruningPointUTXOSetIterator externalapi.ReadOnlyUTXOSetIterator) error
 	FinishImportingPruningPointUTXOSet(dbContext DBWriter) error
+	CacheLen() int
 }

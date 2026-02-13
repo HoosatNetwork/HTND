@@ -9,4 +9,5 @@ type AcceptanceDataStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	Get(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (externalapi.AcceptanceData, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
+	CacheLen() int
 }

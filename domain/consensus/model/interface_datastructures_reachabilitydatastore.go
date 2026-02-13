@@ -12,4 +12,5 @@ type ReachabilityDataStore interface {
 	HasReachabilityData(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
 	ReachabilityReindexRoot(dbContext DBReader, stagingArea *StagingArea) (*externalapi.DomainHash, error)
 	Delete(dbContext DBWriter) error
+	CacheLen() int
 }

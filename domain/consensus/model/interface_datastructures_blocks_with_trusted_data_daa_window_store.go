@@ -10,4 +10,5 @@ type BlocksWithTrustedDataDAAWindowStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, index uint64, ghostdagData *externalapi.BlockGHOSTDAGDataHashPair)
 	DAAWindowBlock(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash, index uint64) (*externalapi.BlockGHOSTDAGDataHashPair, error)
+	CacheLen() int
 }

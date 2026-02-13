@@ -182,3 +182,7 @@ func (hscs *headersSelectedChainStore) highestChainBlockIndex(dbContext model.DB
 	hscs.cacheHighestChainBlockIndex = index
 	return index, true, nil
 }
+
+func (hscs *headersSelectedChainStore) CacheLen() int {
+	return hscs.cacheByIndex.Len() + hscs.cacheByHash.Len()
+}

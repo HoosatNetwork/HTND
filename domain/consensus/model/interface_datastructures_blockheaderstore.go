@@ -12,4 +12,5 @@ type BlockHeaderStore interface {
 	BlockHeaders(dbContext DBReader, stagingArea *StagingArea, blockHashes []*externalapi.DomainHash) ([]externalapi.BlockHeader, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
 	Count(stagingArea *StagingArea) uint64
+	CacheLen() int
 }

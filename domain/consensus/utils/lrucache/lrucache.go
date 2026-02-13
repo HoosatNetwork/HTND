@@ -143,3 +143,8 @@ func (c *LRUCache[V]) Clear() {
 	c.cache = make(map[uint64]*entry[V], len(c.cache)/2+1) // shrink a bit
 	c.lru.Init()
 }
+
+// Len returns the number of items in the cache
+func (c *LRUCache[V]) Len() int {
+	return c.lru.Len()
+}

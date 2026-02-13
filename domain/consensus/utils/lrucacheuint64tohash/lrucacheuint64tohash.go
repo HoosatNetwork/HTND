@@ -87,3 +87,7 @@ func (c *LRUCache) Clear() {
 	c.cache = make(map[uint64]*entry, len(c.cache)/2+1)
 	c.lru.Init()
 }
+
+func (c *LRUCache) Len() int {
+	return c.lru.Len()
+}

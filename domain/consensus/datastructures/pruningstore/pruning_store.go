@@ -356,3 +356,7 @@ func (ps *pruningStore) CurrentPruningPointIndex(dbContext model.DBReader, stagi
 	*ps.currentPruningPointIndexCache = index
 	return index, nil
 }
+
+func (ps *pruningStore) CacheLen() int {
+	return ps.pruningPointByIndexCache.Len()
+}

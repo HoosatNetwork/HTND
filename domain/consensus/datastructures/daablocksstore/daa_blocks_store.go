@@ -120,3 +120,7 @@ func (daas *daaBlocksStore) Delete(stagingArea *model.StagingArea, blockHash *ex
 		stagingShard.daaAddedBlocksToDelete[*blockHash] = struct{}{}
 	}
 }
+
+func (daas *daaBlocksStore) CacheLen() int {
+	return daas.daaScoreLRUCache.Len() + daas.daaAddedBlocksLRUCache.Len()
+}

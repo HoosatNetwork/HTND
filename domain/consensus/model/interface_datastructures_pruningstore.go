@@ -31,4 +31,6 @@ type PruningStore interface {
 	CommitImportedPruningPointUTXOSet(dbContext DBWriter) error
 	PruningPointUTXOs(dbContext DBReader, fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error)
 	PruningPointUTXOIterator(dbContext DBReader) (externalapi.ReadOnlyUTXOSetIterator, error)
+
+	CacheLen() int
 }
