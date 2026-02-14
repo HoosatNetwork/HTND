@@ -12,6 +12,7 @@ import (
 // HandleIBDBlockLocatorContext is the interface for the context needed for the HandleIBDBlockLocator flow.
 type HandleIBDBlockLocatorContext interface {
 	Domain() domain.Domain
+	IsIBDRunning() bool
 }
 
 // HandleIBDBlockLocator listens to appmessage.MsgIBDBlockLocator messages and sends
@@ -29,6 +30,16 @@ func HandleIBDBlockLocator(context HandleIBDBlockLocatorContext, incomingRoute *
 
 		targetHash := ibdBlockLocatorMessage.TargetHash
 		log.Debugf("Received IBDBlockLocator from %s with targetHash %s", peer, targetHash)
+
+		if context.IsIBDRunning() {
+			log.Debugf("Node is in IBD, responding with not found for targetHash %s", targetHash)
+			ibdBlockLocatorHighestHashNotFoundMessage := appmessage.NewMsgIBDBlockLocatorHighestHashNotFound()
+			err = outgoingRoute.Enqueue(ibdBlockLocatorHighestHashNotFoundMessage)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 
 		blockInfo, err := context.Domain().Consensus().GetBlockInfo(targetHash)
 		if err != nil {
