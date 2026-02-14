@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strconv"
-	"time"
 
 	"github.com/Hoosat-Oy/HTND/app"
 )
