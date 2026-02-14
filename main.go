@@ -41,7 +41,6 @@ func main() {
 		}()
 	}
 
-	go periodicAggressiveRelease()
 	if err := app.StartApp(); err != nil {
 		os.Exit(1)
 	}
