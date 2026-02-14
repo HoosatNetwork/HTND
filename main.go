@@ -25,14 +25,18 @@ func getEnvInt(key string, defaultVal int) int64 {
 	return int64(defaultVal)
 }
 
-func main() {
-	var gogc string = "500"
+func init() {
+	os.Setenv("GOGC", "off")
 	if os.Getenv("GOGC") != "" {
-		gogc = os.Getenv("GOGC")
+		gogc := os.Getenv("GOGC")
+		os.Setenv("GOGC", gogc)
 	}
-	os.Setenv("GOGC", gogc)
 	debug.SetMemoryLimit(getEnvInt("GOMEMLIMIT", 8_000_000_000))
-	runtime.GOMAXPROCS(runtime.NumCPU()) // Set the maximum number of CPUs that can be executing simultaneously
+	runtime.GOMAXPROCS(runtime.NumCPU())
+}
+
+func main() {
+	// Set the maximum number of CPUs that can be executing simultaneously
 	if os.Getenv("HTND_PROFILER") != "" {
 		runtime.SetBlockProfileRate(1)     // Set block profile rate to 1 to enable block profiling
 		runtime.SetMutexProfileFraction(1) // Set mutex profile fraction to 1 to enable mutex profiling

@@ -1,7 +1,6 @@
 package pruningmanager
 
 import (
-	"runtime/debug"
 	"sort"
 	"time"
 
@@ -1158,7 +1157,6 @@ func (pm *pruningManager) PruneAllBlocksBelow(stagingArea *model.StagingArea, pr
 			return err
 		}
 	}
-	debug.FreeOSMemory()
 	return nil
 }
 

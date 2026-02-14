@@ -203,6 +203,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 }
 
 func (s *consensus) PeriodicFreeOSMemory() error {
+
 	minutes := 90
 	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
 	if htnd_gc_timer_argument != "" {
@@ -212,6 +213,7 @@ func (s *consensus) PeriodicFreeOSMemory() error {
 			return err
 		}
 	}
+	time.Sleep(time.Duration(minutes))
 
 	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
 	for range ticker.C {
