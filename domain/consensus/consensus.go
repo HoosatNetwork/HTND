@@ -3,6 +3,8 @@ package consensus
 import (
 	"math/big"
 	"os"
+	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 
@@ -195,6 +197,32 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 		go s.displayCacheSizes()
 	}
 
+	go s.PeriodicFreeOSMemory()
+
+	return nil
+}
+
+func (s *consensus) PeriodicFreeOSMemory() error {
+	minutes := 90
+	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
+	if htnd_gc_timer_argument != "" {
+		var err error
+		minutes, err = strconv.Atoi(htnd_gc_timer_argument)
+		if err != nil {
+			return err
+		}
+	}
+
+	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
+	for range ticker.C {
+		nearlySynced, err := s.IsNearlySynced()
+		if err != nil {
+			continue
+		}
+		if nearlySynced {
+			debug.FreeOSMemory()
+		}
+	}
 	return nil
 }
 

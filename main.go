@@ -17,24 +17,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/app"
 )
 
-func periodicAggressiveRelease() error {
-	minutes := 90
-	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
-	if htnd_gc_timer_argument != "" {
-		var err error
-		minutes, err = strconv.Atoi(htnd_gc_timer_argument)
-		if err != nil {
-			return err
-		}
-	}
-
-	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
-	for range ticker.C {
-		debug.FreeOSMemory()
-	}
-	return nil
-}
-
 func getEnvInt(key string, defaultVal int) int64 {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -60,7 +42,6 @@ func main() {
 		}()
 	}
 
-	go periodicAggressiveRelease()
 	if err := app.StartApp(); err != nil {
 		os.Exit(1)
 	}
