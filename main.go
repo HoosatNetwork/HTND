@@ -35,8 +35,22 @@ func periodicAggressiveRelease() error {
 	return nil
 }
 
+func getEnvInt(key string, defaultVal int) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return int64(n)
+		}
+	}
+	return int64(defaultVal)
+}
+
 func main() {
-	os.Setenv("GOGC", "-1")
+	var gogc string = "500"
+	if os.Getenv("GOGC") != "" {
+		gogc = os.Getenv("GOGC")
+	}
+	os.Setenv("GOGC", gogc)
+	debug.SetMemoryLimit(getEnvInt("GOMEMLIMIT", 8_000_000_000))
 	runtime.GOMAXPROCS(runtime.NumCPU()) // Set the maximum number of CPUs that can be executing simultaneously
 	if os.Getenv("HTND_PROFILER") != "" {
 		runtime.SetBlockProfileRate(1)     // Set block profile rate to 1 to enable block profiling
