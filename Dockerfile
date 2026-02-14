@@ -1,5 +1,5 @@
 # -- multistage docker build: stage #1: build stage
-FROM golang:1.24.5 AS build
+FROM golang:1.25 AS build
 
 RUN mkdir -p /go/src/github.com/Hoosat-Oy/HTND
 WORKDIR /go/src/github.com/Hoosat-Oy/HTND

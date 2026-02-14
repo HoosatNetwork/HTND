@@ -129,8 +129,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			baseFileSize * 64, // L6
 		},
 
-		MaxManifestFileSize: 128 << 20, // 128 MiB
-		MaxOpenFiles:        16384,
+		MaxManifestFileSize: 512 << 20, // 128 MiB
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
 
 		// WAL & sync behavior
 		DisableWAL:      false,
