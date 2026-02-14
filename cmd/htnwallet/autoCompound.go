@@ -89,7 +89,6 @@ func compoundOnce(
 		Address:                  conf.ToAddress,
 		UseExistingChangeAddress: conf.UseExistingChangeAddress,
 	})
-	fmt.Printf("%s", len(resp.UnsignedTransactions))
 	if err != nil {
 		fmt.Printf("[%s] NOTHING TO COMPOUND → Error: %s, backing off for 5m\n", time.Now().Format("15:04:05"), err)
 		time.Sleep(5 * time.Minute)
