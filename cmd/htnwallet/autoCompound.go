@@ -116,7 +116,7 @@ func compoundOnce(
 
 	bresp, err := client.Broadcast(bctx, &pb.BroadcastRequest{
 		Transactions: [][]byte{signedTx},
-		AllowOrphan:  true,
+		AllowOrphan:  false,
 	})
 	if err != nil {
 		// Handle rate limit gracefully

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+
 	"github.com/pkg/errors"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
@@ -68,8 +69,5 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 }
 
 func (s *server) isUTXOSpendable(entry *walletUTXO, virtualDAAScore uint64) bool {
-	if !entry.UTXOEntry.IsCoinbase() {
-		return true
-	}
 	return entry.UTXOEntry.BlockDAAScore()+s.coinbaseMaturity < virtualDAAScore
 }

@@ -224,7 +224,7 @@ func (s *server) usedOutpointHasExpired(outpointBroadcastTime time.Time) bool {
 	// interval to a minute.
 	// We also verify that a full refresh UTXO operation started after this time point and has already
 	// completed, in order to make sure that indeed this state reflects a state obtained following the required wait time.
-	return s.startTimeOfLastCompletedRefresh.After(outpointBroadcastTime.Add(time.Minute))
+	return s.startTimeOfLastCompletedRefresh.After(outpointBroadcastTime.Add(10 * time.Minute))
 }
 
 // updateUTXOSet clears the current UTXO set, and re-fills it with the given entries
