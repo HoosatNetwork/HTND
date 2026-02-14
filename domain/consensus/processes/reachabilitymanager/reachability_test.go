@@ -52,6 +52,10 @@ func (r *reachabilityDataStoreMock) ReachabilityReindexRoot(dbContext model.DBRe
 	return r.reachabilityReindexRootStaging, nil
 }
 
+func (r *reachabilityDataStoreMock) CacheLen() int {
+	return 0 // Mock has no cache
+}
+
 func (r *reachabilityDataStoreMock) isRecorderContainsOnly(nodes ...*externalapi.DomainHash) bool {
 	if len(r.recorder) != len(nodes) {
 		return false

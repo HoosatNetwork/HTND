@@ -62,3 +62,7 @@ func (mdrs *mergeDepthRootStore) IsStaged(stagingArea *model.StagingArea) bool {
 func (mdrs *mergeDepthRootStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
 	return mdrs.bucket.Key(hash.ByteSlice())
 }
+
+func (mdrs *mergeDepthRootStore) CacheLen() int {
+	return mdrs.cache.Len()
+}

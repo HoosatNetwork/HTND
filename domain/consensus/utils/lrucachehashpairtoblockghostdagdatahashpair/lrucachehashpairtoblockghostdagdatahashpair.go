@@ -103,3 +103,7 @@ func (c *LRUCache) Clear() {
 	c.cache = make(map[lruKey]*entry, len(c.cache)/2+1)
 	c.lru.Init()
 }
+
+func (c *LRUCache) Len() int {
+	return c.lru.Len()
+}

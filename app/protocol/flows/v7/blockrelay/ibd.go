@@ -2,7 +2,6 @@ package blockrelay
 
 import (
 	"fmt"
-	"runtime/debug"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -16,6 +15,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/config"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/Hoosat-Oy/HTND/infrastructure/network/addressmanager"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
 )
@@ -31,6 +31,7 @@ type IBDContext interface {
 	TrySetIBDRunning(ibdPeer *peerpkg.Peer) bool
 	UnsetIBDRunning()
 	IsRecoverableError(err error) bool
+	AddressManager() *addressmanager.AddressManager
 }
 
 type handleIBDFlow struct {
@@ -87,10 +88,57 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	var err error = nil
 	defer func() {
 		flow.UnsetIBDRunning()
-		debug.FreeOSMemory()
 		err = flow.logIBDFinished(isFinishedSuccessfully, err)
 	}()
 
+	// Determine timeout based on sync status
+	timeout := flow.getIBDTimeout()
+
+	// Channel to receive the IBD result
+	ibdDone := make(chan error, 1)
+
+	// Run IBD in a goroutine
+	go func() {
+		ibdDone <- flow.runIBD(block)
+	}()
+
+	// Wait for IBD to complete or timeout
+	select {
+	case err = <-ibdDone:
+		if err == nil {
+			isFinishedSuccessfully = true
+		}
+	case <-time.After(timeout):
+		log.Warnf("IBD with peer %s timed out after %v, disconnecting and banning peer", flow.peer, timeout)
+		// Disconnect & Remove the peer from address manager to prevent immediate reconnection
+		netAddress := flow.peer.Connection().NetAddress()
+		flow.peer.Connection().Disconnect()
+		if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
+			log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
+		}
+		return protocolerrors.Errorf(false, "IBD timed out")
+	}
+
+	return err
+}
+
+func (flow *handleIBDFlow) getIBDTimeout() time.Duration {
+	isNearlySynced, err := flow.Domain().Consensus().IsNearlySynced()
+	if err != nil {
+		log.Warnf("Failed to check if nearly synced, using default timeout: %v", err)
+		return flow.Config().IBDTimeout
+	}
+
+	if isNearlySynced {
+		// If nearly synced, IBD should be faster, use shorter timeout
+		return 10 * time.Minute
+	} else {
+		// If not nearly synced, allow more time for IBD
+		return flow.Config().IBDTimeout
+	}
+}
+
+func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 	relayBlockHash := consensushashing.BlockHash(block)
 
 	log.Infof("IBD started with peer %s and relayBlockHash %s", flow.peer, relayBlockHash)
@@ -163,9 +211,8 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	}
 
 	log.Infof("Finished syncing blocks up to %s", relayBlockHash)
-	isFinishedSuccessfully = true
 
-	return err
+	return nil
 }
 
 func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment() (*externalapi.DomainHash, *externalapi.DomainHash, error) {

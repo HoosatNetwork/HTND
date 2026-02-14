@@ -73,6 +73,12 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 		netConnection:     netConnection,
 		invsQueue:         make([]invRelayBlock, 0),
 	}
+
+	// Clean up offenseTracker entry when the connection ends, regardless of how it exits
+	defer func() {
+		delete(offenseTracker, netConnection.Address())
+	}()
+
 	err := flow.start()
 	// Currently, HandleRelayInvs flow is the only place where IBD is triggered, so the channel can be closed now
 	close(peer.IBDRequestChannel())
@@ -110,7 +116,6 @@ func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 		if isBanned {
 			log.Infof("Peer %s is banned. Disconnecting...", flow.netConnection.NetAddress().IP)
 			flow.netConnection.Disconnect()
-			delete(offenseTracker, address) // Clean up after ban
 			return
 		}
 	} else {

@@ -168,3 +168,7 @@ func (rds *reachabilityDataStore) deserializeReachabilityReindexRoot(reachabilit
 
 	return serialization.DbHashToDomainHash(dbHash)
 }
+
+func (rds *reachabilityDataStore) CacheLen() int {
+	return rds.reachabilityDataCache.Len()
+}

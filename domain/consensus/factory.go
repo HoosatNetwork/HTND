@@ -82,7 +82,7 @@ type Config struct {
 // Factory instantiates new Consensuses
 type Factory interface {
 	NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
-		consensusEventsChan chan externalapi.ConsensusEvent) (
+		consensusEventsQueue *EventQueue) (
 		externalapi.Consensus, bool, error)
 	NewTestConsensus(config *Config, testName string) (
 		tc testapi.TestConsensus, teardown func(keepDataDir bool), err error)
@@ -115,7 +115,7 @@ func NewFactory() Factory {
 
 // NewConsensus instantiates a new Consensus
 func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
-	consensusEventsChan chan externalapi.ConsensusEvent) (
+	consensusEventsQueue *EventQueue) (
 	consensusInstance externalapi.Consensus, shouldMigrate bool, err error) {
 
 	dbManager := consensusdatabase.New(db)
@@ -167,8 +167,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	headersSelectedTipStore := headersselectedtipstore.New(prefixBucket)
 	finalityStore := finalitystore.New(prefixBucket, 1000, preallocateCaches)
 	headersSelectedChainStore := headersselectedchainstore.New(prefixBucket, pruningWindowSizeForCaches, preallocateCaches)
-	daaBlocksStore := daablocksstore.New(prefixBucket, pruningWindowSizeForCaches, finalityWindowSizeForCaches, preallocateCaches)
-	windowHeapSliceStore := blockwindowheapslicestore.New(1000, preallocateCaches)
+	daaBlocksStore := daablocksstore.New(prefixBucket, 10_000, 10_000, preallocateCaches)
+	windowHeapSliceStore := blockwindowheapslicestore.New(10_000, preallocateCaches)
 
 	newReachabilityDataStore := reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
 	blockRelationStores, reachabilityDataStores, ghostdagDataStores := dagStores(config, prefixBucket, pruningWindowSizePlusFinalityDepthForCache, pruningWindowSizeForCaches, preallocateCaches)
@@ -535,9 +535,10 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		headersSelectedChainStore:           headersSelectedChainStore,
 		daaBlocksStore:                      daaBlocksStore,
 		blocksWithTrustedDataDAAWindowStore: daaWindowStore,
+		windowHeapSliceStore:                windowHeapSliceStore,
 
-		consensusEventsChan: consensusEventsChan,
-		virtualNotUpdated:   true,
+		consensusEventsQueue: consensusEventsQueue,
+		virtualNotUpdated:    true,
 	}
 
 	if isOldReachabilityInitialized {
@@ -677,15 +678,12 @@ func dagStores(config *Config,
 	reachabilityDataStores := make([]model.ReachabilityDataStore, config.MaxBlockLevel+1)
 	ghostdagDataStores := make([]model.GHOSTDAGDataStore, config.MaxBlockLevel+1)
 
-	ghostdagDataCacheSize := pruningWindowSizeForCaches * 2
-	if ghostdagDataCacheSize < config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1] {
-		ghostdagDataCacheSize = config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]
-	}
+	ghostdagDataCacheSize := config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]
 
 	for i := 0; i <= config.MaxBlockLevel; i++ {
 		prefixBucket := prefixBucket.Bucket([]byte{byte(i)})
 		if i == 0 {
-			blockRelationStores[i] = blockrelationstore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache, preallocateCaches)
+			blockRelationStores[i] = blockrelationstore.New(prefixBucket, 200, preallocateCaches)
 			reachabilityDataStores[i] = reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
 			ghostdagDataStores[i] = ghostdagdatastore.New(prefixBucket, ghostdagDataCacheSize, preallocateCaches)
 		} else {

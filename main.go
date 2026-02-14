@@ -12,31 +12,26 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strconv"
-	"time"
 
 	"github.com/Hoosat-Oy/HTND/app"
 )
 
-func periodicAggressiveRelease() error {
-	minutes := 30
-	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
-	if htnd_gc_timer_argument != "" {
-		var err error
-		minutes, err = strconv.Atoi(htnd_gc_timer_argument)
-		if err != nil {
-			return err
+func getEnvInt(key string, defaultVal int) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return int64(n)
 		}
 	}
-
-	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
-	for range ticker.C {
-		debug.FreeOSMemory()
-	}
-	return nil
+	return int64(defaultVal)
 }
 
 func main() {
-	debug.SetMemoryLimit(4_000_000_000)  // Set memory soft limit to 16GB
+	var gogc string = "500"
+	if os.Getenv("GOGC") != "" {
+		gogc = os.Getenv("GOGC")
+	}
+	os.Setenv("GOGC", gogc)
+	debug.SetMemoryLimit(getEnvInt("GOMEMLIMIT", 8_000_000_000))
 	runtime.GOMAXPROCS(runtime.NumCPU()) // Set the maximum number of CPUs that can be executing simultaneously
 	if os.Getenv("HTND_PROFILER") != "" {
 		runtime.SetBlockProfileRate(1)     // Set block profile rate to 1 to enable block profiling
@@ -45,9 +40,8 @@ func main() {
 			log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
 		}()
 	}
-	if os.Getenv("HTND_PERIODIC_RELEASE_DISABLE") == "" {
-		go periodicAggressiveRelease()
-	}
+
+	go periodicAggressiveRelease()
 	if err := app.StartApp(); err != nil {
 		os.Exit(1)
 	}

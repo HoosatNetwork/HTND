@@ -13,4 +13,5 @@ type BlockStore interface {
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
 	Count(stagingArea *StagingArea) uint64
 	AllBlockHashesIterator(dbContext DBReader) (BlockIterator, error)
+	CacheLen() int
 }

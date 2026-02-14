@@ -5,6 +5,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/protocol"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain"
+	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/config"
@@ -29,7 +30,7 @@ func NewManager(
 	connectionManager *connmanager.ConnectionManager,
 	addressManager *addressmanager.AddressManager,
 	utxoIndex *utxoindex.UTXOIndex,
-	consensusEventsChan chan externalapi.ConsensusEvent,
+	consensusEventsQueue *consensus.EventQueue,
 	shutDownChan chan<- struct{}) *Manager {
 
 	manager := Manager{
@@ -46,7 +47,7 @@ func NewManager(
 	}
 	netAdapter.SetRPCRouterInitializer(manager.routerInitializer)
 
-	manager.initConsensusEventsHandler(consensusEventsChan)
+	manager.initConsensusEventsHandler(consensusEventsQueue)
 
 	// Start RPC statistics tracking
 	RPCStats.Start()
@@ -54,10 +55,10 @@ func NewManager(
 	return &manager
 }
 
-func (m *Manager) initConsensusEventsHandler(consensusEventsChan chan externalapi.ConsensusEvent) {
+func (m *Manager) initConsensusEventsHandler(consensusEventsQueue *consensus.EventQueue) {
 	spawn("consensusEventsHandler", func() {
 		for {
-			consensusEvent, ok := <-consensusEventsChan
+			consensusEvent, ok := consensusEventsQueue.Get()
 			if !ok {
 				return
 			}

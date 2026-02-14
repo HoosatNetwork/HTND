@@ -9,4 +9,5 @@ type MultisetStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	Get(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (Multiset, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
+	CacheLen() int
 }

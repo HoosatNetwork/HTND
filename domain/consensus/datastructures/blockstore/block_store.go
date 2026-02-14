@@ -246,3 +246,7 @@ func (bs *blockStore) AllBlockHashesIterator(dbContext model.DBReader) (model.Bl
 
 	return &allBlockHashesIterator{cursor: cursor}, nil
 }
+
+func (bs *blockStore) CacheLen() int {
+	return bs.cache.Len()
+}

@@ -33,3 +33,7 @@ func New(prefixBucket model.DBBucket, utxoSetCacheSize int, preallocate bool) mo
 func (css *consensusStateStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return css.stagingShard(stagingArea).isStaged()
 }
+
+func (css *consensusStateStore) CacheLen() int {
+	return css.virtualUTXOSetCache.Len()
+}

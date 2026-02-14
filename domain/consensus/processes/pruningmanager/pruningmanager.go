@@ -1073,7 +1073,6 @@ func (pm *pruningManager) CheckIfShouldDeletePastBlocks(stagingArea *model.Stagi
 	if currentPruningPointHeader.BlueScore()-previousDeletionPointHeader.BlueScore() < pm.pruningDepth {
 		return false, nil
 	}
-	debug.FreeOSMemory()
 	return true, previousDeletionPoint
 }
 

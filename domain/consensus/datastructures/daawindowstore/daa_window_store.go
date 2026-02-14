@@ -44,6 +44,8 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 	dbKey := newDBKey(blockHash, index)
 	pair, ok := stagingShard.toAdd[dbKey]
 	if ok && pair != nil {
+		// Cache the staged data as well, since it's valid data
+		daaws.cache.Add(blockHash, index, pair)
 		return pair, nil
 	}
 	pairCached, ok := daaws.cache.Get(blockHash, index)
@@ -83,4 +85,8 @@ func (daaws *daaWindowStore) key(key dbKey) model.DBKey {
 	keyIndexBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(keyIndexBytes, key.index)
 	return daaws.bucket.Bucket(key.blockHash.ByteSlice()).Key(keyIndexBytes)
+}
+
+func (daaws *daaWindowStore) CacheLen() int {
+	return daaws.cache.Len()
 }

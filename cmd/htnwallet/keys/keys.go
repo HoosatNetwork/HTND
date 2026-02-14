@@ -242,6 +242,7 @@ func ReadKeysFile(netParams *dagconfig.Params, path string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()

@@ -100,3 +100,7 @@ func (bss *blockStatusStore) deserializeBlockStatus(statusBytes []byte) (externa
 func (bss *blockStatusStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
 	return bss.bucket.Key(hash.ByteSlice())
 }
+
+func (bss *blockStatusStore) CacheLen() int {
+	return bss.cache.Len()
+}

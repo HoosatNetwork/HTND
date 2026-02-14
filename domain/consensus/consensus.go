@@ -2,7 +2,11 @@ package consensus
 
 import (
 	"math/big"
+	"os"
+	"runtime/debug"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 
@@ -15,6 +19,43 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
 )
+
+type EventQueue struct {
+	events []externalapi.ConsensusEvent
+	mu     sync.Mutex
+	MaxLen int
+	closed bool
+}
+
+func (q *EventQueue) Add(event externalapi.ConsensusEvent) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
+	if len(q.events) >= q.MaxLen {
+		// drop oldest
+		q.events = q.events[1:]
+	}
+	q.events = append(q.events, event)
+}
+
+func (q *EventQueue) Get() (externalapi.ConsensusEvent, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.events) == 0 {
+		return nil, q.closed
+	}
+	event := q.events[0]
+	q.events = q.events[1:]
+	return event, true
+}
+
+func (q *EventQueue) Close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.closed = true
+}
 
 type consensus struct {
 	lock            *sync.Mutex
@@ -60,9 +101,10 @@ type consensus struct {
 	headersSelectedChainStore           model.HeadersSelectedChainStore
 	daaBlocksStore                      model.DAABlocksStore
 	blocksWithTrustedDataDAAWindowStore model.BlocksWithTrustedDataDAAWindowStore
+	windowHeapSliceStore                model.WindowHeapSliceStore
 
-	consensusEventsChan chan externalapi.ConsensusEvent
-	virtualNotUpdated   bool
+	consensusEventsQueue *EventQueue
+	virtualNotUpdated    bool
 }
 
 // In order to prevent a situation that the consensus lock is held for too much time, we
@@ -150,7 +192,71 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 		}
 	}
 
+	// Start goroutine to display cache sizes every minute
+	if os.Getenv("HTND_PROFILER") != "" {
+		go s.displayCacheSizes()
+	}
+
+	go s.PeriodicFreeOSMemory()
+
 	return nil
+}
+
+func (s *consensus) PeriodicFreeOSMemory() error {
+	minutes := 90
+	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
+	if htnd_gc_timer_argument != "" {
+		var err error
+		minutes, err = strconv.Atoi(htnd_gc_timer_argument)
+		if err != nil {
+			return err
+		}
+	}
+
+	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
+	for range ticker.C {
+		nearlySynced, err := s.IsNearlySynced()
+		if err != nil {
+			continue
+		}
+		if nearlySynced {
+			debug.FreeOSMemory()
+		}
+	}
+	return nil
+}
+
+func (s *consensus) displayCacheSizes() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		log.Infof("BlockStore cache size: %d", s.blockStore.CacheLen())
+		log.Infof("BlockHeaderStore cache size: %d", s.blockHeaderStore.CacheLen())
+		log.Infof("BlockStatusStore cache size: %d", s.blockStatusStore.CacheLen())
+		log.Infof("AcceptanceDataStore cache size: %d", s.acceptanceDataStore.CacheLen())
+		log.Infof("MultisetStore cache size: %d", s.multisetStore.CacheLen())
+		log.Infof("UTXODiffStore cache size: %d", s.utxoDiffStore.CacheLen())
+		log.Infof("ConsensusStateStore cache size: %d", s.consensusStateStore.CacheLen())
+		log.Infof("DAABlocksStore cache size: %d", s.daaBlocksStore.CacheLen())
+		log.Infof("DAAWindowStore cache size: %d", s.blocksWithTrustedDataDAAWindowStore.CacheLen())
+		log.Infof("FinalityStore cache size: %d", s.finalityStore.CacheLen())
+		log.Infof("HeadersSelectedChainStore cache size: %d", s.headersSelectedChainStore.CacheLen())
+
+		var cacheLen int = 0
+		for i := 1; i < len(s.blockRelationStores); i++ {
+			cacheLen += s.blockRelationStores[i].CacheLen()
+		}
+		log.Infof("BlockRelationStore[x] cache size sum: %d", cacheLen)
+		log.Infof("ReachabilityDataStore cache size: %d", s.reachabilityDataStore.CacheLen())
+		cacheLen = 0
+		for i := 1; i < len(s.blockRelationStores); i++ {
+			cacheLen += s.ghostdagDataStores[i].CacheLen()
+		}
+		log.Infof("GHOSTDAGDataStore[x] cache size sum: %d", cacheLen)
+		log.Infof("PruningStore cache size: %d", s.pruningStore.CacheLen())
+		log.Infof("WindowHeapSliceStore cache size: %d", s.windowHeapSliceStore.CacheLen())
+	}
 }
 
 func (s *consensus) PruningPointAndItsAnticone() ([]*externalapi.DomainHash, error) {
@@ -276,26 +382,19 @@ func (s *consensus) validateAndInsertBlockNoLock(block *externalapi.DomainBlock,
 }
 
 func (s *consensus) sendBlockAddedEvent(block *externalapi.DomainBlock, blockStatus externalapi.BlockStatus) error {
-	if s.consensusEventsChan != nil {
+	if s.consensusEventsQueue != nil {
 		if blockStatus == externalapi.StatusHeaderOnly || blockStatus == externalapi.StatusInvalid {
 			return nil
 		}
 
-		if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
-			return errors.Errorf("consensusEventsChan is full")
-		}
-		s.consensusEventsChan <- &externalapi.BlockAdded{Block: block}
+		s.consensusEventsQueue.Add(&externalapi.BlockAdded{Block: block})
 	}
 	return nil
 }
 
 func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.VirtualChangeSet, wasVirtualUpdated bool) error {
-	if !wasVirtualUpdated || s.consensusEventsChan == nil || virtualChangeSet == nil {
+	if !wasVirtualUpdated || s.consensusEventsQueue == nil || virtualChangeSet == nil {
 		return nil
-	}
-
-	if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
-		return errors.Errorf("consensusEventsChan is full")
 	}
 
 	stagingArea := model.NewStagingArea()
@@ -322,7 +421,7 @@ func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.Virtua
 	virtualChangeSet.VirtualSelectedParentBlueScore = virtualSelectedParentGHOSTDAGData.BlueScore()
 	virtualChangeSet.VirtualDAAScore = virtualDAAScore
 
-	s.consensusEventsChan <- virtualChangeSet
+	s.consensusEventsQueue.Add(virtualChangeSet)
 	return nil
 }
 
@@ -528,10 +627,12 @@ func (s *consensus) GetBlocksAcceptanceData(blockHashes []*externalapi.DomainHas
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	stagingArea := model.NewStagingArea()
 	blocksAcceptanceData := make([]externalapi.AcceptanceData, len(blockHashes))
 
 	for i := 0; i < len(blockHashes); i++ {
+		// Use a separate staging area for each acceptance data retrieval to avoid memory accumulation
+		stagingArea := model.NewStagingArea()
+
 		acceptanceData, err := s.acceptanceDataStore.Get(s.databaseContext, stagingArea, blockHashes[i])
 
 		if database.IsNotFoundError(err) {
@@ -666,21 +767,22 @@ func (s *consensus) PruningPointHeaders() ([]externalapi.BlockHeader, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	stagingArea := model.NewStagingArea()
-
-	lastPruningPointIndex, err := s.pruningStore.CurrentPruningPointIndex(s.databaseContext, stagingArea)
+	lastPruningPointIndex, err := s.pruningStore.CurrentPruningPointIndex(s.databaseContext, model.NewStagingArea())
 	if err != nil {
 		return nil, err
 	}
 
 	headers := make([]externalapi.BlockHeader, 0, lastPruningPointIndex)
 	for i := uint64(0); i <= lastPruningPointIndex; i++ {
-		pruningPoint, err := s.pruningStore.PruningPointByIndex(s.databaseContext, stagingArea, i)
+		// Use separate staging areas for each retrieval to avoid memory accumulation
+		pruningStagingArea := model.NewStagingArea()
+		pruningPoint, err := s.pruningStore.PruningPointByIndex(s.databaseContext, pruningStagingArea, i)
 		if err != nil {
 			return nil, err
 		}
 
-		header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, pruningPoint)
+		headerStagingArea := model.NewStagingArea()
+		header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, headerStagingArea, pruningPoint)
 		if err != nil {
 			return nil, err
 		}
@@ -1204,8 +1306,6 @@ func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 
 func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTransactionID) (*externalapi.DomainBlock, error) {
 
-	stagingArea := model.NewStagingArea()
-
 	// Get an iterator to go through all blocks
 	iterator, err := s.blockStore.AllBlockHashesIterator(s.databaseContext)
 	if err != nil {
@@ -1220,6 +1320,9 @@ func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTra
 			if err != nil {
 				return nil, err
 			}
+
+			// Use a separate staging area for each block to avoid memory accumulation
+			stagingArea := model.NewStagingArea()
 
 			// Hold lock briefly for block retrieval
 			s.lock.Lock()

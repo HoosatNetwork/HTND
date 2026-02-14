@@ -10,4 +10,5 @@ type BlockRelationStore interface {
 	BlockRelation(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (*BlockRelations, error)
 	Has(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
 	UnstageAll(stagingArea *StagingArea)
+	CacheLen() int
 }

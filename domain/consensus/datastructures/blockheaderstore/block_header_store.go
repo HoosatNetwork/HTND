@@ -196,3 +196,7 @@ func (bhs *blockHeaderStore) serializeHeaderCount(count uint64) ([]byte, error) 
 	dbBlockHeaderCount := &serialization.DbBlockHeaderCount{Count: count}
 	return proto.Marshal(dbBlockHeaderCount)
 }
+
+func (bhs *blockHeaderStore) CacheLen() int {
+	return bhs.cache.Len()
+}
