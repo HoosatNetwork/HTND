@@ -117,33 +117,8 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 		return nil, 0, 0, errors.Wrap(err, "failed to get DAG info")
 	}
 
-	s.sortUTXOsByAmountDescending()
-	for _, highestUTXO := range s.utxosSortedByAmount {
-		if len(selectedUTXOs) >= 1 {
-			break
-		}
-		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, highestUTXO.address)) ||
-			!s.isUTXOSpendable(highestUTXO, dagInfo.VirtualDAAScore) {
-			continue
-		}
-
-		if broadcastTime, ok := s.usedOutpoints[*highestUTXO.Outpoint]; ok {
-			if s.usedOutpointHasExpired(broadcastTime) {
-				delete(s.usedOutpoints, *highestUTXO.Outpoint)
-			} else {
-				continue
-			}
-		}
-
-		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
-			Outpoint:       highestUTXO.Outpoint,
-			UTXOEntry:      highestUTXO.UTXOEntry,
-			DerivationPath: s.walletAddressPath(highestUTXO.address),
-		})
-		totalValue += highestUTXO.UTXOEntry.Amount()
-	}
-
 	s.sortUTXOsByAmountAscending()
+	log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
 
 	// Step 1: Collect up to targetCompoundInputs smallest spendable UTXOs
 	for _, utxo := range s.utxosSortedByAmount {
@@ -151,7 +126,9 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 			break
 		}
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
+			utxo.UTXOEntry.BlockDAAScore() == 0 {
+			log.Infof("Can't use utxo as wallet address does not contain, and utxo is not spendable or unconfirmed")
 			continue
 		}
 
@@ -170,6 +147,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 		})
 		totalValue += utxo.UTXOEntry.Amount()
 	}
+	log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
 
 	if len(selectedUTXOs) == 0 {
 		return nil, 0, 0, errors.New("no spendable UTXOs for compounding")
@@ -185,6 +163,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 
 	return selectedUTXOs, totalValue, changeSompi, nil
 }
+
 func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte) ([][]byte, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
@@ -284,7 +263,8 @@ func (s *server) selectUTXOs(spendAmount uint64, isSendAll bool, feePerInput uin
 
 	for _, utxo := range s.utxosSortedByAmount {
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
+			utxo.UTXOEntry.BlockDAAScore() == 0 {
 			continue
 		}
 

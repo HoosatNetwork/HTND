@@ -573,6 +573,7 @@ type BroadcastRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IsDomain      bool                   `protobuf:"varint,1,opt,name=isDomain,proto3" json:"isDomain,omitempty"`
 	Transactions  [][]byte               `protobuf:"bytes,2,rep,name=transactions,proto3" json:"transactions,omitempty"`
+	AllowOrphan   bool                   `protobuf:"varint,3,opt,name=allowOrphan,proto3" json:"allowOrphan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -619,6 +620,13 @@ func (x *BroadcastRequest) GetTransactions() [][]byte {
 		return x.Transactions
 	}
 	return nil
+}
+
+func (x *BroadcastRequest) GetAllowOrphan() bool {
+	if x != nil {
+		return x.AllowOrphan
+	}
+	return false
 }
 
 type BroadcastResponse struct {
@@ -1406,10 +1414,11 @@ const file_htnwalletd_proto_rawDesc = "" +
 	"\aaddress\x18\x01 \x03(\tR\aaddress\"\x13\n" +
 	"\x11NewAddressRequest\".\n" +
 	"\x12NewAddressResponse\x12\x18\n" +
-	"\aaddress\x18\x01 \x01(\tR\aaddress\"R\n" +
+	"\aaddress\x18\x01 \x01(\tR\aaddress\"t\n" +
 	"\x10BroadcastRequest\x12\x1a\n" +
 	"\bisDomain\x18\x01 \x01(\bR\bisDomain\x12\"\n" +
-	"\ftransactions\x18\x02 \x03(\fR\ftransactions\")\n" +
+	"\ftransactions\x18\x02 \x03(\fR\ftransactions\x12 \n" +
+	"\vallowOrphan\x18\x03 \x01(\bR\vallowOrphan\")\n" +
 	"\x11BroadcastResponse\x12\x14\n" +
 	"\x05txIDs\x18\x01 \x03(\tR\x05txIDs\"\x11\n" +
 	"\x0fShutdownRequest\"\x12\n" +

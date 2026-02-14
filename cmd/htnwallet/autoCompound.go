@@ -89,6 +89,7 @@ func compoundOnce(
 		Address:                  conf.ToAddress,
 		UseExistingChangeAddress: conf.UseExistingChangeAddress,
 	})
+	fmt.Printf("%s", len(resp.UnsignedTransactions))
 	if err != nil {
 		fmt.Printf("[%s] NOTHING TO COMPOUND → Error: %s, backing off for 5m\n", time.Now().Format("15:04:05"), err)
 		time.Sleep(5 * time.Minute)
@@ -115,13 +116,16 @@ func compoundOnce(
 
 	bresp, err := client.Broadcast(bctx, &pb.BroadcastRequest{
 		Transactions: [][]byte{signedTx},
+		AllowOrphan:  true,
 	})
 	if err != nil {
 		// Handle rate limit gracefully
 		if strings.Contains(err.Error(), "Compound transaction rate limit exceeded") {
+			fmt.Printf("[%s] RATE LIMITED, backing off for 30s\n", time.Now().Format("15:04:05"))
 			return errRateLimited
+		} else {
+			fmt.Printf("[%s] NOTHING TO COMPOUND, backing off for 30s, err: %s\n", time.Now().Format("15:04:05"), err)
 		}
-		fmt.Printf("[%s] NOTHING TO COMPOUND, backing off for 30s\n", time.Now().Format("15:04:05"))
 		time.Sleep(30 * time.Second)
 		return nil
 	}
