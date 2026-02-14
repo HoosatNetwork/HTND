@@ -54,6 +54,7 @@ const (
 	sampleConfigFilename    = "sample-htnd.conf"
 	defaultMaxUTXOCacheSize = 5_000_000_000
 	defaultProtocolVersion  = 7
+	defaultIBDTimeout       = 120 * time.Minute
 )
 
 var (
@@ -137,6 +138,8 @@ type Flags struct {
 	// Wallet freezing flags
 	FrozenAddresses []string `long:"freeze-address" description:"Address to freeze (can be specified multiple times)"`
 
+	IBDTimeout time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
+
 	NetworkFlags
 	ServiceOptions *ServiceOptions
 }
@@ -204,6 +207,7 @@ func defaultFlags() *Flags {
 		MaxUTXOCacheSize:               defaultMaxUTXOCacheSize,
 		ServiceOptions:                 &ServiceOptions{},
 		ProtocolVersion:                defaultProtocolVersion,
+		IBDTimeout:                     defaultIBDTimeout,
 		DisallowLoopbackP2PConnections: false,
 	}
 }
