@@ -67,7 +67,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	selectedUTXOs, _, changeSompi, err := s.selectCompoundUTXOs(feePerInput, fromAddresses)
+	selectedUTXOs, _, changeSompi, err := s.selectUTXOsForCompounding(feePerInput, fromAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 // Add this constant next to your others
 var targetCompoundInputs = 88
 
-func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAddress) (
+func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*walletAddress) (
 	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error) {
 
 	selectedUTXOs = make([]*libhtnwallet.UTXO, 0, targetCompoundInputs)
@@ -117,35 +117,9 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 		return nil, 0, 0, errors.Wrap(err, "failed to get DAG info")
 	}
 
-	s.sortUTXOsByAmountDescending()
-	for _, highestUTXO := range s.utxosSortedByAmount {
-		if len(selectedUTXOs) >= 1 {
-			break
-		}
-		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, highestUTXO.address)) ||
-			!s.isUTXOSpendable(highestUTXO, dagInfo.VirtualDAAScore) {
-			continue
-		}
-
-		if broadcastTime, ok := s.usedOutpoints[*highestUTXO.Outpoint]; ok {
-			if s.usedOutpointHasExpired(broadcastTime) {
-				delete(s.usedOutpoints, *highestUTXO.Outpoint)
-			} else {
-				continue
-			}
-		}
-
-		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
-			Outpoint:       highestUTXO.Outpoint,
-			UTXOEntry:      highestUTXO.UTXOEntry,
-			DerivationPath: s.walletAddressPath(highestUTXO.address),
-		})
-		totalValue += highestUTXO.UTXOEntry.Amount()
-	}
-
 	s.sortUTXOsByAmountAscending()
 
-	// Step 1: Collect up to targetCompoundInputs smallest spendable UTXOs
+	// Collect up to targetCompoundInputs smallest spendable UTXOs for compounding
 	for _, utxo := range s.utxosSortedByAmount {
 		if len(selectedUTXOs) >= targetCompoundInputs {
 			break
@@ -175,6 +149,11 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 		return nil, 0, 0, errors.New("no spendable UTXOs for compounding")
 	}
 
+	// Require at least 2 UTXOs to make compounding worthwhile
+	if len(selectedUTXOs) < 2 {
+		return nil, 0, 0, errors.New("need at least 2 UTXOs to compound")
+	}
+
 	// Calculate fees based on the actual number of selected inputs
 	fee := uint64(len(selectedUTXOs)) * uint64(feePerInput)
 	if totalValue <= fee {
@@ -185,6 +164,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 
 	return selectedUTXOs, totalValue, changeSompi, nil
 }
+
 func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte) ([][]byte, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
@@ -205,7 +185,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	selectedUTXOs, spendValue, changeSompi, err := s.selectUTXOs(amount, isSendAll, feePerInput, fromAddresses)
+	selectedUTXOs, spendValue, changeSompi, err := s.selectUTXOsForTransaction(amount, isSendAll, feePerInput, fromAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +249,7 @@ func (s *server) sortUTXOsByAmountDescending() {
 	})
 }
 
-func (s *server) selectUTXOs(spendAmount uint64, isSendAll bool, feePerInput uint64, fromAddresses []*walletAddress) (
+func (s *server) selectUTXOsForTransaction(spendAmount uint64, isSendAll bool, feePerInput uint64, fromAddresses []*walletAddress) (
 	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error) {
 
 	selectedUTXOs = []*libhtnwallet.UTXO{}
@@ -306,12 +286,10 @@ func (s *server) selectUTXOs(spendAmount uint64, isSendAll bool, feePerInput uin
 
 		fee := feePerInput * uint64(len(selectedUTXOs))
 		totalSpend := spendAmount + fee
-		// Two break cases (if not send all):
-		// 		1. totalValue == totalSpend, so there's no change needed -> number of outputs = 1, so a single input is sufficient
-		// 		2. totalValue > totalSpend, so there will be change and 2 outputs, therefor in order to not struggle with --
-		//		   2.1 go-nodes dust patch we try and find at least 2 inputs (even though the next one is not necessary in terms of spend value)
-		// 		   2.2 KIP9 we try and make sure that the change amount is not too small
-		if !isSendAll && (totalValue == totalSpend || (totalValue >= totalSpend+minChangeTarget && len(selectedUTXOs) > 1)) {
+
+		// For spending biggest UTXOs: break as soon as we have enough funds
+		// Don't add extra inputs just to avoid dust - prioritize using largest UTXOs
+		if !isSendAll && totalValue >= totalSpend {
 			break
 		}
 	}
