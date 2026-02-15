@@ -127,7 +127,7 @@ func (s *Stats) logAndReset() {
 
 	// Log request counts by method
 	if len(s.requestsByMethod) > 0 {
-		log.Debugf("RPC Stats: Requests by method:")
+		log.Info("RPC Stats: Requests by method:")
 		methodCounts := make([]struct {
 			Method string
 			Count  uint64
@@ -142,7 +142,7 @@ func (s *Stats) logAndReset() {
 			return methodCounts[i].Count > methodCounts[j].Count
 		})
 		for _, mc := range methodCounts {
-			log.Debugf("  %s: %d", mc.Method, mc.Count)
+			log.Infof("  %s: %d", mc.Method, mc.Count)
 		}
 	}
 
