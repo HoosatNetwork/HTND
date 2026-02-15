@@ -20,43 +20,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type EventQueue struct {
-	events []externalapi.ConsensusEvent
-	mu     sync.Mutex
-	MaxLen int
-	closed bool
-}
-
-func (q *EventQueue) Add(event externalapi.ConsensusEvent) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.closed {
-		return
-	}
-	if len(q.events) >= q.MaxLen {
-		// drop oldest
-		q.events = q.events[1:]
-	}
-	q.events = append(q.events, event)
-}
-
-func (q *EventQueue) Get() (externalapi.ConsensusEvent, bool) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.events) == 0 {
-		return nil, q.closed
-	}
-	event := q.events[0]
-	q.events = q.events[1:]
-	return event, true
-}
-
-func (q *EventQueue) Close() {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.closed = true
-}
-
 type consensus struct {
 	lock            *sync.Mutex
 	databaseContext model.DBManager
@@ -103,8 +66,8 @@ type consensus struct {
 	blocksWithTrustedDataDAAWindowStore model.BlocksWithTrustedDataDAAWindowStore
 	windowHeapSliceStore                model.WindowHeapSliceStore
 
-	consensusEventsQueue *EventQueue
-	virtualNotUpdated    bool
+	consensusEventsChan chan externalapi.ConsensusEvent
+	virtualNotUpdated   bool
 }
 
 // In order to prevent a situation that the consensus lock is held for too much time, we
@@ -384,19 +347,26 @@ func (s *consensus) validateAndInsertBlockNoLock(block *externalapi.DomainBlock,
 }
 
 func (s *consensus) sendBlockAddedEvent(block *externalapi.DomainBlock, blockStatus externalapi.BlockStatus) error {
-	if s.consensusEventsQueue != nil {
+	if s.consensusEventsChan != nil {
 		if blockStatus == externalapi.StatusHeaderOnly || blockStatus == externalapi.StatusInvalid {
 			return nil
 		}
 
-		s.consensusEventsQueue.Add(&externalapi.BlockAdded{Block: block})
+		if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
+			return errors.Errorf("consensusEventsChan is full")
+		}
+		s.consensusEventsChan <- &externalapi.BlockAdded{Block: block}
 	}
 	return nil
 }
 
 func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.VirtualChangeSet, wasVirtualUpdated bool) error {
-	if !wasVirtualUpdated || s.consensusEventsQueue == nil || virtualChangeSet == nil {
+	if !wasVirtualUpdated || s.consensusEventsChan == nil || virtualChangeSet == nil {
 		return nil
+	}
+
+	if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
+		return errors.Errorf("consensusEventsChan is full")
 	}
 
 	stagingArea := model.NewStagingArea()
@@ -423,7 +393,7 @@ func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.Virtua
 	virtualChangeSet.VirtualSelectedParentBlueScore = virtualSelectedParentGHOSTDAGData.BlueScore()
 	virtualChangeSet.VirtualDAAScore = virtualDAAScore
 
-	s.consensusEventsQueue.Add(virtualChangeSet)
+	s.consensusEventsChan <- virtualChangeSet
 	return nil
 }
 
