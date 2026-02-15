@@ -69,5 +69,8 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 }
 
 func (s *server) isUTXOSpendable(entry *walletUTXO, virtualDAAScore uint64) bool {
+	if !entry.UTXOEntry.IsCoinbase() {
+		return true
+	}
 	return entry.UTXOEntry.BlockDAAScore()+s.coinbaseMaturity < virtualDAAScore
 }
