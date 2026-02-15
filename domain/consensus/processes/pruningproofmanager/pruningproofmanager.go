@@ -354,6 +354,7 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			reachabilityDataStores[i].UnstageAll(stagingArea)
 		}
 		blockHeaderStore.UnstageAll(stagingArea)
+		stagingArea = nil
 	}()
 
 	for blockLevel := 0; blockLevel <= maxLevel; blockLevel++ {
@@ -787,6 +788,10 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	ghostdagDataStoreForTargetReachabilityManager.UnstageAll(stagingArea)
 	blockRelationStoreForTargetReachabilityManager.UnstageAll(stagingArea)
 	ghostdagDataStore.UnstageAll(tmpStagingArea)
+
+	// Clear references to aid GC in low-memory or no-GC environments
+	stagingArea = nil
+	tmpStagingArea = nil
 
 	return nil
 }
