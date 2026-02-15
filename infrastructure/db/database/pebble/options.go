@@ -2,7 +2,6 @@ package pebble
 
 import (
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -28,10 +27,8 @@ import (
 //   - Reduced bloom filter bits from 14 to 12 for faster filter creation
 //   - Increased L0 compaction thresholds to reduce compaction frequency
 //   - Increased block sizes from 16KB to 32KB for better cache efficiency
-//   - Disabled compression for all levels for faster reads
+//   - Changed L6 compression from Zstd to Snappy for better performance
 //   - Increased L0 compaction concurrency to handle more files
-//   - Enabled MMapReads for faster random access
-//   - Tuned read compaction for aggressive hot data compaction
 func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Bloom filter configuration
@@ -39,7 +36,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Higher bits = lower false positives = fewer unnecessary SST reads = faster Gets
 	// ────────────────────────────────────────────────
 	// For high-performance workloads, balance between filter creation time and lookup efficiency
-	bloomBitsPerKey := 12
+	// Reduced from 14 to 12 bits to speed up bloom filter creation during compaction
+	bloomBitsPerKey := 12 // Optimized: faster filter creation, still good lookup performance
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -76,10 +74,10 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Larger files → better block cache & index locality → fewer files overall
 	// Smaller files → more granular compactions → potentially lower write amplification
 	// ────────────────────────────────────────────────
-	baseFileSize := memTableBytes * 2 // Slightly larger than memtable → natural flush grouping
+	baseFileSize := memTableBytes / 2 // Slightly larger than memtable → natural flush grouping
 	const (
-		minBaseFileSize = 32 << 20   // 32 MiB  – too small → too many files
-		maxBaseFileSize = 4096 << 20 // 4096 MiB
+		minBaseFileSize = 32 << 20  // 32 MiB  – too small → too many files
+		maxBaseFileSize = 128 << 20 // 128 MiB – reasonable cap for cache efficiency
 	)
 	if baseFileSize < minBaseFileSize {
 		baseFileSize = minBaseFileSize
@@ -131,9 +129,10 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		//
 		// Higher values → tolerate larger L0 → much higher sustained write rate
 		// Lower values  → keep L0 small → lower point-lookup amplification (fewer tables checked)
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 3),
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 8),
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 10),
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 16),      // Increased: start compaction later
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 48),     // Increased: allow more L0 files before write stall
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16), // Increased: reduce compaction frequency
+
 		// Target file sizes per level – controls fan-out and eventual file count
 		// Steeper growth → fewer files at deeper levels → better cache efficiency
 		TargetFileSizes: [7]int64{
@@ -146,62 +145,62 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			baseFileSize * 256, // L6 – avoid excessively large cold files
 		},
 
-		MaxManifestFileSize: 1024 << 20, // 1024 MiB – large enough to avoid frequent manifest rewrites
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
+		MaxManifestFileSize: 512 << 20,                                     // 512 MiB – large enough to avoid frequent manifest rewrites
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 2000), // allow many open SSTs
 
 		// Write-ahead log & fsync behavior
 		// Larger sync sizes → fewer fsync calls → better NVMe throughput
 		DisableWAL:      false,
-		WALBytesPerSync: 16 << 20, // 4 MiB
-		BytesPerSync:    16 << 20, // 4 MiB – good balance for modern SSDs
+		WALBytesPerSync: 4 << 20, // 4 MiB
+		BytesPerSync:    4 << 20, // 4 MiB – good balance for modern SSDs
 
 		// Allow more parallel compaction workers during high load
-		CompactionConcurrencyRange: func() (int, int) { return 0, runtime.NumCPU() },
+		CompactionConcurrencyRange: func() (int, int) { return 4, 8 },
 
 		// Per-level block & index sizes + compression
 		// Larger blocks → better sequential read throughput & compression ratio
 		// Smaller blocks → better random access granularity
 		Levels: [7]pebble.LevelOptions{
 			{ // L0 – write-mostly, high churn
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression }, // Disabled for faster reads
+				BlockSize:      32 << 10, // Increased from 16 KiB for better performance
+				IndexBlockSize: 32 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L1
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression }, // Disabled for faster reads
+				BlockSize:      32 << 10, // Increased from 16 KiB
+				IndexBlockSize: 32 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L2
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression }, // Disabled for faster reads
+				BlockSize:      32 << 10, // Increased from 16 KiB
+				IndexBlockSize: 32 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L3
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression }, // Disabled for faster reads
+				BlockSize:      32 << 10, // Increased from 16 KiB
+				IndexBlockSize: 32 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L4
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression }, // Disabled for faster reads
+				BlockSize:      32 << 10, // Increased from 16 KiB
+				IndexBlockSize: 32 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L5
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression }, // Disabled for faster reads
+				BlockSize:      32 << 10, // Increased to 32 KiB for better sequential performance
+				IndexBlockSize: 32 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L6 – mostly cold data, use faster compression than Zstd
-				BlockSize:      128 << 10,
-				IndexBlockSize: 128 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.ZstdCompression }, // Disabled for faster reads
+				BlockSize:      64 << 10, // Larger blocks for cold data
+				IndexBlockSize: 64 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression }, // Changed from Zstd to Snappy for performance
 				FilterPolicy:   bloomPolicy,
 			},
 		},
@@ -217,14 +216,15 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 
 	// How many L0 compactions can run concurrently
-	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", runtime.NumCPU()) // Increased to 10 for faster L0 compaction, reducing read amplification
+	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 6) // Increased from 4 to handle more L0 files
+
 	// Trigger extra compaction workers when debt (pending bytes) is high
 	opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
 
 	// Read-triggered compactions: compact hot-read data more aggressively
 	// Helpful during long IBD phases with repeated ancestor / window lookups
-	opts.Experimental.ReadCompactionRate = 256 << 20
-	opts.Experimental.ReadSamplingMultiplier = 32
+	opts.Experimental.ReadCompactionRate = 32 << 20 // 32 MiB/s – moderate aggressiveness
+	opts.Experimental.ReadSamplingMultiplier = 8    // sample 1/8 reads for triggering
 
 	if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
 		if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
