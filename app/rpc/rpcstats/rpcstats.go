@@ -78,7 +78,6 @@ func (s *Stats) RecordRequest(address string, method string) {
 	defer s.Unlock()
 
 	s.requestsByIP[ip]++
-	s.requestsByMethod[method]++
 	s.totalRequests++
 }
 
@@ -125,30 +124,8 @@ func (s *Stats) logAndReset() {
 		}
 	}
 
-	// Log request counts by method
-	if len(s.requestsByMethod) > 0 {
-		log.Info("RPC Stats: Requests by method:")
-		methodCounts := make([]struct {
-			Method string
-			Count  uint64
-		}, 0, len(s.requestsByMethod))
-		for method, count := range s.requestsByMethod {
-			methodCounts = append(methodCounts, struct {
-				Method string
-				Count  uint64
-			}{method, count})
-		}
-		sort.Slice(methodCounts, func(i, j int) bool {
-			return methodCounts[i].Count > methodCounts[j].Count
-		})
-		for _, mc := range methodCounts {
-			log.Infof("  %s: %d", mc.Method, mc.Count)
-		}
-	}
-
 	// Reset counters
 	s.requestsByIP = make(map[string]uint64)
-	s.requestsByMethod = make(map[string]uint64)
 	s.totalRequests = 0
 	s.startTime = time.Now()
 }
@@ -170,23 +147,4 @@ func (s *Stats) getTopIPs(n int) []IPRequestCount {
 	}
 
 	return ipCounts
-}
-
-// GetCurrentStats returns the current statistics without resetting
-func (s *Stats) GetCurrentStats() (totalRequests uint64, requestsByIP map[string]uint64, requestsByMethod map[string]uint64) {
-	s.RLock()
-	defer s.RUnlock()
-
-	// Make copies of the maps
-	ipCopy := make(map[string]uint64, len(s.requestsByIP))
-	for k, v := range s.requestsByIP {
-		ipCopy[k] = v
-	}
-
-	methodCopy := make(map[string]uint64, len(s.requestsByMethod))
-	for k, v := range s.requestsByMethod {
-		methodCopy[k] = v
-	}
-
-	return s.totalRequests, ipCopy, methodCopy
 }
