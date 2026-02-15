@@ -12,14 +12,6 @@ import (
 func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlocksRequest := request.(*appmessage.GetBlocksRequestMessage)
 
-	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
-		return nil, err
-	}
-	if !isNearlySynced {
-		return appmessage.NewGetBlocksResponseMessage(), nil
-	}
-
 	// Validate that user didn't set IncludeTransactions without setting IncludeBlocks
 	if !getBlocksRequest.IncludeBlocks && getBlocksRequest.IncludeTransactions {
 		return &appmessage.GetBlocksResponseMessage{

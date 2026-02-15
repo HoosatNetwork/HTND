@@ -9,13 +9,6 @@ import (
 // HandleNotifyVirtualSelectedParentChainChanged handles the respectively named RPC command
 func HandleNotifyVirtualSelectedParentChainChanged(context *rpccontext.Context, router *router.Router,
 	request appmessage.Message) (appmessage.Message, error) {
-	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
-		return nil, err
-	}
-	if !isNearlySynced {
-		return appmessage.NewNotifyVirtualSelectedParentChainChangedResponseMessage(), nil
-	}
 	notifyVirtualSelectedParentChainChangedRequest := request.(*appmessage.NotifyVirtualSelectedParentChainChangedRequestMessage)
 
 	listener, err := context.NotificationManager.Listener(router)

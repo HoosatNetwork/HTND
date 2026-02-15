@@ -11,13 +11,6 @@ import (
 
 // HandleGetBlockByTransactionID handles the respectively named RPC command
 func HandleGetBlockByTransactionID(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
-	isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-	if err != nil {
-		return nil, err
-	}
-	if !isNearlySynced {
-		return appmessage.NewGetBlockByTransactionIDResponseMessage(), nil
-	}
 	getBlockByTransactionIDRequest := request.(*appmessage.GetBlockByTransactionIDRequestMessage)
 	if context.Config.SafeRPC {
 		log.Warn("GetBlockByTransactionID RPC command called while node in safe RPC mode -- ignoring.")
