@@ -50,6 +50,13 @@ func (uds *utxoDiffStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return uds.stagingShard(stagingArea).isStaged()
 }
 
+func (uds *utxoDiffStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := uds.stagingShard(stagingArea)
+	stagingShard.utxoDiffToAdd = make(map[externalapi.DomainHash]externalapi.UTXODiff)
+	stagingShard.utxoDiffChildToAdd = make(map[externalapi.DomainHash]*externalapi.DomainHash)
+	stagingShard.toDelete = make(map[externalapi.DomainHash]struct{})
+}
+
 func (uds *utxoDiffStore) isBlockHashStaged(stagingShard *utxoDiffStagingShard, blockHash *externalapi.DomainHash) bool {
 	if _, ok := stagingShard.utxoDiffToAdd[*blockHash]; ok {
 		return true

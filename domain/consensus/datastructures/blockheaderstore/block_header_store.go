@@ -73,6 +73,12 @@ func (bhs *blockHeaderStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return bhs.stagingShard(stagingArea).isStaged()
 }
 
+func (bhs *blockHeaderStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := bhs.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[externalapi.DomainHash]externalapi.BlockHeader)
+	stagingShard.toDelete = make(map[externalapi.DomainHash]struct{})
+}
+
 // BlockHeader gets the block header associated with the given blockHash
 func (bhs *blockHeaderStore) BlockHeader(dbContext model.DBReader, stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error) {

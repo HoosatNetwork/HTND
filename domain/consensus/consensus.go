@@ -197,7 +197,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 		go s.displayCacheSizes()
 	}
 
-	go s.PeriodicFreeOSMemory()
+	// go s.PeriodicFreeOSMemory()
 
 	return nil
 }

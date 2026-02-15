@@ -9,5 +9,6 @@ type BlockStatusStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	Get(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (externalapi.BlockStatus, error)
 	Exists(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
+	UnstageAll(stagingArea *StagingArea)
 	CacheLen() int
 }

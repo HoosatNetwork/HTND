@@ -38,6 +38,12 @@ func (ms *multisetStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return ms.stagingShard(stagingArea).isStaged()
 }
 
+func (ms *multisetStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := ms.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[externalapi.DomainHash]model.Multiset)
+	stagingShard.toDelete = make(map[externalapi.DomainHash]struct{})
+}
+
 // Get gets the multiset associated with the given blockHash
 func (ms *multisetStore) Get(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (model.Multiset, error) {
 	stagingShard := ms.stagingShard(stagingArea)

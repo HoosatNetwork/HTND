@@ -47,6 +47,11 @@ func (hsts *headerSelectedTipStore) IsStaged(stagingArea *model.StagingArea) boo
 	return hsts.stagingShard(stagingArea).isStaged()
 }
 
+func (hsts *headerSelectedTipStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := hsts.stagingShard(stagingArea)
+	stagingShard.UnstageAll()
+}
+
 func (hsts *headerSelectedTipStore) HeadersSelectedTip(dbContext model.DBReader, stagingArea *model.StagingArea) (
 	*externalapi.DomainHash, error) {
 

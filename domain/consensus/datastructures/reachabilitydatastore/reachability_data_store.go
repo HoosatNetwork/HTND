@@ -169,6 +169,12 @@ func (rds *reachabilityDataStore) deserializeReachabilityReindexRoot(reachabilit
 	return serialization.DbHashToDomainHash(dbHash)
 }
 
+func (rds *reachabilityDataStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := rds.stagingShard(stagingArea)
+	stagingShard.reachabilityData = make(map[externalapi.DomainHash]model.ReachabilityData)
+	stagingShard.reachabilityReindexRoot = nil
+}
+
 func (rds *reachabilityDataStore) CacheLen() int {
 	return rds.reachabilityDataCache.Len()
 }

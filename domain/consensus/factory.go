@@ -149,7 +149,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
 	daaWindowStore := daawindowstore.New(prefixBucket, 1000, preallocateCaches)
 	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, preallocateCaches)
-	blockStore, err := blockstore.New(dbManager, prefixBucket, 1000, preallocateCaches)
+	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, preallocateCaches)
 	if err != nil {
 		return nil, false, err
 	}
@@ -167,7 +167,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	headersSelectedTipStore := headersselectedtipstore.New(prefixBucket)
 	finalityStore := finalitystore.New(prefixBucket, 1000, preallocateCaches)
 	headersSelectedChainStore := headersselectedchainstore.New(prefixBucket, pruningWindowSizeForCaches, preallocateCaches)
-	daaBlocksStore := daablocksstore.New(prefixBucket, 10_000, 10_000, preallocateCaches)
+	daaBlocksStore := daablocksstore.New(prefixBucket, 50_000, 50_000, preallocateCaches)
 	windowHeapSliceStore := blockwindowheapslicestore.New(10_000, preallocateCaches)
 
 	newReachabilityDataStore := reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
@@ -320,7 +320,11 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		blockHeaderStore,
 		headersSelectedTipStore,
 		pruningStore,
-		daaBlocksStore)
+		daaBlocksStore,
+		finalityStore,
+		headersSelectedChainStore,
+		mergeDepthRootStore,
+		windowHeapSliceStore)
 	if err != nil {
 		return nil, false, err
 	}
@@ -679,7 +683,7 @@ func dagStores(config *Config,
 	reachabilityDataStores := make([]model.ReachabilityDataStore, config.MaxBlockLevel+1)
 	ghostdagDataStores := make([]model.GHOSTDAGDataStore, config.MaxBlockLevel+1)
 
-	ghostdagDataCacheSize := config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]
+	ghostdagDataCacheSize := config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1] * 5
 
 	for i := 0; i <= config.MaxBlockLevel; i++ {
 		prefixBucket := prefixBucket.Bucket([]byte{byte(i)})

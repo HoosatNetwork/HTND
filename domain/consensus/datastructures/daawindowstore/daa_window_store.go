@@ -81,6 +81,12 @@ func (daaws *daaWindowStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return daaws.stagingShard(stagingArea).isStaged()
 }
 
+func (daaws *daaWindowStore) UnstageAll(stagingArea *model.StagingArea) {
+	daaws.cache.Clear()
+	stagingShard := daaws.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[dbKey]*externalapi.BlockGHOSTDAGDataHashPair)
+}
+
 func (daaws *daaWindowStore) key(key dbKey) model.DBKey {
 	keyIndexBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(keyIndexBytes, key.index)

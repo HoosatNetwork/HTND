@@ -7,6 +7,7 @@ type BlockStore interface {
 	Store
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, block *externalapi.DomainBlock)
 	IsStaged(stagingArea *StagingArea) bool
+	UnstageAll(stagingArea *StagingArea)
 	Block(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error)
 	HasBlock(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
 	Blocks(dbContext DBReader, stagingArea *StagingArea, blockHashes []*externalapi.DomainHash) ([]*externalapi.DomainBlock, error)

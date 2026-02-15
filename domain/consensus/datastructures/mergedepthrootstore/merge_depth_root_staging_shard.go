@@ -34,3 +34,7 @@ func (mdrss *mergeDepthRootStagingShard) Commit(dbTx model.DBTransaction) error 
 func (mdrss *mergeDepthRootStagingShard) isStaged() bool {
 	return len(mdrss.toAdd) != 0
 }
+
+func (mdrss *mergeDepthRootStagingShard) UnstageAll() {
+	mdrss.toAdd = make(map[externalapi.DomainHash]*externalapi.DomainHash)
+}

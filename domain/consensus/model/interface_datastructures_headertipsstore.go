@@ -9,4 +9,5 @@ type HeaderSelectedTipStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	HeadersSelectedTip(dbContext DBReader, stagingArea *StagingArea) (*externalapi.DomainHash, error)
 	Has(dbContext DBReader, stagingArea *StagingArea) (bool, error)
+	UnstageAll(stagingArea *StagingArea)
 }

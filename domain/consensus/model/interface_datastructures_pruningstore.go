@@ -33,4 +33,5 @@ type PruningStore interface {
 	PruningPointUTXOIterator(dbContext DBReader) (externalapi.ReadOnlyUTXOSetIterator, error)
 
 	CacheLen() int
+	UnstageAll(stagingArea *StagingArea)
 }

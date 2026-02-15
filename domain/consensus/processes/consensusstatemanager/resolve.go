@@ -173,6 +173,19 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 			return nil, false, err
 		}
 
+		csm.ghostdagDataStore.UnstageAll(resolveStagingArea)
+		csm.blockRelationStore.UnstageAll(resolveStagingArea)
+		csm.blockStatusStore.UnstageAll(resolveStagingArea)
+		csm.acceptanceDataStore.UnstageAll(resolveStagingArea)
+		csm.consensusStateStore.UnstageAll(resolveStagingArea)
+		csm.daaBlocksStore.UnstageAll(resolveStagingArea)
+		csm.finalityStore.UnstageAll(resolveStagingArea)
+		csm.headersSelectedChainStore.UnstageAll(resolveStagingArea)
+		csm.headersSelectedTipStore.UnstageAll(resolveStagingArea)
+		csm.mergeDepthRootStore.UnstageAll(resolveStagingArea)
+		csm.pruningStore.UnstageAll(resolveStagingArea)
+		csm.windowHeapSliceStore.UnstageAll(resolveStagingArea)
+
 		if reversalData != nil {
 			err = csm.ReverseUTXODiffs(processingPoint, reversalData)
 			if err != nil {
@@ -210,6 +223,19 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	if err != nil {
 		return nil, false, err
 	}
+
+	csm.ghostdagDataStore.UnstageAll(updateVirtualStagingArea)
+	csm.blockRelationStore.UnstageAll(updateVirtualStagingArea)
+	csm.blockStatusStore.UnstageAll(updateVirtualStagingArea)
+	csm.acceptanceDataStore.UnstageAll(updateVirtualStagingArea)
+	csm.consensusStateStore.UnstageAll(updateVirtualStagingArea)
+	csm.daaBlocksStore.UnstageAll(updateVirtualStagingArea)
+	csm.finalityStore.UnstageAll(updateVirtualStagingArea)
+	csm.headersSelectedChainStore.UnstageAll(updateVirtualStagingArea)
+	csm.headersSelectedTipStore.UnstageAll(updateVirtualStagingArea)
+	csm.mergeDepthRootStore.UnstageAll(updateVirtualStagingArea)
+	csm.pruningStore.UnstageAll(updateVirtualStagingArea)
+	csm.windowHeapSliceStore.UnstageAll(updateVirtualStagingArea)
 
 	selectedParentChainChanges, err := csm.dagTraversalManager.
 		CalculateChainPath(updateVirtualStagingArea, previousVirtualSelectedParent, processingPoint)

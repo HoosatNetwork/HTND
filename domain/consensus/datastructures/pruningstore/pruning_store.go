@@ -119,6 +119,11 @@ func (ps *pruningStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return ps.stagingShard(stagingArea).isStaged()
 }
 
+func (ps *pruningStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := ps.stagingShard(stagingArea)
+	stagingShard.UnstageAll()
+}
+
 func (ps *pruningStore) UpdatePruningPointUTXOSet(dbContext model.DBWriter, diff externalapi.UTXODiff) error {
 	toRemoveIterator := diff.ToRemove().Iterator()
 	defer toRemoveIterator.Close()

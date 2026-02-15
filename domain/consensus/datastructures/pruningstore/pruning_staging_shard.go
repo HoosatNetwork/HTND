@@ -79,3 +79,10 @@ func (mss *pruningStagingShard) Commit(dbTx model.DBTransaction) error {
 func (mss *pruningStagingShard) isStaged() bool {
 	return len(mss.pruningPointByIndex) > 0 || mss.newPruningPointCandidate != nil || mss.startUpdatingPruningPointUTXOSet
 }
+
+func (mss *pruningStagingShard) UnstageAll() {
+	mss.pruningPointByIndex = make(map[uint64]*externalapi.DomainHash)
+	mss.currentPruningPointIndex = nil
+	mss.newPruningPointCandidate = nil
+	mss.startUpdatingPruningPointUTXOSet = false
+}

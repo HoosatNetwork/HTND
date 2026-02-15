@@ -101,6 +101,11 @@ func (bss *blockStatusStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey
 	return bss.bucket.Key(hash.ByteSlice())
 }
 
+func (bss *blockStatusStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := bss.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[externalapi.DomainHash]externalapi.BlockStatus)
+}
+
 func (bss *blockStatusStore) CacheLen() int {
 	return bss.cache.Len()
 }
