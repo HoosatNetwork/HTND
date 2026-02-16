@@ -15,6 +15,16 @@ import (
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
 func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs utxoindex.UTXOOutpointEntryPairs) []*appmessage.UTXOsByAddressesEntry {
 	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(pairs))
+	var scriptHex string
+	var scriptVersion uint16
+	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
+	for _, utxoEntry := range pairs {
+		script := utxoEntry.ScriptPublicKey().Script
+		version := utxoEntry.ScriptPublicKey().Version
+		scriptHex = hex.EncodeToString(script)
+		scriptVersion = version
+		break // Only need to compute once
+	}
 	for outpoint, utxoEntry := range pairs {
 		utxosByAddressesEntries = append(utxosByAddressesEntries, &appmessage.UTXOsByAddressesEntry{
 			Address: address,
@@ -24,7 +34,7 @@ func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pair
 			},
 			UTXOEntry: &appmessage.RPCUTXOEntry{
 				Amount:          utxoEntry.Amount(),
-				ScriptPublicKey: &appmessage.RPCScriptPublicKey{Script: hex.EncodeToString(utxoEntry.ScriptPublicKey().Script), Version: utxoEntry.ScriptPublicKey().Version},
+				ScriptPublicKey: &appmessage.RPCScriptPublicKey{Script: scriptHex, Version: scriptVersion},
 				BlockDAAScore:   utxoEntry.BlockDAAScore(),
 				IsCoinbase:      utxoEntry.IsCoinbase(),
 			},
