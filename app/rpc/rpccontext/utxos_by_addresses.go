@@ -2,7 +2,6 @@ package rpccontext
 
 import (
 	"encoding/hex"
-	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/util"
@@ -16,42 +15,42 @@ import (
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
 func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs utxoindex.UTXOOutpointEntryPairs) []*appmessage.UTXOsByAddressesEntry {
 	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(pairs))
+
+	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
 	var scriptHex string
 	var scriptVersion uint16
-	var scriptBytes []byte
-	// Pool for UTXOEntry objects
-	var utxoEntryPool = sync.Pool{
-		New: func() interface{} { return new(appmessage.RPCUTXOEntry) },
-	}
-	// Compute scriptHex and scriptBytes once per address
 	for _, utxoEntry := range pairs {
-		scriptBytes = utxoEntry.ScriptPublicKey().Script
-		scriptHex = hex.EncodeToString(scriptBytes)
+		scriptHex = hex.EncodeToString(utxoEntry.ScriptPublicKey().Script)
 		scriptVersion = utxoEntry.ScriptPublicKey().Version
-		break // Only need to compute once
+		break
 	}
+
 	for outpoint, utxoEntry := range pairs {
-		pooledEntry := utxoEntryPool.Get().(*appmessage.RPCUTXOEntry)
-		// Reset fields (if needed)
-		pooledEntry.Amount = utxoEntry.Amount()
-		pooledEntry.ScriptPublicKey = &appmessage.RPCScriptPublicKey{
-			Script:  scriptHex,
-			Version: scriptVersion,
+		// IMPORTANT: do NOT use sync.Pool for objects that you store in the returned slice.
+		// Each returned entry must have its own RPCUTXOEntry instance.
+		entry := &appmessage.RPCUTXOEntry{
+			Amount: utxoEntry.Amount(),
+			ScriptPublicKey: &appmessage.RPCScriptPublicKey{
+				Script:  scriptHex,
+				Version: scriptVersion,
+			},
+			BlockDAAScore: utxoEntry.BlockDAAScore(),
+			IsCoinbase:    utxoEntry.IsCoinbase(),
 		}
-		pooledEntry.BlockDAAScore = utxoEntry.BlockDAAScore()
-		pooledEntry.IsCoinbase = utxoEntry.IsCoinbase()
+
 		utxosByAddressesEntries = append(utxosByAddressesEntries, &appmessage.UTXOsByAddressesEntry{
 			Address: address,
 			Outpoint: &appmessage.RPCOutpoint{
 				TransactionID: outpoint.TransactionID.String(),
 				Index:         outpoint.Index,
 			},
-			UTXOEntry: pooledEntry,
+			UTXOEntry: entry,
 		})
-		utxoEntryPool.Put(pooledEntry)
 	}
+
 	return utxosByAddressesEntries
 }
+
 
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings
 // to UTXOsChangedNotificationAddresses
