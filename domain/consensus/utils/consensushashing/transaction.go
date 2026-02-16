@@ -1,7 +1,9 @@
 package consensushashing
 
 import (
+	"container/list"
 	"io"
+	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
 
@@ -22,6 +24,18 @@ const (
 	txEncodingExcludeSignatureScript = 1 << iota
 )
 
+const maxTransactionIDCacheSize = 10000
+
+type cacheEntry struct {
+	tx   *externalapi.DomainTransaction
+	id   *externalapi.DomainTransactionID
+	elem *list.Element
+}
+
+var transactionIDCache = make(map[*externalapi.DomainTransaction]*cacheEntry)
+var cacheLRU = list.New()
+var cacheMutex sync.RWMutex
+
 // TransactionHash returns the transaction hash.
 func TransactionHash(tx *externalapi.DomainTransaction) *externalapi.DomainHash {
 	// Encode the header and hash everything prior to the number of
@@ -40,8 +54,32 @@ func TransactionHash(tx *externalapi.DomainTransaction) *externalapi.DomainHash 
 
 // TransactionID generates the Hash for the transaction without the signature script and payload field.
 func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransactionID {
-	// If transaction ID is already cached, return it
+	// Check global cache first
+	cacheMutex.RLock()
+	if entry, exists := transactionIDCache[tx]; exists {
+		// Move to front of LRU
+		cacheLRU.MoveToFront(entry.elem)
+		cacheMutex.RUnlock()
+		return entry.id
+	}
+	cacheMutex.RUnlock()
+
+	// If transaction ID is already cached on the object, return it
 	if tx.ID != nil {
+		cacheMutex.Lock()
+		// Add to global cache with LRU
+		elem := cacheLRU.PushFront(tx)
+		transactionIDCache[tx] = &cacheEntry{tx: tx, id: tx.ID, elem: elem}
+		if len(transactionIDCache) > maxTransactionIDCacheSize {
+			// Evict least recently used
+			elem := cacheLRU.Back()
+			if elem != nil {
+				evictTx := elem.Value.(*externalapi.DomainTransaction)
+				delete(transactionIDCache, evictTx)
+				cacheLRU.Remove(elem)
+			}
+		}
+		cacheMutex.Unlock()
 		return tx.ID
 	}
 
@@ -61,6 +99,21 @@ func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransac
 	transactionID := externalapi.DomainTransactionID(*writer.Finalize())
 
 	tx.ID = &transactionID
+
+	// Add to global cache with LRU
+	cacheMutex.Lock()
+	elem := cacheLRU.PushFront(tx)
+	transactionIDCache[tx] = &cacheEntry{tx: tx, id: tx.ID, elem: elem}
+	if len(transactionIDCache) > maxTransactionIDCacheSize {
+		// Evict least recently used
+		elem := cacheLRU.Back()
+		if elem != nil {
+			evictTx := elem.Value.(*externalapi.DomainTransaction)
+			delete(transactionIDCache, evictTx)
+			cacheLRU.Remove(elem)
+		}
+	}
+	cacheMutex.Unlock()
 
 	return tx.ID
 }
