@@ -2,6 +2,7 @@ package rpccontext
 
 import (
 	"encoding/hex"
+	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/util"
@@ -17,28 +18,37 @@ func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pair
 	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(pairs))
 	var scriptHex string
 	var scriptVersion uint16
-	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
+	var scriptBytes []byte
+	// Pool for UTXOEntry objects
+	var utxoEntryPool = sync.Pool{
+		New: func() interface{} { return new(appmessage.RPCUTXOEntry) },
+	}
+	// Compute scriptHex and scriptBytes once per address
 	for _, utxoEntry := range pairs {
-		script := utxoEntry.ScriptPublicKey().Script
-		version := utxoEntry.ScriptPublicKey().Version
-		scriptHex = hex.EncodeToString(script)
-		scriptVersion = version
+		scriptBytes = utxoEntry.ScriptPublicKey().Script
+		scriptHex = hex.EncodeToString(scriptBytes)
+		scriptVersion = utxoEntry.ScriptPublicKey().Version
 		break // Only need to compute once
 	}
 	for outpoint, utxoEntry := range pairs {
+		pooledEntry := utxoEntryPool.Get().(*appmessage.RPCUTXOEntry)
+		// Reset fields (if needed)
+		pooledEntry.Amount = utxoEntry.Amount()
+		pooledEntry.ScriptPublicKey = &appmessage.RPCScriptPublicKey{
+			Script:  scriptHex,
+			Version: scriptVersion,
+		}
+		pooledEntry.BlockDAAScore = utxoEntry.BlockDAAScore()
+		pooledEntry.IsCoinbase = utxoEntry.IsCoinbase()
 		utxosByAddressesEntries = append(utxosByAddressesEntries, &appmessage.UTXOsByAddressesEntry{
 			Address: address,
 			Outpoint: &appmessage.RPCOutpoint{
 				TransactionID: outpoint.TransactionID.String(),
 				Index:         outpoint.Index,
 			},
-			UTXOEntry: &appmessage.RPCUTXOEntry{
-				Amount:          utxoEntry.Amount(),
-				ScriptPublicKey: &appmessage.RPCScriptPublicKey{Script: scriptHex, Version: scriptVersion},
-				BlockDAAScore:   utxoEntry.BlockDAAScore(),
-				IsCoinbase:      utxoEntry.IsCoinbase(),
-			},
+			UTXOEntry: pooledEntry,
 		})
+		utxoEntryPool.Put(pooledEntry)
 	}
 	return utxosByAddressesEntries
 }
