@@ -293,8 +293,15 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 }
 
 func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	// Deprecated: Use UTXOs or ForEachUTXO for allocation-efficient access.
-	return nil, errors.New("getUTXOOutpointEntryPairs is deprecated; use UTXOs or ForEachUTXO")
+	pairs, err := uis.UTXOs(scriptPublicKey)
+	if err != nil {
+		return nil, err
+	}
+	result := make(UTXOOutpointEntryPairs)
+	for _, pair := range pairs {
+		result[pair.Outpoint] = pair.Entry
+	}
+	return result, nil
 }
 
 // UTXOPair is a struct for streaming UTXO results efficiently
