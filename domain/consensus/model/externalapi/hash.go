@@ -82,7 +82,7 @@ func (hash *DomainHash) ByteSlice() []byte {
 func (hash *DomainHash) Uint32Array() [8]uint32 {
 	var result [8]uint32
 
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		result[i] = uint32(hash.hashArray[i*4])<<24 |
 			uint32(hash.hashArray[i*4+1])<<16 |
 			uint32(hash.hashArray[i*4+2])<<8 |

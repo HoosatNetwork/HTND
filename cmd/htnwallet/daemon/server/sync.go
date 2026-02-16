@@ -120,10 +120,7 @@ func (s *server) maxUsedIndexWithLock() uint32 {
 }
 
 func (s *server) maxUsedIndex() uint32 {
-	maxUsedIndex := s.keysFile.LastUsedExternalIndex()
-	if s.keysFile.LastUsedInternalIndex() > maxUsedIndex {
-		maxUsedIndex = s.keysFile.LastUsedInternalIndex()
-	}
+	maxUsedIndex := max(s.keysFile.LastUsedInternalIndex(), s.keysFile.LastUsedExternalIndex())
 
 	return maxUsedIndex
 }
@@ -322,11 +319,7 @@ func (s *server) isSynced() bool {
 }
 
 func (s *server) formatSyncStateReport() string {
-	maxUsedIndex := s.maxUsedIndex()
-
-	if s.nextSyncStartIndex > maxUsedIndex {
-		maxUsedIndex = s.nextSyncStartIndex
-	}
+	maxUsedIndex := max(s.nextSyncStartIndex, s.maxUsedIndex())
 
 	if s.nextSyncStartIndex < s.maxUsedIndex() {
 		return fmt.Sprintf("scanned %d out of %d addresses (%.2f%%)",

@@ -78,7 +78,7 @@ func TestRPCMaxInboundConnections(t *testing.T) {
 	rpcClients := []*testRPCClient{}
 	doneChan := make(chan error)
 	go func() {
-		for i := 0; i < config.DefaultMaxRPCClients; i++ {
+		for range config.DefaultMaxRPCClients {
 			rpcClient, err := newTestRPCClient(harness.rpcAddress)
 			if err != nil {
 				doneChan <- err

@@ -17,7 +17,7 @@ import (
 // CreateMnemonics generates `numKeys` number of mnemonics.
 func CreateMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword string, isMultisig bool) (encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error) {
 	mnemonics := make([]string, numKeys)
-	for i := uint32(0); i < numKeys; i++ {
+	for i := range numKeys {
 		var err error
 		mnemonics[i], err = libhtnwallet.CreateMnemonic()
 		if err != nil {
@@ -31,7 +31,7 @@ func CreateMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword s
 // ImportMnemonics imports a `numKeys` of mnemonics.
 func ImportMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword string, isMultisig bool) (encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error) {
 	mnemonics := make([]string, numKeys)
-	for i := uint32(0); i < numKeys; i++ {
+	for i := range numKeys {
 		fmt.Printf("Enter mnemonic #%d here:\n", i+1)
 		reader := bufio.NewReader(os.Stdin)
 		mnemonic, err := utils.ReadLine(reader)

@@ -44,7 +44,7 @@ func (err RPCError) Error() string {
 
 // RPCErrorf formats according to a format specifier and returns the string
 // as an RPCError.
-func RPCErrorf(format string, args ...interface{}) *RPCError {
+func RPCErrorf(format string, args ...any) *RPCError {
 	return &RPCError{
 		Message: fmt.Sprintf(format, args...),
 	}

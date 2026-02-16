@@ -24,7 +24,7 @@ func TestIBD(t *testing.T) {
 	syncer, syncee, _, teardown := standardSetup(t)
 	defer teardown()
 
-	for i := 0; i < numBlocks; i++ {
+	for range numBlocks {
 		mineNextBlock(t, syncer)
 	}
 
@@ -194,11 +194,11 @@ func TestIBDWithPruning(t *testing.T) {
 	// block.
 	const synceeOnlyBlocks = 2
 	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < synceeOnlyBlocks; i++ {
+	for range synceeOnlyBlocks {
 		mineNextBlockWithMockTimestamps(t, syncee1, rd)
 	}
 
-	for i := 0; i < numBlocks-1; i++ {
+	for range numBlocks - 1 {
 		mineNextBlockWithMockTimestamps(t, syncer, rd)
 	}
 
@@ -293,7 +293,7 @@ func TestBoundedMergeDepth(t *testing.T) {
 			mineNextBlock(t, syncee)
 		}
 
-		for i := uint64(0); i < ibdTriggerRange+1; i++ {
+		for range uint64(ibdTriggerRange + 1) {
 			mineNextBlock(t, syncer)
 		}
 

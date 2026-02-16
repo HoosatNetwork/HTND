@@ -188,7 +188,7 @@ func TestDifficulty(t *testing.T) {
 
 		redChainTipHash := splitBlockHash
 		const redChainLength = 10
-		for i := 0; i < redChainLength; i++ {
+		for range redChainLength {
 			_, redChainTipHash = addBlockWithMinimumTime(redChainTipHash)
 		}
 		tipWithRedPast, _ := addBlock(0, redChainTipHash, blueTipHash)
@@ -206,7 +206,7 @@ func TestDifficulty(t *testing.T) {
 		}
 
 		redChainTipHash = splitBlockHash
-		for i := 0; i < redChainLength; i++ {
+		for range redChainLength {
 			_, redChainTipHash = addBlockWithMinimumTime(redChainTipHash)
 		}
 		tipWithRedPast, _ = addBlock(0, redChainTipHash, blueTipHash)
@@ -258,7 +258,7 @@ func TestDAAScore(t *testing.T) {
 		}
 		tipDAAScore := blockBlueScore3ExpectedDAAScore
 
-		for i := uint64(0); i < 10; i++ {
+		for i := range uint64(10) {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("AddBlock: %+v", err)

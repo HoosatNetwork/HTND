@@ -101,9 +101,9 @@ func TestHandleGetBlocks(t *testing.T) {
 		//               etc.
 		expectedOrder := make([]*externalapi.DomainHash, 0, 40)
 		mergingBlock := consensusConfig.GenesisHash
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			splitBlocks := make([]*externalapi.DomainHash, 0, 3)
-			for j := 0; j < 3; j++ {
+			for range 3 {
 				blockHash, _, err := tc.AddBlock([]*externalapi.DomainHash{mergingBlock}, nil, nil)
 				if err != nil {
 					t.Fatalf("Failed adding block: %v", err)

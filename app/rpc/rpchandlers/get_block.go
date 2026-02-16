@@ -16,7 +16,7 @@ func GetBlockEvenIfHeaderOnlyWithRetry(context *rpccontext.Context, hash *extern
 	backoffDurations := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 300 * time.Millisecond, 400 * time.Millisecond, 500 * time.Millisecond}
 
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		block, err := context.Domain.Consensus().GetBlockEvenIfHeaderOnly(hash)
 		if err == nil {
 			if attempt > 0 {

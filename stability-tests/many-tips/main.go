@@ -203,7 +203,7 @@ func mineTips(numOfTips int, miningAddress util.Address, rpcClient *rpc.Client) 
 		return err
 	}
 	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < numOfTips; i++ {
+	for i := range numOfTips {
 		_, powHash := mining.SolveBlock(block, rd)
 		block.PoWHash = powHash
 		_, err = rpcClient.SubmitBlockAlsoIfNonDAA(block, block.PoWHash)

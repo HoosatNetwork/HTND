@@ -113,7 +113,7 @@ func (r *Route) DequeueWithTimeout(timeout time.Duration) (appmessage.Message, e
 }
 
 func (r *Route) DequeueWithTimeoutAndRetry(timeout time.Duration, maxRetries int) (appmessage.Message, error) {
-	for i := 0; i < maxRetries; i++ {
+	for range maxRetries {
 		select {
 		case <-time.After(timeout):
 			continue

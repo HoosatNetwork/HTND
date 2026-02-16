@@ -230,10 +230,8 @@ func BlockLevel(header externalapi.BlockHeader, maxBlockLevel int) int {
 	}
 
 	proofOfWorkValue, _ := NewState(header.ToMutable()).CalculateProofOfWorkValue()
-	level := maxBlockLevel - proofOfWorkValue.BitLen()
-	// If the block has a level lower than genesis make it zero.
-	if level < 0 {
-		level = 0
-	}
+	level := max(
+		// If the block has a level lower than genesis make it zero.
+		maxBlockLevel-proofOfWorkValue.BitLen(), 0)
 	return level
 }

@@ -2,6 +2,7 @@ package utxoindex
 
 import (
 	"encoding/binary"
+	"maps"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
@@ -270,18 +271,14 @@ func (uis *utxoIndexStore) stagedData() (
 	toAddClone := make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs, len(uis.toAdd))
 	for scriptPublicKeyString, toAddUTXOOutpointEntryPairs := range uis.toAdd {
 		toAddUTXOOutpointEntryPairsClone := make(UTXOOutpointEntryPairs, len(toAddUTXOOutpointEntryPairs))
-		for outpoint, utxoEntry := range toAddUTXOOutpointEntryPairs {
-			toAddUTXOOutpointEntryPairsClone[outpoint] = utxoEntry
-		}
+		maps.Copy(toAddUTXOOutpointEntryPairsClone, toAddUTXOOutpointEntryPairs)
 		toAddClone[scriptPublicKeyString] = toAddUTXOOutpointEntryPairsClone
 	}
 
 	toRemoveClone := make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs, len(uis.toRemove))
 	for scriptPublicKeyString, toRemoveUTXOOutpointEntryPairs := range uis.toRemove {
 		toRemoveUTXOOutpointEntryPairsClone := make(UTXOOutpointEntryPairs, len(toRemoveUTXOOutpointEntryPairs))
-		for outpoint, utxoEntry := range toRemoveUTXOOutpointEntryPairs {
-			toRemoveUTXOOutpointEntryPairsClone[outpoint] = utxoEntry
-		}
+		maps.Copy(toRemoveUTXOOutpointEntryPairsClone, toRemoveUTXOOutpointEntryPairs)
 		toRemoveClone[scriptPublicKeyString] = toRemoveUTXOOutpointEntryPairsClone
 	}
 

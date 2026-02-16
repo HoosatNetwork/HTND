@@ -13,7 +13,7 @@ func Test16IncomingConnections(t *testing.T) {
 	// Much more than 16 hosts creates a risk of running out of available file descriptors for leveldb
 	const numBullies = 16
 	harnessesParams := make([]*harnessParams, numBullies+1)
-	for i := 0; i < numBullies+1; i++ {
+	for i := range numBullies + 1 {
 		harnessesParams[i] = &harnessParams{
 			p2pAddress:              fmt.Sprintf("127.0.0.1:%d", 12345+i),
 			rpcAddress:              fmt.Sprintf("127.0.0.1:%d", 22345+i),

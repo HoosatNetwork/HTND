@@ -683,10 +683,7 @@ func dagStores(config *Config,
 	reachabilityDataStores := make([]model.ReachabilityDataStore, config.MaxBlockLevel+1)
 	ghostdagDataStores := make([]model.GHOSTDAGDataStore, config.MaxBlockLevel+1)
 
-	ghostdagDataCacheSize := pruningWindowSizeForCaches * 2
-	if ghostdagDataCacheSize < config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1] {
-		ghostdagDataCacheSize = config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]
-	}
+	ghostdagDataCacheSize := max(pruningWindowSizeForCaches*2, config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
 
 	for i := 0; i <= config.MaxBlockLevel; i++ {
 		prefixBucket := prefixBucket.Bucket([]byte{byte(i)})

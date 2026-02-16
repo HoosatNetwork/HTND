@@ -90,7 +90,7 @@ func TestFinality(t *testing.T) {
 		stagingArea := model.NewStagingArea()
 
 		// Add two more blocks in the side-chain until it becomes the selected chain
-		for i := uint64(0); i < 2; i++ {
+		for i := range uint64(2) {
 			sideChainTip, err = buildAndInsertBlock([]*externalapi.DomainHash{sideChainTipHash})
 			if err != nil {
 				t.Fatalf("TestFinality: Failed to process sidechain Block #%d: %v", i, err)
@@ -118,7 +118,7 @@ func TestFinality(t *testing.T) {
 		}
 
 		// Add two more blocks to main chain, to move finality point to first non-genesis block in mainChain
-		for i := uint64(0); i < 2; i++ {
+		for i := range uint64(2) {
 			mainChainTip, err = buildAndInsertBlock([]*externalapi.DomainHash{mainChainTipHash})
 			if err != nil {
 				t.Fatalf("TestFinality: Failed to process sidechain Block #%d: %v", i, err)
@@ -138,7 +138,7 @@ func TestFinality(t *testing.T) {
 		// TODO: Make sure that a finality conflict notification is sent
 		// Add two more blocks to the side chain, so that it violates finality and gets status UTXOPendingVerification even
 		// though it is the block with the highest blue score.
-		for i := uint64(0); i < 2; i++ {
+		for i := range uint64(2) {
 			sideChainTip, err = buildAndInsertBlock([]*externalapi.DomainHash{sideChainTipHash})
 			if err != nil {
 				t.Fatalf("TestFinality: Failed to process sidechain Block #%d: %v", i, err)

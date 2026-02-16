@@ -176,7 +176,7 @@ func rebalanceCandidates(oldCandidateTxs []*candidateTx, isFirstRun bool) (
 	totalP = 0.0
 
 	candidateTxs = make([]*candidateTx, 0, len(oldCandidateTxs))
-	for i := 0; i < len(oldCandidateTxs); i++ {
+	for i := range oldCandidateTxs {
 		if oldCandidateTxs[i].isMarkedForDeletion {
 			continue
 		}

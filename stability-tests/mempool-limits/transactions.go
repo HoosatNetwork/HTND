@@ -48,12 +48,12 @@ func generateFundingCoinbaseTransactions(t *testing.T, rpcClient *rpcclient.RPCC
 	fundingCoinbaseTransactions := &fundingCoinbaseTransactions{
 		transactions: make([]*externalapi.DomainTransaction, fundingCoinbaseTransactionAmount),
 	}
-	for i := 0; i < fundingCoinbaseTransactionAmount; i++ {
+	for i := range fundingCoinbaseTransactionAmount {
 		fundingCoinbaseTransactions.transactions[i] = mineBlockAndGetCoinbaseTransaction(t, rpcClient)
 	}
 
 	log.Infof("Maturing funding coinbase transactions")
-	for i := 0; i < coinbaseMaturity; i++ {
+	for range coinbaseMaturity {
 		mineBlockAndGetCoinbaseTransaction(t, rpcClient)
 	}
 
@@ -142,7 +142,7 @@ func generateTransactionsWithMultipleOutputs(t *testing.T,
 		}
 
 		spendingTransactionOutputs := make([]*externalapi.DomainTransactionOutput, outputsPerTransaction)
-		for i := 0; i < outputsPerTransaction; i++ {
+		for i := range outputsPerTransaction {
 			spendingTransactionOutputs[i] = &externalapi.DomainTransactionOutput{
 				Value:           outputValue,
 				ScriptPublicKey: payToPayAddressScript,

@@ -617,7 +617,7 @@ func (s *consensus) GetBlocksAcceptanceData(blockHashes []*externalapi.DomainHas
 
 	blocksAcceptanceData := make([]externalapi.AcceptanceData, len(blockHashes))
 
-	for i := 0; i < len(blockHashes); i++ {
+	for i := range blockHashes {
 		// Use a separate staging area for each acceptance data retrieval to avoid memory accumulation
 		stagingArea := model.NewStagingArea()
 

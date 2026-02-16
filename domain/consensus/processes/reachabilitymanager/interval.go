@@ -149,10 +149,7 @@ func intervalSplitWithExponentialBias(ri *model.ReachabilityInterval, sizes []ui
 		if i == len(fractions)-1 {
 			bias = remainingBias
 		} else {
-			bias = uint64(math.Round(float64(totalBias) * fraction))
-			if bias > remainingBias {
-				bias = remainingBias
-			}
+			bias = min(uint64(math.Round(float64(totalBias)*fraction)), remainingBias)
 		}
 		biasedSizes[i] = sizes[i] + bias
 		remainingBias -= bias

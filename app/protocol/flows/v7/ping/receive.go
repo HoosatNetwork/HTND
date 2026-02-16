@@ -6,8 +6,7 @@ import (
 )
 
 // ReceivePingsContext is the interface for the context needed for the ReceivePings flow.
-type ReceivePingsContext interface {
-}
+type ReceivePingsContext any
 
 type receivePingsFlow struct {
 	ReceivePingsContext

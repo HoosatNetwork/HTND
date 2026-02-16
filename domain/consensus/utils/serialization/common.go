@@ -14,7 +14,7 @@ var errNoEncodingForType = errors.New("there's no encoding for this type")
 var errMalformed = errors.New("errMalformed")
 
 // WriteElement writes the little endian representation of element to w.
-func WriteElement(w io.Writer, element interface{}) error {
+func WriteElement(w io.Writer, element any) error {
 	// Attempt to write the element based on the concrete type via fast
 	// type assertions first.
 	switch e := element.(type) {
@@ -128,7 +128,7 @@ func WriteElement(w io.Writer, element interface{}) error {
 
 // WriteElements writes multiple items to w. It is equivalent to multiple
 // calls to writeElement.
-func WriteElements(w io.Writer, elements ...interface{}) error {
+func WriteElements(w io.Writer, elements ...any) error {
 	for _, element := range elements {
 		err := WriteElement(w, element)
 		if err != nil {
@@ -140,7 +140,7 @@ func WriteElements(w io.Writer, elements ...interface{}) error {
 
 // ReadElement reads the next sequence of bytes from r using little endian
 // depending on the concrete type of element pointed to.
-func ReadElement(r io.Reader, element interface{}) error {
+func ReadElement(r io.Reader, element any) error {
 	// Attempt to read the element based on the concrete type via fast
 	// type assertions first.
 	switch e := element.(type) {
@@ -220,7 +220,7 @@ func ReadElement(r io.Reader, element interface{}) error {
 
 // ReadElements reads multiple items from r. It is equivalent to multiple
 // calls to ReadElement.
-func ReadElements(r io.Reader, elements ...interface{}) error {
+func ReadElements(r io.Reader, elements ...any) error {
 	for _, element := range elements {
 		err := ReadElement(r, element)
 		if err != nil {

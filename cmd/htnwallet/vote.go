@@ -39,7 +39,7 @@ func vote(conf *voteConfig) error {
 	votingAddress := "hoosat:qz8hek32xdryqstk6ptvvfzmrsrns95h7nd2r9f55epnxx7eummegyxa7f2lu"
 
 	// Create vote payload
-	votePayload := map[string]interface{}{
+	votePayload := map[string]any{
 		"type":   "vote_cast",
 		"v":      1,
 		"pollId": conf.PollId,
@@ -106,10 +106,7 @@ retry:
 
 		const chunkSize = 100 // To avoid sending a message bigger than the gRPC max message size, we split it to chunks
 		for offset := 0; offset < len(signedTransactions); offset += chunkSize {
-			end := len(signedTransactions)
-			if offset+chunkSize <= len(signedTransactions) {
-				end = offset + chunkSize
-			}
+			end := min(offset+chunkSize, len(signedTransactions))
 
 			chunk := signedTransactions[offset:end]
 			response, err := daemonClient.Broadcast(broadcastCtx, &pb.BroadcastRequest{Transactions: chunk})

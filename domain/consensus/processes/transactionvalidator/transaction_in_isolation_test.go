@@ -133,7 +133,7 @@ func createTxForTest(numInputs uint32, numOutputs uint32, outputValue uint64, su
 	txIns := []*externalapi.DomainTransactionInput{}
 	txOuts := []*externalapi.DomainTransactionOutput{}
 
-	for i := uint32(0); i < numInputs; i++ {
+	for i := range numInputs {
 		txIns = append(txIns, &externalapi.DomainTransactionInput{
 			PreviousOutpoint: externalapi.DomainOutpoint{
 				TransactionID: externalapi.DomainTransactionID{},
@@ -145,7 +145,7 @@ func createTxForTest(numInputs uint32, numOutputs uint32, outputValue uint64, su
 		})
 	}
 
-	for i := uint32(0); i < numOutputs; i++ {
+	for range numOutputs {
 		txOuts = append(txOuts, &externalapi.DomainTransactionOutput{
 			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0},
 			Value:           outputValue,

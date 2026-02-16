@@ -54,7 +54,7 @@ func TestCursorSanity(t *testing.T) {
 
 	// Write some data to the database
 	bucket := database.MakeBucket([]byte("bucket"))
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key := fmt.Sprintf("key%d", i)
 		value := fmt.Sprintf("value%d", i)
 		err := ldb.Put(bucket.Key([]byte(key)), []byte(value))
@@ -195,7 +195,7 @@ func TestCursorCloseFirstAndNext(t *testing.T) {
 	defer teardownFunc()
 
 	// Write some data to the database
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key := fmt.Sprintf("key%d", i)
 		value := fmt.Sprintf("value%d", i)
 		err := ldb.Put(database.MakeBucket([]byte("bucket")).Key([]byte(key)), []byte(value))
@@ -234,9 +234,9 @@ func TestCursorUTXOIteration(t *testing.T) {
 	defer teardownFunc()
 
 	bucket := database.MakeBucket([]byte("utxo"))
-	for i := 0; i < 10; i++ {
-		key := bucket.Key([]byte(fmt.Sprintf("txid:%d", i)))
-		value := []byte(fmt.Sprintf("amount:%d", i))
+	for i := range 10 {
+		key := bucket.Key(fmt.Appendf(nil, "txid:%d", i))
+		value := fmt.Appendf(nil, "amount:%d", i)
 		if err := ldb.Put(key, value); err != nil {
 			t.Fatalf("TestCursorUTXOIteration: Put failed: %s", err)
 		}
@@ -253,8 +253,8 @@ func TestCursorUTXOIteration(t *testing.T) {
 		if i >= 10 {
 			t.Fatalf("TestCursorUTXOIteration: Cursor iterated beyond expected  Ascending: %d", i)
 		}
-		expectedKey := bucket.Key([]byte(fmt.Sprintf("txid:%d", i)))
-		expectedValue := []byte(fmt.Sprintf("amount:%d", i))
+		expectedKey := bucket.Key(fmt.Appendf(nil, "txid:%d", i))
+		expectedValue := fmt.Appendf(nil, "amount:%d", i)
 		validateCurrentCursorKeyAndValue(t, "TestCursorUTXOIteration", cursor, expectedKey, expectedValue)
 		i++
 	}
@@ -283,7 +283,7 @@ func TestCursorUTXOEmptyAndNonSequential(t *testing.T) {
 	keys := []string{"txid:0", "txid:2", "txid:5"}
 	for i, k := range keys {
 		key := bucket.Key([]byte(k))
-		value := []byte(fmt.Sprintf("amount:%d", i))
+		value := fmt.Appendf(nil, "amount:%d", i)
 		if err := ldb.Put(key, value); err != nil {
 			t.Fatalf("TestCursorUTXOEmptyAndNonSequential: Put failed: %s", err)
 		}
@@ -301,7 +301,7 @@ func TestCursorUTXOEmptyAndNonSequential(t *testing.T) {
 			t.Fatalf("TestCursorUTXOEmptyAndNonSequential: Cursor iterated beyond expected %d keys", len(keys))
 		}
 		expectedKey := bucket.Key([]byte(keys[i]))
-		expectedValue := []byte(fmt.Sprintf("amount:%d", i))
+		expectedValue := fmt.Appendf(nil, "amount:%d", i)
 		validateCurrentCursorKeyAndValue(t, "TestCursorUTXOEmptyAndNonSequential", cursor, expectedKey, expectedValue)
 		i++
 	}

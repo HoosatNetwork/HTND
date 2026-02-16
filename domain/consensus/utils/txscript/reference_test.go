@@ -24,7 +24,7 @@ import (
 
 // scriptTestName returns a descriptive test name for the given reference script
 // test data.
-func scriptTestName(test []interface{}) (string, error) {
+func scriptTestName(test []any) (string, error) {
 	// The test must consist of a signature script, public key script, flags,
 	// and expected error. Finally, it may optionally contain a comment.
 	if len(test) < 4 || len(test) > 5 {
@@ -134,8 +134,8 @@ func parseShortForm(script string, version uint16) ([]byte, error) {
 func parseScriptFlags(flagStr string) (ScriptFlags, error) {
 	var flags ScriptFlags
 
-	sFlags := strings.Split(flagStr, ",")
-	for _, flag := range sFlags {
+	sFlags := strings.SplitSeq(flagStr, ",")
+	for flag := range sFlags {
 		switch flag {
 		case "":
 			// Nothing.
@@ -253,7 +253,7 @@ func createSpendingTx(sigScript []byte, scriptPubKey *externalapi.ScriptPublicKe
 // testScripts ensures all of the passed script tests execute with the expected
 // results with or without using a signature cache, as specified by the
 // parameter.
-func testScripts(t *testing.T, tests [][]interface{}, useSigCache bool) {
+func testScripts(t *testing.T, tests [][]any, useSigCache bool) {
 	// Create a signature cache to use only if requested.
 	var sigCache *SigCache
 	var sigCacheECDSA *SigCacheECDSA
@@ -385,7 +385,7 @@ func TestScripts(t *testing.T) {
 		t.Fatalf("TestScripts: %v\n", err)
 	}
 
-	var tests [][]interface{}
+	var tests [][]any
 	err = json.Unmarshal(file, &tests)
 	if err != nil {
 		t.Fatalf("TestScripts couldn't Unmarshal: %v", err)

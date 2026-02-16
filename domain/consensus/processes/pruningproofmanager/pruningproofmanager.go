@@ -698,7 +698,6 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 
 			for level := 0; level <= ppm.maxBlockLevel; level++ {
 				for _, parent := range ppm.parentsManager.ParentsAtLevel(header, level) {
-					parent := parent
 					dag[*blockHash].parents.Add(parent)
 				}
 			}
@@ -718,7 +717,6 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 		block := dag[*blockHash]
 		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
 		for parent := range block.parents {
-			parent := parent
 			if _, ok := dag[parent]; !ok {
 				continue
 			}

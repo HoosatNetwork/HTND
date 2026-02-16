@@ -44,7 +44,7 @@ func TestAddChildThatPointsDirectlyToTheSelectedParentChainBelowReindexRoot(t *t
 		// Add chain of reachabilityReindexWindow blocks above chainRootBlock.
 		// This should move the reindex root
 		chainRootBlockTipHash := chainRootBlock
-		for i := uint64(0); i < reachabilityReindexWindow; i++ {
+		for range reachabilityReindexWindow {
 			chainBlock, _, err := tc.AddBlock([]*externalapi.DomainHash{chainRootBlockTipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("AddBlock: %+v", err)
@@ -65,7 +65,7 @@ func TestAddChildThatPointsDirectlyToTheSelectedParentChainBelowReindexRoot(t *t
 		// level (genesis in this case) runs out of slack
 		slackSize := tc.ReachabilityManager().ReachabilityReindexSlack()
 		blocksToAdd := uint64(math.Log2(float64(slackSize))) + 2
-		for i := uint64(0); i < blocksToAdd; i++ {
+		for range blocksToAdd {
 			_, _, err = tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("AddBlock: %+v", err)
@@ -227,7 +227,7 @@ func TestReindexIntervalsEarlierThanReindexRoot(t *testing.T) {
 		// Add a chain of reachabilityReindexWindow blocks above centerBlock.
 		// This will move the reindex root to centerBlock
 		centerTipHash := centerBlock
-		for i := uint64(0); i < reachabilityReindexWindow; i++ {
+		for range reachabilityReindexWindow {
 			var err error
 			centerTipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{centerTipHash}, nil, nil)
 			if err != nil {

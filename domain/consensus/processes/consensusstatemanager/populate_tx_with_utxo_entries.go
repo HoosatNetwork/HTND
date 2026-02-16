@@ -106,7 +106,7 @@ func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromUTXOSet(
 	pruningPoint *externalapi.DomainBlock, iterator externalapi.ReadOnlyUTXOSetIterator) error {
 
 	// Collect the required outpoints from the block
-	outpointsForPopulation := make(map[externalapi.DomainOutpoint]interface{})
+	outpointsForPopulation := make(map[externalapi.DomainOutpoint]any)
 	for _, transaction := range pruningPoint.Transactions {
 		for _, input := range transaction.Inputs {
 			outpointsForPopulation[input.PreviousOutpoint] = struct{}{}

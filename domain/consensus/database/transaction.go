@@ -15,7 +15,7 @@ func (d *dbTransaction) Get(key model.DBKey) ([]byte, error) {
 	databaseKey := dbKeyToDatabaseKey(key)
 	retryDelay := initialRetryDelay
 
-	for attempt := 0; attempt < maxGetRetryAttempts; attempt++ {
+	for attempt := range maxGetRetryAttempts {
 		data, err := d.transaction.Get(databaseKey)
 
 		// If there was an error, return it immediately (no retry for errors)

@@ -34,7 +34,7 @@ func (pm *parentsManager) ParentsAtLevel(blockHeader externalapi.BlockHeader, le
 func (pm *parentsManager) Parents(blockHeader externalapi.BlockHeader) []externalapi.BlockLevelParents {
 	numParents := pm.maxBlockLevel + 1
 	parents := make([]externalapi.BlockLevelParents, numParents)
-	for i := 0; i < numParents; i++ {
+	for i := range numParents {
 		parents[i] = pm.ParentsAtLevel(blockHeader, i)
 	}
 

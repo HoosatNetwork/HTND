@@ -371,7 +371,7 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 
 		const numSharedBlocks = 2
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < numSharedBlocks; i++ {
+		for range numSharedBlocks {
 			tipHash = addBlock(tcSyncer, []*externalapi.DomainHash{tipHash}, t)
 			block, _, err := tcSyncer.GetBlock(tipHash)
 			if err != nil {
@@ -386,7 +386,7 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 
 		// Add two side blocks to syncee
 		tipHashSyncee := tipHash
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			tipHashSyncee = addBlock(tcSyncee1, []*externalapi.DomainHash{tipHashSyncee}, t)
 		}
 
@@ -544,7 +544,7 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 		}
 
 		outputs := make([]*externalapi.DomainTransactionOutput, 900)
-		for i := 0; i < len(outputs); i++ {
+		for i := range outputs {
 			outputs[i] = &externalapi.DomainTransactionOutput{
 				ScriptPublicKey: scriptPublicKey,
 				Value:           10000,
@@ -699,7 +699,7 @@ func BenchmarkGetPruningPointUTXOs(b *testing.B) {
 			Sequence:        constants.MaxTxInSequenceNum,
 		}
 		outputs := make([]*externalapi.DomainTransactionOutput, 900)
-		for i := 0; i < len(outputs); i++ {
+		for i := range outputs {
 			outputs[i] = &externalapi.DomainTransactionOutput{
 				ScriptPublicKey: scriptPublicKey,
 				Value:           10000,
@@ -727,7 +727,7 @@ func BenchmarkGetPruningPointUTXOs(b *testing.B) {
 
 	// Add finalityDepth blocks, each containing lots of outputs
 	tip := blockWithSpendableCoinbase
-	for i := 0; i < finalityDepth; i++ {
+	for range finalityDepth {
 		tip = addBlockWithLotsOfOutputs(b, tip.Transactions[0])
 	}
 

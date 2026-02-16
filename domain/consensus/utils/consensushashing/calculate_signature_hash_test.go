@@ -532,7 +532,7 @@ func signTx(b *testing.B, tx *externalapi.DomainTransaction, sigHashTypes []cons
 func generateInputs(size int, sourceScript *externalapi.ScriptPublicKey) []*externalapi.DomainTransactionInput {
 	inputs := make([]*externalapi.DomainTransactionInput, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		inputs[i] = &externalapi.DomainTransactionInput{
 			PreviousOutpoint: *externalapi.NewDomainOutpoint(
 				externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{12, 3, 4, 5}), 1),
@@ -563,7 +563,7 @@ func getSourceScript(b *testing.B) *externalapi.ScriptPublicKey {
 func generateOutputs(size int, script *externalapi.ScriptPublicKey) []*externalapi.DomainTransactionOutput {
 	outputs := make([]*externalapi.DomainTransactionOutput, size)
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		outputs[i] = &externalapi.DomainTransactionOutput{
 			Value:           uint64(i),
 			ScriptPublicKey: script,

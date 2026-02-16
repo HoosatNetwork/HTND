@@ -286,7 +286,7 @@ func hashOutpoint(hashWriter hashes.HashWriter, outpoint externalapi.DomainOutpo
 	infallibleWriteElement(hashWriter, outpoint.Index)
 }
 
-func infallibleWriteElement(hashWriter hashes.HashWriter, element interface{}) {
+func infallibleWriteElement(hashWriter hashes.HashWriter, element any) {
 	err := serialization.WriteElement(hashWriter, element)
 	if err != nil {
 		// It seems like this could only happen if the writer returned an error.

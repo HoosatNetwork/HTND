@@ -108,7 +108,7 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 
 	// collect results – return the *first* error
 	var firstErr error
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		res := <-errCh
 		if res.err != nil && firstErr == nil {
 			firstErr = res.err // keep the first one

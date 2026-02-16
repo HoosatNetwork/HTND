@@ -62,7 +62,7 @@ func (ctx *Context) getAndConvertAcceptedTransactionIDs(selectedParentChainChang
 				AcceptingBlockHash:     chainBlocksChunk[i].String(),
 				AcceptedTransactionIDs: nil,
 			}
-			for x := 0; x < len(chainBlockAcceptanceData); x++ {
+			for x := range chainBlockAcceptanceData {
 				for y := 0; y < len(chainBlockAcceptanceData[x].TransactionAcceptanceData); y++ {
 					if chainBlockAcceptanceData[x].TransactionAcceptanceData[y].IsAccepted {
 						acceptedTransactionIDs[position+i].AcceptedTransactionIDs =

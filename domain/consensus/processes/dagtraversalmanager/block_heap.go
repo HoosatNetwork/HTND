@@ -21,11 +21,11 @@ type baseHeap struct {
 func (h *baseHeap) Len() int      { return len(h.slice) }
 func (h *baseHeap) Swap(i, j int) { h.slice[i], h.slice[j] = h.slice[j], h.slice[i] }
 
-func (h *baseHeap) Push(x interface{}) {
+func (h *baseHeap) Push(x any) {
 	h.slice = append(h.slice, x.(*externalapi.BlockGHOSTDAGDataHashPair))
 }
 
-func (h *baseHeap) Pop() interface{} {
+func (h *baseHeap) Pop() any {
 	oldSlice := h.slice
 	oldLength := len(oldSlice)
 	popped := oldSlice[oldLength-1]
@@ -131,7 +131,7 @@ func (bh *blockHeap) Len() int {
 func (bh *blockHeap) ToSlice() []*externalapi.DomainHash {
 	length := bh.Len()
 	hashes := make([]*externalapi.DomainHash, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		hashes[i] = bh.Pop()
 	}
 	return hashes
