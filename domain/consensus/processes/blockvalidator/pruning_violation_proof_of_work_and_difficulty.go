@@ -216,7 +216,6 @@ func (v *blockValidator) checkParentHeadersExist(stagingArea *model.StagingArea,
 			}
 
 			missingParentHashes = append(missingParentHashes, parent)
-			continue
 		}
 	}
 
