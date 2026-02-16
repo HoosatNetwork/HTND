@@ -3,6 +3,7 @@ package consensus
 import (
 	"math/big"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
@@ -158,15 +159,15 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 	// Start goroutine to display cache sizes every minute
 	if os.Getenv("HTND_PROFILER") != "" {
 		go s.displayCacheSizes()
+		go s.displayMemUse()
 	}
 
-	// go s.PeriodicFreeOSMemory()
+	// go s.periodicFreeOSMemory()
 
 	return nil
 }
 
-func (s *consensus) PeriodicFreeOSMemory() error {
-
+func (s *consensus) periodicFreeOSMemory() error {
 	minutes := 90
 	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
 	if htnd_gc_timer_argument != "" {
@@ -221,6 +222,21 @@ func (s *consensus) displayCacheSizes() {
 		log.Infof("GHOSTDAGDataStore[x] cache size sum: %d", cacheLen)
 		log.Infof("PruningStore cache size: %d", s.pruningStore.CacheLen())
 		log.Infof("WindowHeapSliceStore cache size: %d", s.windowHeapSliceStore.CacheLen())
+	}
+}
+
+func (s *consensus) displayMemUse() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		log.Infof("Num Coroutines %d", runtime.NumGoroutine())
+		log.Infof("HeapAlloc: %d MB", m.HeapAlloc/1024/1024)
+		log.Infof("HeapSys:   %d MB", m.HeapSys/1024/1024)
+		log.Infof("Sys:       %d MB", m.Sys/1024/1024)
+		log.Infof("HeapReleased: %d MB", m.HeapReleased/1024/1024)
 	}
 }
 
