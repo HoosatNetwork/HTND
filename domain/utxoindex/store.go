@@ -293,17 +293,28 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 }
 
 func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	if uis.isAnythingStaged() {
-		return nil, errors.Errorf("cannot get utxo outpoint entry pairs while staging isn't empty")
-	}
+	// Deprecated: Use UTXOs or ForEachUTXO for allocation-efficient access.
+	return nil, errors.New("getUTXOOutpointEntryPairs is deprecated; use UTXOs or ForEachUTXO")
+}
 
+// UTXOPair is a struct for streaming UTXO results efficiently
+type UTXOPair struct {
+	Outpoint externalapi.DomainOutpoint
+	Entry    externalapi.UTXOEntry
+}
+
+// UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXOPair, error) {
+	if uis.isAnythingStaged() {
+		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+	}
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close()
-	utxoOutpointEntryPairs := make(UTXOOutpointEntryPairs)
+	var pairs []UTXOPair
 	for cursor.Next() {
 		key, err := cursor.Key()
 		if err != nil {
@@ -321,9 +332,44 @@ func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalap
 		if err != nil {
 			return nil, err
 		}
-		utxoOutpointEntryPairs[*outpoint] = utxoEntry
+		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
 	}
-	return utxoOutpointEntryPairs, nil
+	return pairs, nil
+}
+
+// ForEachUTXO provides an iterator-style API for advanced streaming
+func (uis *utxoIndexStore) ForEachUTXO(scriptPublicKey *externalapi.ScriptPublicKey, fn func(outpoint externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error) error {
+	if uis.isAnythingStaged() {
+		return errors.Errorf("cannot iterate UTXOs while staging isn't empty")
+	}
+	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
+	cursor, err := uis.database.Cursor(bucket)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close()
+	for cursor.Next() {
+		key, err := cursor.Key()
+		if err != nil {
+			return err
+		}
+		outpoint, err := uis.convertKeyToOutpoint(key)
+		if err != nil {
+			return err
+		}
+		serializedUTXOEntry, err := cursor.Value()
+		if err != nil {
+			return err
+		}
+		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		if err != nil {
+			return err
+		}
+		if err := fn(*outpoint, utxoEntry); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (uis *utxoIndexStore) getVirtualParents() ([]*externalapi.DomainHash, error) {
