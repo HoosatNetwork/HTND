@@ -13,44 +13,40 @@ import (
 
 // ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries converts
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
-func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs utxoindex.UTXOOutpointEntryPairs) []*appmessage.UTXOsByAddressesEntry {
-	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(pairs))
+func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs []utxoindex.UTXOPair) []*appmessage.UTXOsByAddressesEntry {
+	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
 
 	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
 	var scriptHex string
 	var scriptVersion uint16
-	for _, utxoEntry := range pairs {
-		scriptHex = hex.EncodeToString(utxoEntry.ScriptPublicKey().Script)
-		scriptVersion = utxoEntry.ScriptPublicKey().Version
-		break
+	if len(pairs) > 0 {
+		scriptHex = hex.EncodeToString(pairs[0].Entry.ScriptPublicKey().Script)
+		scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
 	}
 
-	for outpoint, utxoEntry := range pairs {
-		// IMPORTANT: do NOT use sync.Pool for objects that you store in the returned slice.
-		// Each returned entry must have its own RPCUTXOEntry instance.
+	for i, pair := range pairs {
 		entry := &appmessage.RPCUTXOEntry{
-			Amount: utxoEntry.Amount(),
+			Amount: pair.Entry.Amount(),
 			ScriptPublicKey: &appmessage.RPCScriptPublicKey{
 				Script:  scriptHex,
 				Version: scriptVersion,
 			},
-			BlockDAAScore: utxoEntry.BlockDAAScore(),
-			IsCoinbase:    utxoEntry.IsCoinbase(),
+			BlockDAAScore: pair.Entry.BlockDAAScore(),
+			IsCoinbase:    pair.Entry.IsCoinbase(),
 		}
 
-		utxosByAddressesEntries = append(utxosByAddressesEntries, &appmessage.UTXOsByAddressesEntry{
+		utxosByAddressesEntries[i] = &appmessage.UTXOsByAddressesEntry{
 			Address: address,
 			Outpoint: &appmessage.RPCOutpoint{
-				TransactionID: outpoint.TransactionID.String(),
-				Index:         outpoint.Index,
+				TransactionID: pair.Outpoint.TransactionID.String(),
+				Index:         pair.Outpoint.Index,
 			},
 			UTXOEntry: entry,
-		})
+		}
 	}
 
 	return utxosByAddressesEntries
 }
-
 
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings
 // to UTXOsChangedNotificationAddresses
