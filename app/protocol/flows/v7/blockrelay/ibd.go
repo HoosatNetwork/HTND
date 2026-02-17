@@ -730,13 +730,13 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
 			if !ok {
 				log.Errorf("Received unexpected message type. expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
-				return protocolerrors.Errorf(true, "received unexpected message type. "+
+				return protocolerrors.Errorf(false, "received unexpected message type. "+
 					"expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
 			}
 
 			if msgIBDBlock.MsgBlock == nil {
 				log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", i)
-				return protocolerrors.Errorf(true, "received nil MsgBlock in MsgIBDBlock at index %d", i)
+				return protocolerrors.Errorf(false, "received nil MsgBlock in MsgIBDBlock at index %d", i)
 			}
 
 			block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
@@ -748,7 +748,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			blockHash := consensushashing.BlockHash(block)
 			if blockHash == nil {
 				log.Errorf("BlockHash returned nil for block at index %d", i)
-				return protocolerrors.Errorf(true, "BlockHash returned nil for block at index %d", i)
+				return protocolerrors.Errorf(false, "BlockHash returned nil for block at index %d", i)
 			}
 
 			receivedBlocks[*blockHash] = block
