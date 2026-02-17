@@ -260,7 +260,11 @@ func (c *scriptLRUCache) evict() {
 	delete(c.items, key)
 }
 
-// copyUTXOPairs creates a deep copy of UTXOPair slice to prevent mutation
+// copyUTXOPairs creates a copy of UTXOPair slice to prevent slice mutation.
+// Note: This performs a shallow copy of the slice structure. The individual
+// UTXOPair elements are copied by value, but nested pointers (e.g., UTXOEntry
+// interface implementations) are shared. This is safe because UTXOEntry
+// implementations are treated as immutable in the codebase.
 func copyUTXOPairs(pairs []UTXOPair) []UTXOPair {
 	if pairs == nil {
 		return nil

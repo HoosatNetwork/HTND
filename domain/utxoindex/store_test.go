@@ -223,15 +223,18 @@ func TestCopyUTXOPairs(t *testing.T) {
 
 	copied := copyUTXOPairs(original)
 
-	// Verify it's a different slice
+	// Verify it's a different slice (not the same underlying array)
+	// Note: The UTXOPair elements themselves are copied by value,
+	// but nested pointers (like UTXOEntry interface) are shared.
+	// This is intentional and safe since UTXOEntry is immutable.
 	if &original[0] == &copied[0] {
 		t.Error("Copy should create a new slice, not reference the same one")
 	}
 
-	// Modify original
+	// Modify original slice's outpoint
 	original[0].Outpoint.Index = 999
 
-	// Verify copy is unchanged
+	// Verify copy is unchanged (slice was copied, so this element is independent)
 	if copied[0].Outpoint.Index != 0 {
 		t.Error("Copy was affected by changes to original")
 	}
