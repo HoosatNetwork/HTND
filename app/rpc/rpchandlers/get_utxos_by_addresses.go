@@ -4,6 +4,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
+	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 )
@@ -18,8 +19,9 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 
 	getUTXOsByAddressesRequest := request.(*appmessage.GetUTXOsByAddressesRequestMessage)
 
-	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0)
-	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
+	total := 0
+	utxoPairsByAddress := make([][]utxoindex.UTXOPair, len(getUTXOsByAddressesRequest.Addresses))
+	for i, addressString := range getUTXOsByAddressesRequest.Addresses {
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
@@ -36,7 +38,13 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		if err != nil {
 			return nil, err
 		}
-		entries := rpccontext.ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(addressString, utxoOutpointEntryPairs)
+		utxoPairsByAddress[i] = utxoOutpointEntryPairs
+		total += len(utxoOutpointEntryPairs)
+	}
+
+	allEntries := make([]*appmessage.UTXOsByAddressesEntry, total)
+	for i, addressString := range getUTXOsByAddressesRequest.Addresses {
+		entries := rpccontext.ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(addressString, utxoPairsByAddress[i])
 		allEntries = append(allEntries, entries...)
 	}
 
