@@ -23,7 +23,7 @@ func NewUTXOEntry(
 	return &utxoEntry{
 		amount: amount,
 		scriptPublicKey: &externalapi.ScriptPublicKey{
-			Script:  slices.Clone(scriptPubKey.Script),
+			Script:  scriptPubKey.Script,
 			Version: scriptPubKey.Version,
 		},
 		blockDAAScore: blockDAAScore,
