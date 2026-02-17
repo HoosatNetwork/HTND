@@ -21,14 +21,114 @@ type utxoIndexStore struct {
 	toRemove map[ScriptPublicKeyString]UTXOOutpointEntryPairs
 
 	virtualParents []*externalapi.DomainHash
+	utxoCache      *utxoLRUCache
+	maxCacheSize   int
 }
 
 func newUTXOIndexStore(database database.Database) *utxoIndexStore {
+	// Default cache size, can be made configurable
+	const defaultCacheSize = 10000
 	return &utxoIndexStore{
-		database: database,
-		toAdd:    make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
-		toRemove: make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		database:     database,
+		toAdd:        make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		toRemove:     make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		utxoCache:    newUtxoLRUCache(defaultCacheSize),
+		maxCacheSize: defaultCacheSize,
 	}
+}
+
+// utxoLRUCache is a minimal LRU cache for DomainOutpoint -> UTXOEntry
+type utxoLRUCache struct {
+	maxSize    int
+	items      map[externalapi.DomainOutpoint]*utxoLRUNode
+	head, tail *utxoLRUNode
+}
+
+type utxoLRUNode struct {
+	key        externalapi.DomainOutpoint
+	value      externalapi.UTXOEntry
+	prev, next *utxoLRUNode
+}
+
+func newUtxoLRUCache(maxSize int) *utxoLRUCache {
+	return &utxoLRUCache{
+		maxSize: maxSize,
+		items:   make(map[externalapi.DomainOutpoint]*utxoLRUNode),
+	}
+}
+
+func (c *utxoLRUCache) Get(key externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
+	node, ok := c.items[key]
+	if !ok {
+		return nil, false
+	}
+	c.moveToFront(node)
+	return node.value, true
+}
+
+func (c *utxoLRUCache) Put(key externalapi.DomainOutpoint, value externalapi.UTXOEntry) {
+	if node, ok := c.items[key]; ok {
+		node.value = value
+		c.moveToFront(node)
+		return
+	}
+	node := &utxoLRUNode{key: key, value: value}
+	c.items[key] = node
+	c.addToFront(node)
+	if len(c.items) > c.maxSize {
+		c.evict()
+	}
+}
+
+func (c *utxoLRUCache) Delete(key externalapi.DomainOutpoint) {
+	node, ok := c.items[key]
+	if !ok {
+		return
+	}
+	c.remove(node)
+	delete(c.items, key)
+}
+
+func (c *utxoLRUCache) moveToFront(node *utxoLRUNode) {
+	if c.head == node {
+		return
+	}
+	c.remove(node)
+	c.addToFront(node)
+}
+
+func (c *utxoLRUCache) addToFront(node *utxoLRUNode) {
+	node.prev = nil
+	node.next = c.head
+	if c.head != nil {
+		c.head.prev = node
+	}
+	c.head = node
+	if c.tail == nil {
+		c.tail = node
+	}
+}
+
+func (c *utxoLRUCache) remove(node *utxoLRUNode) {
+	if node.prev != nil {
+		node.prev.next = node.next
+	} else {
+		c.head = node.next
+	}
+	if node.next != nil {
+		node.next.prev = node.prev
+	} else {
+		c.tail = node.prev
+	}
+}
+
+func (c *utxoLRUCache) evict() {
+	if c.tail == nil {
+		return
+	}
+	key := c.tail.key
+	c.remove(c.tail)
+	delete(c.items, key)
 }
 
 func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
@@ -58,8 +158,9 @@ func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, out
 	if _, ok := toAddPairsOfKey[*outpoint]; ok {
 		return errors.Errorf("cannot add outpoint %s because it's being added already", outpoint)
 	}
-
 	toAddPairsOfKey[*outpoint] = utxoEntry
+	// Update cache
+	uis.utxoCache.Put(*outpoint, utxoEntry)
 
 	log.Tracef("Added outpoint %s:%d to scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -77,6 +178,8 @@ func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, 
 			log.Tracef("Outpoint %s:%d exists in `toAdd`. Deleting it from there",
 				outpoint.TransactionID, outpoint.Index)
 			delete(toAddPairsOfKey, *outpoint)
+			// Remove from cache if present
+			uis.utxoCache.Delete(*outpoint)
 			return nil
 		}
 	}
@@ -94,6 +197,8 @@ func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, 
 	}
 
 	toRemovePairsOfKey[*outpoint] = utxoEntry
+	// Remove from cache if present
+	uis.utxoCache.Delete(*outpoint)
 
 	log.Tracef("Removed outpoint %s:%d from scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -108,6 +213,8 @@ func (uis *utxoIndexStore) discard() {
 	uis.toAdd = make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs)
 	uis.toRemove = make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs)
 	uis.virtualParents = nil
+	// Optionally clear cache if you want to invalidate all
+	// uis.utxoCache = make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry)
 }
 
 func (uis *utxoIndexStore) commit() error {
@@ -135,6 +242,8 @@ func (uis *utxoIndexStore) commit() error {
 				return err
 			}
 			toRemoveSompiSupply = toRemoveSompiSupply + utxoEntryToRemove.Amount()
+			// Remove from cache
+			uis.utxoCache.Delete(outpointToRemove)
 		}
 	}
 
@@ -157,6 +266,8 @@ func (uis *utxoIndexStore) commit() error {
 				return err
 			}
 			toAddSompiSupply = toAddSompiSupply + utxoEntryToAdd.Amount()
+			// Update cache
+			uis.utxoCache.Put(outpointToAdd, utxoEntryToAdd)
 		}
 	}
 
@@ -332,6 +443,11 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 		if err != nil {
 			return nil, err
 		}
+		// Try cache first
+		if entry, ok := uis.utxoCache.Get(*outpoint); ok {
+			pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: entry})
+			continue
+		}
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
 			return nil, err
@@ -340,6 +456,8 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 		if err != nil {
 			return nil, err
 		}
+		// Populate cache for future
+		uis.utxoCache.Put(*outpoint, utxoEntry)
 		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
 	}
 	return pairs, nil
