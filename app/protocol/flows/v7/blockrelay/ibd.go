@@ -742,7 +742,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
 			if block == nil {
 				log.Errorf("MsgBlockToDomainBlock returned nil at index %d", i)
-				return protocolerrors.Errorf(true, "MsgBlockToDomainBlock returned nil at index %d", i)
+				return protocolerrors.Errorf(false, "MsgBlockToDomainBlock returned nil at index %d", i)
 			}
 
 			blockHash := consensushashing.BlockHash(block)
