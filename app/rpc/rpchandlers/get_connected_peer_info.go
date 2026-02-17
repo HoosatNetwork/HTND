@@ -10,8 +10,8 @@ import (
 func HandleGetConnectedPeerInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.Message) (appmessage.Message, error) {
 	peers := context.ProtocolManager.Peers()
 	ibdPeer := context.ProtocolManager.IBDPeer()
-	infos := make([]*appmessage.GetConnectedPeerInfoMessage, len(peers))
-	for i, peer := range peers {
+	infos := make([]*appmessage.GetConnectedPeerInfoMessage, 0, len(peers))
+	for _, peer := range peers {
 		info := &appmessage.GetConnectedPeerInfoMessage{
 			ID:                        peer.ID().String(),
 			Address:                   peer.Address(),
@@ -23,7 +23,7 @@ func HandleGetConnectedPeerInfo(context *rpccontext.Context, _ *router.Router, _
 			TimeConnected:             peer.TimeConnected().Milliseconds(),
 			IsIBDPeer:                 peer == ibdPeer,
 		}
-		infos[i] = info
+		infos = append(infos, info)
 	}
 	response := appmessage.NewGetConnectedPeerInfoResponseMessage(infos)
 	return response, nil

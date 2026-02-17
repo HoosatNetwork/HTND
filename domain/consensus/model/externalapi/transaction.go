@@ -39,26 +39,27 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 		outputsClone[i] = output.Clone()
 	}
 
-	// If Payload is not mutated, just assign it
-	payloadClone := tx.Payload
+	var payloadClone []byte
+	if len(tx.Payload) > 0 {
+		payloadClone = append([]byte(nil), tx.Payload...)
+	}
 
-	// If SubnetworkID is not mutated, just assign it
-	subnetworkID := tx.SubnetworkID
-
-	// If ID is not mutated, just assign it
-	id := tx.ID
+	var idClone *DomainTransactionID
+	if tx.ID != nil {
+		idClone = tx.ID.Clone()
+	}
 
 	return &DomainTransaction{
 		Version:      tx.Version,
 		Inputs:       inputsClone,
 		Outputs:      outputsClone,
 		LockTime:     tx.LockTime,
-		SubnetworkID: subnetworkID,
+		SubnetworkID: *tx.SubnetworkID.Clone(),
 		Gas:          tx.Gas,
 		Payload:      payloadClone,
 		Fee:          tx.Fee,
 		Mass:         tx.Mass,
-		ID:           id,
+		ID:           idClone,
 	}
 }
 

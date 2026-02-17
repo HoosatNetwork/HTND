@@ -22,9 +22,9 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 		return nil, err
 	}
 
-	window := make([]*externalapi.DomainHash, len(windowHeap.impl.slice))
-	for i, b := range windowHeap.impl.slice {
-		window[i] = b.Hash
+	window := make([]*externalapi.DomainHash, 0, len(windowHeap.impl.slice))
+	for _, b := range windowHeap.impl.slice {
+		window = append(window, b.Hash)
 	}
 	return window, nil
 }

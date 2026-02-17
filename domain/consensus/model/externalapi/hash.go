@@ -34,9 +34,11 @@ func NewDomainHashFromByteSlice(hashBytes []byte) (*DomainHash, error) {
 		return nil, errors.Errorf("invalid hash size. Want: %d, got: %d",
 			DomainHashSize, len(hashBytes))
 	}
-	var arr [DomainHashSize]byte
-	copy(arr[:], hashBytes)
-	return &DomainHash{hashArray: arr}, nil
+	domainHash := DomainHash{
+		hashArray: [DomainHashSize]byte{},
+	}
+	copy(domainHash.hashArray[:], hashBytes)
+	return &domainHash, nil
 }
 
 // NewDomainHashFromString constructs a new DomainHash out of a hex-encoded string.
