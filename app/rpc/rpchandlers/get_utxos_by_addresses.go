@@ -1,6 +1,9 @@
 package rpchandlers
 
 import (
+	"sync"
+	"time"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
@@ -9,7 +12,15 @@ import (
 	"github.com/Hoosat-Oy/HTND/util"
 )
 
-// HandleGetUTXOsByAddresses handles the respectively named RPC command
+var (
+	utxosByAddressesCache = make(map[string]struct {
+		entries   []*appmessage.UTXOsByAddressesEntry
+		timestamp time.Time
+	})
+	utxosByAddressesCacheMutex sync.Mutex
+)
+
+// HandleGetUTXOsByAddresses handles the respectively named RPC command with 1-second cache
 func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	if !context.Config.UTXOIndex {
 		errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
@@ -18,6 +29,21 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	}
 
 	getUTXOsByAddressesRequest := request.(*appmessage.GetUTXOsByAddressesRequestMessage)
+
+	// Create a cache key based on addresses
+	cacheKey := ""
+	for _, addr := range getUTXOsByAddressesRequest.Addresses {
+		cacheKey += addr + ","
+	}
+
+	utxosByAddressesCacheMutex.Lock()
+	cached, found := utxosByAddressesCache[cacheKey]
+	if found && time.Since(cached.timestamp) < time.Second {
+		utxosByAddressesCacheMutex.Unlock()
+		response := appmessage.NewGetUTXOsByAddressesResponseMessage(cached.entries)
+		return response, nil
+	}
+	utxosByAddressesCacheMutex.Unlock()
 
 	total := 0
 	utxoPairsByAddress := make([][]utxoindex.UTXOPair, len(getUTXOsByAddressesRequest.Addresses))
@@ -42,11 +68,21 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		total += len(utxoOutpointEntryPairs)
 	}
 
-	allEntries := make([]*appmessage.UTXOsByAddressesEntry, total)
+	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, total)
 	for i, addressString := range getUTXOsByAddressesRequest.Addresses {
 		entries := rpccontext.ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(addressString, utxoPairsByAddress[i])
 		allEntries = append(allEntries, entries...)
 	}
+
+	utxosByAddressesCacheMutex.Lock()
+	utxosByAddressesCache[cacheKey] = struct {
+		entries   []*appmessage.UTXOsByAddressesEntry
+		timestamp time.Time
+	}{
+		entries:   allEntries,
+		timestamp: time.Now(),
+	}
+	utxosByAddressesCacheMutex.Unlock()
 
 	response := appmessage.NewGetUTXOsByAddressesResponseMessage(allEntries)
 	return response, nil
