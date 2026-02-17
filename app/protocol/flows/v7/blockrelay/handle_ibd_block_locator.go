@@ -61,7 +61,7 @@ func HandleIBDBlockLocator(context HandleIBDBlockLocatorContext, incomingRoute *
 				continue
 			}
 
-			if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
+			if block.PoWHash == nil && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 				continue
 			}
 

@@ -37,11 +37,9 @@ func TestBlockStoreRoundTripCountDeleteAndIterator(t *testing.T) {
 	)
 
 	blockHash1 := testutils.Hash(1)
-	block1 := &externalapi.DomainBlock{Header: hdr, Transactions: []*externalapi.DomainTransaction{}, PoWHash: "pow1"}
-
+	block1 := &externalapi.DomainBlock{Header: hdr, Transactions: []*externalapi.DomainTransaction{}, PoWHash: nil}
 	blockHash2 := testutils.Hash(2)
-	block2 := &externalapi.DomainBlock{Header: hdr, Transactions: []*externalapi.DomainTransaction{}, PoWHash: "pow2"}
-
+	block2 := &externalapi.DomainBlock{Header: hdr, Transactions: []*externalapi.DomainTransaction{}, PoWHash: nil}
 	stagingArea := model.NewStagingArea()
 	store.Stage(stagingArea, blockHash1, block1)
 	store.Stage(stagingArea, blockHash2, block2)

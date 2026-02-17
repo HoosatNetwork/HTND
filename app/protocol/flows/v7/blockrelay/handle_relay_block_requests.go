@@ -43,7 +43,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 					return
 				}
 
-				if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
+				if block.PoWHash == nil && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 					for range 5 {
 						block, found, err = context.Domain().Consensus().GetBlock(hash)
 						if err != nil {
@@ -54,15 +54,15 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 							log.Warnf("Relay block %s not found on retry", hash)
 							return
 						}
-						if block.PoWHash != "" {
+						if block.PoWHash != nil {
 							break
 						}
 						time.Sleep(getBlockRetryInterval * time.Duration(i+1))
 					}
-					if block.PoWHash == "" {
+					if block.PoWHash == nil {
 						state := pow.NewState(block.Header.ToMutable())
 						_, powHash := state.CalculateProofOfWorkValue()
-						block.PoWHash = powHash.String()
+						block.PoWHash = powHash
 					}
 				}
 				log.Debugf("Relaying block %s to peer %s", hash, peer.Address())

@@ -191,7 +191,7 @@ func mineOnTips(client *rpc.Client) (appmessage.RejectReason, error) {
 		return appmessage.RejectReasonNone, err
 	}
 
-	domainBlock, err := appmessage.RPCBlockToDomainBlock(template.Block, "MINE_TIPS_POW_HASH")
+	domainBlock, err := appmessage.RPCBlockToDomainBlock(template.Block, nil)
 	if err != nil {
 		return appmessage.RejectReasonNone, err
 	}

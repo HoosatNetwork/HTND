@@ -131,11 +131,15 @@ func checkNodeSyncStatus(context *rpccontext.Context) error {
 
 // convertAndValidateBlock converts RPC block to domain block and validates it
 func convertAndValidateBlock(req *appmessage.SubmitBlockRequestMessage) (*externalapi.DomainBlock, error) {
-	domainBlock, err := appmessage.RPCBlockToDomainBlock(req.Block, stripHexPrefix(req.PowHash))
+	powHash, err := externalapi.NewDomainHashFromString(stripHexPrefix(req.PowHash))
+	if err != nil {
+		return nil, fmt.Errorf("invalid PoW hash")
+	}
+	domainBlock, err := appmessage.RPCBlockToDomainBlock(req.Block, powHash)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse block: %w", err)
 	}
-	if domainBlock.PoWHash == "" {
+	if domainBlock.PoWHash == nil {
 		return nil, fmt.Errorf("invalid PoW hash")
 	}
 	return domainBlock, nil

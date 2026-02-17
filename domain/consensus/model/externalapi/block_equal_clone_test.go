@@ -98,7 +98,10 @@ func initTestTwoTransactions() []*externalapi.DomainTransaction {
 }
 
 func initTestBlockStructsForClone() []*externalapi.DomainBlock {
-	powHash := "TEST_CLONE"
+	powHash, err := externalapi.NewDomainHashFromString("TEST_CLONE")
+	if err != nil {
+		return nil
+	}
 	tests := []*externalapi.DomainBlock{
 		{
 			blockheader.NewImmutableBlockHeader(
@@ -141,7 +144,10 @@ func initTestBlockStructsForClone() []*externalapi.DomainBlock {
 }
 
 func initTestBlockStructsForEqual() *[]TestBlockStruct {
-	powHash := "TEST_CLONE"
+	powHash, err := externalapi.NewDomainHashFromString("TEST_CLONE")
+	if err != nil {
+		return nil
+	}
 	tests := []TestBlockStruct{
 		{
 			baseBlock: nil,

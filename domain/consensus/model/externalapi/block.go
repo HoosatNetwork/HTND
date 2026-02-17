@@ -1,12 +1,14 @@
 package externalapi
 
-import "math/big"
+import (
+	"math/big"
+)
 
 // DomainBlock represents a Hoosat block
 type DomainBlock struct {
 	Header       BlockHeader
 	Transactions []*DomainTransaction
-	PoWHash      string
+	PoWHash      *DomainHash
 }
 
 // Clone returns a clone of DomainBlock
@@ -25,7 +27,7 @@ func (block *DomainBlock) Clone() *DomainBlock {
 
 // If this doesn't compile, it means the type definition has been changed, so it's
 // an indication to update Equal and Clone accordingly.
-var _ = DomainBlock{nil, []*DomainTransaction{}, ""}
+var _ = DomainBlock{nil, []*DomainTransaction{}, nil}
 
 // Equal returns whether block equals to other
 func (block *DomainBlock) Equal(other *DomainBlock) bool {

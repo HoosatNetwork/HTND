@@ -36,7 +36,7 @@ func TestIntegrationBasicSync(t *testing.T) {
 	case <-time.After(defaultTimeout):
 		t.Fatalf("Timeout waiting for block added notification on node directly connected to miner")
 	}
-	domainBlockFromRPC, err := appmessage.RPCBlockToDomainBlock(rpcBlock, "")
+	domainBlockFromRPC, err := appmessage.RPCBlockToDomainBlock(rpcBlock, nil)
 	if err != nil {
 		t.Fatalf("Could not convert RPC block: %s", err)
 	}
@@ -52,7 +52,7 @@ func TestIntegrationBasicSync(t *testing.T) {
 	case <-time.After(defaultTimeout):
 		t.Fatalf("Timeout waiting for block added notification on node indirectly connected to miner")
 	}
-	domainBlockFromRPC, err = appmessage.RPCBlockToDomainBlock(rpcBlock, "")
+	domainBlockFromRPC, err = appmessage.RPCBlockToDomainBlock(rpcBlock, nil)
 	if err != nil {
 		t.Fatalf("Could not convert RPC block: %s", err)
 	}
