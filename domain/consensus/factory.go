@@ -688,7 +688,7 @@ func dagStores(config *Config,
 	for i := 0; i <= config.MaxBlockLevel; i++ {
 		prefixBucket := prefixBucket.Bucket([]byte{byte(i)})
 		if i == 0 {
-			blockRelationStores[i] = blockrelationstore.New(prefixBucket, 200, preallocateCaches)
+			blockRelationStores[i] = blockrelationstore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache, preallocateCaches)
 			reachabilityDataStores[i] = reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
 			ghostdagDataStores[i] = ghostdagdatastore.New(prefixBucket, ghostdagDataCacheSize, preallocateCaches)
 		} else {
