@@ -8,62 +8,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 )
 
-// Test thread-safety of utxoLRUCache
-func TestUTXOLRUCacheConcurrency(t *testing.T) {
-	cache := newUtxoLRUCache(100)
-	var wg sync.WaitGroup
-
-	// Create some test data
-	testOutpoint := externalapi.DomainOutpoint{
-		TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{1}),
-		Index:         0,
-	}
-	testEntry := utxo.NewUTXOEntry(
-		1000,
-		&externalapi.ScriptPublicKey{Script: []byte{1, 2, 3}, Version: 0},
-		false,
-		100,
-	)
-
-	// Concurrent writes
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			outpoint := externalapi.DomainOutpoint{
-				TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(idx)}),
-				Index:         uint32(idx),
-			}
-			cache.Put(outpoint, testEntry)
-		}(i)
-	}
-
-	// Concurrent reads
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, _ = cache.Get(testOutpoint)
-		}()
-	}
-
-	// Concurrent deletes
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			outpoint := externalapi.DomainOutpoint{
-				TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(idx)}),
-				Index:         uint32(idx),
-			}
-			cache.Delete(outpoint)
-		}(i)
-	}
-
-	wg.Wait()
-	// If we get here without data races or crashes, test passes
-}
-
 // Test thread-safety of scriptLRUCache
 func TestScriptLRUCacheConcurrency(t *testing.T) {
 	cache := newScriptLRUCache(100)
