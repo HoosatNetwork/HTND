@@ -1,6 +1,9 @@
 package rpchandlers
 
 import (
+	"sync"
+	"time"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
@@ -9,15 +12,33 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	balanceByAddressCache = make(map[string]struct {
+		balance   uint64
+		timestamp time.Time
+	})
+	balanceByAddressCacheMutex sync.Mutex
+)
+
 // HandleGetBalanceByAddress handles the respectively named RPC command
 func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	if !context.Config.UTXOIndex {
-		errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
+		errorMessage := &appmessage.GetBalanceByAddressResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Method unavailable when htnd is run without --utxoindex")
 		return errorMessage, nil
 	}
-
 	getBalanceByAddressRequest := request.(*appmessage.GetBalanceByAddressRequestMessage)
+
+	cacheKey := getBalanceByAddressRequest.Address
+
+	balanceByAddressCacheMutex.Lock()
+	cached, found := balanceByAddressCache[cacheKey]
+	if found && time.Since(cached.timestamp) < time.Second {
+		balanceByAddressCacheMutex.Unlock()
+		response := appmessage.NewGetBalanceByAddressResponse(cached.balance)
+		return response, nil
+	}
+	balanceByAddressCacheMutex.Unlock()
 
 	balance, err := getBalanceByAddress(context, getBalanceByAddressRequest.Address)
 	if err != nil {
@@ -25,11 +46,19 @@ func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, re
 		if !errors.As(err, &rpcError) {
 			return nil, err
 		}
-		errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
+		errorMessage := &appmessage.GetBalanceByAddressResponseMessage{}
 		errorMessage.Error = rpcError
 		return errorMessage, nil
 	}
-
+	balanceByAddressCacheMutex.Lock()
+	balanceByAddressCache[cacheKey] = struct {
+		balance   uint64
+		timestamp time.Time
+	}{
+		balance:   balance,
+		timestamp: time.Now(),
+	}
+	balanceByAddressCacheMutex.Unlock()
 	response := appmessage.NewGetBalanceByAddressResponse(balance)
 	return response, nil
 }
