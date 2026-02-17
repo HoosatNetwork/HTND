@@ -563,7 +563,7 @@ func (flow *handleIBDFlow) processHeader(consensus externalapi.Consensus, msgBlo
 	block := &externalapi.DomainBlock{
 		Header:       header,
 		Transactions: nil,
-		PoWHash:      nil,
+		PoWHash:      "",
 	}
 	blockHash := consensushashing.BlockHash(block)
 	blockInfo, err := consensus.GetBlockInfo(blockHash)

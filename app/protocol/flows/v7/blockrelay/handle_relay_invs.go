@@ -206,7 +206,7 @@ func (flow *handleRelayInvsFlow) start() error {
 			log.Debugf("Aborting requesting block %s because it already exists", inv.Hash)
 			continue
 		}
-		if block.PoWHash == nil && block.Header.Version() >= constants.BanMinVersion {
+		if block.PoWHash == "" && block.Header.Version() >= constants.BanMinVersion {
 			flow.banConnection(false)
 		}
 		if !flow.IsIBDRunning() {
@@ -323,7 +323,7 @@ func (flow *handleRelayInvsFlow) start() error {
 			if !found {
 				return protocolerrors.Errorf(false, "Virtual parent %s not found", parent)
 			}
-			if block.PoWHash != nil {
+			if block.PoWHash != "" {
 				blockHash := consensushashing.BlockHash(block)
 				log.Debugf("Relaying block %s", blockHash)
 				err = flow.relayBlock(block)
@@ -442,7 +442,7 @@ func (flow *handleRelayInvsFlow) processBlock(hash *externalapi.DomainHash, bloc
 }
 
 func (flow *handleRelayInvsFlow) relayBlock(block *externalapi.DomainBlock) error {
-	if block.PoWHash == nil && block.Header.Version() >= constants.PoWIntegrityMinVersion {
+	if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 		return nil
 	}
 	blockHash := consensushashing.BlockHash(block)
@@ -463,7 +463,7 @@ func (flow *handleRelayInvsFlow) processOrphan(block *externalapi.DomainBlock) e
 		return nil
 	}
 
-	if block.PoWHash == nil && block.Header.Version() >= constants.PoWIntegrityMinVersion {
+	if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 		log.Debugf("Skipping orphan processing for block %s because it is missing pow hash", blockHash)
 		return nil
 	}

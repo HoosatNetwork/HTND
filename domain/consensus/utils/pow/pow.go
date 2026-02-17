@@ -189,8 +189,12 @@ func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip boo
 	} else if powSkip && state.BlockVersion >= constants.PoWIntegrityMinVersion {
 		return powNum.Cmp(&state.Target) <= 0
 	} else if state.BlockVersion >= constants.PoWIntegrityMinVersion {
-		if !block.PoWHash.Equal(new(externalapi.DomainHash)) {
-			submittedPowNum := toBig(block.PoWHash)
+		powHash, err := externalapi.NewDomainHashFromString(block.PoWHash)
+		if err != nil {
+			return false
+		}
+		if !powHash.Equal(new(externalapi.DomainHash)) {
+			submittedPowNum := toBig(powHash)
 			if submittedPowNum.Cmp(powNum) == 0 {
 				return powNum.Cmp(&state.Target) <= 0
 			}

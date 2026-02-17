@@ -28,7 +28,7 @@ func Get() (*externalapi.DomainBlock, *pow.State, bool) {
 
 // Set sets the current template to work on
 func Set(template *appmessage.GetBlockTemplateResponseMessage) error {
-	block, err := appmessage.RPCBlockToDomainBlock(template.Block, nil)
+	block, err := appmessage.RPCBlockToDomainBlock(template.Block, "TEMPLATE_POW_HASH")
 	if err != nil {
 		return err
 	}

@@ -160,7 +160,7 @@ func mineNextBlock(mineWhenNotSynced bool) *externalapi.DomainBlock {
 		if powNum.Cmp(&state.Target) <= 0 {
 			mutHeader := block.Header.ToMutable()
 			mutHeader.SetNonce(nonce)
-			block.PoWHash = hash
+			block.PoWHash = hash.String()
 			block.Header = mutHeader.ToImmutable()
 			// log.Infof("Found block %s\n with parents %s", consensushashing.BlockHash(block), block.Header.DirectParents())
 			return block

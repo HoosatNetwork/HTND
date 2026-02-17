@@ -245,12 +245,11 @@ func (spk *ScriptPublicKey) Equal(other *ScriptPublicKey) bool {
 
 // String stringifies a ScriptPublicKey.
 func (spk *ScriptPublicKey) String() string {
-	var buf bytes.Buffer
-	var versionBytes [2]byte
-	binary.LittleEndian.PutUint16(versionBytes[:], spk.Version)
-	buf.Write(versionBytes[:])
-	buf.Write(spk.Script)
-	return buf.String()
+	var versionBytes = make([]byte, 2) // uint16
+	binary.LittleEndian.PutUint16(versionBytes, spk.Version)
+	versionString := string(versionBytes)
+	scriptString := string(spk.Script)
+	return versionString + scriptString
 }
 
 // NewScriptPublicKeyFromString converts the given string to a scriptPublicKey

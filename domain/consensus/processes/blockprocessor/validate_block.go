@@ -54,10 +54,10 @@ func (bp *blockProcessor) validateBlock(stagingArea *model.StagingArea, block *e
 	}
 
 	// Before staging the block, confirm that the PoWHash is set.
-	if block.PoWHash == nil && block.Header.Version() >= constants.PoWIntegrityMinVersion {
+	if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 		state := pow.NewState(block.Header.ToMutable())
 		_, powHash := state.CalculateProofOfWorkValue()
-		block.PoWHash = powHash
+		block.PoWHash = powHash.String()
 	}
 
 	// Pow validation was success, lets stage the block or add the .

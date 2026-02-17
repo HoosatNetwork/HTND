@@ -153,6 +153,6 @@ func mineOrFetchBlock(blockData JSONBlock, mdb *miningDB, testConsensus testapi.
 var random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // SolveBlock increments the given block's nonce until it matches the difficulty requirements in its bits field
-func SolveBlock(block *externalapi.DomainBlock) (*big.Int, *externalapi.DomainHash) {
+func SolveBlock(block *externalapi.DomainBlock) (*big.Int, string) {
 	return mining.SolveBlock(block, random)
 }

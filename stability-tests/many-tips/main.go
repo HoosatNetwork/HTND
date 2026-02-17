@@ -69,7 +69,7 @@ func realMain() error {
 	if err != nil {
 		return err
 	}
-	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, nil)
+	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, "REAL_MAIN_POW_HASH")
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func mineBlock(rpcClient *rpc.Client, miningAddress util.Address) error {
 	if err != nil {
 		return err
 	}
-	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, nil)
+	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, "MINE_BLOCK_POW_HASH")
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func mineTips(numOfTips int, miningAddress util.Address, rpcClient *rpc.Client) 
 	if err != nil {
 		return err
 	}
-	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, nil)
+	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, "")
 	if err != nil {
 		return err
 	}

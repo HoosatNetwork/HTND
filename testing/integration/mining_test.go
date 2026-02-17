@@ -17,7 +17,7 @@ func mineNextBlock(t *testing.T, harness *appHarness) *externalapi.DomainBlock {
 		t.Fatalf("Error getting block template: %+v", err)
 	}
 
-	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, nil)
+	block, err := appmessage.RPCBlockToDomainBlock(blockTemplate.Block, "REAL_MAIN_POW_HASH")
 	if err != nil {
 		t.Fatalf("Error converting block: %s", err)
 	}
@@ -25,7 +25,7 @@ func mineNextBlock(t *testing.T, harness *appHarness) *externalapi.DomainBlock {
 	if harness.config.ActiveNetParams.SkipProofOfWork {
 		// PoW validation is disabled for integration tests, so avoid expensive nonce search.
 		_, powHash := pow.NewState(block.Header.ToMutable()).CalculateProofOfWorkValue()
-		block.PoWHash = powHash
+		block.PoWHash = powHash.String()
 	} else {
 		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 		_, powHash := mining.SolveBlock(block, rd)

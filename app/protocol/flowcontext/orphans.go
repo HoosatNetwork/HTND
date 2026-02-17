@@ -179,7 +179,7 @@ func (f *FlowContext) GetOrphanRoots(orphan *externalapi.DomainHash) ([]*externa
 				return nil, false, err
 			}
 
-			if !found || !(block.PoWHash == nil && block.Header.Version() >= constants.PoWIntegrityMinVersion) {
+			if !found || !(block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion) {
 				roots = append(roots, current)
 			} else {
 				log.Debugf("Block %s was skipped when checking for orphan roots: "+

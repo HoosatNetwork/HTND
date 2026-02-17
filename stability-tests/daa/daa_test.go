@@ -211,7 +211,7 @@ func runDAATest(t *testing.T, testName string, runDuration time.Duration,
 			if powNum.Cmp(&minerState.Target) <= 0 {
 				headerForMining.SetNonce(minerState.Nonce)
 				templateBlock.Header = headerForMining.ToImmutable()
-				templateBlock.PoWHash = powHash
+				templateBlock.PoWHash = powHash.String()
 				break
 			}
 
@@ -258,7 +258,7 @@ func fetchBlockForMining(t *testing.T, rpcClient *rpcclient.RPCClient) *external
 	if err != nil {
 		t.Fatalf("GetBlockTemplate: %s", err)
 	}
-	templateBlock, err := appmessage.RPCBlockToDomainBlock(getBlockTemplateResponse.Block, nil)
+	templateBlock, err := appmessage.RPCBlockToDomainBlock(getBlockTemplateResponse.Block, "FETCH_BLOCK_FOR_MINING_POW_HASH")
 	if err != nil {
 		t.Fatalf("RPCBlockToDomainBlock: %s", err)
 	}
