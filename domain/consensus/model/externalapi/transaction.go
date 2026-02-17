@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"slices"
 
 	"github.com/pkg/errors"
 )
@@ -28,14 +29,14 @@ type DomainTransaction struct {
 
 // Clone returns a clone of DomainTransaction
 func (tx *DomainTransaction) Clone() *DomainTransaction {
-	inputsClone := make([]*DomainTransactionInput, 0, len(tx.Inputs))
-	for _, input := range tx.Inputs {
-		inputsClone = append(inputsClone, input.Clone())
+	inputsClone := make([]*DomainTransactionInput, len(tx.Inputs))
+	for i, input := range tx.Inputs {
+		inputsClone[i] = input.Clone()
 	}
 
-	outputsClone := make([]*DomainTransactionOutput, 0, len(tx.Outputs))
-	for _, output := range tx.Outputs {
-		outputsClone = append(outputsClone, output.Clone())
+	outputsClone := make([]*DomainTransactionOutput, len(tx.Outputs))
+	for i, output := range tx.Outputs {
+		outputsClone[i] = output.Clone()
 	}
 
 	var payloadClone []byte
@@ -174,12 +175,9 @@ func (input *DomainTransactionInput) Equal(other *DomainTransactionInput) bool {
 
 // Clone returns a clone of DomainTransactionInput
 func (input *DomainTransactionInput) Clone() *DomainTransactionInput {
-	signatureScriptClone := make([]byte, len(input.SignatureScript))
-	copy(signatureScriptClone, input.SignatureScript)
-
 	return &DomainTransactionInput{
 		PreviousOutpoint: *input.PreviousOutpoint.Clone(),
-		SignatureScript:  signatureScriptClone,
+		SignatureScript:  slices.Clone(input.SignatureScript),
 		Sequence:         input.Sequence,
 		SigOpCount:       input.SigOpCount,
 		UTXOEntry:        input.UTXOEntry,
@@ -287,14 +285,12 @@ func (output *DomainTransactionOutput) Equal(other *DomainTransactionOutput) boo
 
 // Clone returns a clone of DomainTransactionOutput
 func (output *DomainTransactionOutput) Clone() *DomainTransactionOutput {
-	scriptPublicKeyClone := &ScriptPublicKey{
-		Script:  make([]byte, len(output.ScriptPublicKey.Script)),
-		Version: output.ScriptPublicKey.Version}
-	copy(scriptPublicKeyClone.Script, output.ScriptPublicKey.Script)
-
 	return &DomainTransactionOutput{
-		Value:           output.Value,
-		ScriptPublicKey: scriptPublicKeyClone,
+		Value: output.Value,
+		ScriptPublicKey: &ScriptPublicKey{
+			Script:  slices.Clone(output.ScriptPublicKey.Script),
+			Version: output.ScriptPublicKey.Version,
+		},
 	}
 }
 
