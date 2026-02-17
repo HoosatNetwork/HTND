@@ -271,3 +271,69 @@ func TestCacheClear(t *testing.T) {
 		t.Error("scriptCache should be empty after Clear()")
 	}
 }
+
+// Benchmark per-script cache hit performance
+func BenchmarkScriptCacheHit(b *testing.B) {
+	cache := newScriptLRUCache(10000)
+
+	// Populate cache with test data
+	pairs := make([]UTXOPair, 100)
+	for i := 0; i < 100; i++ {
+		pairs[i] = UTXOPair{
+			Outpoint: externalapi.DomainOutpoint{
+				TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i)}),
+				Index:         uint32(i),
+			},
+			Entry: utxo.NewUTXOEntry(
+				1000,
+				&externalapi.ScriptPublicKey{Script: []byte{1, 2, 3}, Version: 0},
+				false,
+				100,
+			),
+		}
+	}
+	cache.Put("test-key", pairs)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = cache.Get("test-key")
+	}
+}
+
+// Benchmark per-script cache miss performance
+func BenchmarkScriptCacheMiss(b *testing.B) {
+	cache := newScriptLRUCache(10000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = cache.Get("nonexistent-key")
+	}
+}
+
+// Benchmark per-script cache put performance
+func BenchmarkScriptCachePut(b *testing.B) {
+	cache := newScriptLRUCache(10000)
+
+	// Create test data
+	pairs := make([]UTXOPair, 100)
+	for i := 0; i < 100; i++ {
+		pairs[i] = UTXOPair{
+			Outpoint: externalapi.DomainOutpoint{
+				TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i)}),
+				Index:         uint32(i),
+			},
+			Entry: utxo.NewUTXOEntry(
+				1000,
+				&externalapi.ScriptPublicKey{Script: []byte{1, 2, 3}, Version: 0},
+				false,
+				100,
+			),
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		key := string([]byte{byte(i % 256)})
+		cache.Put(key, pairs)
+	}
+}
