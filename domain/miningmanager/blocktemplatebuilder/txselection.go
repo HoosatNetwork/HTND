@@ -59,9 +59,9 @@ type selectedTransactions struct {
 // See selectTxs for further details.
 func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx) selectedTransactions {
 	txsForBlockTemplate := selectedTransactions{
-		selectedTxs: make([]*consensusexternalapi.DomainTransaction, 0, len(candidateTxs)),
-		txMasses:    make([]uint64, 0, len(candidateTxs)),
-		txFees:      make([]uint64, 0, len(candidateTxs)),
+		selectedTxs: make([]*consensusexternalapi.DomainTransaction, len(candidateTxs)),
+		txMasses:    make([]uint64, len(candidateTxs)),
+		txFees:      make([]uint64, len(candidateTxs)),
 		totalMass:   0,
 		totalFees:   0,
 	}
@@ -163,9 +163,9 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 	}
 
 	for i := 0; i < len(selectedTxs); i++ {
-		txsForBlockTemplate.selectedTxs = append(txsForBlockTemplate.selectedTxs, selectedTxs[i].DomainTransaction)
-		txsForBlockTemplate.txMasses = append(txsForBlockTemplate.txMasses, selectedTxs[i].Mass)
-		txsForBlockTemplate.txFees = append(txsForBlockTemplate.txFees, selectedTxs[i].Fee)
+		txsForBlockTemplate.selectedTxs[i] = selectedTxs[i].DomainTransaction
+		txsForBlockTemplate.txMasses[i] = selectedTxs[i].Mass
+		txsForBlockTemplate.txFees[i] = selectedTxs[i].Fee
 	}
 	return txsForBlockTemplate
 }

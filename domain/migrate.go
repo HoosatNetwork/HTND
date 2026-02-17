@@ -89,8 +89,8 @@ func syncConsensuses(syncer, syncee externalapi.Consensus) error {
 
 		blockWithTrustedData := &externalapi.BlockWithTrustedData{
 			Block:        block,
-			DAAWindow:    make([]*externalapi.TrustedDataDataDAAHeader, 0, len(blockDAAWindowHashes)),
-			GHOSTDAGData: make([]*externalapi.BlockGHOSTDAGDataHashPair, 0, len(ghostdagDataBlockHashes)),
+			DAAWindow:    make([]*externalapi.TrustedDataDataDAAHeader, len(blockDAAWindowHashes)),
+			GHOSTDAGData: make([]*externalapi.BlockGHOSTDAGDataHashPair, len(ghostdagDataBlockHashes)),
 		}
 
 		for i, daaBlockHash := range blockDAAWindowHashes {
@@ -98,18 +98,18 @@ func syncConsensuses(syncer, syncee externalapi.Consensus) error {
 			if err != nil {
 				return err
 			}
-			blockWithTrustedData.DAAWindow = append(blockWithTrustedData.DAAWindow, trustedDataDataDAAHeader)
+			blockWithTrustedData.DAAWindow[i] = trustedDataDataDAAHeader
 		}
 
-		for _, ghostdagDataBlockHash := range ghostdagDataBlockHashes {
+		for i, ghostdagDataBlockHash := range ghostdagDataBlockHashes {
 			data, err := syncer.TrustedGHOSTDAGData(ghostdagDataBlockHash)
 			if err != nil {
 				return err
 			}
-			blockWithTrustedData.GHOSTDAGData = append(blockWithTrustedData.GHOSTDAGData, &externalapi.BlockGHOSTDAGDataHashPair{
+			blockWithTrustedData.GHOSTDAGData[i] = &externalapi.BlockGHOSTDAGDataHashPair{
 				Hash:         ghostdagDataBlockHash,
 				GHOSTDAGData: data,
-			})
+			}
 		}
 
 		err = syncee.ValidateAndInsertBlockWithTrustedData(blockWithTrustedData, false)

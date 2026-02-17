@@ -5,4 +5,4 @@
 package appmessage
 
 // MaxInvPerMsg is the maximum number of inventory vectors that can be in any type of hoosat inv message.
-const MaxInvPerMsg = 1 << 17
+const MaxInvPerMsg = 1 << 12

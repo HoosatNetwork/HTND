@@ -121,17 +121,17 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 	coinbaseData *consensusexternalapi.DomainCoinbaseData) (*consensusexternalapi.DomainBlockTemplate, error) {
 
 	mempoolTransactions := btb.mempool.BlockCandidateTransactions()
-	candidateTxs := make([]*candidateTx, 0, len(mempoolTransactions))
+	candidateTxs := make([]*candidateTx, len(mempoolTransactions))
 	for i := range mempoolTransactions {
 		gasLimit := uint64(0)
 		if !subnetworks.IsBuiltInOrNative(mempoolTransactions[i].SubnetworkID) {
 			panic("We currently don't support non native subnetworks")
 		}
-		candidateTxs = append(candidateTxs, &candidateTx{
+		candidateTxs[i] = &candidateTx{
 			DomainTransaction: mempoolTransactions[i],
 			txValue:           btb.calcTxValue(mempoolTransactions[i]),
 			gasLimit:          gasLimit,
-		})
+		}
 	}
 	if constants.GetBlockVersion() < 5 {
 		sort.Slice(candidateTxs, func(i, j int) bool {

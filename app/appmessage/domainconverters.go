@@ -18,9 +18,9 @@ import (
 
 // DomainBlockToMsgBlock converts an externalapi.DomainBlock to MsgBlock
 func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
-	msgTxs := make([]*MsgTx, 0, len(domainBlock.Transactions))
-	for _, domainTransaction := range domainBlock.Transactions {
-		msgTxs = append(msgTxs, DomainTransactionToMsgTx(domainTransaction))
+	msgTxs := make([]*MsgTx, len(domainBlock.Transactions))
+	for i, domainTransaction := range domainBlock.Transactions {
+		msgTxs[i] = DomainTransactionToMsgTx(domainTransaction)
 	}
 	return &MsgBlock{
 		Header:       *DomainBlockHeaderToBlockHeader(domainBlock.Header),
@@ -49,9 +49,9 @@ func DomainBlockHeaderToBlockHeader(domainBlockHeader externalapi.BlockHeader) *
 
 // MsgBlockToDomainBlock converts a MsgBlock to externalapi.DomainBlock
 func MsgBlockToDomainBlock(msgBlock *MsgBlock) *externalapi.DomainBlock {
-	transactions := make([]*externalapi.DomainTransaction, 0, len(msgBlock.Transactions))
-	for _, msgTx := range msgBlock.Transactions {
-		transactions = append(transactions, MsgTxToDomainTransaction(msgTx))
+	transactions := make([]*externalapi.DomainTransaction, len(msgBlock.Transactions))
+	for i, msgTx := range msgBlock.Transactions {
+		transactions[i] = MsgTxToDomainTransaction(msgTx)
 	}
 	return &externalapi.DomainBlock{
 		Header:       BlockHeaderToDomainBlockHeader(&msgBlock.Header),
@@ -80,14 +80,14 @@ func BlockHeaderToDomainBlockHeader(blockHeader *MsgBlockHeader) externalapi.Blo
 
 // DomainTransactionToMsgTx converts an externalapi.DomainTransaction into an MsgTx
 func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) *MsgTx {
-	txIns := make([]*TxIn, 0, len(domainTransaction.Inputs))
-	for _, input := range domainTransaction.Inputs {
-		txIns = append(txIns, domainTransactionInputToTxIn(input))
+	txIns := make([]*TxIn, len(domainTransaction.Inputs))
+	for i, input := range domainTransaction.Inputs {
+		txIns[i] = domainTransactionInputToTxIn(input)
 	}
 
-	txOuts := make([]*TxOut, 0, len(domainTransaction.Outputs))
-	for _, output := range domainTransaction.Outputs {
-		txOuts = append(txOuts, domainTransactionOutputToTxOut(output))
+	txOuts := make([]*TxOut, len(domainTransaction.Outputs))
+	for i, output := range domainTransaction.Outputs {
+		txOuts[i] = domainTransactionOutputToTxOut(output)
 	}
 
 	return &MsgTx{
@@ -125,14 +125,14 @@ func domainOutpointToOutpoint(domainOutpoint externalapi.DomainOutpoint) *Outpoi
 
 // MsgTxToDomainTransaction converts an MsgTx into externalapi.DomainTransaction
 func MsgTxToDomainTransaction(msgTx *MsgTx) *externalapi.DomainTransaction {
-	transactionInputs := make([]*externalapi.DomainTransactionInput, 0, len(msgTx.TxIn))
-	for _, txIn := range msgTx.TxIn {
-		transactionInputs = append(transactionInputs, txInToDomainTransactionInput(txIn))
+	transactionInputs := make([]*externalapi.DomainTransactionInput, len(msgTx.TxIn))
+	for i, txIn := range msgTx.TxIn {
+		transactionInputs[i] = txInToDomainTransactionInput(txIn)
 	}
 
-	transactionOutputs := make([]*externalapi.DomainTransactionOutput, 0, len(msgTx.TxOut))
-	for _, txOut := range msgTx.TxOut {
-		transactionOutputs = append(transactionOutputs, txOutToDomainTransactionOutput(txOut))
+	transactionOutputs := make([]*externalapi.DomainTransactionOutput, len(msgTx.TxOut))
+	for i, txOut := range msgTx.TxOut {
+		transactionOutputs[i] = txOutToDomainTransactionOutput(txOut)
 	}
 
 	return &externalapi.DomainTransaction{

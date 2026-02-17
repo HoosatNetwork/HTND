@@ -192,19 +192,18 @@ func (s *server) splitAndInputPerSplitCounts(transaction *serialization.Partiall
 func (s *server) createSplitTransaction(transaction *serialization.PartiallySignedTransaction,
 	changeAddress util.Address, startIndex int, endIndex int) (*serialization.PartiallySignedTransaction, error) {
 
-	selectedUTXOs := make([]*libhtnwallet.UTXO, 0, endIndex-startIndex)
+	selectedUTXOs := make([]*libhtnwallet.UTXO, endIndex-startIndex)
 	totalSompi := uint64(0)
 
 	for i := startIndex; i < endIndex && i < len(transaction.PartiallySignedInputs); i++ {
 		partiallySignedInput := transaction.PartiallySignedInputs[i]
-		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
+		selectedUTXOs[i] = &libhtnwallet.UTXO{
 			Outpoint: &transaction.Tx.Inputs[i].PreviousOutpoint,
 			UTXOEntry: utxo.NewUTXOEntry(
 				partiallySignedInput.PrevOutput.Value, partiallySignedInput.PrevOutput.ScriptPublicKey,
 				false, constants.UnacceptedDAAScore),
 			DerivationPath: partiallySignedInput.DerivationPath,
-		})
-
+		}
 		totalSompi += selectedUTXOs[i-startIndex].UTXOEntry.Amount()
 		totalSompi -= feePerInput
 	}

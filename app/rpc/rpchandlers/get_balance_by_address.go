@@ -50,8 +50,8 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string) (uin
 	}
 
 	balance := uint64(0)
-	for _, utxoOutpointEntryPair := range utxoOutpointEntryPairs {
-		balance += utxoOutpointEntryPair.Amount()
+	for _, pair := range utxoOutpointEntryPairs {
+		balance += pair.Entry.Amount()
 	}
 	return balance, nil
 }

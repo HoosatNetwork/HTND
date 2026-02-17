@@ -2144,13 +2144,13 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 		return scriptError(ErrTooManyOperations, str)
 	}
 
-	pubKeys := make([][]byte, 0, numPubKeys)
+	pubKeys := make([][]byte, numPubKeys)
 	for i := 0; i < numPubKeys; i++ {
 		pubKey, err := vm.dstack.PopByteArray()
 		if err != nil {
 			return err
 		}
-		pubKeys = append(pubKeys, pubKey)
+		pubKeys[i] = pubKey
 	}
 
 	numSigs, err := vm.dstack.PopInt()
@@ -2177,7 +2177,7 @@ func opcodeCheckMultiSig(op *parsedOpcode, vm *Engine) error {
 			return err
 		}
 		sigInfo := &parsedSigInfo{signature: signature}
-		signatures = append(signatures, sigInfo)
+		signatures[i] = sigInfo
 	}
 
 	success := true
@@ -2319,7 +2319,7 @@ func opcodeCheckMultiSigECDSA(op *parsedOpcode, vm *Engine) error {
 		if err != nil {
 			return err
 		}
-		pubKeys = append(pubKeys, pubKey)
+		pubKeys[i] = pubKey
 	}
 
 	numSigs, err := vm.dstack.PopInt()
@@ -2346,7 +2346,7 @@ func opcodeCheckMultiSigECDSA(op *parsedOpcode, vm *Engine) error {
 			return err
 		}
 		sigInfo := &parsedSigInfoECDSA{signature: signature}
-		signatures = append(signatures, sigInfo)
+		signatures[i] = sigInfo
 	}
 
 	success := true

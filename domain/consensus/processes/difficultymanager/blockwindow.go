@@ -55,30 +55,35 @@ func (dm *difficultyManager) blockWindow(
 	}
 
 	// Build the window from the batch-retrieved headers
-	window := make(blockWindow, 0, len(headers))
-	for i, header := range headers {
-		block, err := dm.getDifficultyBlock(header, windowHashes[i])
+	window := make(blockWindow, len(headers))
+	for i := range headers {
+		// Avoid extra allocations by reusing loop variables
+		block, err := dm.getDifficultyBlock(headers[i], windowHashes[i])
 		if err != nil {
 			return nil, nil, err
 		}
-		window = append(window, block)
+		window[i] = block
 	}
 
 	// Check if the last header has DAAScore == 43334187
 	// Note: This maintains the original behavior where the last header is processed twice
 	// (once in the loop above and once here), which may be intentional for difficulty calculation
-	if len(windowHashes) > 0 {
-		lastHash := windowHashes[len(windowHashes)-1]
-		lastHeader := headers[len(headers)-1]
-		if lastHeader.DAAScore() <= 43334187 {
-			lastBlock, err := dm.getDifficultyBlock(lastHeader, lastHash)
-			if err != nil {
-				return nil, nil, err
-			}
-			singleWindow := blockWindow{lastBlock}
-			return singleWindow, []*externalapi.DomainHash{lastHash}, nil
-		}
-	}
+	// Comment out this unecessary fork bomb code already.
+	// if len(windowHashes) > 0 {
+	// 	lastHash := windowHashes[len(windowHashes)-1]
+	// 	lastHeader := headers[len(headers)-1]
+	// 	if lastHeader.DAAScore() <= 43334187 {
+	// 		lastBlock, err := dm.getDifficultyBlock(lastHeader, lastHash)
+	// 		if err != nil {
+	// 			return nil, nil, err
+	// 		}
+	// 		// Reuse slices to avoid allocation
+	// 		singleWindow := window[:1]
+	// 		singleWindow[0] = lastBlock
+	// 		singleHashes := windowHashes[len(windowHashes)-1:]
+	// 		return singleWindow, singleHashes, nil
+	// 	}
+	// }
 
 	return window, windowHashes, nil
 }

@@ -171,12 +171,12 @@ func (x *GhostdagData) toAppMessage() (*appmessage.BlockGHOSTDAGData, error) {
 }
 
 func (x *GhostdagData) fromAppMessage(ghostdagData *appmessage.BlockGHOSTDAGData) {
-	protoBluesAnticoneSizes := make([]*BluesAnticoneSizes, 0, len(ghostdagData.BluesAnticoneSizes))
-	for _, pair := range ghostdagData.BluesAnticoneSizes {
-		protoBluesAnticoneSizes = append(protoBluesAnticoneSizes, &BluesAnticoneSizes{
+	protoBluesAnticoneSizes := make([]*BluesAnticoneSizes, len(ghostdagData.BluesAnticoneSizes))
+	for i, pair := range ghostdagData.BluesAnticoneSizes {
+		protoBluesAnticoneSizes[i] = &BluesAnticoneSizes{
 			BlueHash:     domainHashToProto(pair.BlueHash),
 			AnticoneSize: uint32(pair.AnticoneSize),
-		})
+		}
 	}
 	*x = GhostdagData{
 		BlueScore:          ghostdagData.BlueScore,

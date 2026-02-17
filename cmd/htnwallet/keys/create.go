@@ -61,22 +61,22 @@ func encryptedMnemonicExtendedPublicKeyPairs(params *dagconfig.Params, mnemonics
 		}
 	}
 
-	encryptedPrivateKeys = make([]*EncryptedMnemonic, 0, len(mnemonics))
-	extendedPublicKeys = make([]string, 0, len(mnemonics))
+	encryptedPrivateKeys = make([]*EncryptedMnemonic, len(mnemonics))
+	extendedPublicKeys = make([]string, len(mnemonics))
 
-	for _, mnemonic := range mnemonics {
+	for i, mnemonic := range mnemonics {
 		extendedPublicKey, err := libhtnwallet.MasterPublicKeyFromMnemonic(params, mnemonic, isMultisig)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		extendedPublicKeys = append(extendedPublicKeys, extendedPublicKey)
+		extendedPublicKeys[i] = extendedPublicKey
 
 		encryptedPrivateKey, err := encryptMnemonic(mnemonic, password)
 		if err != nil {
 			return nil, nil, err
 		}
-		encryptedPrivateKeys = append(encryptedPrivateKeys, encryptedPrivateKey)
+		encryptedPrivateKeys[i] = encryptedPrivateKey
 	}
 
 	return encryptedPrivateKeys, extendedPublicKeys, nil

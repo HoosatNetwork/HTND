@@ -152,12 +152,12 @@ func decodeFromBase32(base32String string) ([]byte, error) {
 // CAUTION: for legacy reasons, in case of an error this function returns
 // an empty string instead of an error.
 func encodeToBase32(data []byte) string {
-	result := make([]byte, 0, len(data))
-	for _, b := range data {
+	result := make([]byte, len(data))
+	for i, b := range data {
 		if int(b) >= len(charset) {
 			return ""
 		}
-		result = append(result, charset[b])
+		result[i] = charset[b]
 	}
 	return string(result)
 }

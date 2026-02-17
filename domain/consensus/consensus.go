@@ -760,7 +760,7 @@ func (s *consensus) PruningPointHeaders() ([]externalapi.BlockHeader, error) {
 		return nil, err
 	}
 
-	headers := make([]externalapi.BlockHeader, 0, lastPruningPointIndex)
+	headers := make([]externalapi.BlockHeader, lastPruningPointIndex)
 	for i := uint64(0); i <= lastPruningPointIndex; i++ {
 		// Use separate staging areas for each retrieval to avoid memory accumulation
 		pruningStagingArea := model.NewStagingArea()
@@ -775,7 +775,7 @@ func (s *consensus) PruningPointHeaders() ([]externalapi.BlockHeader, error) {
 			return nil, err
 		}
 
-		headers = append(headers, header)
+		headers[i] = header
 	}
 
 	return headers, nil
