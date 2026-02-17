@@ -2,7 +2,6 @@ package utxoindex
 
 import (
 	"encoding/binary"
-	"maps"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
@@ -264,31 +263,29 @@ func (uis *utxoIndexStore) convertKeyToOutpoint(key *database.Key) (*externalapi
 }
 
 func (uis *utxoIndexStore) stagedData() (
-	toAdd map[ScriptPublicKeyString]UTXOOutpointEntryPairs,
-	toRemove map[ScriptPublicKeyString]UTXOOutpointEntryPairs,
+	toAdd []UTXOPair,
+	toRemove []UTXOPair,
 	virtualParents []*externalapi.DomainHash) {
-
-	toAddClone := make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs, len(uis.toAdd))
-	for scriptPublicKeyString, toAddUTXOOutpointEntryPairs := range uis.toAdd {
-		toAddUTXOOutpointEntryPairsClone := make(UTXOOutpointEntryPairs, len(toAddUTXOOutpointEntryPairs))
-		maps.Copy(toAddUTXOOutpointEntryPairsClone, toAddUTXOOutpointEntryPairs)
-		toAddClone[scriptPublicKeyString] = toAddUTXOOutpointEntryPairsClone
+	// Flatten uis.toAdd map to []UTXOPair
+	for _, utxoPairs := range uis.toAdd {
+		for outpoint, entry := range utxoPairs {
+			toAdd = append(toAdd, UTXOPair{Outpoint: outpoint, Entry: entry})
+		}
 	}
-
-	toRemoveClone := make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs, len(uis.toRemove))
-	for scriptPublicKeyString, toRemoveUTXOOutpointEntryPairs := range uis.toRemove {
-		toRemoveUTXOOutpointEntryPairsClone := make(UTXOOutpointEntryPairs, len(toRemoveUTXOOutpointEntryPairs))
-		maps.Copy(toRemoveUTXOOutpointEntryPairsClone, toRemoveUTXOOutpointEntryPairs)
-		toRemoveClone[scriptPublicKeyString] = toRemoveUTXOOutpointEntryPairsClone
+	// Flatten uis.toRemove map to []UTXOPair
+	for _, utxoPairs := range uis.toRemove {
+		for outpoint, entry := range utxoPairs {
+			toRemove = append(toRemove, UTXOPair{Outpoint: outpoint, Entry: entry})
+		}
 	}
-
-	return toAddClone, toRemoveClone, uis.virtualParents
+	return toAdd, toRemove, uis.virtualParents
 }
 
 func (uis *utxoIndexStore) isAnythingStaged() bool {
 	return len(uis.toAdd) > 0 || len(uis.toRemove) > 0
 }
 
+// Deprecated
 func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
 	pairs, err := uis.UTXOs(scriptPublicKey)
 	if err != nil {

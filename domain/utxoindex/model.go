@@ -18,6 +18,6 @@ type UTXOOutpoints map[externalapi.DomainOutpoint]any
 // UTXOChanges is the set of changes made to the UTXO index after
 // a successful update
 type UTXOChanges struct {
-	Added   map[ScriptPublicKeyString]UTXOOutpointEntryPairs
-	Removed map[ScriptPublicKeyString]UTXOOutpointEntryPairs
+	Added   []UTXOPair
+	Removed []UTXOPair
 }

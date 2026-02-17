@@ -1,6 +1,8 @@
 package utxo
 
 import (
+	"slices"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
@@ -12,14 +14,20 @@ type utxoEntry struct {
 }
 
 // NewUTXOEntry creates a new utxoEntry representing the given txOut
-func NewUTXOEntry(amount uint64, scriptPubKey *externalapi.ScriptPublicKey, isCoinbase bool, blockDAAScore uint64) externalapi.UTXOEntry {
-	scriptPubKeyClone := externalapi.ScriptPublicKey{Script: make([]byte, len(scriptPubKey.Script)), Version: scriptPubKey.Version}
-	copy(scriptPubKeyClone.Script, scriptPubKey.Script)
+func NewUTXOEntry(
+	amount uint64,
+	scriptPubKey *externalapi.ScriptPublicKey,
+	isCoinbase bool,
+	blockDAAScore uint64,
+) externalapi.UTXOEntry {
 	return &utxoEntry{
-		amount:          amount,
-		scriptPublicKey: &scriptPubKeyClone,
-		blockDAAScore:   blockDAAScore,
-		isCoinbase:      isCoinbase,
+		amount: amount,
+		scriptPublicKey: &externalapi.ScriptPublicKey{
+			Script:  slices.Clone(scriptPubKey.Script),
+			Version: scriptPubKey.Version,
+		},
+		blockDAAScore: blockDAAScore,
+		isCoinbase:    isCoinbase,
 	}
 }
 
@@ -28,9 +36,10 @@ func (u *utxoEntry) Amount() uint64 {
 }
 
 func (u *utxoEntry) ScriptPublicKey() *externalapi.ScriptPublicKey {
-	clone := externalapi.ScriptPublicKey{Script: make([]byte, len(u.scriptPublicKey.Script)), Version: u.scriptPublicKey.Version}
-	copy(clone.Script, u.scriptPublicKey.Script)
-	return &clone
+	return &externalapi.ScriptPublicKey{
+		Script:  slices.Clone(u.scriptPublicKey.Script),
+		Version: u.scriptPublicKey.Version,
+	}
 }
 
 func (u *utxoEntry) BlockDAAScore() uint64 {
