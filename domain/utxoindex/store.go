@@ -243,7 +243,14 @@ func (uis *utxoIndexStore) updateAndCommitVirtualParentsWithoutTransaction(virtu
 }
 
 func (uis *utxoIndexStore) bucketForScriptPublicKey(scriptPublicKey *externalapi.ScriptPublicKey) *database.Bucket {
-	var scriptPublicKeyBytes = make([]byte, 2+len(scriptPublicKey.Script)) // uint16
+	scriptLen := len(scriptPublicKey.Script)
+	if scriptLen <= 64 {
+		var arr [66]byte
+		binary.LittleEndian.PutUint16(arr[:2], scriptPublicKey.Version)
+		copy(arr[2:2+scriptLen], scriptPublicKey.Script)
+		return utxoIndexBucket.Bucket(arr[:2+scriptLen])
+	}
+	scriptPublicKeyBytes := make([]byte, 2+scriptLen)
 	binary.LittleEndian.PutUint16(scriptPublicKeyBytes[:2], scriptPublicKey.Version)
 	copy(scriptPublicKeyBytes[2:], scriptPublicKey.Script)
 	return utxoIndexBucket.Bucket(scriptPublicKeyBytes)
