@@ -44,22 +44,26 @@ func (x *BlockMessage) toAppMessage() (*appmessage.MsgBlock, error) {
 }
 
 func (x *BlockMessage) fromAppMessage(msgBlock *appmessage.MsgBlock) error {
-	protoHeader := new(BlockHeader)
-	err := protoHeader.fromAppMessage(&msgBlock.Header)
-	if err != nil {
-		return err
-	}
-	protoTransactions := make([]*TransactionMessage, len(msgBlock.Transactions))
-	for i, tx := range msgBlock.Transactions {
-		protoTx := new(TransactionMessage)
-		protoTx.fromAppMessage(tx)
-		protoTransactions[i] = protoTx
-	}
-	log.Debugf("fromAppMessage: msgBlock.PoWHash = %s\n", msgBlock.PoWHash)
-	*x = BlockMessage{
-		Header:       protoHeader,
-		Transactions: protoTransactions,
-		PowHash:      msgBlock.PoWHash,
-	}
-	return nil
+	   if msgBlock == nil {
+		   log.Errorf("fromAppMessage: received nil msgBlock")
+		   return errors.New("fromAppMessage: received nil msgBlock")
+	   }
+	   protoHeader := new(BlockHeader)
+	   err := protoHeader.fromAppMessage(&msgBlock.Header)
+	   if err != nil {
+		   return err
+	   }
+	   protoTransactions := make([]*TransactionMessage, len(msgBlock.Transactions))
+	   for i, tx := range msgBlock.Transactions {
+		   protoTx := new(TransactionMessage)
+		   protoTx.fromAppMessage(tx)
+		   protoTransactions[i] = protoTx
+	   }
+	   log.Debugf("fromAppMessage: msgBlock.PoWHash = %s\n", msgBlock.PoWHash)
+	   *x = BlockMessage{
+		   Header:       protoHeader,
+		   Transactions: protoTransactions,
+		   PowHash:      msgBlock.PoWHash,
+	   }
+	   return nil
 }
