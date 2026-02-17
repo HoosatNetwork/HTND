@@ -25,8 +25,8 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		// Defensive: block header should not be nil
 		return nil
 	}
-	if domainBlock.PoWHash == nil {
-		// Defensive: PoWHash should not be nil
+	if domainBlock.PoWHash == "" {
+		// Defensive: PoWHash should not be empty
 		return nil
 	}
 	msgTxs := make([]*MsgTx, 0, len(domainBlock.Transactions))
