@@ -721,23 +721,39 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			return err
 		}
 		// Dequeue all messages for the requested hashes
-		for i := 0; i < len(hashesToRequest); i++ {
-			message, err := flow.incomingRoute.DequeueWithTimeout(1 * time.Minute)
-			if err != nil {
-				return err
-			}
+		   for i := 0; i < len(hashesToRequest); i++ {
+			   message, err := flow.incomingRoute.DequeueWithTimeout(1 * time.Minute)
+			   if err != nil {
+				   return err
+			   }
 
-			msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
-			if !ok {
-				return protocolerrors.Errorf(true, "received unexpected message type. "+
-					"expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
-			}
+			   msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
+			   if !ok {
+				   log.Errorf("Received unexpected message type. expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
+				   return protocolerrors.Errorf(true, "received unexpected message type. "+
+					   "expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
+			   }
 
-			block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
-			blockHash := consensushashing.BlockHash(block)
-			receivedBlocks[*blockHash] = block
-			log.Debugf("Received block %s and stored in cache", blockHash)
-		}
+			   if msgIBDBlock.MsgBlock == nil {
+				   log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", i)
+				   return protocolerrors.Errorf(true, "received nil MsgBlock in MsgIBDBlock at index %d", i)
+			   }
+
+			   block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
+			   if block == nil {
+				   log.Errorf("MsgBlockToDomainBlock returned nil at index %d", i)
+				   return protocolerrors.Errorf(true, "MsgBlockToDomainBlock returned nil at index %d", i)
+			   }
+
+			   blockHash := consensushashing.BlockHash(block)
+			   if blockHash == nil {
+				   log.Errorf("BlockHash returned nil for block at index %d", i)
+				   return protocolerrors.Errorf(true, "BlockHash returned nil for block at index %d", i)
+			   }
+
+			   receivedBlocks[*blockHash] = block
+			   log.Debugf("Received block %s and stored in cache", blockHash)
+		   }
 
 		// Process blocks in the order of expected hashes
 		for _, expectedHash := range hashesToRequest {

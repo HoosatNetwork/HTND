@@ -18,8 +18,23 @@ import (
 
 // DomainBlockToMsgBlock converts an externalapi.DomainBlock to MsgBlock
 func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
+	if domainBlock == nil {
+		return nil
+	}
+	if domainBlock.Header == nil {
+		// Defensive: block header should not be nil
+		return nil
+	}
+	if domainBlock.PoWHash == nil {
+		// Defensive: PoWHash should not be nil
+		return nil
+	}
 	msgTxs := make([]*MsgTx, 0, len(domainBlock.Transactions))
 	for _, domainTransaction := range domainBlock.Transactions {
+		if domainTransaction == nil {
+			// Defensive: skip nil transactions
+			continue
+		}
 		msgTxs = append(msgTxs, DomainTransactionToMsgTx(domainTransaction))
 	}
 	return &MsgBlock{
