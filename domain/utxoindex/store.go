@@ -678,8 +678,7 @@ func (uis *utxoIndexStore) getCirculatingSompiSupply() (uint64, error) {
 	}
 	circulatingSupply, err := uis.database.Get(circulatingSupplyKey)
 	if database.IsNotFoundError(err) {
-		log.Infof("getCirculatingSompiSupply failed to retrieve with %s\n", circulatingSupplyKey)
-		return 0, err
+		return 0, nil
 	}
 	if err != nil {
 		return 0, err
