@@ -202,7 +202,14 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	}
 
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
-		return pebble.DefaultOptions().Experimental.ValueSeparationPolicy()
+		return pebble.ValueSeparationPolicy{
+			Enabled:               true,           // Must be true to activate (default in recent versions)
+			MinimumSize:           256,            // bytes – default in CockroachDB v25.4+
+			MaxBlobReferenceDepth: 100,            // Reasonable cap to limit indirection depth / compaction complexity
+			RewriteMinimumAge:     24 * time.Hour, // 1 day – balances space reclamation vs. write amp
+			TargetGarbageRatio:    0.20,           // 20% garbage triggers rewrite attempts – aggressive enough without excessive writes
+
+		}
 	}
 
 	// ────────────────────────────────────────────────
