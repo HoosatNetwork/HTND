@@ -67,6 +67,9 @@ func protoTransactionIDsToDomain(protoIDs []*TransactionId) ([]*externalapi.Doma
 }
 
 func domainTransactionIDToProto(id *externalapi.DomainTransactionID) *TransactionId {
+	if id == nil {
+		return nil
+	}
 	return &TransactionId{
 		Bytes: id.ByteSlice(),
 	}
@@ -75,6 +78,10 @@ func domainTransactionIDToProto(id *externalapi.DomainTransactionID) *Transactio
 func wireTransactionIDsToProto(ids []*externalapi.DomainTransactionID) []*TransactionId {
 	protoIDs := make([]*TransactionId, len(ids))
 	for i, hash := range ids {
+		if hash == nil {
+			protoIDs[i] = nil
+			continue
+		}
 		protoIDs[i] = domainTransactionIDToProto(hash)
 	}
 	return protoIDs
