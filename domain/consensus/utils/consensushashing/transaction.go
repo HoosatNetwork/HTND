@@ -54,6 +54,10 @@ func TransactionHash(tx *externalapi.DomainTransaction) *externalapi.DomainHash 
 
 // TransactionID generates the Hash for the transaction without the signature script and payload field.
 func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransactionID {
+	// Return nil if tx is nil to prevent interface conversion panic
+	if tx == nil {
+		return nil
+	}
 	// Check global cache first
 	cacheMutex.RLock()
 	if entry, exists := transactionIDCache[tx]; exists {
