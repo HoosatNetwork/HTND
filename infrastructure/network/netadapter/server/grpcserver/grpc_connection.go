@@ -162,6 +162,14 @@ func (c *gRPCConnection) closeSend() {
 	c.streamLock.Lock()
 	defer c.streamLock.Unlock()
 
+	// Whilst we are protecting against nil streams, do it here too
+	if c.stream != nil {
+		if clientStream, ok := c.stream.(grpc.ClientStream); ok {
+	                // ignore error because we don't really know what's the status of the connection
+			_ = clientStream.CloseSend()
+		}
+	}
+
 	clientStream := c.stream.(grpc.ClientStream)
 
 	// ignore error because we don't really know what's the status of the connection
