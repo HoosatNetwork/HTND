@@ -202,7 +202,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	}
 
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
-		return pebble.ValueSeparationPolicy{Enabled: true, MinimumSize: 128}
+		return pebble.DefaultOptions().Experimental.ValueSeparationPolicy()
 	}
 
 	// ────────────────────────────────────────────────
