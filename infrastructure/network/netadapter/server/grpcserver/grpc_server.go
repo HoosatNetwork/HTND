@@ -23,6 +23,16 @@ type gRPCServer struct {
 	maxInboundConnections      int
 	inboundConnectionCount     int
 	inboundConnectionCountLock *sync.Mutex
+
+	// Rate limiting fields
+	rateLimitLock sync.Mutex
+	rateLimitMap  map[string]*ipRateLimit
+}
+
+// ipRateLimit tracks request count and window for an IP
+type ipRateLimit struct {
+	count     int
+	windowEnd time.Time
 }
 
 // newGRPCServer creates a gRPC server
@@ -35,6 +45,7 @@ func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundCo
 		maxInboundConnections:      maxInboundConnections,
 		inboundConnectionCount:     0,
 		inboundConnectionCountLock: &sync.Mutex{},
+		rateLimitMap:               make(map[string]*ipRateLimit),
 	}
 }
 
@@ -95,11 +106,10 @@ func (s *gRPCServer) SetOnConnectedHandler(onConnectedHandler server.OnConnected
 }
 
 func (s *gRPCServer) handleInboundConnection(ctx context.Context, stream grpcStream) error {
-	connectionCount, err := s.incrementInboundConnectionCountAndLimitIfRequired()
-	if err != nil {
-		return err
-	}
-	defer s.decrementInboundConnectionCount()
+	// Rate limiting: allow max 1 req/s per IP, except 127.0.0.1 (1000 req/s)
+	const defaultMaxRequestsPerSec = 1
+	const localMaxRequestsPerSec = 1000
+	const window = time.Second
 
 	peerInfo, ok := peer.FromContext(ctx)
 	if !ok {
@@ -110,6 +120,35 @@ func (s *gRPCServer) handleInboundConnection(ctx context.Context, stream grpcStr
 		return errors.Errorf("non-tcp connections are not supported")
 	}
 
+	ipStr := tcpAddress.IP.String()
+	maxRequestsPerSec := defaultMaxRequestsPerSec
+	if ipStr == "127.0.0.1" || ipStr == "::1" {
+		maxRequestsPerSec = localMaxRequestsPerSec
+	}
+
+	s.rateLimitLock.Lock()
+	rl, exists := s.rateLimitMap[ipStr]
+	now := time.Now()
+	if !exists || now.After(rl.windowEnd) {
+		rl = &ipRateLimit{count: 1, windowEnd: now.Add(window)}
+		s.rateLimitMap[ipStr] = rl
+	} else {
+		rl.count++
+	}
+	count := rl.count
+	end := rl.windowEnd
+	s.rateLimitLock.Unlock()
+
+	if count > maxRequestsPerSec {
+		return errors.Errorf("rate limit exceeded for IP %s: %d req/s (limit %d)", ipStr, count, maxRequestsPerSec)
+	}
+
+	connectionCount, err := s.incrementInboundConnectionCountAndLimitIfRequired()
+	if err != nil {
+		return err
+	}
+	defer s.decrementInboundConnectionCount()
+
 	connection := newConnection(s, tcpAddress, stream, nil)
 
 	err = s.onConnectedHandler(connection)
@@ -117,7 +156,7 @@ func (s *gRPCServer) handleInboundConnection(ctx context.Context, stream grpcStr
 		return err
 	}
 
-	log.Debugf("%s Incoming connection from %s #%d", s.name, peerInfo.Addr, connectionCount)
+	log.Debugf("%s Incoming connection from %s #%d (rate: %d req/s, window ends %v)", s.name, peerInfo.Addr, connectionCount, count, end)
 
 	<-connection.stopChan
 	return nil
