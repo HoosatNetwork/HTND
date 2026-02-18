@@ -263,13 +263,17 @@ func newLoggingEventListener(minDuration time.Duration) *pebble.EventListener {
 			log.Warnf("[pebble] write stall end")
 		},
 		CompactionEnd: func(info pebble.CompactionInfo) {
-			if info.Err != nil || info.TotalDuration >= minDuration { ... }
+			if info.Err != nil || info.TotalDuration >= minDuration {
+				log.Infof("[pebble] compaction end: duration=%s err=%v input=%v output=%v", info.TotalDuration, info.Err, info.Input, info.Output)
+			}
 		},
 		FlushEnd: func(info pebble.FlushInfo) {
-			if info.Err != nil || info.TotalDuration >= minDuration { ... }
+			if info.Err != nil || info.TotalDuration >= minDuration {
+				log.Infof("[pebble] flush end: duration=%s err=%v", info.TotalDuration, info.Err)
+			}
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			log.Warnf("[pebble] disk slow: op=%s path=%s write=%d dur=%s", ...)
+			log.Warnf("[pebble] disk slow: opType=%s path=%s write=%d dur=%s", info.OpType, info.Path, info.WriteSize, info.Duration)
 		},
 	}
 }
