@@ -16,28 +16,16 @@ import (
 //   - Sustained high write throughput during IBD, catch-up sync and parallel block processing
 //   - Assumes NVMe SSD + 16–64 GiB RAM class hardware in 2026
 //
-// Most important tuning axes for this workload:
-//  1. Bloom filter strength → point lookup hit rate
-//  2. Memtable size & stall thresholds → write burst tolerance
-//  3. L0 file count tolerance → write throughput vs read amplification
-//  4. SST sizes & block sizes → cache efficiency & sequential read performance
-//  5. Block cache size → overall lookup hit rate during validation/IBD
-//
-// Performance optimizations applied:
-//   - Reduced bloom filter bits from 14 to 12 for faster filter creation
-//   - Increased L0 compaction thresholds to reduce compaction frequency
-//   - Increased block sizes from 16KB to 32KB for better cache efficiency
-//   - Changed L6 compression from Zstd to Snappy for better performance
-//   - Increased L0 compaction concurrency to handle more files
+// Key modern features (as of 2026 Pebble):
+// - FormatMajorVersion: pebble.FormatNewest → enables columnar blocks (colblk) by default for faster point/range reads
+// - Value separation → enabled by default (values ≥256 bytes stored in separate blob files) → major write-amp reduction
+// - No need to set ValueSeparationPolicy unless customizing threshold
 func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Bloom filter configuration
-	// Controls false-positive rate for point lookups.
-	// Higher bits = lower false positives = fewer unnecessary SST reads = faster Gets
+	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
 	// ────────────────────────────────────────────────
-	// For high-performance workloads, balance between filter creation time and lookup efficiency
-	// Reduced from 14 to 12 bits to speed up bloom filter creation during compaction
-	bloomBitsPerKey := 12 // Optimized: faster filter creation, still good lookup performance
+	bloomBitsPerKey := 15
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -47,12 +35,10 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	// ────────────────────────────────────────────────
 	// Memtable tuning
-	// Larger memtables → fewer flushes → less L0 pressure → better sustained write rate
-	// Smaller memtables → data reaches disk faster → lower memory usage during bursts
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 128 // Larger than RocksDB/Pebble defaults – helps high TPS/IBD bursts
-		defaultMemTablesBeforeStall = 6   // How many unflushed memtables before write stall
+		defaultMemTableMB           = 128
+		defaultMemTablesBeforeStall = 6
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -71,13 +57,11 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	// ────────────────────────────────────────────────
 	// Target SST file size at base level
-	// Larger files → better block cache & index locality → fewer files overall
-	// Smaller files → more granular compactions → potentially lower write amplification
 	// ────────────────────────────────────────────────
-	baseFileSize := memTableBytes / 2 // Slightly larger than memtable → natural flush grouping
+	baseFileSize := memTableBytes / 2
 	const (
-		minBaseFileSize = 32 << 20  // 32 MiB  – too small → too many files
-		maxBaseFileSize = 128 << 20 // 128 MiB – reasonable cap for cache efficiency
+		minBaseFileSize = 32 << 20
+		maxBaseFileSize = 128 << 20
 	)
 	if baseFileSize < minBaseFileSize {
 		baseFileSize = minBaseFileSize
@@ -92,10 +76,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	}
 
 	// ────────────────────────────────────────────────
-	// Block cache (holds decompressed data blocks + filters + indexes)
-	// Extremely important for point lookup performance during validation & IBD
+	// Block cache – aim higher in 2026 (8–16 GiB realistic)
 	// ────────────────────────────────────────────────
-	cacheBytes := int64(2048) << 20 // 2 GiB default – generous but realistic for 16–32 GiB nodes
+	cacheBytes := int64(8192) << 20 // 8 GiB default – increase for better hit rate
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
 	}
@@ -109,32 +92,19 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Core Pebble options
 	// ────────────────────────────────────────────────
 	opts := &pebble.Options{
-		FormatMajorVersion: pebble.FormatNewest, // Use newest on-disk format (better performance & features)
+		FormatMajorVersion: pebble.FormatNewest, // Enables columnar blocks + value separation by default
 
 		Cache: pebble.NewCache(cacheBytes),
 
-		// Memtable settings – see above
 		MemTableSize:                uint64(memTableBytes),
 		MemTableStopWritesThreshold: memTableStopThreshold,
 
-		// Split large memtable flushes into multiple L0 files
-		// → Enables better parallel compaction out of L0
 		FlushSplitBytes: baseFileSize,
 
-		// L0-specific controls – MOST IMPORTANT for write throughput vs read amplification
-		//
-		// L0CompactionThreshold:     start compacting when this many L0 files overlap a key range
-		// L0StopWritesThreshold:     HARD stop accepting writes when L0 reaches this file count
-		// L0CompactionFileThreshold: trigger compaction when a single file overlaps this many files below
-		//
-		// Higher values → tolerate larger L0 → much higher sustained write rate
-		// Lower values  → keep L0 small → lower point-lookup amplification (fewer tables checked)
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 16),      // Increased: start compaction later
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 48),     // Increased: allow more L0 files before write stall
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16), // Increased: reduce compaction frequency
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 16),
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 48),
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16),
 
-		// Target file sizes per level – controls fan-out and eventual file count
-		// Steeper growth → fewer files at deeper levels → better cache efficiency
 		TargetFileSizes: [7]int64{
 			baseFileSize,       // L0
 			baseFileSize * 4,   // L1
@@ -142,71 +112,65 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			baseFileSize * 32,  // L3
 			baseFileSize * 64,  // L4
 			baseFileSize * 128, // L5
-			baseFileSize * 256, // L6 – avoid excessively large cold files
+			baseFileSize * 256, // L6
 		},
 
-		MaxManifestFileSize: 512 << 20,                                     // 512 MiB – large enough to avoid frequent manifest rewrites
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 2000), // allow many open SSTs
+		MaxManifestFileSize: 512 << 20,
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 4096), // Bump for more SSTs
 
-		// Write-ahead log & fsync behavior
-		// Larger sync sizes → fewer fsync calls → better NVMe throughput
 		DisableWAL:      false,
-		WALBytesPerSync: 4 << 20, // 4 MiB
-		BytesPerSync:    4 << 20, // 4 MiB – good balance for modern SSDs
+		WALBytesPerSync: 4 << 20,
+		BytesPerSync:    4 << 20,
 
-		// Allow more parallel compaction workers during high load
 		CompactionConcurrencyRange: func() (int, int) { return 4, 8 },
 
-		// Per-level block & index sizes + compression
-		// Larger blocks → better sequential read throughput & compression ratio
-		// Smaller blocks → better random access granularity
 		Levels: [7]pebble.LevelOptions{
-			{ // L0 – write-mostly, high churn
-				BlockSize:      32 << 10, // Increased from 16 KiB for better performance
+			{ // L0
+				BlockSize:      32 << 10,
 				IndexBlockSize: 32 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L1
-				BlockSize:      32 << 10, // Increased from 16 KiB
+				BlockSize:      32 << 10,
 				IndexBlockSize: 32 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L2
-				BlockSize:      32 << 10, // Increased from 16 KiB
+				BlockSize:      32 << 10,
 				IndexBlockSize: 32 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L3
-				BlockSize:      32 << 10, // Increased from 16 KiB
+				BlockSize:      32 << 10,
 				IndexBlockSize: 32 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L4
-				BlockSize:      32 << 10, // Increased from 16 KiB
+				BlockSize:      32 << 10,
 				IndexBlockSize: 32 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L5
-				BlockSize:      32 << 10, // Increased to 32 KiB for better sequential performance
+				BlockSize:      32 << 10,
 				IndexBlockSize: 32 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L6 – mostly cold data, use faster compression than Zstd
-				BlockSize:      64 << 10, // Larger blocks for cold data
+			{ // L6
+				BlockSize:      64 << 10,
 				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression }, // Changed from Zstd to Snappy for performance
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 		},
 	}
 
-	// Optional: disable flush splitting (useful on very slow disks or specific tests)
+	// Optional: disable flush splitting
 	if envBool("HTND_PEBBLE_DISABLE_FLUSH_SPLIT") {
 		opts.FlushSplitBytes = 0
 	}
@@ -237,8 +201,13 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		}
 	}
 
+	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
+		return pebble.ValueSeparationPolicy{Enabled: true}
+	}
+
 	// ────────────────────────────────────────────────
 	// Optional detailed event logging (useful for tuning & debugging)
+	// Logging (optional)
 	// ────────────────────────────────────────────────
 	if envBool("HTND_PEBBLE_LOG_EVENTS") {
 		minDurMs := getEnvInt("HTND_PEBBLE_LOG_EVENTS_MIN_MS", 250)
@@ -253,7 +222,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Helper functions (unchanged)
+// Helpers (unchanged)
 // ──────────────────────────────────────────────────────────────
 
 func getEnvInt(key string, defaultVal int) int {
@@ -275,12 +244,8 @@ func envBool(key string) bool {
 	}
 }
 
-// newLoggingEventListener returns an event listener that logs significant operations
-// Replace log calls with your actual logger (assumed to exist)
 func newLoggingEventListener(minDuration time.Duration) *pebble.EventListener {
 	return &pebble.EventListener{
-		// Implement desired logging callbacks here.
-		// Example placeholders only – customize as needed.
 		BackgroundError: func(err error) {
 			// log.Errorf("[pebble] background error: %v", err)
 		},
@@ -297,8 +262,7 @@ func newLoggingEventListener(minDuration time.Duration) *pebble.EventListener {
 			// if info.Err != nil || info.TotalDuration >= minDuration { ... }
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			// log.Warnf("[pebble] disk slow: op=%s path=%s write=%d dur=%s",
-			// 	info.OpType, info.Path, info.WriteSize, info.Duration)
+			// log.Warnf("[pebble] disk slow: op=%s path=%s write=%d dur=%s", ...)
 		},
 	}
 }
