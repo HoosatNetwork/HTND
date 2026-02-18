@@ -25,7 +25,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Bloom filter configuration
 	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
 	// ────────────────────────────────────────────────
-	bloomBitsPerKey := 15
+	bloomBitsPerKey := 20
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -37,8 +37,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Memtable tuning
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 128
-		defaultMemTablesBeforeStall = 6
+		defaultMemTableMB           = 256
+		defaultMemTablesBeforeStall = 4
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -78,7 +78,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Block cache – aim higher in 2026 (8–16 GiB realistic)
 	// ────────────────────────────────────────────────
-	cacheBytes := int64(8192) << 20 // 8 GiB default – increase for better hit rate
+	cacheBytes := int64(2048) << 20 // 2 GiB default – increase for better hit rate
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
 	}
@@ -108,15 +108,15 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		TargetFileSizes: [7]int64{
 			baseFileSize,       // L0
 			baseFileSize * 4,   // L1
-			baseFileSize * 12,  // L2
-			baseFileSize * 32,  // L3
-			baseFileSize * 64,  // L4
-			baseFileSize * 128, // L5
-			baseFileSize * 256, // L6
+			baseFileSize * 10,  // L2
+			baseFileSize * 25,  // L3
+			baseFileSize * 50,  // L4
+			baseFileSize * 100, // L5
+			baseFileSize * 200, // L6
 		},
 
 		MaxManifestFileSize: 512 << 20,
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 4096), // Bump for more SSTs
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
 
 		DisableWAL:      false,
 		WALBytesPerSync: 4 << 20,
@@ -164,15 +164,15 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			{ // L6
 				BlockSize:      64 << 10,
 				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
+				Compression:    func() *sstable.CompressionProfile { return sstable.ZstdCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 		},
 	}
 
-	// Optional: disable flush splitting
+	// Optional: enable flush splitting
 	if envBool("HTND_PEBBLE_DISABLE_FLUSH_SPLIT") {
-		opts.FlushSplitBytes = 0
+		opts.FlushSplitBytes = baseFileSize
 	}
 
 	// ────────────────────────────────────────────────
@@ -187,8 +187,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	// Read-triggered compactions: compact hot-read data more aggressively
 	// Helpful during long IBD phases with repeated ancestor / window lookups
-	opts.Experimental.ReadCompactionRate = 32 << 20 // 32 MiB/s – moderate aggressiveness
-	opts.Experimental.ReadSamplingMultiplier = 8    // sample 1/8 reads for triggering
+	opts.Experimental.ReadCompactionRate = 64 << 20 // 32 MiB/s – moderate aggressiveness
+	opts.Experimental.ReadSamplingMultiplier = 4    // sample 1/4 reads for triggering
 
 	if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
 		if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
@@ -204,7 +204,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		return pebble.ValueSeparationPolicy{
 			Enabled:               true,           // Must be true to activate (default in recent versions)
-			MinimumSize:           256,            // bytes – default in CockroachDB v25.4+
+			MinimumSize:           128,            // bytes – default in CockroachDB v25.4+
 			MaxBlobReferenceDepth: 100,            // Reasonable cap to limit indirection depth / compaction complexity
 			RewriteMinimumAge:     24 * time.Hour, // 1 day – balances space reclamation vs. write amp
 			TargetGarbageRatio:    0.20,           // 20% garbage triggers rewrite attempts – aggressive enough without excessive writes
@@ -254,22 +254,22 @@ func envBool(key string) bool {
 func newLoggingEventListener(minDuration time.Duration) *pebble.EventListener {
 	return &pebble.EventListener{
 		BackgroundError: func(err error) {
-			// log.Errorf("[pebble] background error: %v", err)
+			log.Errorf("[pebble] background error: %v", err)
 		},
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
-			// log.Warnf("[pebble] write stall begin: %s", info.Reason)
+			log.Warnf("[pebble] write stall begin: %s", info.Reason)
 		},
 		WriteStallEnd: func() {
-			// log.Warnf("[pebble] write stall end")
+			log.Warnf("[pebble] write stall end")
 		},
 		CompactionEnd: func(info pebble.CompactionInfo) {
-			// if info.Err != nil || info.TotalDuration >= minDuration { ... }
+			if info.Err != nil || info.TotalDuration >= minDuration { ... }
 		},
 		FlushEnd: func(info pebble.FlushInfo) {
-			// if info.Err != nil || info.TotalDuration >= minDuration { ... }
+			if info.Err != nil || info.TotalDuration >= minDuration { ... }
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			// log.Warnf("[pebble] disk slow: op=%s path=%s write=%d dur=%s", ...)
+			log.Warnf("[pebble] disk slow: op=%s path=%s write=%d dur=%s", ...)
 		},
 	}
 }
