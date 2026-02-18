@@ -44,15 +44,6 @@ func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransac
 	if tx == nil {
 		return nil
 	}
-	// Check global cache first
-	cacheMutex.RLock()
-	if entry, exists := transactionIDCache[tx]; exists {
-		// Move to front of LRU
-		cacheLRU.MoveToFront(entry.elem)
-		cacheMutex.RUnlock()
-		return entry.id
-	}
-	cacheMutex.RUnlock()
 
 	// If transaction ID is already cached on the object, return it
 	if tx.ID != nil {
