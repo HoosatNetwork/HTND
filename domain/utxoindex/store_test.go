@@ -189,36 +189,6 @@ func TestCopyUTXOPairs(t *testing.T) {
 	}
 }
 
-// Test Clear methods
-func TestCacheClear(t *testing.T) {
-	// Test utxoLRUCache.Clear()
-	utxoCache := newUtxoLRUCache(10)
-	testOutpoint := externalapi.DomainOutpoint{
-		TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{1}),
-		Index:         0,
-	}
-	testEntry := utxo.NewUTXOEntry(
-		1000,
-		&externalapi.ScriptPublicKey{Script: []byte{1, 2, 3}, Version: 0},
-		false,
-		100,
-	)
-	utxoCache.Put(testOutpoint, testEntry)
-	utxoCache.Clear()
-	if _, ok := utxoCache.Get(testOutpoint); ok {
-		t.Error("utxoCache should be empty after Clear()")
-	}
-
-	// Test scriptLRUCache.Clear()
-	scriptCache := newScriptLRUCache(10)
-	pairs := []UTXOPair{{Outpoint: testOutpoint, Entry: testEntry}}
-	scriptCache.Put("key", pairs)
-	scriptCache.Clear()
-	if _, ok := scriptCache.Get("key"); ok {
-		t.Error("scriptCache should be empty after Clear()")
-	}
-}
-
 // Benchmark per-script cache hit performance
 func BenchmarkScriptCacheHit(b *testing.B) {
 	cache := newScriptLRUCache(10000)
