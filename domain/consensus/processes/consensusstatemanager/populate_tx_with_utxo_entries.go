@@ -18,6 +18,10 @@ func (csm *consensusStateManager) PopulateTransactionWithUTXOEntries(
 // If utxoDiff == nil UTXO entries are taken from the virtual's UTXO set only
 func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea *model.StagingArea,
 	transaction *externalapi.DomainTransaction, utxoDiff externalapi.UTXODiff) error {
+	// fast exit for coinbase
+	if len(transaction.Inputs) == 0 {
+		return nil
+	}
 
 	transactionID := consensushashing.TransactionID(transaction)
 	log.Tracef("populateTransactionWithUTXOEntriesFromVirtualOrDiff start for transaction %s", transactionID)
