@@ -158,7 +158,7 @@ func (f *FlowContext) UnsetIBDRunning() {
 	defer f.ibdPeerMutex.Unlock()
 
 	if f.ibdPeer == nil {
-		panic("attempted to unset isInIBD when it was not set to begin with")
+		log.Infof("attempted to unset isInIBD when it was not set to begin with")
 	}
 
 	f.ibdPeer = nil
