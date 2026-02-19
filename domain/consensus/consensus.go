@@ -193,7 +193,7 @@ func (s *consensus) periodicFreeOSMemory() error {
 }
 
 func (s *consensus) displayCacheSizes() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -226,7 +226,7 @@ func (s *consensus) displayCacheSizes() {
 }
 
 func (s *consensus) displayMemUse() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
