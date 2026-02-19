@@ -147,7 +147,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 	// Data Structures
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
-	daaWindowStore := daawindowstore.New(prefixBucket, 10_000, preallocateCaches)
+	daaWindowStore := daawindowstore.New(prefixBucket, 50_000, preallocateCaches)
 	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, preallocateCaches)
 	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, preallocateCaches)
 	if err != nil {
@@ -162,7 +162,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	multisetStore := multisetstore.New(prefixBucket, 1000, preallocateCaches)
 	pruningStore := pruningstore.New(prefixBucket, 2, preallocateCaches)
 	utxoDiffStore := utxodiffstore.New(prefixBucket, 1000, preallocateCaches)
-	consensusStateStore := consensusstatestore.New(prefixBucket, 1000, preallocateCaches)
+	consensusStateStore := consensusstatestore.New(prefixBucket, 50_000, preallocateCaches)
 
 	headersSelectedTipStore := headersselectedtipstore.New(prefixBucket)
 	finalityStore := finalitystore.New(prefixBucket, 1000, preallocateCaches)
