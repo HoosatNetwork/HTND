@@ -34,6 +34,7 @@ func (daaws *daaWindowStore) Stage(stagingArea *model.StagingArea, blockHash *ex
 	key := newDBKey(blockHash, index)
 	if _, ok := stagingShard.toAdd[key]; !ok {
 		stagingShard.toAdd[key] = pair
+		daaws.cache.Add(blockHash, index, pair)
 	}
 
 }
@@ -44,8 +45,6 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 	dbKey := newDBKey(blockHash, index)
 	pair, ok := stagingShard.toAdd[dbKey]
 	if ok && pair != nil {
-		// Cache the staged data as well, since it's valid data
-		daaws.cache.Add(blockHash, index, pair)
 		return pair, nil
 	}
 	pairCached, ok := daaws.cache.Get(blockHash, index)
