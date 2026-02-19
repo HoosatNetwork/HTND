@@ -28,7 +28,7 @@ func init() {
 
 		// Append build metadata if there is any.
 		// Panic if any invalid characters are encountered
-		if appBuild != "RC1" {
+		if appBuild != "" {
 			checkAppBuild(appBuild)
 
 			version = fmt.Sprintf("%s-%s", version, appBuild)
