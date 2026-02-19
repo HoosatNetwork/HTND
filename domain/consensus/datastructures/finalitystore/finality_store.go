@@ -11,7 +11,7 @@ var bucketName = []byte("finality-points")
 
 type finalityStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache
+	cache   *lrucache.LRUCache[*externalapi.DomainHash]
 	bucket  model.DBBucket
 }
 
@@ -19,7 +19,7 @@ type finalityStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.FinalityStore {
 	return &finalityStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New(cacheSize, preallocate),
+		cache:   lrucache.New[*externalapi.DomainHash](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -39,7 +39,7 @@ func (fs *finalityStore) FinalityPoint(dbContext model.DBReader, stagingArea *mo
 
 	finalityPointHashCached, ok := fs.cache.Get(blockHash)
 	if ok && finalityPointHashCached != nil {
-		return finalityPointHashCached.(*externalapi.DomainHash), nil
+		return finalityPointHashCached, nil
 	}
 
 	finalityPointHashBytes, err := dbContext.Get(fs.hashAsKey(blockHash))

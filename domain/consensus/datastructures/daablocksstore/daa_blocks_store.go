@@ -14,8 +14,8 @@ var daaAddedBlocksBucketName = []byte("daa-added-blocks")
 // daaBlocksStore represents a store of DAABlocksStore
 type daaBlocksStore struct {
 	shardID                model.StagingShardID
-	daaScoreLRUCache       *lrucache.LRUCache
-	daaAddedBlocksLRUCache *lrucache.LRUCache
+	daaScoreLRUCache       *lrucache.LRUCache[uint64]
+	daaAddedBlocksLRUCache *lrucache.LRUCache[[]*externalapi.DomainHash]
 	daaScoreBucket         model.DBBucket
 	daaAddedBlocksBucket   model.DBBucket
 }
@@ -24,8 +24,8 @@ type daaBlocksStore struct {
 func New(prefixBucket model.DBBucket, daaScoreCacheSize int, daaAddedBlocksCacheSize int, preallocate bool) model.DAABlocksStore {
 	return &daaBlocksStore{
 		shardID:                staging.GenerateShardingID(),
-		daaScoreLRUCache:       lrucache.New(daaScoreCacheSize, preallocate),
-		daaAddedBlocksLRUCache: lrucache.New(daaAddedBlocksCacheSize, preallocate),
+		daaScoreLRUCache:       lrucache.New[uint64](daaScoreCacheSize, preallocate),
+		daaAddedBlocksLRUCache: lrucache.New[[]*externalapi.DomainHash](daaAddedBlocksCacheSize, preallocate),
 		daaScoreBucket:         prefixBucket.Bucket(daaScoreBucketName),
 		daaAddedBlocksBucket:   prefixBucket.Bucket(daaAddedBlocksBucketName),
 	}
@@ -55,8 +55,8 @@ func (daas *daaBlocksStore) DAAScore(dbContext model.DBReader, stagingArea *mode
 	}
 
 	daaScore, ok := daas.daaScoreLRUCache.Get(blockHash)
-	if ok && daaScore != nil {
-		return daaScore.(uint64), nil
+	if ok {
+		return daaScore, nil
 	}
 
 	daaScoreBytes, err := dbContext.Get(daas.daaScoreHashAsKey(blockHash))
@@ -80,7 +80,7 @@ func (daas *daaBlocksStore) DAAAddedBlocks(dbContext model.DBReader, stagingArea
 	}
 	addedBlocksCached, ok := daas.daaAddedBlocksLRUCache.Get(blockHash)
 	if ok && addedBlocksCached != nil {
-		return externalapi.CloneHashes(addedBlocksCached.([]*externalapi.DomainHash)), nil
+		return externalapi.CloneHashes(addedBlocksCached), nil
 	}
 
 	addedBlocksBytes, err := dbContext.Get(daas.daaAddedBlocksHashAsKey(blockHash))

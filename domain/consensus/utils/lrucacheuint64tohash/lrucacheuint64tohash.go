@@ -1,77 +1,167 @@
 package lrucacheuint64tohash
 
 import (
-	// "sync"
-
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
-// LRUCache is a least-recently-used cache from
-// uint64 to DomainHash
-type LRUCache struct {
-	// lock     *sync.RWMutex
-	cache    map[uint64]*externalapi.DomainHash
-	capacity int
+// entry holds the value + intrusive doubly-linked list pointers
+type entry struct {
+	key   uint64
+	value *externalapi.DomainHash
+
+	prev *entry
+	next *entry
 }
 
-// New creates a new LRUCache
+// LRUCache is an intrusive doubly-linked list based LRU cache.
+// Not safe for concurrent use without external synchronization.
+type LRUCache struct {
+	cache    map[uint64]*entry
+	head     *entry // most recently used
+	tail     *entry // least recently used
+	capacity int
+	length   int // explicit count for O(1) Len()
+}
+
+// New creates a new LRU cache
 func New(capacity int, preallocate bool) *LRUCache {
-	var cache map[uint64]*externalapi.DomainHash
+	m := make(map[uint64]*entry)
 	if preallocate {
-		cache = make(map[uint64]*externalapi.DomainHash, capacity+1)
-	} else {
-		cache = make(map[uint64]*externalapi.DomainHash)
+		m = make(map[uint64]*entry, capacity+(capacity>>2)) // ~25% headroom
 	}
 	return &LRUCache{
-		// lock:     &sync.RWMutex{},
-		cache:    cache,
+		cache:    m,
 		capacity: capacity,
 	}
 }
 
-// Add adds an entry to the LRUCache
-func (c *LRUCache) Add(key uint64, value *externalapi.DomainHash) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	c.cache[key] = value
+// moveToFront promotes the entry to MRU (head) position
+func (c *LRUCache) moveToFront(e *entry) {
+	if e == c.head {
+		return
+	}
 
-	if len(c.cache) > c.capacity {
-		c.evictRandom()
+	// unlink
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else {
+		c.head = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	} else {
+		c.tail = e.prev
+	}
+
+	// link to front
+	e.prev = nil
+	e.next = c.head
+	if c.head != nil {
+		c.head.prev = e
+	}
+	c.head = e
+
+	// first item case
+	if c.tail == nil {
+		c.tail = e
 	}
 }
 
-// Get returns the entry for the given key, or (nil, false) otherwise
+// Add inserts or updates the value and promotes to front
+func (c *LRUCache) Add(key uint64, value *externalapi.DomainHash) {
+	if e, ok := c.cache[key]; ok {
+		e.value = value
+		c.moveToFront(e)
+		return
+	}
+
+	e := &entry{
+		key:   key,
+		value: value,
+	}
+
+	c.moveToFront(e)
+	c.cache[key] = e
+	c.length++
+
+	if c.length > c.capacity {
+		c.evict()
+	}
+}
+
+// Get returns the value if present and promotes to MRU
 func (c *LRUCache) Get(key uint64) (*externalapi.DomainHash, bool) {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	value, ok := c.cache[key]
+	e, ok := c.cache[key]
 	if !ok {
 		return nil, false
 	}
-	return value, true
-}
 
-// Has returns whether the LRUCache contains the given key
-func (c *LRUCache) Has(key uint64) bool {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	number, ok := c.cache[key]
-	return ok && number != nil
-}
-
-// Remove removes the entry for the the given key. Does nothing if
-// the entry does not exist
-func (c *LRUCache) Remove(key uint64) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	delete(c.cache, key)
-}
-
-func (c *LRUCache) evictRandom() {
-	var keyToEvict uint64
-	for key := range c.cache {
-		keyToEvict = key
-		break
+	// kept nil check to match original behavior (though usually redundant)
+	if e.value == nil {
+		return nil, false
 	}
-	delete(c.cache, keyToEvict)
+
+	c.moveToFront(e)
+	return e.value, true
+}
+
+// Has checks existence without promotion
+func (c *LRUCache) Has(key uint64) bool {
+	e, ok := c.cache[key]
+	return ok && e.value != nil
+}
+
+// Remove deletes the entry if it exists
+func (c *LRUCache) Remove(key uint64) {
+	e, ok := c.cache[key]
+	if !ok {
+		return
+	}
+
+	c.unlink(e)
+	delete(c.cache, key)
+	c.length--
+}
+
+// evict removes the least recently used entry (tail)
+func (c *LRUCache) evict() {
+	if c.tail == nil {
+		return
+	}
+
+	e := c.tail
+	c.unlink(e)
+	delete(c.cache, e.key)
+	c.length--
+}
+
+// unlink removes node from the list (does not delete from map)
+func (c *LRUCache) unlink(e *entry) {
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else {
+		c.head = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	} else {
+		c.tail = e.prev
+	}
+
+	// help GC a tiny bit
+	e.prev = nil
+	e.next = nil
+}
+
+// Clear empties the cache
+func (c *LRUCache) Clear() {
+	c.cache = make(map[uint64]*entry, c.capacity>>1)
+	c.head = nil
+	c.tail = nil
+	c.length = 0
+}
+
+// Len returns current number of items
+func (c *LRUCache) Len() int {
+	return c.length
 }

@@ -14,7 +14,7 @@ var bucketName = []byte("block-statuses")
 // blockStatusStore represents a store of BlockStatuses
 type blockStatusStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache
+	cache   *lrucache.LRUCache[externalapi.BlockStatus]
 	bucket  model.DBBucket
 }
 
@@ -22,7 +22,7 @@ type blockStatusStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.BlockStatusStore {
 	return &blockStatusStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New(cacheSize, preallocate),
+		cache:   lrucache.New[externalapi.BlockStatus](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -45,8 +45,8 @@ func (bss *blockStatusStore) Get(dbContext model.DBReader, stagingArea *model.St
 		return status, nil
 	}
 	status, ok := bss.cache.Get(blockHash)
-	if ok && status != nil {
-		return status.(externalapi.BlockStatus), nil
+	if ok {
+		return status, nil
 	}
 
 	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))

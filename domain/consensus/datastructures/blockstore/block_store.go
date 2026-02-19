@@ -16,7 +16,7 @@ var bucketName = []byte("blocks")
 // blockStore represents a store of blocks
 type blockStore struct {
 	shardID     model.StagingShardID
-	cache       *lrucache.LRUCache
+	cache       *lrucache.LRUCache[*externalapi.DomainBlock]
 	countCached uint64
 	bucket      model.DBBucket
 	countKey    model.DBKey
@@ -26,7 +26,7 @@ type blockStore struct {
 func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockStore, error) {
 	blockStore := &blockStore{
 		shardID:  staging.GenerateShardingID(),
-		cache:    lrucache.New(cacheSize, preallocate),
+		cache:    lrucache.New[*externalapi.DomainBlock](cacheSize, preallocate),
 		bucket:   prefixBucket.Bucket(bucketName),
 		countKey: prefixBucket.Key([]byte("blocks-count")),
 	}
@@ -89,7 +89,7 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 
 	blockCached, ok := bs.cache.Get(blockHash)
 	if ok && blockCached != nil {
-		return blockCached.(*externalapi.DomainBlock).Clone(), nil
+		return blockCached.Clone(), nil
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))

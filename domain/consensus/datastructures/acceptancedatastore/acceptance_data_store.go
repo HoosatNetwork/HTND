@@ -14,7 +14,7 @@ var bucketName = []byte("acceptance-data")
 // acceptanceDataStore represents a store of AcceptanceData
 type acceptanceDataStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache
+	cache   *lrucache.LRUCache[externalapi.AcceptanceData]
 	bucket  model.DBBucket
 }
 
@@ -22,7 +22,7 @@ type acceptanceDataStore struct {
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.AcceptanceDataStore {
 	return &acceptanceDataStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New(cacheSize, preallocate),
+		cache:   lrucache.New[externalapi.AcceptanceData](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -46,7 +46,7 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 	}
 	acceptanceDataCached, ok := ads.cache.Get(blockHash)
 	if ok && acceptanceDataCached != nil {
-		return acceptanceDataCached.(externalapi.AcceptanceData).Clone(), nil
+		return acceptanceDataCached, nil
 	}
 
 	acceptanceDataBytes, err := dbContext.Get(ads.hashAsKey(blockHash))

@@ -1,94 +1,169 @@
 package lrucachehashandwindowsizetoblockghostdagdatahashpairs
 
 import (
-	// "sync"
-
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
+// lruKey identifies a cache entry
 type lruKey struct {
 	blockHash  externalapi.DomainHash
 	windowSize int
 }
 
-func newKey(blockHash *externalapi.DomainHash, windowSize int) lruKey {
-	return lruKey{
-		blockHash:  *blockHash,
-		windowSize: windowSize,
-	}
+// entry holds the value + intrusive doubly-linked list pointers
+type entry struct {
+	key   lruKey
+	value []*externalapi.BlockGHOSTDAGDataHashPair
+
+	prev *entry
+	next *entry
 }
 
-// LRUCache is a least-recently-used cache from
-// lruKey to *externalapi.BlockGHOSTDAGDataHashPair
+// LRUCache is an intrusive doubly-linked list based LRU cache.
+// Not safe for concurrent use without external synchronization.
 type LRUCache struct {
-	// lock     *sync.RWMutex
-	cache    map[lruKey][]*externalapi.BlockGHOSTDAGDataHashPair
+	cache    map[lruKey]*entry
+	head     *entry // most recently used
+	tail     *entry // least recently used
 	capacity int
+	length   int // O(1) Len()
 }
 
-// New creates a new LRUCache
+// New creates a new LRU cache.
 func New(capacity int, preallocate bool) *LRUCache {
-	var cache map[lruKey][]*externalapi.BlockGHOSTDAGDataHashPair
+	m := make(map[lruKey]*entry)
 	if preallocate {
-		cache = make(map[lruKey][]*externalapi.BlockGHOSTDAGDataHashPair, capacity+1)
-	} else {
-		cache = make(map[lruKey][]*externalapi.BlockGHOSTDAGDataHashPair)
+		m = make(map[lruKey]*entry, capacity+(capacity>>2)) // ~25% headroom
 	}
 	return &LRUCache{
-		// lock:     &sync.RWMutex{},
-		cache:    cache,
+		cache:    m,
 		capacity: capacity,
 	}
 }
 
-// Add adds an entry to the LRUCache
-func (c *LRUCache) Add(blockHash *externalapi.DomainHash, windowSize int, value []*externalapi.BlockGHOSTDAGDataHashPair) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	key := newKey(blockHash, windowSize)
-	c.cache[key] = value
+// moveToFront promotes entry to MRU (head) position.
+func (c *LRUCache) moveToFront(e *entry) {
+	if e == c.head {
+		return
+	}
 
-	if len(c.cache) > c.capacity {
-		c.evictRandom()
+	// Unlink from current position
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else {
+		c.head = e.next // was head
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	} else {
+		c.tail = e.prev // was tail
+	}
+
+	// Link to front
+	e.prev = nil
+	e.next = c.head
+	if c.head != nil {
+		c.head.prev = e
+	}
+	c.head = e
+
+	// If this is the first item
+	if c.tail == nil {
+		c.tail = e
 	}
 }
 
-// Get returns the entry for the given key, or (nil, false) otherwise
+// Add inserts or updates and promotes to front. Evicts if over capacity.
+func (c *LRUCache) Add(blockHash *externalapi.DomainHash, windowSize int, value []*externalapi.BlockGHOSTDAGDataHashPair) {
+	k := lruKey{blockHash: *blockHash, windowSize: windowSize}
+
+	if e, ok := c.cache[k]; ok {
+		e.value = value
+		c.moveToFront(e)
+		return
+	}
+
+	e := &entry{
+		key:   k,
+		value: value,
+	}
+
+	c.moveToFront(e)
+	c.cache[k] = e
+	c.length++
+
+	if c.length > c.capacity {
+		c.evict()
+	}
+}
+
+// Get returns value if present and promotes to MRU.
 func (c *LRUCache) Get(blockHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, bool) {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	key := newKey(blockHash, windowSize)
-	value, ok := c.cache[key]
+	k := lruKey{blockHash: *blockHash, windowSize: windowSize}
+	e, ok := c.cache[k]
 	if !ok {
 		return nil, false
 	}
-	return value, true
+	c.moveToFront(e)
+	return e.value, true
 }
 
-// Has returns whether the LRUCache contains the given key
+// Has checks existence without promotion.
 func (c *LRUCache) Has(blockHash *externalapi.DomainHash, windowSize int) bool {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	key := newKey(blockHash, windowSize)
-	dagdata, ok := c.cache[key]
-	return ok && dagdata != nil
+	k := lruKey{blockHash: *blockHash, windowSize: windowSize}
+	_, ok := c.cache[k]
+	return ok
 }
 
-// Remove removes the entry for the the given key. Does nothing if
-// the entry does not exist
+// Remove deletes entry if exists.
 func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, windowSize int) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	key := newKey(blockHash, windowSize)
-	delete(c.cache, key)
+	k := lruKey{blockHash: *blockHash, windowSize: windowSize}
+	e, ok := c.cache[k]
+	if !ok {
+		return
+	}
+	c.unlink(e)
+	delete(c.cache, k)
+	c.length--
 }
 
-func (c *LRUCache) evictRandom() {
-	var keyToEvict lruKey
-	for key := range c.cache {
-		keyToEvict = key
-		break
+// evict removes the LRU (tail) entry.
+func (c *LRUCache) evict() {
+	if c.tail == nil {
+		return
 	}
-	key := newKey(&keyToEvict.blockHash, keyToEvict.windowSize)
-	delete(c.cache, key)
+	e := c.tail
+	c.unlink(e)
+	delete(c.cache, e.key)
+	c.length--
+}
+
+// unlink removes node from list (does not delete from map).
+func (c *LRUCache) unlink(e *entry) {
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else {
+		c.head = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	} else {
+		c.tail = e.prev
+	}
+	// Help GC a bit
+	e.prev = nil
+	e.next = nil
+}
+
+// Clear empties the cache (old entries become GC-eligible).
+func (c *LRUCache) Clear() {
+	c.cache = make(map[lruKey]*entry, c.capacity>>1)
+	c.head = nil
+	c.tail = nil
+	c.length = 0
+}
+
+// Len returns current item count.
+func (c *LRUCache) Len() int {
+	return c.length
 }

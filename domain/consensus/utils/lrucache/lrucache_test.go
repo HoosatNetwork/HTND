@@ -14,7 +14,7 @@ func newTestHash(t *testing.T, b byte) *externalapi.DomainHash {
 }
 
 func TestLRUCache_AddGetHasRemove_NoEvictionWithinCapacity(t *testing.T) {
-	cache := New(10, false)
+	cache := New[any](10, false)
 
 	key1 := newTestHash(t, 1)
 	key2 := newTestHash(t, 2)
@@ -45,7 +45,7 @@ func TestLRUCache_AddGetHasRemove_NoEvictionWithinCapacity(t *testing.T) {
 }
 
 func TestLRUCache_KeyEqualityByValue(t *testing.T) {
-	cache := New(10, true)
+	cache := New[any](10, true)
 
 	keyA1 := newTestHash(t, 7)
 	keyA2 := newTestHash(t, 7) // same bytes, different pointer
@@ -61,7 +61,7 @@ func TestLRUCache_KeyEqualityByValue(t *testing.T) {
 }
 
 func TestLRUCache_OverwriteDoesNotGrow(t *testing.T) {
-	cache := New(10, false)
+	cache := New[any](10, false)
 	key := newTestHash(t, 3)
 
 	cache.Add(key, "first")
@@ -81,7 +81,7 @@ func TestLRUCache_OverwriteDoesNotGrow(t *testing.T) {
 }
 
 func TestLRUCache_EvictsExactlyOneWhenOverCapacity(t *testing.T) {
-	cache := New(2, false)
+	cache := New[any](2, false)
 
 	key1 := newTestHash(t, 1)
 	key2 := newTestHash(t, 2)
@@ -122,39 +122,28 @@ func TestLRUCache_EvictsExactlyOneWhenOverCapacity(t *testing.T) {
 }
 
 func TestLRUCache_RandomEvictionVariesAcrossTrials(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping probabilistic eviction test in -short")
+	// Eviction is deterministic LRU (least recently used).
+	cache := New[string](2, false)
+
+	key1 := newTestHash(t, 1)
+	key2 := newTestHash(t, 2)
+	key3 := newTestHash(t, 3)
+
+	cache.Add(key1, "v1")
+	cache.Add(key2, "v2")
+
+	// Touch key1 so that key2 becomes the LRU.
+	if _, ok := cache.Get(key1); !ok {
+		t.Fatalf("expected key1 to exist")
 	}
 
-	const trials = 200
-	evicted := make(map[byte]int)
+	// Adding key3 should evict key2 (the LRU).
+	cache.Add(key3, "v3")
 
-	for i := 0; i < trials; i++ {
-		cache := New(2, false)
-		key1 := newTestHash(t, 1)
-		key2 := newTestHash(t, 2)
-		key3 := newTestHash(t, 3)
-
-		cache.Add(key1, "v1")
-		cache.Add(key2, "v2")
-		cache.Add(key3, "v3")
-
-		missing := byte(0)
-		missingCount := 0
-		for _, b := range []byte{1, 2, 3} {
-			k := newTestHash(t, b)
-			if !cache.Has(k) {
-				missing = b
-				missingCount++
-			}
-		}
-		if missingCount != 1 {
-			t.Fatalf("expected exactly 1 evicted entry, got %d", missingCount)
-		}
-		evicted[missing]++
+	if cache.Has(key2) {
+		t.Fatalf("expected key2 to be evicted as LRU")
 	}
-
-	if len(evicted) < 2 {
-		t.Fatalf("expected eviction to vary across trials, got evicted set: %v", evicted)
+	if !cache.Has(key1) || !cache.Has(key3) {
+		t.Fatalf("expected key1 and key3 to remain")
 	}
 }

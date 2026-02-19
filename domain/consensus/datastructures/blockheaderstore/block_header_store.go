@@ -16,7 +16,7 @@ var countKeyName = []byte("block-headers-count")
 // blockHeaderStore represents a store of blocks
 type blockHeaderStore struct {
 	shardID     model.StagingShardID
-	cache       *lrucache.LRUCache
+	cache       *lrucache.LRUCache[externalapi.BlockHeader]
 	countCached uint64
 	bucket      model.DBBucket
 	countKey    model.DBKey
@@ -26,7 +26,7 @@ type blockHeaderStore struct {
 func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockHeaderStore, error) {
 	blockHeaderStore := &blockHeaderStore{
 		shardID:  staging.GenerateShardingID(),
-		cache:    lrucache.New(cacheSize, preallocate),
+		cache:    lrucache.New[externalapi.BlockHeader](cacheSize, preallocate),
 		bucket:   prefixBucket.Bucket(bucketName),
 		countKey: prefixBucket.Key(countKeyName),
 	}

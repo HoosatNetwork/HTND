@@ -1,94 +1,187 @@
 package lrucacheghostdagdata
 
 import (
-	// "sync"
-
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
+// lruKey identifies a cache entry (hash + trusted flag)
 type lruKey struct {
 	blockHash     externalapi.DomainHash
 	isTrustedData bool
 }
 
-func newKey(blockHash *externalapi.DomainHash, isTrustedData bool) lruKey {
-	return lruKey{
-		blockHash:     *blockHash,
-		isTrustedData: isTrustedData,
-	}
+// entry holds the value + intrusive list pointers
+type entry struct {
+	key   lruKey
+	value *externalapi.BlockGHOSTDAGData
+
+	prev *entry
+	next *entry
 }
 
-// LRUCache is a least-recently-used cache from
-// lruKey to *externalapi.BlockGHOSTDAGData
+// LRUCache is an intrusive-list based LRU cache (thread-unsafe)
 type LRUCache struct {
-	// lock     *sync.RWMutex
-	cache    map[lruKey]*externalapi.BlockGHOSTDAGData
+	cache    map[lruKey]*entry
+	head     *entry // most recently used
+	tail     *entry // least recently used
 	capacity int
+	length   int // explicit count → Len() is O(1)
 }
 
-// New creates a new LRUCache
+// New creates a new LRU cache
 func New(capacity int, preallocate bool) *LRUCache {
-	var cache map[lruKey]*externalapi.BlockGHOSTDAGData
+	m := make(map[lruKey]*entry)
 	if preallocate {
-		cache = make(map[lruKey]*externalapi.BlockGHOSTDAGData, capacity+1)
-	} else {
-		cache = make(map[lruKey]*externalapi.BlockGHOSTDAGData)
+		m = make(map[lruKey]*entry, capacity+(capacity>>2)) // ~25% headroom
 	}
+
 	return &LRUCache{
-		// lock:     &sync.RWMutex{},
-		cache:    cache,
+		cache:    m,
 		capacity: capacity,
 	}
 }
 
-// Add adds an entry to the LRUCache
-func (c *LRUCache) Add(blockHash *externalapi.DomainHash, isTrustedData bool, value *externalapi.BlockGHOSTDAGData) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	key := newKey(blockHash, isTrustedData)
-	c.cache[key] = value
+// moveToFront promotes an entry to MRU position
+func (c *LRUCache) moveToFront(e *entry) {
+	if e == c.head {
+		return
+	}
 
-	if len(c.cache) > c.capacity {
-		c.evictRandom()
+	// unlink
+	if e.prev != nil {
+		e.prev.next = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	}
+	if e == c.tail {
+		c.tail = e.prev
+	}
+
+	// link to front
+	e.next = c.head
+	e.prev = nil
+	if c.head != nil {
+		c.head.prev = e
+	}
+	c.head = e
+
+	if c.tail == nil {
+		c.tail = e // first item
 	}
 }
 
-// Get returns the entry for the given key, or (nil, false) otherwise
+// Add inserts or updates the value for the given key (promotes to front)
+func (c *LRUCache) Add(blockHash *externalapi.DomainHash, isTrustedData bool, value *externalapi.BlockGHOSTDAGData) {
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+
+	if e, ok := c.cache[k]; ok {
+		e.value = value
+		c.moveToFront(e)
+		return
+	}
+
+	// new entry
+	e := &entry{
+		key:   k,
+		value: value,
+	}
+
+	c.moveToFront(e)
+	c.cache[k] = e
+	c.length++
+
+	if c.length > c.capacity {
+		c.evict()
+	}
+}
+
+// Get returns the value if present and promotes it to MRU
 func (c *LRUCache) Get(blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, bool) {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	key := newKey(blockHash, isTrustedData)
-	value, ok := c.cache[key]
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+
+	e, ok := c.cache[k]
 	if !ok {
 		return nil, false
 	}
-	return value, true
+
+	c.moveToFront(e)
+	return e.value, true
 }
 
-// Has returns whether the LRUCache contains the given key
+// Has checks existence without promotion
 func (c *LRUCache) Has(blockHash *externalapi.DomainHash, isTrustedData bool) bool {
-	// c.lock.RLock()
-	// defer c.lock.RUnlock()
-	key := newKey(blockHash, isTrustedData)
-	dagdata, ok := c.cache[key]
-	return ok && dagdata != nil
-}
-
-// Remove removes the entry for the the given key. Does nothing if
-// the entry does not exist
-func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, isTrustedData bool) {
-	// c.lock.Lock()
-	// defer c.lock.Unlock()
-	key := newKey(blockHash, isTrustedData)
-	delete(c.cache, key)
-}
-
-func (c *LRUCache) evictRandom() {
-	var keyToEvict lruKey
-	for key := range c.cache {
-		keyToEvict = key
-		break
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
 	}
-	key := newKey(&keyToEvict.blockHash, keyToEvict.isTrustedData)
-	delete(c.cache, key)
+	_, ok := c.cache[k]
+	return ok
+}
+
+// Remove deletes the entry if it exists
+func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, isTrustedData bool) {
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+
+	e, ok := c.cache[k]
+	if !ok {
+		return
+	}
+
+	c.unlink(e)
+	delete(c.cache, k)
+	c.length--
+}
+
+// evict removes the LRU (tail) entry
+func (c *LRUCache) evict() {
+	if c.tail == nil {
+		return
+	}
+
+	e := c.tail
+	c.unlink(e)
+	delete(c.cache, e.key)
+	c.length--
+}
+
+// unlink removes the node from the list (does not delete from map)
+func (c *LRUCache) unlink(e *entry) {
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else {
+		c.head = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	} else {
+		c.tail = e.prev
+	}
+
+	// clear links to help GC slightly
+	e.prev = nil
+	e.next = nil
+}
+
+// Clear empties the cache
+func (c *LRUCache) Clear() {
+	// new map lets old entries GC naturally
+	c.cache = make(map[lruKey]*entry, c.capacity>>1)
+	c.head = nil
+	c.tail = nil
+	c.length = 0
+}
+
+// Len returns the current number of items
+func (c *LRUCache) Len() int {
+	return c.length
 }
