@@ -166,9 +166,9 @@ func TestIsFinalizedTransaction(t *testing.T) {
 
 		// Build a small DAG
 		outerParents := []*externalapi.DomainHash{consensusConfig.GenesisHash}
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			var innerParents []*externalapi.DomainHash
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				blockHash, _, err := tc.AddBlock(outerParents, nil, nil)
 				if err != nil {
 					t.Fatalf("AddBlock: %+v", err)
@@ -176,7 +176,7 @@ func TestIsFinalizedTransaction(t *testing.T) {
 				innerParents = append(innerParents, blockHash)
 			}
 			outerParents = []*externalapi.DomainHash{}
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				blockHash, _, err := tc.AddBlock(innerParents, nil, nil)
 				if err != nil {
 					t.Fatalf("AddBlock: %+v", err)

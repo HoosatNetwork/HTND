@@ -68,7 +68,7 @@ func TestCompoundTxRateLimiter_RecordAtPastTime(t *testing.T) {
 	// Record 10 submissions 2 minutes ago; they should be cleaned out and not count now
 	past := time.Now().Add(-2 * time.Minute)
 	tracker.mutex.Lock()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		tracker.submissions = append(tracker.submissions, compoundTxSubmission{timestamp: past, txID: "old"})
 	}
 	tracker.mutex.Unlock()

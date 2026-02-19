@@ -96,10 +96,7 @@ retry:
 
 		const chunkSize = 100 // To avoid sending a message bigger than the gRPC max message size, we split it to chunks
 		for offset := 0; offset < len(signedTransactions); offset += chunkSize {
-			end := len(signedTransactions)
-			if offset+chunkSize <= len(signedTransactions) {
-				end = offset + chunkSize
-			}
+			end := min(offset+chunkSize, len(signedTransactions))
 
 			chunk := signedTransactions[offset:end]
 			response, err := daemonClient.Broadcast(broadcastCtx, &pb.BroadcastRequest{Transactions: chunk})

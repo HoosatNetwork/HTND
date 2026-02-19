@@ -204,7 +204,7 @@ func IsValidJSONObject(data []byte, DAAScore uint64) (bool, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber() // Preserve number precision and avoid float64 conversion
 
-	var obj map[string]interface{}
+	var obj map[string]any
 	err := decoder.Decode(&obj)
 	if err != nil {
 		return false, fmt.Errorf("invalid JSON: %v", err)
@@ -264,7 +264,7 @@ func containsSuspiciousBinarySignatures(data []byte) bool {
 }
 
 // hasEncodedFileContent recursively checks JSON object for encoded binary content with depth limit
-func hasEncodedFileContent(data interface{}, depth int, DAAScore uint64) error {
+func hasEncodedFileContent(data any, depth int, DAAScore uint64) error {
 	// Prevent deep recursion that could cause stack overflow
 	const maxDepth = 10
 	if depth > maxDepth {
@@ -272,7 +272,7 @@ func hasEncodedFileContent(data interface{}, depth int, DAAScore uint64) error {
 	}
 
 	switch v := data.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		// Limit the number of keys we check for performance
 		const maxKeys = 100
 		keyCount := 0
@@ -291,7 +291,7 @@ func hasEncodedFileContent(data interface{}, depth int, DAAScore uint64) error {
 				return err
 			}
 		}
-	case []interface{}:
+	case []any:
 		// Limit array size for performance
 		const maxArraySize = 100
 		if len(v) > maxArraySize {

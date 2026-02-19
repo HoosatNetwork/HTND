@@ -37,7 +37,7 @@ func TestBlockStatus(t *testing.T) {
 		}
 
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("AddBlock: %+v", err)

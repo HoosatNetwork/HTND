@@ -2,6 +2,7 @@ package coinbasemanager
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -129,15 +130,16 @@ func TestBuildSubsidyTable(t *testing.T) {
 		}
 	}
 
-	tableStr := "\n{\t"
+	var tableStr strings.Builder
+	tableStr.WriteString("\n{\t")
 	for i := 0; i < len(subsidyTable); i++ {
-		tableStr += strconv.FormatUint(subsidyTable[i], 10) + ", "
+		tableStr.WriteString(strconv.FormatUint(subsidyTable[i], 10) + ", ")
 		if (i+1)%25 == 0 {
-			tableStr += "\n\t"
+			tableStr.WriteString("\n\t")
 		}
 	}
-	tableStr += "\n}"
-	t.Logf("%s", tableStr)
+	tableStr.WriteString("\n}")
+	t.Logf("%s", tableStr.String())
 	len := len(subsidyTable)
 	t.Logf("Length: %d", len)
 }

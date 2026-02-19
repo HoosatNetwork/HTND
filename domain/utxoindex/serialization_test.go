@@ -13,7 +13,7 @@ import (
 func Test_serializeHashes(t *testing.T) {
 	r := rand.New(rand.NewSource(0))
 
-	for length := 0; length < 32; length++ {
+	for length := range 32 {
 		hashes := make([]*externalapi.DomainHash, length)
 		for i := range hashes {
 			var hashBytes [32]byte

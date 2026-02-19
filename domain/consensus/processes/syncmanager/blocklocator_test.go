@@ -26,7 +26,7 @@ func TestCreateBlockLocator(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
@@ -140,7 +140,7 @@ func TestCreateHeadersSelectedChainBlockLocator(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {

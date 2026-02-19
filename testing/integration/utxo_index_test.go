@@ -54,7 +54,7 @@ func TestUTXOIndex(t *testing.T) {
 	}
 
 	// Mine some blocks
-	for i := 0; i < blockAmountToMine; i++ {
+	for range blockAmountToMine {
 		mineNextBlock(t, htnd)
 	}
 
@@ -77,7 +77,7 @@ func TestUTXOIndex(t *testing.T) {
 	// mined
 	var notificationEntries []*appmessage.UTXOsByAddressesEntry
 	var sumAddedSompi uint64
-	for i := 0; i < blockAmountToMine; i++ {
+	for range blockAmountToMine {
 		notification := <-onUTXOsChangedChan
 		if len(notification.Removed) > 0 {
 			t.Fatalf("Unexpectedly received that a UTXO has been removed")
@@ -100,7 +100,7 @@ func TestUTXOIndex(t *testing.T) {
 
 	// Submit a few transactions that spends some UTXOs
 	const transactionAmountToSpend = 5
-	for i := 0; i < transactionAmountToSpend; i++ {
+	for i := range transactionAmountToSpend {
 		rpcTransaction, transactionID := buildTransactionForUTXOIndexTest(t, notificationEntries[i])
 		_, err = htnd.rpcClient.SubmitTransaction(rpcTransaction, transactionID, false)
 		if err != nil {
@@ -117,7 +117,7 @@ func TestUTXOIndex(t *testing.T) {
 		t.Fatalf("Unexpected amount of removed UTXOs. Want: %d, got: %d",
 			transactionAmountToSpend, len(notification.Removed))
 	}
-	for i := 0; i < transactionAmountToSpend; i++ {
+	for i := range transactionAmountToSpend {
 		entry := notificationEntries[i]
 
 		found := false

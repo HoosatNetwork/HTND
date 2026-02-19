@@ -36,7 +36,7 @@ const (
 // Read logger flags from the LOGFLAGS environment variable. Multiple flags can
 // be set at once, separated by commas.
 func getDefaultFlags() (flags uint32) {
-	for _, f := range strings.Split(os.Getenv("LOGFLAGS"), ",") {
+	for f := range strings.SplitSeq(os.Getenv("LOGFLAGS"), ",") {
 		switch f {
 		case "longfile":
 			flags |= LogFlagLongFile

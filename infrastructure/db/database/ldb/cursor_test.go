@@ -60,7 +60,7 @@ func TestCursorSanity(t *testing.T) {
 
 	// Write some data to the database
 	bucket := database.MakeBucket([]byte("bucket"))
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key := fmt.Sprintf("key%d", i)
 		value := fmt.Sprintf("value%d", i)
 		err := ldb.Put(bucket.Key([]byte(key)), []byte(value))
@@ -221,7 +221,7 @@ func TestCursorCloseFirstAndNext(t *testing.T) {
 	defer teardownFunc()
 
 	// Write some data to the database
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key := fmt.Sprintf("key%d", i)
 		value := fmt.Sprintf("value%d", i)
 		err := ldb.Put(database.MakeBucket([]byte("bucket")).Key([]byte(key)), []byte(value))

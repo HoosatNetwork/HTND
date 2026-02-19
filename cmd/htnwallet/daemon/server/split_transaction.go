@@ -123,7 +123,7 @@ func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.Partia
 	}
 
 	splitTransactions := make([]*serialization.PartiallySignedTransaction, splitCount)
-	for i := 0; i < splitCount; i++ {
+	for i := range splitCount {
 		startIndex := i * inputCountPerSplit
 		endIndex := startIndex + inputCountPerSplit
 		var err error

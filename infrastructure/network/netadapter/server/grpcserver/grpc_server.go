@@ -73,7 +73,7 @@ func (s *gRPCServer) listenOn(listenAddr string) error {
 func (s *gRPCServer) Stop() error {
 	const stopTimeout = 2 * time.Second
 
-	stopChan := make(chan interface{})
+	stopChan := make(chan any)
 	spawn("gRPCServer.Stop", func() {
 		s.server.GracefulStop()
 		close(stopChan)

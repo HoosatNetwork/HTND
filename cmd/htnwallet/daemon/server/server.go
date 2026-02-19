@@ -145,7 +145,7 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 	case <-interrupt:
 		const stopTimeout = 2 * time.Second
 
-		stopChan := make(chan interface{})
+		stopChan := make(chan any)
 		spawn("gRPCServer.Stop", func() {
 			grpcServer.GracefulStop()
 			close(stopChan)

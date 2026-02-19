@@ -69,7 +69,7 @@ func TestValidateMedianTime(t *testing.T) {
 
 		blockTime := tip.Header.TimeInMilliseconds()
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			blockTime += 100
 			_, tipHash = addBlock(blockTime, []*externalapi.DomainHash{tipHash}, nil)
 		}

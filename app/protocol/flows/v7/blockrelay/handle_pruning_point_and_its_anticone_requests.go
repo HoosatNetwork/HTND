@@ -46,7 +46,7 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 			}
 
 			msgPruningPointHeaders := make([]*appmessage.MsgBlockHeader, len(pruningPointHeaders))
-			for i := 0; i < len(pruningPointHeaders); i++ {
+			for i := range pruningPointHeaders {
 				msgPruningPointHeaders[i] = appmessage.DomainBlockHeaderToBlockHeader(pruningPointHeaders[i])
 			}
 
@@ -68,14 +68,14 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 			ghostdagData := make([]*externalapi.BlockGHOSTDAGDataHashPair, 0)
 			ghostdagDataHashToIndex := make(map[externalapi.DomainHash]int)
 			trustedDataGHOSTDAGDataIndexes := make(map[externalapi.DomainHash][]uint64)
-			for i := 0; i < len(pointAndItsAnticone); i++ {
+			for i := range pointAndItsAnticone {
 				blockDAAWindowHashes, err := context.Domain().Consensus().BlockDAAWindowHashes(pointAndItsAnticone[i])
 				if err != nil {
 					return err
 				}
 
 				trustedDataDAABlockIndexes[*pointAndItsAnticone[i]] = make([]uint64, 0, windowSize)
-				for x := 0; x < len(blockDAAWindowHashes); x++ {
+				for x := range blockDAAWindowHashes {
 					index, exists := daaWindowHashesToIndex[*blockDAAWindowHashes[x]]
 					if !exists {
 						trustedDataDataDAAHeader, err := context.Domain().Consensus().TrustedDataDataDAAHeader(pointAndItsAnticone[i], blockDAAWindowHashes[x], uint64(i))
@@ -96,7 +96,7 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 				}
 
 				trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]] = make([]uint64, 0, context.Config().NetParams().K[constants.GetBlockVersion()-1])
-				for y := 0; y < len(ghostdagDataBlockHashes); y++ {
+				for y := range ghostdagDataBlockHashes {
 					index, exists := ghostdagDataHashToIndex[*ghostdagDataBlockHashes[y]]
 					if !exists {
 						data, err := context.Domain().Consensus().TrustedGHOSTDAGData(ghostdagDataBlockHashes[y])
@@ -119,7 +119,7 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 			if err != nil {
 				return err
 			}
-			for i := 0; i < len(pointAndItsAnticone); i++ {
+			for i := range pointAndItsAnticone {
 				block, found, err := context.Domain().Consensus().GetBlock(pointAndItsAnticone[i])
 				if err != nil {
 					return err

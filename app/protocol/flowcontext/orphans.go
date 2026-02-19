@@ -1,6 +1,8 @@
 package flowcontext
 
 import (
+	"slices"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
@@ -108,13 +110,7 @@ func (f *FlowContext) addChildOrphansToProcessQueue(blockHash *externalapi.Domai
 
 	blockChildren := f.findChildOrphansOfBlock(blockHash)
 	for _, blockChild := range blockChildren {
-		exists := false
-		for _, queueOrphan := range processQueue {
-			if queueOrphan == blockChild {
-				exists = true
-				break
-			}
-		}
+		exists := slices.Contains(processQueue, blockChild)
 		if !exists {
 			processQueue = append(processQueue, blockChild)
 		}

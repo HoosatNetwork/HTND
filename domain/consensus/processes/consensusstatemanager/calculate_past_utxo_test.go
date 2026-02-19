@@ -124,7 +124,7 @@ func TestPastUTXOMultiset(t *testing.T) {
 
 		// Build a short chain
 		currentHash := consensusConfig.GenesisHash
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			currentHash, _, err = consensus.AddBlock([]*externalapi.DomainHash{currentHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error creating block A: %+v", err)

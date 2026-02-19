@@ -174,17 +174,17 @@ func (rt *reachabilityManager) String(stagingArea *model.StagingArea, node *exte
 			continue
 		}
 
-		line := ""
+		var line strings.Builder
 		for _, child := range children {
 			childInterval, err := rt.interval(stagingArea, child)
 			if err != nil {
 				return "", err
 			}
 
-			line += childInterval.String()
+			line.WriteString(childInterval.String())
 			queue = append(queue, child)
 		}
-		lines = append([]string{line}, lines...)
+		lines = append([]string{line.String()}, lines...)
 	}
 	return strings.Join(lines, "\n"), nil
 }

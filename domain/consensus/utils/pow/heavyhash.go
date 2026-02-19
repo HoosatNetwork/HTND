@@ -109,8 +109,8 @@ func GenerateHoohashMatrixV110(hash *externalapi.DomainHash) *floatMatrix {
 	generator := newxoShiRo256PlusPlus(hash)
 	const normalize float64 = 1000000
 
-	for i := 0; i < 64; i++ {
-		for j := 0; j < 64; j++ {
+	for i := range 64 {
+		for j := range 64 {
 			val := generator.Uint64()
 			lower4Bytes := uint32(val & 0xFFFFFFFF)
 			mat[i][j] = float64(lower4Bytes) / float64(math.MaxUint32) * normalize
@@ -244,7 +244,7 @@ func (mat *matrix) computeHoohashRank() int {
 	}
 	var rank int
 	var rowSelected [64]bool
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		var j int
 		for j = 0; j < 64; j++ {
 			if !rowSelected[j] && math.Abs(B[j][i]) > eps {
@@ -257,7 +257,7 @@ func (mat *matrix) computeHoohashRank() int {
 			for p := i + 1; p < 64; p++ {
 				B[j][p] /= B[j][i]
 			}
-			for k := 0; k < 64; k++ {
+			for k := range 64 {
 				if k != j && math.Abs(B[k][i]) > eps {
 					for p := i + 1; p < 64; p++ {
 						B[k][p] -= B[j][p] * B[k][i]
@@ -278,7 +278,7 @@ func (mat *matrix) computeRank() int {
 	}
 	var rank int
 	var rowSelected [64]bool
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		var j int
 		for j = 0; j < 64; j++ {
 			if !rowSelected[j] && math.Abs(B[j][i]) > eps {
@@ -291,7 +291,7 @@ func (mat *matrix) computeRank() int {
 			for p := i + 1; p < 64; p++ {
 				B[j][p] /= B[j][i]
 			}
-			for k := 0; k < 64; k++ {
+			for k := range 64 {
 				if k != j && math.Abs(B[k][i]) > eps {
 					for p := i + 1; p < 64; p++ {
 						B[k][p] -= B[j][p] * B[k][i]
@@ -309,14 +309,14 @@ func (mat *matrix) HoohashMatrixMultiplicationV1(hash *externalapi.DomainHash) *
 	var product [64]float64
 
 	// Populate the vector with floating-point values
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		vector[2*i] = float64(hashBytes[i] >> 4)
 		vector[2*i+1] = float64(hashBytes[i] & 0x0F)
 	}
 
 	// Matrix-vector multiplication with floating point operations
-	for i := 0; i < 64; i++ {
-		for j := 0; j < 64; j++ {
+	for i := range 64 {
+		for j := range 64 {
 			// Transform Matrix values with complex non linear equations and sum into product.
 			forComplex := float64(mat[i][j]) * vector[j]
 			for forComplex > 16 {
@@ -347,14 +347,14 @@ func (mat *matrix) HoohashMatrixMultiplicationV101(hash *externalapi.DomainHash)
 	var product [64]float64
 
 	// Populate the vector with floating-point values
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		vector[2*i] = float64(hashBytes[i] >> 4)
 		vector[2*i+1] = float64(hashBytes[i] & 0x0F)
 	}
 
 	// Matrix-vector multiplication with floating point operations
-	for i := 0; i < 64; i++ {
-		for j := 0; j < 64; j++ {
+	for i := range 64 {
+		for j := range 64 {
 			// Transform Matrix values with complex non linear equations and sum into product.
 			forComplex := float64(mat[i][j]) * vector[j]
 			for forComplex > 14 {
@@ -412,14 +412,14 @@ func (mat *floatMatrix) HoohashMatrixMultiplicationV110(hash *externalapi.Domain
 	sw := float64(0.0)
 
 	// Populate the vector with floating-point values from the hash bytes
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		vector[2*i] = hashBytes[i] >> 4     // Upper 4 bits
 		vector[2*i+1] = hashBytes[i] & 0x0F // Lower 4 bits
 	}
 
 	// Perform the matrix-vector multiplication with nonlinear adjustments
-	for i := 0; i < 64; i++ {
-		for j := 0; j < 64; j++ {
+	for i := range 64 {
+		for j := range 64 {
 			if sw <= 0.02 {
 				input := (mat[i][j]*hashMod*float64(vector[j]) + nonceMod)
 				output := ForComplex(input) * float64(vector[j]) * multiplier
@@ -439,7 +439,7 @@ func (mat *floatMatrix) HoohashMatrixMultiplicationV110(hash *externalapi.Domain
 		pval := uint64(product[i]) + uint64(product[i+1])
 		scaledValues[i/2] = uint8(pval & 0xFF)
 	}
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		res[i] = hashBytes[i] ^ scaledValues[i]
 	}
 	writer := hashes.Blake3HashWriter()
@@ -451,14 +451,14 @@ func (mat *matrix) bHeavyHash(hash *externalapi.DomainHash) *externalapi.DomainH
 	hashBytes := hash.ByteArray()
 	var vector [64]uint16
 	var product [64]uint16
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		vector[2*i] = uint16(hashBytes[i] >> 4)
 		vector[2*i+1] = uint16(hashBytes[i] & 0x0F)
 	}
 	// Matrix-vector multiplication, and convert to 4 bits.
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		var sum uint16
-		for j := 0; j < 64; j++ {
+		for j := range 64 {
 			sum += mat[i][j] * vector[j]
 		}
 		product[i] = sum >> 10

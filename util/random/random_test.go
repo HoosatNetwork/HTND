@@ -17,7 +17,7 @@ func TestRandomUint64(t *testing.T) {
 	maxHits := 5
 
 	numHits := 0
-	for i := 0; i < tries; i++ {
+	for i := range tries {
 		nonce, err := Uint64()
 		if err != nil {
 			t.Errorf("RandomUint64 iteration %d failed - err %v",

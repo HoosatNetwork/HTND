@@ -311,8 +311,8 @@ func TestOverfillAddressManager(t *testing.T) {
 
 	generateTestAddresses := func(amount int) []*appmessage.NetAddress {
 		testAddresses := make([]*appmessage.NetAddress, 0, amount)
-		for i := byte(0); i < 128; i++ {
-			for j := byte(0); j < 128; j++ {
+		for i := range byte(128) {
+			for j := range byte(128) {
 				testAddress := &appmessage.NetAddress{IP: net.IP{1, 2, i, j}, Timestamp: mstime.Now()}
 				testAddresses = append(testAddresses, testAddress)
 				if len(testAddresses) == amount {

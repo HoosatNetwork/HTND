@@ -155,7 +155,7 @@ func testReorg(cfg *configFlags) {
 	}
 }
 
-func fail(format string, args ...interface{}) {
+func fail(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Fprintln(os.Stderr, msg)
 	log.Criticalf("%s", msg)

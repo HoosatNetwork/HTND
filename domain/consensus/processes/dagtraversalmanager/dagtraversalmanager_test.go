@@ -49,7 +49,7 @@ func TestLowestChainBlockAboveOrEqualToBlueScore(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 9; i++ {
+		for range 9 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
@@ -73,7 +73,7 @@ func TestLowestChainBlockAboveOrEqualToBlueScore(t *testing.T) {
 		blueScore11BlockHash := tipHash
 		checkBlueScore(blueScore11BlockHash, 11)
 
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
@@ -97,7 +97,7 @@ func TestLowestChainBlockAboveOrEqualToBlueScore(t *testing.T) {
 		blueScore18BlockHash := tipHash
 		checkBlueScore(blueScore18BlockHash, 18)
 
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {

@@ -53,7 +53,7 @@ func stringToValue(parameterDesc *parameterDescription, valueStr string) (reflec
 		return reflect.Zero(parameterDesc.typeof), nil
 	}
 
-	var value interface{}
+	var value any
 	var err error
 	switch parameterDesc.typeof.Kind() {
 	case reflect.Bool:
@@ -137,7 +137,7 @@ func stringToValue(parameterDesc *parameterDescription, valueStr string) (reflec
 		// Unpointer the value once it's ready
 		fieldInterfaceValue := reflect.ValueOf(fieldInterface)
 		value = fieldInterfaceValue.Elem().Interface()
-	case reflect.Ptr:
+	case reflect.Pointer:
 		dummyParameterDesc := &parameterDescription{
 			name:   "valuePointedTo",
 			typeof: parameterDesc.typeof.Elem(),

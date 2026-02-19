@@ -30,7 +30,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 		}
 		getRelayBlocksMessage := message.(*appmessage.MsgRequestRelayBlocks)
 		hashesLen := len(getRelayBlocksMessage.Hashes)
-		for i := 0; i < hashesLen; i++ {
+		for i := range hashesLen {
 			hash := getRelayBlocksMessage.Hashes[i]
 			go func(hash *externalapi.DomainHash) {
 				block, found, err := context.Domain().Consensus().GetBlock(hash)
@@ -44,7 +44,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 				}
 
 				if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
-					for j := 0; j < 5; j++ {
+					for range 5 {
 						block, found, err = context.Domain().Consensus().GetBlock(hash)
 						if err != nil {
 							log.Warnf("unable to re-fetch requested block hash %s: %s", hash, err)

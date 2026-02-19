@@ -81,7 +81,7 @@ func addArbitraryBlocks(t *testing.T, tc testapi.TestConsensus) {
 
 	randSource := rand.New(rand.NewSource(33233))
 
-	for i := 0; i < numChainsToAdd; i++ {
+	for i := range numChainsToAdd {
 		randomIndex := randSource.Intn(len(blocks))
 		randomParent := blocks[randomIndex]
 		newBlock, _, err := tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{randomParent})
@@ -93,7 +93,7 @@ func addArbitraryBlocks(t *testing.T, tc testapi.TestConsensus) {
 		if randSource.Intn(8) == 0 {
 			numBlocksInChain := randSource.Intn(maxBlocksInChain)
 			chainBlock := newBlock
-			for j := 0; j < numBlocksInChain; j++ {
+			for range numBlocksInChain {
 				chainBlock, _, err = tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{chainBlock})
 				if err != nil {
 					t.Fatal(err)
@@ -191,16 +191,16 @@ func addAlternatingReorgBlocks(t *testing.T, tc testapi.TestConsensus, tips []*e
 	}
 
 	// Alternate between the chains 200 times
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		if i%2 == 0 {
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				chainTip, _, err = tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{chainTip})
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
 		} else {
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				reorgTip, _, err = tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{reorgTip})
 				if err != nil {
 					t.Fatal(err)

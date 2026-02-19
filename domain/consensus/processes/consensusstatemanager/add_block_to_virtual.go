@@ -1,6 +1,8 @@
 package consensusstatemanager
 
 import (
+	"slices"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -153,13 +155,7 @@ func (csm *consensusStateManager) calculateNewTips(
 	newTips := []*externalapi.DomainHash{newTipHash}
 
 	for _, currentTip := range currentTips {
-		isCurrentTipInNewTipParents := false
-		for _, newTipParent := range newTipParents {
-			if currentTip.Equal(newTipParent) {
-				isCurrentTipInNewTipParents = true
-				break
-			}
-		}
+		isCurrentTipInNewTipParents := slices.ContainsFunc(newTipParents, currentTip.Equal)
 		if !isCurrentTipInNewTipParents {
 			newTips = append(newTips, currentTip)
 		}

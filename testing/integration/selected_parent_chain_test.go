@@ -30,7 +30,7 @@ func TestVirtualSelectedParentChain(t *testing.T) {
 	chain1TipHash := consensushashing.BlockHash(htnd1.config.NetParams().GenesisBlock)
 	chain1TipHashString := chain1TipHash.String()
 	const blockAmountToMine = 10
-	for i := 0; i < blockAmountToMine; i++ {
+	for range blockAmountToMine {
 		minedBlock := mineNextBlock(t, htnd1)
 		notification := <-onVirtualSelectedParentChainChangedChan
 		if len(notification.RemovedChainBlockHashes) > 0 {
@@ -53,7 +53,7 @@ func TestVirtualSelectedParentChain(t *testing.T) {
 	// In htnd2, mine a different chain of `blockAmountToMine` + 1
 	// blocks over the genesis
 	var chain2Tip *externalapi.DomainBlock
-	for i := 0; i < blockAmountToMine+1; i++ {
+	for range blockAmountToMine + 1 {
 		chain2Tip = mineNextBlock(t, htnd2)
 	}
 

@@ -23,7 +23,7 @@ func (e ProtocolError) Unwrap() error {
 
 // Errorf formats according to a format specifier and returns the string
 // as a ProtocolError.
-func Errorf(shouldBan bool, format string, args ...interface{}) error {
+func Errorf(shouldBan bool, format string, args ...any) error {
 	return ProtocolError{
 		ShouldBan: shouldBan,
 		Cause:     errors.Errorf(format, args...),
@@ -48,7 +48,7 @@ func Wrap(shouldBan bool, err error, message string) error {
 }
 
 // Wrapf wraps the given error with the given format and returns it as a ProtocolError.
-func Wrapf(shouldBan bool, err error, format string, args ...interface{}) error {
+func Wrapf(shouldBan bool, err error, format string, args ...any) error {
 	return ProtocolError{
 		ShouldBan: shouldBan,
 		Cause:     errors.Wrapf(err, format, args...),
@@ -58,7 +58,7 @@ func Wrapf(shouldBan bool, err error, format string, args ...interface{}) error 
 // ConvertToBanningProtocolErrorIfRuleError converts the given error to
 // a banning protocol error if it's a rule error, and otherwise keep it
 // as is.
-func ConvertToBanningProtocolErrorIfRuleError(err error, format string, args ...interface{}) error {
+func ConvertToBanningProtocolErrorIfRuleError(err error, format string, args ...any) error {
 	if !errors.As(err, &ruleerrors.RuleError{}) {
 		return err
 	}

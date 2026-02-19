@@ -165,7 +165,6 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 					referenceBlocks = []*externalapi.DomainHash{parent}
 				} else {
 					for childHash, childHeader := range virtualGenesisChildrenHeaders {
-						childHash := childHash // Assign to a new pointer to avoid `range` pointer reuse
 						if bpb.parentsManager.ParentsAtLevel(childHeader, blockLevel).Contains(parent) {
 							referenceBlocks = append(referenceBlocks, &childHash)
 						}
@@ -184,7 +183,6 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 				toRemove := hashset.New()
 				isAncestorOfAnyCandidate := false
 				for candidate, candidateReferences := range candidatesByLevelToReferenceBlocksMap[blockLevel] {
-					candidate := candidate // Assign to a new pointer to avoid `range` pointer reuse
 					isInFutureOfCurrentCandidate, err := bpb.dagTopologyManager.IsAnyAncestorOf(stagingArea, candidateReferences, parent)
 					if err != nil {
 						return nil, err
@@ -234,7 +232,6 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 
 		levelBlocks := make(externalapi.BlockLevelParents, 0, len(candidatesByLevelToReferenceBlocksMap[blockLevel]))
 		for block := range candidatesByLevelToReferenceBlocksMap[blockLevel] {
-			block := block // Assign to a new pointer to avoid `range` pointer reuse
 			levelBlocks = append(levelBlocks, &block)
 		}
 

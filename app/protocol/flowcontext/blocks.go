@@ -88,7 +88,7 @@ func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
 	totalLen := len(transactionsAcceptedToMempool) + len(txIDsToRebroadcast)
 	txIDsToBroadcast := make([]*externalapi.DomainTransactionID, totalLen)
 
-	for i := 0; i < len(transactionsAcceptedToMempool); i++ {
+	for i := range transactionsAcceptedToMempool {
 		txIDsToBroadcast[i] = consensushashing.TransactionID(transactionsAcceptedToMempool[i])
 	}
 

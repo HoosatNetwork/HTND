@@ -33,7 +33,7 @@ func generateHoosatdMessage(commandValue reflect.Value, commandDesc *commandDesc
 	commandWrapper := reflect.New(commandDesc.typeof)
 	unwrapCommandValue(commandWrapper).Set(commandValue)
 
-	htndMessage := reflect.New(reflect.TypeOf(protowire.HoosatdMessage{}))
+	htndMessage := reflect.New(reflect.TypeFor[protowire.HoosatdMessage]())
 	htndMessage.Elem().FieldByName("Payload").Set(commandWrapper)
 	return htndMessage.Interface().(*protowire.HoosatdMessage), nil
 }

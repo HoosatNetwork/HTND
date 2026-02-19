@@ -81,7 +81,7 @@ func testEstimateMassIncreaseForSignaturesSetUp(t *testing.T, consensusConfig *c
 	const numKeys = 3
 	mnemonics := make([]string, numKeys)
 	publicKeys := make([]string, numKeys)
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		var err error
 		mnemonics[i], err = libhtnwallet.CreateMnemonic()
 		if err != nil {

@@ -116,7 +116,7 @@ func TestPOW(t *testing.T) {
 func solveBlockWithWrongPOW(block *externalapi.DomainBlock) *externalapi.DomainBlock {
 	header := block.Header.ToMutable()
 	state := pow.NewState(header)
-	for i := uint64(0); i < math.MaxUint64; i++ {
+	for i := range uint64(math.MaxUint64) {
 		state.Nonce = i
 		if !state.CheckProofOfWork(block, true) {
 			header.SetNonce(state.Nonce)

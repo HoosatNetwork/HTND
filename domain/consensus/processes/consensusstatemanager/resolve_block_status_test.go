@@ -385,7 +385,7 @@ func TestResolveBlockStatusSanity(t *testing.T) {
 		// Add a chain of blocks over the genesis and make sure all their
 		// statuses are valid
 		currentHash := genesisHash
-		for i := 0; i < chainLength; i++ {
+		for i := range chainLength {
 			addedBlockHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{currentHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("error adding block %d: %s", i, err)
@@ -424,7 +424,7 @@ func TestResolveBlockStatusSanity(t *testing.T) {
 
 		// Add another two blocks to the second chain. This should trigger
 		// resolving the entire chain
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			addedBlockHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{currentHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("error adding block %d: %s", i, err)

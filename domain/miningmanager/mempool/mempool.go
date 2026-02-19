@@ -154,7 +154,7 @@ func (mp *mempool) BlockCandidateTransactions() []*externalapi.DomainTransaction
 	var candidateTxs []*externalapi.DomainTransaction
 	var spamTx *externalapi.DomainTransaction
 	var spamTxNewestUTXODaaScore uint64
-	for i := 0; i < len(readyTxs); i++ {
+	for i := range readyTxs {
 		if len(readyTxs[i].Outputs) <= 2 {
 			candidateTxs = append(candidateTxs, readyTxs[i])
 			continue

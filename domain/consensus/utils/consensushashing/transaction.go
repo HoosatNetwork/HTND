@@ -68,7 +68,7 @@ func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransac
 // TransactionIDs converts the provided slice of DomainTransactions to a corresponding slice of TransactionIDs
 func TransactionIDs(txs []*externalapi.DomainTransaction) []*externalapi.DomainTransactionID {
 	txIDs := make([]*externalapi.DomainTransactionID, len(txs))
-	for i := 0; i < len(txs); i++ {
+	for i := range txs {
 		txIDs[i] = TransactionID(txs[i])
 	}
 	return txIDs

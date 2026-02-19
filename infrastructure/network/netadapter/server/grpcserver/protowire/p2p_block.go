@@ -3,7 +3,6 @@ package protowire
 import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 func (x *HoosatdMessage_Block) toAppMessage() (appmessage.Message, error) {
@@ -61,7 +60,7 @@ func (x *BlockMessage) fromAppMessage(msgBlock *appmessage.MsgBlock) error {
 	*x = BlockMessage{
 		Header:       protoHeader,
 		Transactions: protoTransactions,
-		PowHash:      proto.String(msgBlock.PoWHash),
+		PowHash:      new(msgBlock.PoWHash),
 	}
 	return nil
 }
