@@ -92,3 +92,7 @@ func (c *LRUCache) evictRandom() {
 	key := newKey(&keyToEvict.blockHash, keyToEvict.windowSize)
 	delete(c.cache, key)
 }
+
+func (c *LRUCache) Len() int {
+	return len(c.cache)
+}
