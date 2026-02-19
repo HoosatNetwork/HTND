@@ -1,6 +1,7 @@
 package consensusstatemanager_test
 
 import (
+	"slices"
 	"sort"
 	"testing"
 
@@ -68,13 +69,7 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 			t.Fatalf("Expected at least 1 virtual parent, got 0")
 		}
 		for i := 0; i < len(virtualParents); i++ {
-			found := false
-			for _, parent := range parents {
-				if virtualParents[i].Equal(parent) {
-					found = true
-					break
-				}
-			}
+			found := slices.ContainsFunc(parents, virtualParents[i].Equal)
 			if !found {
 				t.Fatalf("Virtual parent %s at position %d is not among the candidates", virtualParents[i], i)
 			}
@@ -113,13 +108,7 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 			t.Fatalf("Expected at least %d virtual parents, got %d", len(parents), len(virtualParents))
 		}
 		for _, parent := range parents {
-			found := false
-			for _, vp := range virtualParents {
-				if parent.Equal(vp) {
-					found = true
-					break
-				}
-			}
+			found := slices.ContainsFunc(virtualParents, parent.Equal)
 			if !found {
 				t.Fatalf("Parent %s is not a virtual parent", parent)
 			}

@@ -29,7 +29,7 @@ func TestScriptLRUCacheConcurrency(t *testing.T) {
 	}
 
 	// Concurrent writes
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -39,7 +39,7 @@ func TestScriptLRUCacheConcurrency(t *testing.T) {
 	}
 
 	// Concurrent reads
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -49,7 +49,7 @@ func TestScriptLRUCacheConcurrency(t *testing.T) {
 	}
 
 	// Concurrent deletes
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -195,7 +195,7 @@ func BenchmarkScriptCacheHit(b *testing.B) {
 
 	// Populate cache with test data
 	pairs := make([]UTXOPair, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		pairs[i] = UTXOPair{
 			Outpoint: externalapi.DomainOutpoint{
 				TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i)}),
@@ -233,7 +233,7 @@ func BenchmarkScriptCachePut(b *testing.B) {
 
 	// Create test data
 	pairs := make([]UTXOPair, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		pairs[i] = UTXOPair{
 			Outpoint: externalapi.DomainOutpoint{
 				TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i)}),
