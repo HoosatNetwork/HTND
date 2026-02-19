@@ -34,7 +34,7 @@ func DeserializeHashes(hashesBytes []byte) ([]*externalapi.DomainHash, error) {
 
 	numHashes := len(hashesBytes) / externalapi.DomainHashSize
 	hashes := make([]*externalapi.DomainHash, numHashes)
-	for i := 0; i < numHashes; i++ {
+	for i := range numHashes {
 		var err error
 		start := i * externalapi.DomainHashSize
 		end := i*externalapi.DomainHashSize + externalapi.DomainHashSize

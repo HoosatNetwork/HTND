@@ -32,6 +32,11 @@ func (bss *blockWindowHeapSliceStore) IsStaged(stagingArea *model.StagingArea) b
 	return bss.stagingShard(stagingArea).isStaged()
 }
 
+func (bss *blockWindowHeapSliceStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := bss.stagingShard(stagingArea)
+	stagingShard.UnstageAll()
+}
+
 func (bss *blockWindowHeapSliceStore) Get(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	stagingShard := bss.stagingShard(stagingArea)
 

@@ -82,7 +82,7 @@ type Config struct {
 // Factory instantiates new Consensuses
 type Factory interface {
 	NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
-		consensusEventsQueue *EventQueue) (
+		consensusEventsChan chan externalapi.ConsensusEvent) (
 		externalapi.Consensus, bool, error)
 	NewTestConsensus(config *Config, testName string) (
 		tc testapi.TestConsensus, teardown func(keepDataDir bool), err error)
@@ -115,7 +115,7 @@ func NewFactory() Factory {
 
 // NewConsensus instantiates a new Consensus
 func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
-	consensusEventsQueue *EventQueue) (
+	consensusEventsChan chan externalapi.ConsensusEvent) (
 	consensusInstance externalapi.Consensus, shouldMigrate bool, err error) {
 
 	dbManager := consensusdatabase.New(db)
@@ -147,9 +147,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 	// Data Structures
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
-	daaWindowStore := daawindowstore.New(prefixBucket, 1000, preallocateCaches)
+	daaWindowStore := daawindowstore.New(prefixBucket, 50_000, preallocateCaches)
 	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, preallocateCaches)
-	blockStore, err := blockstore.New(dbManager, prefixBucket, 1000, preallocateCaches)
+	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, preallocateCaches)
 	if err != nil {
 		return nil, false, err
 	}
@@ -162,12 +162,12 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	multisetStore := multisetstore.New(prefixBucket, 1000, preallocateCaches)
 	pruningStore := pruningstore.New(prefixBucket, 2, preallocateCaches)
 	utxoDiffStore := utxodiffstore.New(prefixBucket, 1000, preallocateCaches)
-	consensusStateStore := consensusstatestore.New(prefixBucket, 1000, preallocateCaches)
+	consensusStateStore := consensusstatestore.New(prefixBucket, 50_000, preallocateCaches)
 
 	headersSelectedTipStore := headersselectedtipstore.New(prefixBucket)
 	finalityStore := finalitystore.New(prefixBucket, 1000, preallocateCaches)
 	headersSelectedChainStore := headersselectedchainstore.New(prefixBucket, pruningWindowSizeForCaches, preallocateCaches)
-	daaBlocksStore := daablocksstore.New(prefixBucket, 10_000, 10_000, preallocateCaches)
+	daaBlocksStore := daablocksstore.New(prefixBucket, pruningWindowSizeForCaches, finalityWindowSizeForCaches, preallocateCaches)
 	windowHeapSliceStore := blockwindowheapslicestore.New(10_000, preallocateCaches)
 
 	newReachabilityDataStore := reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
@@ -320,7 +320,11 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		blockHeaderStore,
 		headersSelectedTipStore,
 		pruningStore,
-		daaBlocksStore)
+		daaBlocksStore,
+		finalityStore,
+		headersSelectedChainStore,
+		mergeDepthRootStore,
+		windowHeapSliceStore)
 	if err != nil {
 		return nil, false, err
 	}
@@ -537,8 +541,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		blocksWithTrustedDataDAAWindowStore: daaWindowStore,
 		windowHeapSliceStore:                windowHeapSliceStore,
 
-		consensusEventsQueue: consensusEventsQueue,
-		virtualNotUpdated:    true,
+		consensusEventsChan: consensusEventsChan,
+		virtualNotUpdated:   true,
 	}
 
 	if isOldReachabilityInitialized {
@@ -678,12 +682,12 @@ func dagStores(config *Config,
 	reachabilityDataStores := make([]model.ReachabilityDataStore, config.MaxBlockLevel+1)
 	ghostdagDataStores := make([]model.GHOSTDAGDataStore, config.MaxBlockLevel+1)
 
-	ghostdagDataCacheSize := config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]
+	ghostdagDataCacheSize := max(pruningWindowSizeForCaches*2, config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
 
 	for i := 0; i <= config.MaxBlockLevel; i++ {
 		prefixBucket := prefixBucket.Bucket([]byte{byte(i)})
 		if i == 0 {
-			blockRelationStores[i] = blockrelationstore.New(prefixBucket, 200, preallocateCaches)
+			blockRelationStores[i] = blockrelationstore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache, preallocateCaches)
 			reachabilityDataStores[i] = reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
 			ghostdagDataStores[i] = ghostdagdatastore.New(prefixBucket, ghostdagDataCacheSize, preallocateCaches)
 		} else {

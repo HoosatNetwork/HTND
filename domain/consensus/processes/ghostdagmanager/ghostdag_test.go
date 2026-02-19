@@ -349,7 +349,7 @@ func (ds *GHOSTDAGDataStoreImpl) Get(dbContext model.DBReader, stagingArea *mode
 }
 
 func (ds *GHOSTDAGDataStoreImpl) UnstageAll(stagingArea *model.StagingArea) {
-	panic("implement me")
+	ds.dagMap = make(map[externalapi.DomainHash]*externalapi.BlockGHOSTDAGData)
 }
 
 func (ds *GHOSTDAGDataStoreImpl) CacheLen() int {
@@ -487,4 +487,8 @@ func (b *blockHeadersStore) CacheLen() int {
 
 func (b *blockHeadersStore) Count(*model.StagingArea) uint64 {
 	return uint64(len(b.dagMap))
+}
+
+func (b *blockHeadersStore) UnstageAll(stagingArea *model.StagingArea) {
+	b.dagMap = make(map[externalapi.DomainHash]externalapi.BlockHeader)
 }

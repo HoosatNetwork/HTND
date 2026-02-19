@@ -52,7 +52,7 @@ func TestVirtualSelectedParentBlueScoreAndVirtualDAAScore(t *testing.T) {
 	// Mine some blocks and make sure that the notifications
 	// report correct values
 	const blockAmountToMine = 100
-	for i := 0; i < blockAmountToMine; i++ {
+	for i := range blockAmountToMine {
 		mineNextBlock(t, htnd)
 		blueScoreChangedNotification := <-onVirtualSelectedParentBlueScoreChangedChan
 		if blueScoreChangedNotification.VirtualSelectedParentBlueScore != 1+uint64(i) {

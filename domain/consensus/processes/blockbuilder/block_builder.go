@@ -132,7 +132,7 @@ func (bb *blockBuilder) validateTransactions(stagingArea *model.StagingArea,
 	transactions []*externalapi.DomainTransaction) error {
 
 	invalidTransactions := make([]ruleerrors.InvalidTransaction, 0, 20)
-	for i := 0; i < len(transactions); i++ {
+	for i := range transactions {
 		err := bb.validateTransaction(stagingArea, transactions[i])
 		if err != nil {
 			ruleError := ruleerrors.RuleError{}
@@ -317,7 +317,7 @@ func (bb *blockBuilder) newBlockAcceptedIDMerkleRoot(stagingArea *model.StagingA
 
 func (bb *blockBuilder) calculateAcceptedIDMerkleRoot(acceptanceData externalapi.AcceptanceData) (*externalapi.DomainHash, error) {
 	var acceptedTransactions []*externalapi.DomainTransaction
-	for i := 0; i < len(acceptanceData); i++ {
+	for i := range acceptanceData {
 		for x := 0; x < len(acceptanceData[i].TransactionAcceptanceData); x++ {
 			if !acceptanceData[i].TransactionAcceptanceData[x].IsAccepted {
 				continue

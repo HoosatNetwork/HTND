@@ -38,7 +38,7 @@ func TestGenerateFastPruningIBDTest(t *testing.T) {
 
 		numBlocks := finalityDepth
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < numBlocks; i++ {
+		for range numBlocks {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatal(err)

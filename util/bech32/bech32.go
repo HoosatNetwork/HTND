@@ -185,10 +185,7 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 
 			// The number of bytes to next extract is the minimum of
 			// remainingFromBits and remainingToBits.
-			toExtract := remainingFromBits
-			if remainingToBits < toExtract {
-				toExtract = remainingToBits
-			}
+			toExtract := min(remainingToBits, remainingFromBits)
 
 			// Add the next bits to nextByte, shifting the already
 			// added bits to the left.
@@ -236,7 +233,7 @@ func calculateChecksum(prefix string, payload []byte) []byte {
 
 	polyModResult := polyMod(concat)
 	var res []byte
-	for i := 0; i < checksumLength; i++ {
+	for i := range checksumLength {
 		res = append(res, byte((polyModResult>>uint(5*(checksumLength-1-i)))&31))
 	}
 
@@ -283,7 +280,7 @@ func polyMod(values []int) int {
 	for _, value := range values {
 		topBits := checksum >> 35
 		checksum = ((checksum & 0x07ffffffff) << 5) ^ value
-		for i := 0; i < len(generator); i++ {
+		for i := range generator {
 			if ((topBits >> uint(i)) & 1) == 1 {
 				checksum ^= generator[i]
 			}

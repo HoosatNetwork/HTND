@@ -31,7 +31,7 @@ func TestAddBlockBetweenResolveVirtualCalls(t *testing.T) {
 		// Create a chain of blocks
 		const initialChainLength = 10
 		previousBlockHash := consensusConfig.GenesisHash
-		for i := 0; i < initialChainLength; i++ {
+		for i := range initialChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			hashes = append(hashes, previousBlockHash)
 			if err != nil {
@@ -42,7 +42,7 @@ func TestAddBlockBetweenResolveVirtualCalls(t *testing.T) {
 		// Mine a chain with more blocks, to re-organize the DAG
 		const reorgChainLength = initialChainLength + 1
 		previousBlockHash = consensusConfig.GenesisHash
-		for i := 0; i < reorgChainLength; i++ {
+		for i := range reorgChainLength {
 			previousBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in re-org chain: %+v", i, err)
@@ -117,7 +117,7 @@ func TestAddGenesisChildAfterOneResolveVirtualCall(t *testing.T) {
 		// Create a chain of blocks
 		const initialChainLength = 6
 		previousBlockHash := consensusConfig.GenesisHash
-		for i := 0; i < initialChainLength; i++ {
+		for i := range initialChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			hashes = append(hashes, previousBlockHash)
 			if err != nil {
@@ -128,7 +128,7 @@ func TestAddGenesisChildAfterOneResolveVirtualCall(t *testing.T) {
 		// Mine a chain with more blocks, to re-organize the DAG
 		const reorgChainLength = initialChainLength + 1
 		previousBlockHash = consensusConfig.GenesisHash
-		for i := 0; i < reorgChainLength; i++ {
+		for i := range reorgChainLength {
 			previousBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in re-org chain: %+v", i, err)
@@ -182,7 +182,7 @@ func TestAddGenesisChildAfterTwoResolveVirtualCalls(t *testing.T) {
 		// Create a chain of blocks
 		const initialChainLength = 6
 		previousBlockHash := consensusConfig.GenesisHash
-		for i := 0; i < initialChainLength; i++ {
+		for i := range initialChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			hashes = append(hashes, previousBlockHash)
 			if err != nil {
@@ -193,7 +193,7 @@ func TestAddGenesisChildAfterTwoResolveVirtualCalls(t *testing.T) {
 		// Mine a chain with more blocks, to re-organize the DAG
 		const reorgChainLength = initialChainLength + 1
 		previousBlockHash = consensusConfig.GenesisHash
-		for i := 0; i < reorgChainLength; i++ {
+		for i := range reorgChainLength {
 			previousBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in re-org chain: %+v", i, err)
@@ -257,7 +257,7 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		// Create a chain of blocks
 		const initialChainLength = 6
 		previousBlockHash := consensusConfig.GenesisHash
-		for i := 0; i < initialChainLength; i++ {
+		for i := range initialChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", i)
 			hashes = append(hashes, previousBlockHash)
@@ -276,7 +276,7 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		// Mine a chain with more blocks, to re-organize the DAG
 		const reorgChainLength = 12 // initialChainLength + 1
 		previousBlockHash = consensusConfig.GenesisHash
-		for i := 0; i < reorgChainLength; i++ {
+		for i := range reorgChainLength {
 			previousBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in re-org chain: %+v", i, err)
@@ -347,7 +347,7 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 
 		// Now get the first chain back to the wining position
 		previousBlockHash = firstChainTip
-		for i := 0; i < reorgChainLength; i++ {
+		for i := range reorgChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", initialChainLength+i)
 			hashes = append(hashes, previousBlockHash)

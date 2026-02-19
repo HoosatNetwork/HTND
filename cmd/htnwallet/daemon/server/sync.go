@@ -120,10 +120,7 @@ func (s *server) maxUsedIndexWithLock() uint32 {
 }
 
 func (s *server) maxUsedIndex() uint32 {
-	maxUsedIndex := s.keysFile.LastUsedExternalIndex()
-	if s.keysFile.LastUsedInternalIndex() > maxUsedIndex {
-		maxUsedIndex = s.keysFile.LastUsedInternalIndex()
-	}
+	maxUsedIndex := max(s.keysFile.LastUsedInternalIndex(), s.keysFile.LastUsedExternalIndex())
 
 	return maxUsedIndex
 }
@@ -224,7 +221,7 @@ func (s *server) usedOutpointHasExpired(outpointBroadcastTime time.Time) bool {
 	// interval to a minute.
 	// We also verify that a full refresh UTXO operation started after this time point and has already
 	// completed, in order to make sure that indeed this state reflects a state obtained following the required wait time.
-	return s.startTimeOfLastCompletedRefresh.After(outpointBroadcastTime.Add(time.Minute))
+	return s.startTimeOfLastCompletedRefresh.After(outpointBroadcastTime.Add(10 * time.Minute))
 }
 
 // updateUTXOSet clears the current UTXO set, and re-fills it with the given entries
@@ -322,11 +319,7 @@ func (s *server) isSynced() bool {
 }
 
 func (s *server) formatSyncStateReport() string {
-	maxUsedIndex := s.maxUsedIndex()
-
-	if s.nextSyncStartIndex > maxUsedIndex {
-		maxUsedIndex = s.nextSyncStartIndex
-	}
+	maxUsedIndex := max(s.nextSyncStartIndex, s.maxUsedIndex())
 
 	if s.nextSyncStartIndex < s.maxUsedIndex() {
 		return fmt.Sprintf("scanned %d out of %d addresses (%.2f%%)",

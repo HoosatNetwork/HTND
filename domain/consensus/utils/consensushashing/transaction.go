@@ -40,7 +40,12 @@ func TransactionHash(tx *externalapi.DomainTransaction) *externalapi.DomainHash 
 
 // TransactionID generates the Hash for the transaction without the signature script and payload field.
 func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransactionID {
-	// If transaction ID is already cached, return it
+	// Return nil if tx is nil to prevent interface conversion panic
+	if tx == nil {
+		return nil
+	}
+
+	// If transaction ID is already cached on the object, return it
 	if tx.ID != nil {
 		return tx.ID
 	}
@@ -68,7 +73,7 @@ func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransac
 // TransactionIDs converts the provided slice of DomainTransactions to a corresponding slice of TransactionIDs
 func TransactionIDs(txs []*externalapi.DomainTransaction) []*externalapi.DomainTransactionID {
 	txIDs := make([]*externalapi.DomainTransactionID, len(txs))
-	for i := 0; i < len(txs); i++ {
+	for i := range txs {
 		txIDs[i] = TransactionID(txs[i])
 	}
 	return txIDs

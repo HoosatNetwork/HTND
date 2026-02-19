@@ -118,6 +118,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 	}
 
 	s.sortUTXOsByAmountAscending()
+	log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
 
 	// Collect up to targetCompoundInputs smallest spendable UTXOs for compounding
 	for _, utxo := range s.utxosSortedByAmount {
@@ -125,7 +126,10 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			break
 		}
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
+			utxo.UTXOEntry.BlockDAAScore() == 0 ||
+			utxo.UTXOEntry.BlockDAAScore()+1 > dagInfo.VirtualDAAScore {
+			log.Infof("Can't use utxo as wallet address does not contain, and utxo is not spendable or unconfirmed")
 			continue
 		}
 
@@ -144,6 +148,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 		})
 		totalValue += utxo.UTXOEntry.Amount()
 	}
+	log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
 
 	if len(selectedUTXOs) == 0 {
 		return nil, 0, 0, errors.New("no spendable UTXOs for compounding")
@@ -264,7 +269,9 @@ func (s *server) selectUTXOsForTransaction(spendAmount uint64, isSendAll bool, f
 
 	for _, utxo := range s.utxosSortedByAmount {
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
+			utxo.UTXOEntry.BlockDAAScore() == 0 ||
+			utxo.UTXOEntry.BlockDAAScore()+1 > dagInfo.VirtualDAAScore {
 			continue
 		}
 

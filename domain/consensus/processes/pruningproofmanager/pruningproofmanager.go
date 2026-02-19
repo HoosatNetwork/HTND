@@ -347,6 +347,16 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 
 	reachabilityManagers, dagTopologyManagers, ghostdagManagers := ppm.dagProcesses(maxLevel, blockHeaderStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores)
 
+	defer func() {
+		for i := 0; i <= maxLevel; i++ {
+			ghostdagDataStores[i].UnstageAll(stagingArea)
+			blockRelationStores[i].UnstageAll(stagingArea)
+			reachabilityDataStores[i].UnstageAll(stagingArea)
+		}
+		blockHeaderStore.UnstageAll(stagingArea)
+		stagingArea = nil
+	}()
+
 	for blockLevel := 0; blockLevel <= maxLevel; blockLevel++ {
 		err := reachabilityManagers[blockLevel].Init(stagingArea)
 		if err != nil {
@@ -690,7 +700,6 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 
 			for level := 0; level <= ppm.maxBlockLevel; level++ {
 				for _, parent := range ppm.parentsManager.ParentsAtLevel(header, level) {
-					parent := parent
 					dag[*blockHash].parents.Add(parent)
 				}
 			}
@@ -710,7 +719,6 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 		block := dag[*blockHash]
 		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
 		for parent := range block.parents {
-			parent := parent
 			if _, ok := dag[parent]; !ok {
 				continue
 			}
@@ -772,12 +780,19 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 		}
 	}
 
-	ghostdagDataStoreForTargetReachabilityManager.UnstageAll(stagingArea)
-	blockRelationStoreForTargetReachabilityManager.UnstageAll(stagingArea)
 	err = staging.CommitAllChanges(ppm.databaseContext, stagingArea)
 	if err != nil {
 		return err
 	}
+
+	ghostdagDataStoreForTargetReachabilityManager.UnstageAll(stagingArea)
+	blockRelationStoreForTargetReachabilityManager.UnstageAll(stagingArea)
+	ghostdagDataStore.UnstageAll(tmpStagingArea)
+
+	// Clear references to aid GC in low-memory or no-GC environments
+	stagingArea = nil
+	tmpStagingArea = nil
+
 	return nil
 }
 

@@ -7,6 +7,7 @@ type MultisetStore interface {
 	Store
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, multiset Multiset)
 	IsStaged(stagingArea *StagingArea) bool
+	UnstageAll(stagingArea *StagingArea)
 	Get(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (Multiset, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)
 	CacheLen() int

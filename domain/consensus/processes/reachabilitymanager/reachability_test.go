@@ -56,6 +56,11 @@ func (r *reachabilityDataStoreMock) CacheLen() int {
 	return 0 // Mock has no cache
 }
 
+func (r *reachabilityDataStoreMock) UnstageAll(stagingArea *model.StagingArea) {
+	r.reachabilityDataStaging = make(map[externalapi.DomainHash]model.ReachabilityData)
+	r.reachabilityReindexRootStaging = nil
+}
+
 func (r *reachabilityDataStoreMock) isRecorderContainsOnly(nodes ...*externalapi.DomainHash) bool {
 	if len(r.recorder) != len(nodes) {
 		return false
@@ -83,7 +88,7 @@ func newReachabilityDataStoreMock() *reachabilityDataStoreMock {
 }
 
 type fatalfer interface {
-	Fatalf(format string, args ...interface{})
+	Fatalf(format string, args ...any)
 }
 
 type testHelper struct {
@@ -201,7 +206,7 @@ func TestAddChild(t *testing.T) {
 
 	// Add a chain of child nodes just before a reindex occurs (2^6=64 < 100)
 	currentTip := root
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		node := helper.newNode(stagingArea)
 		helper.resetRecorder()
 		helper.addChild(stagingArea, currentTip, node, root)
@@ -272,7 +277,7 @@ func TestAddChild(t *testing.T) {
 
 	// Add child nodes to root just before a reindex occurs (2^6=64 < 100)
 	childNodes := make([]*externalapi.DomainHash, 6)
-	for i := 0; i < len(childNodes); i++ {
+	for i := range childNodes {
 		childNodes[i] = helper.newNode(stagingArea)
 		helper.resetRecorder()
 		helper.addChild(stagingArea, root, childNodes[i], root)
@@ -339,7 +344,7 @@ func TestReachabilityTreeNodeIsAncestorOf(t *testing.T) {
 	currentTip := root
 	const numberOfDescendants = 6
 	descendants := make([]*externalapi.DomainHash, numberOfDescendants)
-	for i := 0; i < numberOfDescendants; i++ {
+	for i := range numberOfDescendants {
 		node := helper.newNode(stagingArea)
 		helper.addChild(stagingArea, currentTip, node, root)
 		descendants[i] = node
@@ -937,7 +942,7 @@ func TestReindexIntervalErrors(t *testing.T) {
 	// Add a chain of 100 child treeNodes to treeNode
 	var err error
 	currentTreeNode := treeNode
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		childTreeNode := helper.newNode(stagingArea)
 		err = helper.reachabilityManager.addChild(stagingArea, currentTreeNode, childTreeNode, treeNode)
 		if err != nil {
@@ -979,7 +984,7 @@ func BenchmarkReindexInterval(b *testing.B) {
 		root := helper.newNodeWithInterval(stagingArea, newReachabilityInterval(0, subTreeSize*2))
 
 		currentTreeNode := root
-		for i := 0; i < subTreeSize; i++ {
+		for range subTreeSize {
 			childTreeNode := helper.newNode(stagingArea)
 			helper.addChild(stagingArea, currentTreeNode, childTreeNode, root)
 

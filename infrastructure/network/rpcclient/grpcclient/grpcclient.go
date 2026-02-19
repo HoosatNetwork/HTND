@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/encoding/gzip"
 )
 
 // OnErrorHandler defines a handler function for when errors occur
@@ -36,7 +35,7 @@ func Connect(address string) (*GRPCClient, error) {
 	}
 
 	grpcClient := protowire.NewRPCClient(gRPCConnection)
-	stream, err := grpcClient.MessageStream(context.Background(), grpc.UseCompressor(gzip.Name),
+	stream, err := grpcClient.MessageStream(context.Background(),
 		grpc.MaxCallRecvMsgSize(grpcserver.RPCMaxMessageSize), grpc.MaxCallSendMsgSize(grpcserver.RPCMaxMessageSize))
 	if err != nil {
 		return nil, errors.Wrapf(err, "error getting client stream for %s", address)

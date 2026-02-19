@@ -2,6 +2,7 @@ package utxo
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -38,9 +39,7 @@ func (uc utxoCollection) Clone() utxoCollection {
 	}
 
 	clone := make(utxoCollection, len(uc))
-	for outpoint, entry := range uc {
-		clone[outpoint] = entry
-	}
+	maps.Copy(clone, uc)
 
 	return clone
 }

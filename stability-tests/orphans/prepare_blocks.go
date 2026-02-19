@@ -39,7 +39,7 @@ func prepareBlocks() (blocks []*externalapi.DomainBlock, topBlock *externalapi.D
 	blocksCount := config.OrphanChainLength + 1
 	blocks = make([]*externalapi.DomainBlock, 0, blocksCount)
 
-	for i := 0; i < blocksCount; i++ {
+	for range blocksCount {
 		block, _, err := testConsensus.BuildBlockWithParents(
 			[]*externalapi.DomainHash{currentParentHash},
 			&externalapi.DomainCoinbaseData{ScriptPublicKey: &externalapi.ScriptPublicKey{}},

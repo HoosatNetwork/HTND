@@ -10,4 +10,5 @@ type WindowHeapSliceStore interface {
 	Get(stagingArea *StagingArea, blockHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error)
 
 	CacheLen() int
+	UnstageAll(stagingArea *StagingArea)
 }

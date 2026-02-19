@@ -59,6 +59,11 @@ func (mdrs *mergeDepthRootStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return mdrs.stagingShard(stagingArea).isStaged()
 }
 
+func (mdrs *mergeDepthRootStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := mdrs.stagingShard(stagingArea)
+	stagingShard.UnstageAll()
+}
+
 func (mdrs *mergeDepthRootStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
 	return mdrs.bucket.Key(hash.ByteSlice())
 }

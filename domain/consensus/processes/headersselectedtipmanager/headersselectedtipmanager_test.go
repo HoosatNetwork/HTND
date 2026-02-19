@@ -52,7 +52,7 @@ func TestAddHeaderTip(t *testing.T) {
 
 		expectedSelectedChain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
@@ -65,7 +65,7 @@ func TestAddHeaderTip(t *testing.T) {
 
 		expectedSelectedChain = []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash = consensusConfig.GenesisHash
-		for i := 0; i < 11; i++ {
+		for range 11 {
 			var err error
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {

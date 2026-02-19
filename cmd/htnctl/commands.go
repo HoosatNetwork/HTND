@@ -9,39 +9,39 @@ import (
 )
 
 var commandTypes = []reflect.Type{
-	reflect.TypeOf(protowire.HoosatdMessage_AddPeerRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetConnectedPeerInfoRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetPeerAddressesRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetCurrentNetworkRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetInfoRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_AddPeerRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetConnectedPeerInfoRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetPeerAddressesRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetCurrentNetworkRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetInfoRequest](),
 
-	reflect.TypeOf(protowire.HoosatdMessage_GetBlockRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetBlockByTransactionIdRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetBlocksRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetHeadersRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetBlockCountRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetBlockDagInfoRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetSelectedTipHashRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_ResolveFinalityConflictRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_EstimateNetworkHashesPerSecondRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBlockRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBlockByTransactionIdRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBlocksRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetHeadersRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBlockCountRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBlockDagInfoRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetSelectedTipHashRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_ResolveFinalityConflictRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_EstimateNetworkHashesPerSecondRequest](),
 
-	reflect.TypeOf(protowire.HoosatdMessage_GetBlockTemplateRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_SubmitBlockRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBlockTemplateRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_SubmitBlockRequest](),
 
-	reflect.TypeOf(protowire.HoosatdMessage_GetMempoolEntryRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetMempoolEntriesRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetMempoolEntriesByAddressesRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_GetMempoolEntryRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetMempoolEntriesRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetMempoolEntriesByAddressesRequest](),
 
-	reflect.TypeOf(protowire.HoosatdMessage_SubmitTransactionRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_SubmitTransactionRequest](),
 
-	reflect.TypeOf(protowire.HoosatdMessage_GetUtxosByAddressesRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetBalanceByAddressRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_GetCoinSupplyRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_GetUtxosByAddressesRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetBalanceByAddressRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetCoinSupplyRequest](),
 
-	reflect.TypeOf(protowire.HoosatdMessage_BanRequest{}),
-	reflect.TypeOf(protowire.HoosatdMessage_UnbanRequest{}),
+	reflect.TypeFor[protowire.HoosatdMessage_BanRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_UnbanRequest](),
 }
 
 type commandDescription struct {
@@ -65,7 +65,7 @@ func commandDescriptions() []*commandDescription {
 		numFields := commandType.NumField()
 
 		var parameters []*parameterDescription
-		for i := 0; i < numFields; i++ {
+		for i := range numFields {
 			field := commandType.Field(i)
 
 			if !isFieldExported(field) {

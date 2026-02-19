@@ -13,11 +13,11 @@ type ScriptPublicKeyString string
 type UTXOOutpointEntryPairs map[externalapi.DomainOutpoint]externalapi.UTXOEntry
 
 // UTXOOutpoints is a set of UTXO outpoints
-type UTXOOutpoints map[externalapi.DomainOutpoint]interface{}
+type UTXOOutpoints map[externalapi.DomainOutpoint]any
 
 // UTXOChanges is the set of changes made to the UTXO index after
 // a successful update
 type UTXOChanges struct {
-	Added   map[ScriptPublicKeyString]UTXOOutpointEntryPairs
-	Removed map[ScriptPublicKeyString]UTXOOutpointEntryPairs
+	Added   []UTXOPair
+	Removed []UTXOPair
 }

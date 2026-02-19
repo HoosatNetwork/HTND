@@ -59,7 +59,7 @@ func Commit(t *testing.T, dbManager model.DBManager, stagingArea *model.StagingA
 // It's intentionally not cryptographically random.
 func Hash(i byte) *externalapi.DomainHash {
 	var arr [externalapi.DomainHashSize]byte
-	for j := 0; j < len(arr); j++ {
+	for j := range len(arr) {
 		arr[j] = i
 	}
 	// Make it slightly less uniform to catch byte-order issues.

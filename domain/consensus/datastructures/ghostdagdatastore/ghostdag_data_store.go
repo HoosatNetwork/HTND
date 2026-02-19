@@ -73,7 +73,6 @@ func (gds *ghostdagDataStore) Get(dbContext model.DBReader, stagingArea *model.S
 
 func (gds *ghostdagDataStore) UnstageAll(stagingArea *model.StagingArea) {
 	stagingShard := gds.stagingShard(stagingArea)
-	gds.cache.Clear()
 	stagingShard.toAdd = make(map[key]*externalapi.BlockGHOSTDAGData)
 }
 

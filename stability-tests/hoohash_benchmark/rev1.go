@@ -110,7 +110,7 @@ func (mat *matrix) computeHoohashRank() int {
 	}
 	var rank int
 	var rowSelected [64]bool
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		var j int
 		for j = 0; j < 64; j++ {
 			if !rowSelected[j] && math.Abs(B[j][i]) > eps {
@@ -123,7 +123,7 @@ func (mat *matrix) computeHoohashRank() int {
 			for p := i + 1; p < 64; p++ {
 				B[j][p] /= B[j][i]
 			}
-			for k := 0; k < 64; k++ {
+			for k := range 64 {
 				if k != j && math.Abs(B[k][i]) > eps {
 					for p := i + 1; p < 64; p++ {
 						B[k][p] -= B[j][p] * B[k][i]
@@ -171,14 +171,14 @@ func (mat *matrix) HoohashMatrixMultiplication(hash *externalapi.DomainHash) []b
 	hashBytes := hash.ByteArray()
 	var vector [64]float64
 	var product [64]float64
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		vector[2*i] = float64(hashBytes[i] >> 4)
 		vector[2*i+1] = float64(hashBytes[i] & 0x0F)
 	}
 	// Matrix-vector multiplication with floating point operations
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		var sum float64
-		for j := 0; j < 64; j++ {
+		for j := range 64 {
 			sum += float64(mat[i][j]) * ComplexNonLinear(vector[j]) // Introduce non-linear operations
 		}
 		product[i] = sum
@@ -213,7 +213,7 @@ func generateHoohashLookupTable() {
 
 func timeMemoryTradeoff(input uint64) uint64 {
 	result := input
-	for i := 0; i < 1000; i++ { // Number of lookups
+	for range 1000 { // Number of lookups
 		index := result % tableSize
 		result ^= lookupTable[index]
 		result = (result << 1) | (result >> 63) // Rotate left by 1
@@ -233,8 +233,8 @@ func memoryHardFunction(input []byte) []byte {
 	}
 
 	// Perform memory-hard computations
-	for i := 0; i < iterations; i++ {
-		for j := 0; j < memorySize; j++ {
+	for range iterations {
+		for j := range memorySize {
 			index1 := memory[j] % uint64(memorySize)
 			index2 := (memory[j] >> 32) % uint64(memorySize)
 
@@ -248,7 +248,7 @@ func memoryHardFunction(input []byte) []byte {
 
 	// Combine results
 	result := make([]byte, 64)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		binary.LittleEndian.PutUint64(result[i*8:], memory[i])
 	}
 	return result
@@ -264,7 +264,7 @@ func verifiableDelayFunction(input []byte) []byte {
 	x := new(big.Int).SetBytes(input)
 
 	// Perform repeated squaring
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		x.Mul(x, x)
 		x.Mod(x, p)
 	}

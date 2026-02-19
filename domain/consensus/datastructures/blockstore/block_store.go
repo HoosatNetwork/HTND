@@ -73,6 +73,12 @@ func (bs *blockStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return bs.stagingShard(stagingArea).isStaged()
 }
 
+func (bs *blockStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := bs.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[externalapi.DomainHash]*externalapi.DomainBlock)
+	stagingShard.toDelete = make(map[externalapi.DomainHash]struct{})
+}
+
 // Block gets the block associated with the given blockHash
 func (bs *blockStore) Block(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
 	stagingShard := bs.stagingShard(stagingArea)

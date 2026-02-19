@@ -34,6 +34,12 @@ func (css *consensusStateStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return css.stagingShard(stagingArea).isStaged()
 }
 
+func (css *consensusStateStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := css.stagingShard(stagingArea)
+	stagingShard.tipsStaging = nil
+	stagingShard.virtualUTXODiffStaging = nil
+}
+
 func (css *consensusStateStore) CacheLen() int {
 	return css.virtualUTXOSetCache.Len()
 }

@@ -1,8 +1,6 @@
 package rpchandlers
 
 import (
-	"os"
-
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
@@ -10,15 +8,6 @@ import (
 
 // HandleNotifyBlockAdded handles the respectively named RPC command
 func HandleNotifyBlockAdded(context *rpccontext.Context, router *router.Router, _ appmessage.Message) (appmessage.Message, error) {
-	if os.Getenv("HTND_TEST_MODE") != "true" {
-		isNearlySynced, err := context.Domain.Consensus().IsNearlySynced()
-		if err != nil {
-			return nil, err
-		}
-		if !isNearlySynced {
-			return appmessage.NewNotifyBlockAddedResponseMessage(), nil
-		}
-	}
 	listener, err := context.NotificationManager.Listener(router)
 	if err != nil {
 		return nil, err

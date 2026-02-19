@@ -2,7 +2,9 @@ package hashes
 
 import (
 	"crypto/sha256"
+	sha30 "crypto/sha3"
 	"crypto/sha512"
+	"hash"
 
 	"golang.org/x/crypto/sha3"
 	"lukechampine.com/blake3"
@@ -95,7 +97,7 @@ func NewBlockHashWriter() HashWriter {
 // }
 
 func SHA3512PowHashWriter() HashWriter {
-	sha3512 := sha3.New512()
+	sha3512 := hash.Hash(sha30.New512())
 	return HashWriter{sha3512}
 }
 

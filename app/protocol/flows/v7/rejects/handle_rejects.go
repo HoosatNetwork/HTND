@@ -7,8 +7,7 @@ import (
 )
 
 // HandleRejectsContext is the interface for the context needed for the HandleRejects flow.
-type HandleRejectsContext interface {
-}
+type HandleRejectsContext any
 
 type handleRejectsFlow struct {
 	HandleRejectsContext

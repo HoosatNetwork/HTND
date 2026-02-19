@@ -155,7 +155,7 @@ func ParseAndSetLogLevels(logLevel string) error {
 
 	// Split the specified string into subsystem/level pairs while detecting
 	// issues and update the log levels accordingly.
-	for _, logLevelPair := range strings.Split(logLevel, ",") {
+	for logLevelPair := range strings.SplitSeq(logLevel, ",") {
 		if !strings.Contains(logLevelPair, "=") {
 			str := "The specified debug level contains an invalid " +
 				"subsystem/level pair [%s]"

@@ -139,6 +139,9 @@ func (c *gRPCConnection) receive() (*protowire.HoosatdMessage, error) {
 	c.streamLock.RLock()
 	defer c.streamLock.RUnlock()
 
+	if c.stream == nil {
+            return nil, errors.New("grpc stream is nil -receive- (connection closed)")
+        } 
 	return c.stream.Recv()
 }
 
@@ -149,12 +152,23 @@ func (c *gRPCConnection) send(message *protowire.HoosatdMessage) error {
 	c.streamLock.RLock()
 	defer c.streamLock.RUnlock()
 
+	if c.stream == nil {
+            return errors.New("grpc stream is nil -send- (connection closed)")
+        } 
 	return c.stream.Send(message)
 }
 
 func (c *gRPCConnection) closeSend() {
 	c.streamLock.Lock()
 	defer c.streamLock.Unlock()
+
+	// Whilst we are protecting against nil streams, do it here too
+	if c.stream != nil {
+		if clientStream, ok := c.stream.(grpc.ClientStream); ok {
+	                // ignore error because we don't really know what's the status of the connection
+			_ = clientStream.CloseSend()
+		}
+	}
 
 	clientStream := c.stream.(grpc.ClientStream)
 

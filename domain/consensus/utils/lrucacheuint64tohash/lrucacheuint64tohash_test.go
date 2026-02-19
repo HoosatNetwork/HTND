@@ -107,7 +107,7 @@ func TestLRUCache_RandomEvictionVariesAcrossTrials(t *testing.T) {
 	const trials = 200
 	evicted := make(map[uint64]int)
 
-	for i := 0; i < trials; i++ {
+	for range trials {
 		cache := New(2, false)
 		h1 := newTestHash(t, 1)
 		h2 := newTestHash(t, 2)

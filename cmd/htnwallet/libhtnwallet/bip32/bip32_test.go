@@ -319,10 +319,10 @@ func TestExtendedKey_DeriveFromPath(t *testing.T) {
 		t.Fatalf("Public: %+v", err)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		numIndexes := 1 + r.Intn(100)
 		indexes := make([]string, numIndexes)
-		for i := 0; i < numIndexes; i++ {
+		for i := range numIndexes {
 			index := r.Intn(hardenedIndexStart)
 			indexes[i] = strconv.Itoa(int(index))
 		}

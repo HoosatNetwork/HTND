@@ -165,7 +165,7 @@ type getDaemonVersionConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
 }
 
-func parseCommandLine() (subCommand string, config interface{}) {
+func parseCommandLine() (subCommand string, config any) {
 	cfg := &configFlags{}
 	parser := flags.NewParser(cfg, flags.PrintErrors|flags.HelpFlag)
 

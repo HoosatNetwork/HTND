@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+
 	"github.com/pkg/errors"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"

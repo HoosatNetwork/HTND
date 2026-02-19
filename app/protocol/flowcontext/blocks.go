@@ -88,15 +88,20 @@ func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
 	totalLen := len(transactionsAcceptedToMempool) + len(txIDsToRebroadcast)
 	txIDsToBroadcast := make([]*externalapi.DomainTransactionID, totalLen)
 
-	for i := 0; i < len(transactionsAcceptedToMempool); i++ {
-		txIDsToBroadcast[i] = consensushashing.TransactionID(transactionsAcceptedToMempool[i])
+	for i := range transactionsAcceptedToMempool {
+		txID := consensushashing.TransactionID(transactionsAcceptedToMempool[i])
+		if txID != nil {
+			txIDsToBroadcast = append(txIDsToBroadcast, txID)
+		}
 	}
 
 	offset := len(transactionsAcceptedToMempool)
 	for i := 0; i < len(txIDsToRebroadcast); i++ {
 		txIDsToBroadcast[offset+i] = txIDsToRebroadcast[i]
 	}
-
+	if len(txIDsToBroadcast) == 0 {
+		return nil
+	}
 	return f.EnqueueTransactionIDsForPropagation(txIDsToBroadcast)
 }
 
@@ -158,7 +163,7 @@ func (f *FlowContext) UnsetIBDRunning() {
 	defer f.ibdPeerMutex.Unlock()
 
 	if f.ibdPeer == nil {
-		panic("attempted to unset isInIBD when it was not set to begin with")
+		log.Infof("attempted to unset isInIBD when it was not set to begin with")
 	}
 
 	f.ibdPeer = nil

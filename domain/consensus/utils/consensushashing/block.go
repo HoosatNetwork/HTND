@@ -12,6 +12,9 @@ import (
 
 // BlockHash returns the given block's hash
 func BlockHash(block *externalapi.DomainBlock) *externalapi.DomainHash {
+	if block == nil || block.Header == nil {
+		return nil
+	}
 	return HeaderHash(block.Header)
 }
 

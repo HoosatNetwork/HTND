@@ -111,11 +111,12 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	case <-time.After(timeout):
 		log.Warnf("IBD with peer %s timed out after %v, disconnecting and banning peer", flow.peer, timeout)
 		// Disconnect & Remove the peer from address manager to prevent immediate reconnection
+		flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out"))
 		netAddress := flow.peer.Connection().NetAddress()
-		flow.peer.Connection().Disconnect()
 		if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
 			log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
 		}
+		flow.peer.Connection().Disconnect()
 		return protocolerrors.Errorf(false, "IBD timed out")
 	}
 
@@ -727,12 +728,28 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 			msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
 			if !ok {
-				return protocolerrors.Errorf(true, "received unexpected message type. "+
+				log.Errorf("Received unexpected message type. expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
+				return protocolerrors.Errorf(false, "received unexpected message type. "+
 					"expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
 			}
 
+			if msgIBDBlock.MsgBlock == nil {
+				log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", i)
+				return protocolerrors.Errorf(false, "received nil MsgBlock in MsgIBDBlock at index %d", i)
+			}
+
 			block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
+			if block == nil {
+				log.Errorf("MsgBlockToDomainBlock returned nil at index %d", i)
+				return protocolerrors.Errorf(false, "MsgBlockToDomainBlock returned nil at index %d", i)
+			}
+
 			blockHash := consensushashing.BlockHash(block)
+			if blockHash == nil {
+				log.Errorf("BlockHash returned nil for block at index %d", i)
+				return protocolerrors.Errorf(false, "BlockHash returned nil for block at index %d", i)
+			}
+
 			receivedBlocks[*blockHash] = block
 			log.Debugf("Received block %s and stored in cache", blockHash)
 		}

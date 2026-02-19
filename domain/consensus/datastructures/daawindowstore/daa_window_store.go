@@ -34,6 +34,7 @@ func (daaws *daaWindowStore) Stage(stagingArea *model.StagingArea, blockHash *ex
 	key := newDBKey(blockHash, index)
 	if _, ok := stagingShard.toAdd[key]; !ok {
 		stagingShard.toAdd[key] = pair
+		daaws.cache.Add(blockHash, index, pair)
 	}
 
 }
@@ -44,8 +45,6 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 	dbKey := newDBKey(blockHash, index)
 	pair, ok := stagingShard.toAdd[dbKey]
 	if ok && pair != nil {
-		// Cache the staged data as well, since it's valid data
-		daaws.cache.Add(blockHash, index, pair)
 		return pair, nil
 	}
 	pairCached, ok := daaws.cache.Get(blockHash, index)
@@ -79,6 +78,11 @@ func deserializePairBytes(pairBytes []byte) (*externalapi.BlockGHOSTDAGDataHashP
 
 func (daaws *daaWindowStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return daaws.stagingShard(stagingArea).isStaged()
+}
+
+func (daaws *daaWindowStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := daaws.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[dbKey]*externalapi.BlockGHOSTDAGDataHashPair)
 }
 
 func (daaws *daaWindowStore) key(key dbKey) model.DBKey {

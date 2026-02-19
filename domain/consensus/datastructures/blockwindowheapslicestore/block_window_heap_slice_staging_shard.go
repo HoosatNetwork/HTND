@@ -36,6 +36,10 @@ func (bsss *blockWindowHeapSliceStagingShard) isStaged() bool {
 	return len(bsss.toAdd) != 0
 }
 
+func (bsss *blockWindowHeapSliceStagingShard) UnstageAll() {
+	bsss.toAdd = make(map[shardKey][]*externalapi.BlockGHOSTDAGDataHashPair)
+}
+
 func newShardKey(hash *externalapi.DomainHash, windowSize int) shardKey {
 	return shardKey{
 		hash:       *hash,

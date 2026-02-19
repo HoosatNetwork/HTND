@@ -57,79 +57,79 @@ type logEntry struct {
 
 // Trace formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with LevelTrace.
-func (l *Logger) Trace(args ...interface{}) {
+func (l *Logger) Trace(args ...any) {
 	l.Write(LevelTrace, args...)
 }
 
 // Tracef formats message according to format specifier, prepends the prefix as
 // necessary, and writes to log with LevelTrace.
-func (l *Logger) Tracef(format string, args ...interface{}) {
+func (l *Logger) Tracef(format string, args ...any) {
 	l.Writef(LevelTrace, format, args...)
 }
 
 // Debug formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with LevelDebug.
-func (l *Logger) Debug(args ...interface{}) {
+func (l *Logger) Debug(args ...any) {
 	l.Write(LevelDebug, args...)
 }
 
 // Debugf formats message according to format specifier, prepends the prefix as
 // necessary, and writes to log with LevelDebug.
-func (l *Logger) Debugf(format string, args ...interface{}) {
+func (l *Logger) Debugf(format string, args ...any) {
 	l.Writef(LevelDebug, format, args...)
 }
 
 // Info formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with LevelInfo.
-func (l *Logger) Info(args ...interface{}) {
+func (l *Logger) Info(args ...any) {
 	l.Write(LevelInfo, args...)
 }
 
 // Infof formats message according to format specifier, prepends the prefix as
 // necessary, and writes to log with LevelInfo.
-func (l *Logger) Infof(format string, args ...interface{}) {
+func (l *Logger) Infof(format string, args ...any) {
 	l.Writef(LevelInfo, format, args...)
 }
 
 // Warn formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with LevelWarn.
-func (l *Logger) Warn(args ...interface{}) {
+func (l *Logger) Warn(args ...any) {
 	l.Write(LevelWarn, args...)
 }
 
 // Warnf formats message according to format specifier, prepends the prefix as
 // necessary, and writes to log with LevelWarn.
-func (l *Logger) Warnf(format string, args ...interface{}) {
+func (l *Logger) Warnf(format string, args ...any) {
 	l.Writef(LevelWarn, format, args...)
 }
 
 // Error formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with LevelError.
-func (l *Logger) Error(args ...interface{}) {
+func (l *Logger) Error(args ...any) {
 	l.Write(LevelError, args...)
 }
 
 // Errorf formats message according to format specifier, prepends the prefix as
 // necessary, and writes to log with LevelError.
-func (l *Logger) Errorf(format string, args ...interface{}) {
+func (l *Logger) Errorf(format string, args ...any) {
 	l.Writef(LevelError, format, args...)
 }
 
 // Critical formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with LevelCritical.
-func (l *Logger) Critical(args ...interface{}) {
+func (l *Logger) Critical(args ...any) {
 	l.Write(LevelCritical, args...)
 }
 
 // Criticalf formats message according to format specifier, prepends the prefix
 // as necessary, and writes to log with LevelCritical.
-func (l *Logger) Criticalf(format string, args ...interface{}) {
+func (l *Logger) Criticalf(format string, args ...any) {
 	l.Writef(LevelCritical, format, args...)
 }
 
 // Write formats message using the default formats for its operands, prepends
 // the prefix as necessary, and writes to log with the given logLevel.
-func (l *Logger) Write(logLevel Level, args ...interface{}) {
+func (l *Logger) Write(logLevel Level, args ...any) {
 	lvl := l.Level()
 	if lvl <= logLevel {
 		l.print(logLevel, l.tag, args...)
@@ -138,7 +138,7 @@ func (l *Logger) Write(logLevel Level, args ...interface{}) {
 
 // Writef formats message according to format specifier, prepends the prefix
 // as necessary, and writes to log with the given logLevel.
-func (l *Logger) Writef(logLevel Level, format string, args ...interface{}) {
+func (l *Logger) Writef(logLevel Level, format string, args ...any) {
 	lvl := l.Level()
 	if lvl <= logLevel {
 		l.printf(logLevel, l.tag, format, args...)
@@ -164,7 +164,7 @@ func (l *Logger) Backend() *Backend {
 // creating a prefix for the given level and tag according to the formatHeader
 // function and formatting the provided arguments according to the given format
 // specifier.
-func (l *Logger) printf(lvl Level, tag string, format string, args ...interface{}) {
+func (l *Logger) printf(lvl Level, tag string, format string, args ...any) {
 	t := mstime.Now() // get as early as possible
 
 	var file string
@@ -191,7 +191,7 @@ func (l *Logger) printf(lvl Level, tag string, format string, args ...interface{
 // creating a prefix for the given level and tag according to the formatHeader
 // function and formatting the provided arguments using the default formatting
 // rules.
-func (l *Logger) print(lvl Level, tag string, args ...interface{}) {
+func (l *Logger) print(lvl Level, tag string, args ...any) {
 	if atomic.LoadUint32(&l.b.isRunning) == 0 {
 		panic("printing log without initializing")
 	}

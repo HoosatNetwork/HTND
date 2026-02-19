@@ -207,10 +207,7 @@ func currentBlockVersionIndexForSlice(length int) int {
 		panic("dagconfig: attempted to index empty per-version parameter slice")
 	}
 
-	index := int(constants.GetBlockVersion()) - 1
-	if index < 0 {
-		index = 0
-	}
+	index := max(int(constants.GetBlockVersion())-1, 0)
 	if index >= length {
 		index = length - 1
 	}

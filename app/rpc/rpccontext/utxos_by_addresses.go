@@ -13,23 +13,38 @@ import (
 
 // ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries converts
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
-func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs utxoindex.UTXOOutpointEntryPairs) []*appmessage.UTXOsByAddressesEntry {
-	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(pairs))
-	for outpoint, utxoEntry := range pairs {
-		utxosByAddressesEntries = append(utxosByAddressesEntries, &appmessage.UTXOsByAddressesEntry{
+func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs []utxoindex.UTXOPair) []*appmessage.UTXOsByAddressesEntry {
+	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
+
+	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
+	var scriptHex string
+	var scriptVersion uint16
+	if len(pairs) > 0 {
+		scriptHex = hex.EncodeToString(pairs[0].Entry.ScriptPublicKey().Script)
+		scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
+	}
+
+	for i, pair := range pairs {
+		entry := &appmessage.RPCUTXOEntry{
+			Amount: pair.Entry.Amount(),
+			ScriptPublicKey: &appmessage.RPCScriptPublicKey{
+				Script:  scriptHex,
+				Version: scriptVersion,
+			},
+			BlockDAAScore: pair.Entry.BlockDAAScore(),
+			IsCoinbase:    pair.Entry.IsCoinbase(),
+		}
+
+		utxosByAddressesEntries[i] = &appmessage.UTXOsByAddressesEntry{
 			Address: address,
 			Outpoint: &appmessage.RPCOutpoint{
-				TransactionID: outpoint.TransactionID.String(),
-				Index:         outpoint.Index,
+				TransactionID: pair.Outpoint.TransactionID.String(),
+				Index:         pair.Outpoint.Index,
 			},
-			UTXOEntry: &appmessage.RPCUTXOEntry{
-				Amount:          utxoEntry.Amount(),
-				ScriptPublicKey: &appmessage.RPCScriptPublicKey{Script: hex.EncodeToString(utxoEntry.ScriptPublicKey().Script), Version: utxoEntry.ScriptPublicKey().Version},
-				BlockDAAScore:   utxoEntry.BlockDAAScore(),
-				IsCoinbase:      utxoEntry.IsCoinbase(),
-			},
-		})
+			UTXOEntry: entry,
+		}
 	}
+
 	return utxosByAddressesEntries
 }
 

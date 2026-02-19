@@ -40,3 +40,7 @@ func (hstss *headersSelectedTipStagingShard) Commit(dbTx model.DBTransaction) er
 func (hstss *headersSelectedTipStagingShard) isStaged() bool {
 	return hstss.newSelectedTip != nil
 }
+
+func (hstss *headersSelectedTipStagingShard) UnstageAll() {
+	hstss.newSelectedTip = nil
+}

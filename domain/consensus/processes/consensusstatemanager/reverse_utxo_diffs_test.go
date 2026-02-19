@@ -30,7 +30,7 @@ func TestReverseUTXODiffs(t *testing.T) {
 		// Create a chain of 5 blocks
 		const initialChainLength = 5
 		previousBlockHash := consensusConfig.GenesisHash
-		for i := 0; i < initialChainLength; i++ {
+		for i := range initialChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in initial chain: %+v", i, err)
@@ -41,7 +41,7 @@ func TestReverseUTXODiffs(t *testing.T) {
 		const reorgChainLength = initialChainLength + 1
 		reorgChain := make([]*externalapi.DomainHash, reorgChainLength)
 		previousBlockHash = consensusConfig.GenesisHash
-		for i := 0; i < reorgChainLength; i++ {
+		for i := range reorgChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
 			reorgChain[i] = previousBlockHash
 			if err != nil {

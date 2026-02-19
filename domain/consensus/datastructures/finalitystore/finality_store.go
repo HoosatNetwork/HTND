@@ -59,6 +59,11 @@ func (fs *finalityStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return fs.stagingShard(stagingArea).isStaged()
 }
 
+func (fs *finalityStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := fs.stagingShard(stagingArea)
+	stagingShard.toAdd = make(map[externalapi.DomainHash]*externalapi.DomainHash)
+}
+
 func (fs *finalityStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
 	return fs.bucket.Key(hash.ByteSlice())
 }

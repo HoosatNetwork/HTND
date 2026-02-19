@@ -566,7 +566,7 @@ func TestRevalidateHighPriorityTransactions(t *testing.T) {
 		}
 
 		// Mine 2 more blocks on top of tip1, to re-org out childTransaction1, thus making spendingTransaction invalid
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			tip1, _, err = tc.AddBlock([]*externalapi.DomainHash{tip1}, nil, nil)
 			if err != nil {
 				t.Fatalf("Error mining on top of tip1: %+v", err)
@@ -828,7 +828,7 @@ func TestModifyBlockTemplate(t *testing.T) {
 
 func sweepCompareModifiedTemplateToBuilt(
 	t *testing.T, consensusConfig *consensus.Config, builder model.BlockTemplateBuilder) {
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		// Run a few times to get more randomness
 		compareModifiedTemplateToBuilt(t, consensusConfig, builder, opUsual, opUsual)
 		compareModifiedTemplateToBuilt(t, consensusConfig, builder, opECDSA, opECDSA)

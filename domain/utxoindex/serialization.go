@@ -54,7 +54,7 @@ func serializeHashes(hashes []*externalapi.DomainHash) []byte {
 func deserializeHashes(serializedHashes []byte) ([]*externalapi.DomainHash, error) {
 	length := binary.LittleEndian.Uint64(serializedHashes[:hashesLengthSize])
 	hashes := make([]*externalapi.DomainHash, length)
-	for i := uint64(0); i < length; i++ {
+	for i := range length {
 		start := hashesLengthSize + externalapi.DomainHashSize*i
 		end := start + externalapi.DomainHashSize
 

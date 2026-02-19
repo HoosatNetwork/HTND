@@ -108,3 +108,10 @@ func (hscss *headersSelectedChainStagingShard) isStaged() bool {
 		len(hscss.addedByIndex) != 0 ||
 		len(hscss.removedByIndex) != 0
 }
+
+func (hscss *headersSelectedChainStagingShard) UnstageAll() {
+	hscss.addedByHash = make(map[externalapi.DomainHash]uint64)
+	hscss.removedByHash = make(map[externalapi.DomainHash]struct{})
+	hscss.addedByIndex = make(map[uint64]*externalapi.DomainHash)
+	hscss.removedByIndex = make(map[uint64]struct{})
+}

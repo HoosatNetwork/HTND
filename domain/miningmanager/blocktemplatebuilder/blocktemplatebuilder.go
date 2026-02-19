@@ -122,7 +122,7 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 
 	mempoolTransactions := btb.mempool.BlockCandidateTransactions()
 	candidateTxs := make([]*candidateTx, 0, len(mempoolTransactions))
-	for i := 0; i < len(mempoolTransactions); i++ {
+	for i := range mempoolTransactions {
 		gasLimit := uint64(0)
 		if !subnetworks.IsBuiltInOrNative(mempoolTransactions[i].SubnetworkID) {
 			panic("We currently don't support non native subnetworks")

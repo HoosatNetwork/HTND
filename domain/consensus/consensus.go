@@ -3,6 +3,7 @@ package consensus
 import (
 	"math/big"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
@@ -19,43 +20,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
 )
-
-type EventQueue struct {
-	events []externalapi.ConsensusEvent
-	mu     sync.Mutex
-	MaxLen int
-	closed bool
-}
-
-func (q *EventQueue) Add(event externalapi.ConsensusEvent) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.closed {
-		return
-	}
-	if len(q.events) >= q.MaxLen {
-		// drop oldest
-		q.events = q.events[1:]
-	}
-	q.events = append(q.events, event)
-}
-
-func (q *EventQueue) Get() (externalapi.ConsensusEvent, bool) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.events) == 0 {
-		return nil, q.closed
-	}
-	event := q.events[0]
-	q.events = q.events[1:]
-	return event, true
-}
-
-func (q *EventQueue) Close() {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.closed = true
-}
 
 type consensus struct {
 	lock            *sync.Mutex
@@ -103,8 +67,8 @@ type consensus struct {
 	blocksWithTrustedDataDAAWindowStore model.BlocksWithTrustedDataDAAWindowStore
 	windowHeapSliceStore                model.WindowHeapSliceStore
 
-	consensusEventsQueue *EventQueue
-	virtualNotUpdated    bool
+	consensusEventsChan chan externalapi.ConsensusEvent
+	virtualNotUpdated   bool
 }
 
 // In order to prevent a situation that the consensus lock is held for too much time, we
@@ -195,15 +159,15 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 	// Start goroutine to display cache sizes every minute
 	if os.Getenv("HTND_PROFILER") != "" {
 		go s.displayCacheSizes()
+		go s.displayMemUse()
 	}
 
-	go s.PeriodicFreeOSMemory()
+	// go s.periodicFreeOSMemory()
 
 	return nil
 }
 
-func (s *consensus) PeriodicFreeOSMemory() error {
-
+func (s *consensus) periodicFreeOSMemory() error {
 	minutes := 90
 	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
 	if htnd_gc_timer_argument != "" {
@@ -229,7 +193,7 @@ func (s *consensus) PeriodicFreeOSMemory() error {
 }
 
 func (s *consensus) displayCacheSizes() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -258,6 +222,21 @@ func (s *consensus) displayCacheSizes() {
 		log.Infof("GHOSTDAGDataStore[x] cache size sum: %d", cacheLen)
 		log.Infof("PruningStore cache size: %d", s.pruningStore.CacheLen())
 		log.Infof("WindowHeapSliceStore cache size: %d", s.windowHeapSliceStore.CacheLen())
+	}
+}
+
+func (s *consensus) displayMemUse() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		log.Infof("Num Coroutines %d", runtime.NumGoroutine())
+		log.Infof("HeapAlloc: %d MB", m.HeapAlloc/1024/1024)
+		log.Infof("HeapSys:   %d MB", m.HeapSys/1024/1024)
+		log.Infof("Sys:       %d MB", m.Sys/1024/1024)
+		log.Infof("HeapReleased: %d MB", m.HeapReleased/1024/1024)
 	}
 }
 
@@ -384,19 +363,26 @@ func (s *consensus) validateAndInsertBlockNoLock(block *externalapi.DomainBlock,
 }
 
 func (s *consensus) sendBlockAddedEvent(block *externalapi.DomainBlock, blockStatus externalapi.BlockStatus) error {
-	if s.consensusEventsQueue != nil {
+	if s.consensusEventsChan != nil {
 		if blockStatus == externalapi.StatusHeaderOnly || blockStatus == externalapi.StatusInvalid {
 			return nil
 		}
 
-		s.consensusEventsQueue.Add(&externalapi.BlockAdded{Block: block})
+		if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
+			return errors.Errorf("consensusEventsChan is full")
+		}
+		s.consensusEventsChan <- &externalapi.BlockAdded{Block: block}
 	}
 	return nil
 }
 
 func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.VirtualChangeSet, wasVirtualUpdated bool) error {
-	if !wasVirtualUpdated || s.consensusEventsQueue == nil || virtualChangeSet == nil {
+	if !wasVirtualUpdated || s.consensusEventsChan == nil || virtualChangeSet == nil {
 		return nil
+	}
+
+	if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
+		return errors.Errorf("consensusEventsChan is full")
 	}
 
 	stagingArea := model.NewStagingArea()
@@ -423,7 +409,7 @@ func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.Virtua
 	virtualChangeSet.VirtualSelectedParentBlueScore = virtualSelectedParentGHOSTDAGData.BlueScore()
 	virtualChangeSet.VirtualDAAScore = virtualDAAScore
 
-	s.consensusEventsQueue.Add(virtualChangeSet)
+	s.consensusEventsChan <- virtualChangeSet
 	return nil
 }
 
@@ -631,7 +617,7 @@ func (s *consensus) GetBlocksAcceptanceData(blockHashes []*externalapi.DomainHas
 
 	blocksAcceptanceData := make([]externalapi.AcceptanceData, len(blockHashes))
 
-	for i := 0; i < len(blockHashes); i++ {
+	for i := range blockHashes {
 		// Use a separate staging area for each acceptance data retrieval to avoid memory accumulation
 		stagingArea := model.NewStagingArea()
 

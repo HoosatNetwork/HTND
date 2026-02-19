@@ -48,6 +48,14 @@ func (daas *daaBlocksStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return daas.stagingShard(stagingArea).isStaged()
 }
 
+func (daas *daaBlocksStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := daas.stagingShard(stagingArea)
+	stagingShard.daaScoreToAdd = make(map[externalapi.DomainHash]uint64)
+	stagingShard.daaAddedBlocksToAdd = make(map[externalapi.DomainHash][]*externalapi.DomainHash)
+	stagingShard.daaScoreToDelete = make(map[externalapi.DomainHash]struct{})
+	stagingShard.daaAddedBlocksToDelete = make(map[externalapi.DomainHash]struct{})
+}
+
 func (daas *daaBlocksStore) DAAScore(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint64, error) {
 	stagingShard := daas.stagingShard(stagingArea)
 	if daaScore, ok := stagingShard.daaScoreToAdd[*blockHash]; ok {

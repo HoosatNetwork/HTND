@@ -6,6 +6,7 @@ import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 type ConsensusStateStore interface {
 	Store
 	IsStaged(stagingArea *StagingArea) bool
+	UnstageAll(stagingArea *StagingArea)
 
 	StageVirtualUTXODiff(stagingArea *StagingArea, virtualUTXODiff externalapi.UTXODiff)
 	UTXOByOutpoint(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error)

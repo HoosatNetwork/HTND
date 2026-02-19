@@ -230,12 +230,25 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	return multiblockAcceptanceData, accumulatedUTXODiff, nil
 }
 
-func (csm *consensusStateManager) maybeAcceptTransaction(stagingArea *model.StagingArea,
-	transaction *externalapi.DomainTransaction, blockHash *externalapi.DomainHash, isSelectedParent bool,
-	accumulatedUTXODiff externalapi.MutableUTXODiff, accumulatedMassBefore uint64, selectedParentPastMedianTime int64,
-	blockDAAScore uint64) (isAccepted bool, accumulatedMassAfter uint64, err error) {
-
-	transactionID := consensushashing.TransactionID(transaction)
+func (csm *consensusStateManager) maybeAcceptTransaction(
+	stagingArea *model.StagingArea,
+	transaction *externalapi.DomainTransaction,
+	blockHash *externalapi.DomainHash,
+	isSelectedParent bool,
+	accumulatedUTXODiff externalapi.MutableUTXODiff,
+	accumulatedMassBefore uint64,
+	selectedParentPastMedianTime int64,
+	blockDAAScore uint64,
+) (isAccepted bool, accumulatedMassAfter uint64, err error) {
+	if transaction == nil {
+		log.Errorf("maybeAcceptTransaction called with nil transaction for block %s", blockHash)
+		return false, accumulatedMassBefore, errors.New("nil transaction passed to maybeAcceptTransaction")
+	}
+	transactionID := "<nil>"
+	transactionIDPtr := consensushashing.TransactionID(transaction)
+	if transactionIDPtr != nil {
+		transactionID = transactionIDPtr.String()
+	}
 	log.Tracef("maybeAcceptTransaction start for transaction %s in block %s", transactionID, blockHash)
 	defer log.Tracef("maybeAcceptTransaction end for transaction %s in block %s", transactionID, blockHash)
 

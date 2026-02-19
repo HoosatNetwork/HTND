@@ -81,6 +81,11 @@ func (hscs *headersSelectedChainStore) IsStaged(stagingArea *model.StagingArea) 
 	return hscs.stagingShard(stagingArea).isStaged()
 }
 
+func (hscs *headersSelectedChainStore) UnstageAll(stagingArea *model.StagingArea) {
+	stagingShard := hscs.stagingShard(stagingArea)
+	stagingShard.UnstageAll()
+}
+
 // Get gets the chain block index for the given blockHash
 func (hscs *headersSelectedChainStore) GetIndexByHash(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint64, error) {
 	stagingShard := hscs.stagingShard(stagingArea)

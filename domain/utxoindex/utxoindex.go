@@ -15,16 +15,113 @@ type UTXOIndex struct {
 	domain domain.Domain
 	store  *utxoIndexStore
 
-	mutex sync.Mutex
+	mutex          sync.Mutex
+	utxoIndexCache *utxoIndexLRUCache
+	maxCacheSize   int
+}
+type utxoIndexLRUCache struct {
+	maxSize    int
+	items      map[string]*utxoIndexLRUNode
+	head, tail *utxoIndexLRUNode
+}
+
+type utxoIndexLRUNode struct {
+	key        string
+	value      []UTXOPair
+	prev, next *utxoIndexLRUNode
+}
+
+func newUtxoIndexLRUCache(maxSize int) *utxoIndexLRUCache {
+	return &utxoIndexLRUCache{
+		maxSize: maxSize,
+		items:   make(map[string]*utxoIndexLRUNode),
+	}
+}
+
+func (c *utxoIndexLRUCache) Get(key string) ([]UTXOPair, bool) {
+	node, ok := c.items[key]
+	if !ok {
+		return nil, false
+	}
+	c.moveToFront(node)
+	return node.value, true
+}
+
+func (c *utxoIndexLRUCache) Put(key string, value []UTXOPair) {
+	if node, ok := c.items[key]; ok {
+		node.value = value
+		c.moveToFront(node)
+		return
+	}
+	node := &utxoIndexLRUNode{key: key, value: value}
+	c.items[key] = node
+	c.addToFront(node)
+	if len(c.items) > c.maxSize {
+		c.evict()
+	}
+}
+
+func (c *utxoIndexLRUCache) Delete(key string) {
+	node, ok := c.items[key]
+	if !ok {
+		return
+	}
+	c.remove(node)
+	delete(c.items, key)
+}
+
+func (c *utxoIndexLRUCache) moveToFront(node *utxoIndexLRUNode) {
+	if c.head == node {
+		return
+	}
+	c.remove(node)
+	c.addToFront(node)
+}
+
+func (c *utxoIndexLRUCache) addToFront(node *utxoIndexLRUNode) {
+	node.prev = nil
+	node.next = c.head
+	if c.head != nil {
+		c.head.prev = node
+	}
+	c.head = node
+	if c.tail == nil {
+		c.tail = node
+	}
+}
+
+func (c *utxoIndexLRUCache) remove(node *utxoIndexLRUNode) {
+	if node.prev != nil {
+		node.prev.next = node.next
+	} else {
+		c.head = node.next
+	}
+	if node.next != nil {
+		node.next.prev = node.prev
+	} else {
+		c.tail = node.prev
+	}
+}
+
+func (c *utxoIndexLRUCache) evict() {
+	if c.tail == nil {
+		return
+	}
+	key := c.tail.key
+	c.remove(c.tail)
+	delete(c.items, key)
 }
 
 // New creates a new UTXO index.
 //
 // NOTE: While this is called no new blocks can be added to the consensus.
 func New(domain domain.Domain, database database.Database) (*UTXOIndex, error) {
+	const defaultCacheSize = 10000
 	utxoIndex := &UTXOIndex{
-		domain: domain,
-		store:  newUTXOIndexStore(database),
+		domain:         domain,
+		store:          newUTXOIndexStore(database),
+		utxoIndexCache: newUtxoIndexLRUCache(defaultCacheSize),
+		maxCacheSize:   defaultCacheSize,
 	}
 	isSynced, err := utxoIndex.isSynced()
 	if err != nil {
@@ -163,6 +260,7 @@ func (ui *UTXOIndex) addUTXOs(toAdd externalapi.UTXOCollection) error {
 		}
 
 		log.Tracef("Adding outpoint %s to UTXO index", outpoint)
+		ui.utxoIndexCache.Delete(entry.ScriptPublicKey().String())
 		err = ui.store.add(entry.ScriptPublicKey(), outpoint, entry)
 		if err != nil {
 			return err
@@ -181,6 +279,7 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 		}
 
 		log.Tracef("Removing outpoint %s from UTXO index", outpoint)
+		ui.utxoIndexCache.Delete(entry.ScriptPublicKey().String())
 		err = ui.store.remove(entry.ScriptPublicKey(), outpoint, entry)
 		if err != nil {
 			return err
@@ -190,14 +289,17 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	onEnd := logger.LogAndMeasureExecutionTime(log, "UTXOIndex.UTXOs")
-	defer onEnd()
-
+func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXOPair, error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
-	return ui.store.getUTXOOutpointEntryPairs(scriptPublicKey)
+	if pair, ok := ui.utxoIndexCache.Get(scriptPublicKey.String()); ok {
+		return pair, nil
+	}
+
+	pair, err := ui.store.UTXOs(scriptPublicKey)
+	ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
+	return pair, err
 }
 
 // GetCirculatingSompiSupply returns the current circulating supply of sompis in the network

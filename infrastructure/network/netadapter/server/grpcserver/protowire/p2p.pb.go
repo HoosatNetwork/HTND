@@ -585,7 +585,7 @@ type BlockMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Header        *BlockHeader           `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
 	Transactions  []*TransactionMessage  `protobuf:"bytes,2,rep,name=transactions,proto3" json:"transactions,omitempty"`
-	PowHash       *string                `protobuf:"bytes,3,opt,name=powHash,proto3,oneof" json:"powHash,omitempty"`
+	PowHash       string                 `protobuf:"bytes,3,opt,name=powHash,proto3" json:"powHash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -635,8 +635,8 @@ func (x *BlockMessage) GetTransactions() []*TransactionMessage {
 }
 
 func (x *BlockMessage) GetPowHash() string {
-	if x != nil && x.PowHash != nil {
-		return *x.PowHash
+	if x != nil {
+		return x.PowHash
 	}
 	return ""
 }
@@ -3087,13 +3087,11 @@ const file_p2p_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\rR\aversion\"o\n" +
 	"\x11TransactionOutput\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\x04R\x05value\x12D\n" +
-	"\x0fscriptPublicKey\x18\x02 \x01(\v2\x1a.protowire.ScriptPublicKeyR\x0fscriptPublicKey\"\xac\x01\n" +
+	"\x0fscriptPublicKey\x18\x02 \x01(\v2\x1a.protowire.ScriptPublicKeyR\x0fscriptPublicKey\"\x9b\x01\n" +
 	"\fBlockMessage\x12.\n" +
 	"\x06header\x18\x01 \x01(\v2\x16.protowire.BlockHeaderR\x06header\x12A\n" +
-	"\ftransactions\x18\x02 \x03(\v2\x1d.protowire.TransactionMessageR\ftransactions\x12\x1d\n" +
-	"\apowHash\x18\x03 \x01(\tH\x00R\apowHash\x88\x01\x01B\n" +
-	"\n" +
-	"\b_powHash\"\xe9\x03\n" +
+	"\ftransactions\x18\x02 \x03(\v2\x1d.protowire.TransactionMessageR\ftransactions\x12\x18\n" +
+	"\apowHash\x18\x03 \x01(\tR\apowHash\"\xe9\x03\n" +
 	"\vBlockHeader\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x126\n" +
 	"\aparents\x18\f \x03(\v2\x1c.protowire.BlockLevelParentsR\aparents\x127\n" +
@@ -3381,7 +3379,6 @@ func file_p2p_proto_init() {
 	if File_p2p_proto != nil {
 		return
 	}
-	file_p2p_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

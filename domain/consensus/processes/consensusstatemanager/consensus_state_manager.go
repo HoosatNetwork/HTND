@@ -22,18 +22,22 @@ type consensusStateManager struct {
 	finalityManager       model.FinalityManager
 	difficultyManager     model.DifficultyManager
 
-	headersSelectedTipStore model.HeaderSelectedTipStore
-	blockStatusStore        model.BlockStatusStore
-	ghostdagDataStore       model.GHOSTDAGDataStore
-	consensusStateStore     model.ConsensusStateStore
-	multisetStore           model.MultisetStore
-	blockStore              model.BlockStore
-	utxoDiffStore           model.UTXODiffStore
-	blockRelationStore      model.BlockRelationStore
-	acceptanceDataStore     model.AcceptanceDataStore
-	blockHeaderStore        model.BlockHeaderStore
-	pruningStore            model.PruningStore
-	daaBlocksStore          model.DAABlocksStore
+	headersSelectedTipStore   model.HeaderSelectedTipStore
+	blockStatusStore          model.BlockStatusStore
+	ghostdagDataStore         model.GHOSTDAGDataStore
+	consensusStateStore       model.ConsensusStateStore
+	multisetStore             model.MultisetStore
+	blockStore                model.BlockStore
+	utxoDiffStore             model.UTXODiffStore
+	blockRelationStore        model.BlockRelationStore
+	acceptanceDataStore       model.AcceptanceDataStore
+	blockHeaderStore          model.BlockHeaderStore
+	pruningStore              model.PruningStore
+	daaBlocksStore            model.DAABlocksStore
+	finalityStore             model.FinalityStore
+	headersSelectedChainStore model.HeadersSelectedChainStore
+	mergeDepthRootStore       model.MergeDepthRootStore
+	windowHeapSliceStore      model.WindowHeapSliceStore
 
 	stores []model.Store
 }
@@ -66,7 +70,11 @@ func New(
 	blockHeaderStore model.BlockHeaderStore,
 	headersSelectedTipStore model.HeaderSelectedTipStore,
 	pruningStore model.PruningStore,
-	daaBlocksStore model.DAABlocksStore) (model.ConsensusStateManager, error) {
+	daaBlocksStore model.DAABlocksStore,
+	finalityStore model.FinalityStore,
+	headersSelectedChainStore model.HeadersSelectedChainStore,
+	mergeDepthRootStore model.MergeDepthRootStore,
+	windowHeapSliceStore model.WindowHeapSliceStore) (model.ConsensusStateManager, error) {
 
 	csm := &consensusStateManager{
 		maxBlockParents:   maxBlockParents,
@@ -85,18 +93,22 @@ func New(
 		finalityManager:       finalityManager,
 		difficultyManager:     difficultyManager,
 
-		multisetStore:           multisetStore,
-		blockStore:              blockStore,
-		blockStatusStore:        blockStatusStore,
-		ghostdagDataStore:       ghostdagDataStore,
-		consensusStateStore:     consensusStateStore,
-		utxoDiffStore:           utxoDiffStore,
-		blockRelationStore:      blockRelationStore,
-		acceptanceDataStore:     acceptanceDataStore,
-		blockHeaderStore:        blockHeaderStore,
-		headersSelectedTipStore: headersSelectedTipStore,
-		pruningStore:            pruningStore,
-		daaBlocksStore:          daaBlocksStore,
+		multisetStore:             multisetStore,
+		blockStore:                blockStore,
+		blockStatusStore:          blockStatusStore,
+		ghostdagDataStore:         ghostdagDataStore,
+		consensusStateStore:       consensusStateStore,
+		utxoDiffStore:             utxoDiffStore,
+		blockRelationStore:        blockRelationStore,
+		acceptanceDataStore:       acceptanceDataStore,
+		blockHeaderStore:          blockHeaderStore,
+		headersSelectedTipStore:   headersSelectedTipStore,
+		pruningStore:              pruningStore,
+		daaBlocksStore:            daaBlocksStore,
+		finalityStore:             finalityStore,
+		headersSelectedChainStore: headersSelectedChainStore,
+		mergeDepthRootStore:       mergeDepthRootStore,
+		windowHeapSliceStore:      windowHeapSliceStore,
 
 		stores: []model.Store{
 			consensusStateStore,
@@ -111,6 +123,11 @@ func New(
 			blockHeaderStore,
 			headersSelectedTipStore,
 			pruningStore,
+			daaBlocksStore,
+			finalityStore,
+			headersSelectedChainStore,
+			mergeDepthRootStore,
+			windowHeapSliceStore,
 		},
 	}
 
