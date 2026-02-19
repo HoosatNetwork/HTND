@@ -82,7 +82,6 @@ func (daaws *daaWindowStore) IsStaged(stagingArea *model.StagingArea) bool {
 }
 
 func (daaws *daaWindowStore) UnstageAll(stagingArea *model.StagingArea) {
-	daaws.cache.Clear()
 	stagingShard := daaws.stagingShard(stagingArea)
 	stagingShard.toAdd = make(map[dbKey]*externalapi.BlockGHOSTDAGDataHashPair)
 }
