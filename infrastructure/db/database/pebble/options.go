@@ -25,7 +25,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Bloom filter configuration
 	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
 	// ────────────────────────────────────────────────
-	bloomBitsPerKey := 20
+	bloomBitsPerKey := 16
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -115,12 +115,12 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			baseFileSize * 200, // L6
 		},
 
-		MaxManifestFileSize: 512 << 20,
+		MaxManifestFileSize: 128 << 20,
 		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
 
-		DisableWAL:      false,
-		WALBytesPerSync: 4 << 20,
-		BytesPerSync:    4 << 20,
+		DisableWAL: true,
+		// WALBytesPerSync: 4 << 20,
+		// BytesPerSync:    4 << 20,
 
 		CompactionConcurrencyRange: func() (int, int) { return 4, 8 },
 
@@ -171,46 +171,46 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	}
 
 	// Optional: enable flush splitting
-	if envBool("HTND_PEBBLE_DISABLE_FLUSH_SPLIT") {
-		opts.FlushSplitBytes = baseFileSize
-	}
+	// if envBool("HTND_PEBBLE_DISABLE_FLUSH_SPLIT") {
+	// 	opts.FlushSplitBytes = baseFileSize
+	// }
 
 	// ────────────────────────────────────────────────
 	// Experimental / advanced controls
 	// ────────────────────────────────────────────────
 
 	// How many L0 compactions can run concurrently
-	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 6) // Increased from 4 to handle more L0 files
+	// opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 6) // Increased from 4 to handle more L0 files
 
 	// Trigger extra compaction workers when debt (pending bytes) is high
-	opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
+	// opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
 
 	// Read-triggered compactions: compact hot-read data more aggressively
 	// Helpful during long IBD phases with repeated ancestor / window lookups
-	opts.Experimental.ReadCompactionRate = 64 << 20 // 32 MiB/s – moderate aggressiveness
-	opts.Experimental.ReadSamplingMultiplier = 4    // sample 1/4 reads for triggering
+	// opts.Experimental.ReadCompactionRate = 64 << 20 // 32 MiB/s – moderate aggressiveness
+	// opts.Experimental.ReadSamplingMultiplier = 4    // sample 1/4 reads for triggering
 
-	if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
-		if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
-			opts.Experimental.ReadCompactionRate = int64(kb) << 10
-		}
-	}
-	if v := os.Getenv("HTND_READ_SAMPLING_MULTIPLIER"); v != "" {
-		if m, err := strconv.Atoi(v); err == nil && m >= 1 {
-			opts.Experimental.ReadSamplingMultiplier = int64(m)
-		}
-	}
+	// if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
+	// 	if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
+	// 		opts.Experimental.ReadCompactionRate = int64(kb) << 10
+	// 	}
+	// }
+	// if v := os.Getenv("HTND_READ_SAMPLING_MULTIPLIER"); v != "" {
+	// 	if m, err := strconv.Atoi(v); err == nil && m >= 1 {
+	// 		opts.Experimental.ReadSamplingMultiplier = int64(m)
+	// 	}
+	// }
 
-	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
-		return pebble.ValueSeparationPolicy{
-			Enabled:               true,           // Must be true to activate (default in recent versions)
-			MinimumSize:           128,            // bytes – default in CockroachDB v25.4+
-			MaxBlobReferenceDepth: 100,            // Reasonable cap to limit indirection depth / compaction complexity
-			RewriteMinimumAge:     24 * time.Hour, // 1 day – balances space reclamation vs. write amp
-			TargetGarbageRatio:    0.20,           // 20% garbage triggers rewrite attempts – aggressive enough without excessive writes
+	// opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
+	// 	return pebble.ValueSeparationPolicy{
+	// 		Enabled:               true,           // Must be true to activate (default in recent versions)
+	// 		MinimumSize:           128,            // bytes – default in CockroachDB v25.4+
+	// 		MaxBlobReferenceDepth: 100,            // Reasonable cap to limit indirection depth / compaction complexity
+	// 		RewriteMinimumAge:     24 * time.Hour, // 1 day – balances space reclamation vs. write amp
+	// 		TargetGarbageRatio:    0.20,           // 20% garbage triggers rewrite attempts – aggressive enough without excessive writes
 
-		}
-	}
+	// 	}
+	// }
 
 	// ────────────────────────────────────────────────
 	// Optional detailed event logging (useful for tuning & debugging)
