@@ -147,7 +147,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 	// Data Structures
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
-	daaWindowStore := daawindowstore.New(prefixBucket, 1000, preallocateCaches)
+	daaWindowStore := daawindowstore.New(prefixBucket, 10_000, preallocateCaches)
 	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, preallocateCaches)
 	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, preallocateCaches)
 	if err != nil {
