@@ -150,10 +150,6 @@ func (c *scriptLRUCache) evict() {
 }
 
 // copyUTXOPairs creates a copy of UTXOPair slice to prevent slice mutation.
-// Note: This performs a shallow copy of the slice structure. The individual
-// UTXOPair elements are copied by value, but nested pointers (e.g., UTXOEntry
-// interface implementations) are shared. This is safe because UTXOEntry
-// implementations are treated as immutable in the codebase.
 func copyUTXOPairs(pairs []UTXOPair) []UTXOPair {
 	if pairs == nil {
 		return nil
@@ -164,7 +160,6 @@ func copyUTXOPairs(pairs []UTXOPair) []UTXOPair {
 }
 
 func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
-
 	key := ScriptPublicKeyString(scriptPublicKey.String())
 	log.Tracef("Adding outpoint %s:%d to scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -414,18 +409,25 @@ func (uis *utxoIndexStore) stagedData() (
 	toAdd []UTXOPair,
 	toRemove []UTXOPair,
 	virtualParents []*externalapi.DomainHash) {
-	// Flatten uis.toAdd map to []UTXOPair
+
+	// Pre-allocate with a reasonable estimate to avoid frequent growslices
+	// Typical scripts have few UTXOs; staging usually doesn't explode
+	estimatedSize := (len(uis.toAdd) + len(uis.toRemove)) * 12 // conservative average
+	toAdd = make([]UTXOPair, 0, estimatedSize)
+	toRemove = make([]UTXOPair, 0, estimatedSize)
+
 	for _, utxoPairs := range uis.toAdd {
 		for outpoint, entry := range utxoPairs {
 			toAdd = append(toAdd, UTXOPair{Outpoint: outpoint, Entry: entry})
 		}
 	}
-	// Flatten uis.toRemove map to []UTXOPair
+
 	for _, utxoPairs := range uis.toRemove {
 		for outpoint, entry := range utxoPairs {
 			toRemove = append(toRemove, UTXOPair{Outpoint: outpoint, Entry: entry})
 		}
 	}
+
 	return toAdd, toRemove, uis.virtualParents
 }
 
@@ -471,7 +473,10 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 		return nil, err
 	}
 	defer cursor.Close()
-	var pairs []UTXOPair
+
+	const initialCapacity = 100_000
+	pairs := make([]UTXOPair, 0, initialCapacity)
+
 	for cursor.Next() {
 		key, err := cursor.Key()
 		if err != nil {
@@ -539,10 +544,6 @@ func (uis *utxoIndexStore) getVirtualParents() ([]*externalapi.DomainHash, error
 	}
 
 	serializedHashes, err := uis.database.Get(virtualParentsKey)
-	// if database.IsNotFoundError(err) {
-	// 	log.Infof("getVirtualParents failed to retrieve with %s\n", virtualParentsKey)
-	// 	return nil, err
-	// }
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +588,6 @@ func (uis *utxoIndexStore) deleteAll() error {
 }
 
 func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
-
 	cursor, err := uis.database.Cursor(utxoIndexBucket)
 	if err != nil {
 		return err
