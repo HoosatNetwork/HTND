@@ -43,6 +43,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 					return
 				}
 
+				// Recalculate PoW hash if it's missing for whatever reason before submitting.
 				if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 					for range 5 {
 						block, found, err = context.Domain().Consensus().GetBlock(hash)
@@ -59,6 +60,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 						}
 						time.Sleep(getBlockRetryInterval * time.Duration(i+1))
 					}
+					// Recalculate PoW hash if it's missing for whatever reason before submitting.
 					if block.PoWHash == "" {
 						state := pow.NewState(block.Header.ToMutable())
 						_, powHash := state.CalculateProofOfWorkValue()
