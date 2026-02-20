@@ -7,7 +7,6 @@ import (
 	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
 	"github.com/Hoosat-Oy/HTND/domain"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 )
@@ -43,27 +42,10 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 					return
 				}
 
-				if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
-					for range 5 {
-						block, found, err = context.Domain().Consensus().GetBlock(hash)
-						if err != nil {
-							log.Warnf("unable to re-fetch requested block hash %s: %s", hash, err)
-							return
-						}
-						if !found {
-							log.Warnf("Relay block %s not found on retry", hash)
-							return
-						}
-						if block.PoWHash != "" {
-							break
-						}
-						time.Sleep(getBlockRetryInterval * time.Duration(i+1))
-					}
-					if block.PoWHash == "" {
-						state := pow.NewState(block.Header.ToMutable())
-						_, powHash := state.CalculateProofOfWorkValue()
-						block.PoWHash = powHash.String()
-					}
+				if block.PoWHash == "" {
+					state := pow.NewState(block.Header.ToMutable())
+					_, powHash := state.CalculateProofOfWorkValue()
+					block.PoWHash = powHash.String()
 				}
 				log.Debugf("Relaying block %s to peer %s", hash, peer.Address())
 				err = outgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))

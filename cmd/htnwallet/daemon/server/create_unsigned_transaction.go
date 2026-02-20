@@ -117,11 +117,41 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 		return nil, 0, 0, errors.Wrap(err, "failed to get DAG info")
 	}
 
+	s.sortUTXOsByAmountDescending()
+	for _, highestUTXO := range s.utxosSortedByAmount {
+		if len(selectedUTXOs) >= 1 {
+			break
+		}
+		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, highestUTXO.address)) ||
+			!s.isUTXOSpendable(highestUTXO, dagInfo.VirtualDAAScore) {
+			continue
+		}
+
+		if broadcastTime, ok := s.usedOutpoints[*highestUTXO.Outpoint]; ok {
+			if s.usedOutpointHasExpired(broadcastTime) {
+				delete(s.usedOutpoints, *highestUTXO.Outpoint)
+			} else {
+				continue
+			}
+		}
+
+		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
+			Outpoint:       highestUTXO.Outpoint,
+			UTXOEntry:      highestUTXO.UTXOEntry,
+			DerivationPath: s.walletAddressPath(highestUTXO.address),
+		})
+		totalValue += highestUTXO.UTXOEntry.Amount()
+	}
+	log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
+
 	s.sortUTXOsByAmountAscending()
 	log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
 
 	// Collect up to targetCompoundInputs smallest spendable UTXOs for compounding
 	for _, utxo := range s.utxosSortedByAmount {
+		if selectedUTXOsContain(selectedUTXOs, utxo) { // Don't accidentally spend same UTXO.
+			continue
+		}
 		if len(selectedUTXOs) >= targetCompoundInputs {
 			break
 		}
@@ -129,7 +159,6 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
 			utxo.UTXOEntry.BlockDAAScore() == 0 ||
 			utxo.UTXOEntry.BlockDAAScore()+1 > dagInfo.VirtualDAAScore {
-			log.Infof("Can't use utxo as wallet address does not contain, and utxo is not spendable or unconfirmed")
 			continue
 		}
 
@@ -325,5 +354,15 @@ func walletAddressesContain(addresses []*walletAddress, contain *walletAddress) 
 		}
 	}
 
+	return false
+}
+
+// selectedUTXOsContain checks if a given walletUTXO is already present in the selectedUTXOs slice.
+func selectedUTXOsContain(selectedUTXOs []*libhtnwallet.UTXO, utxo *walletUTXO) bool {
+	for _, s := range selectedUTXOs {
+		if s.Outpoint != nil && utxo.Outpoint != nil && *s.Outpoint == *utxo.Outpoint {
+			return true
+		}
+	}
 	return false
 }

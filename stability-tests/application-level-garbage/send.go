@@ -5,6 +5,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/protocol/common"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/standalone"
 	"github.com/pkg/errors"
 )
@@ -34,6 +35,13 @@ func sendBlocks(address string, minimalNetAdapter *standalone.MinimalNetAdapter,
 		if len(requestRelayBlockMessage.Hashes) != 1 || *requestRelayBlockMessage.Hashes[0] != *blockHash {
 			return errors.Errorf("Expecting requested hashes to be [%s], but got %v",
 				blockHash, requestRelayBlockMessage.Hashes)
+		}
+
+		// Recalculate PoW hash if it's missing for whatever reason before submitting.
+		if block.PoWHash == "" {
+			state := pow.NewState(block.Header.ToMutable())
+			_, powHash := state.CalculateProofOfWorkValue()
+			block.PoWHash = powHash.String()
 		}
 
 		err = routes.OutgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))

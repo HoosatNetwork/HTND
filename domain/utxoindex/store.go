@@ -66,21 +66,18 @@ func (c *scriptLRUCache) Get(key string) ([]UTXOPair, bool) {
 		return nil, false
 	}
 	c.moveToFront(node)
-	// Return a deep copy to prevent external mutation
-	return copyUTXOPairs(node.value), true
+	return node.value, true
 }
 
 func (c *scriptLRUCache) Put(key string, value []UTXOPair) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Store a copy to prevent external mutation
-	valueCopy := copyUTXOPairs(value)
 	if node, ok := c.items[key]; ok {
-		node.value = valueCopy
+		node.value = value
 		c.moveToFront(node)
 		return
 	}
-	node := &scriptLRUNode{key: key, value: valueCopy}
+	node := &scriptLRUNode{key: key, value: value}
 	c.items[key] = node
 	c.addToFront(node)
 	if len(c.items) > c.maxSize {
@@ -241,8 +238,12 @@ func (uis *utxoIndexStore) updateVirtualParents(virtualParents []*externalapi.Do
 }
 
 func (uis *utxoIndexStore) discard() {
-	uis.toAdd = make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs)
-	uis.toRemove = make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs)
+	for k := range uis.toAdd {
+		delete(uis.toAdd, k)
+	}
+	for k := range uis.toRemove {
+		delete(uis.toRemove, k)
+	}
 	uis.virtualParents = nil
 	uis.scriptCache.Clear()
 }
@@ -458,21 +459,30 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
-	// Check per-script cache first
 	scriptKeyString := scriptPublicKey.String()
 	if cachedPairs, ok := uis.scriptCache.Get(scriptKeyString); ok {
 		return cachedPairs, nil
 	}
 
-	// Cache miss - read from database
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close()
-	var pairs []UTXOPair
-	for cursor.Next() {
+
+	// First pass: count entries
+	count := 0
+	for ok := cursor.First(); ok; ok = cursor.Next() {
+		count++
+	}
+
+	// Preallocate
+	pairs := make([]UTXOPair, count)
+
+	// Second pass: fill
+	i := 0
+	for ok := cursor.First(); ok; ok = cursor.Next() {
 		key, err := cursor.Key()
 		if err != nil {
 			return nil, err
@@ -489,12 +499,14 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 		if err != nil {
 			return nil, err
 		}
-		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		pairs[i] = UTXOPair{Outpoint: *outpoint, Entry: utxoEntry}
+		i++
+		if i >= count { // Don't iterate over the preallocated amount on this request
+			break
+		}
 	}
 
-	// Populate per-script cache with the results
 	uis.scriptCache.Put(scriptKeyString, pairs)
-
 	return pairs, nil
 }
 
