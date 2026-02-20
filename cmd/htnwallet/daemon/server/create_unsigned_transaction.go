@@ -159,7 +159,6 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
 			utxo.UTXOEntry.BlockDAAScore() == 0 ||
 			utxo.UTXOEntry.BlockDAAScore()+1 > dagInfo.VirtualDAAScore {
-			log.Infof("Can't use utxo as wallet address does not contain, and utxo is not spendable or unconfirmed")
 			continue
 		}
 
