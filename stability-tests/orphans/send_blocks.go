@@ -76,7 +76,6 @@ func waitForRequestAndSend(routes *standalone.Routes, block *externalapi.DomainB
 			blockHash, requestRelayBlockMessage.Hashes)
 	}
 
-	// Recalculate PoW hash if it's missing for whatever reason before submitting.
 	if block.PoWHash == "" {
 		state := pow.NewState(block.Header.ToMutable())
 		_, powHash := state.CalculateProofOfWorkValue()

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/blockheader"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -541,6 +542,12 @@ func DomainBlockWithTrustedDataToBlockWithTrustedData(block *externalapi.BlockWi
 			GHOSTDAGData: domainGHOSTDAGDataGHOSTDAGData(datum.GHOSTDAGData),
 		}
 	}
+	if block.Block.PoWHash == "" {
+		state := pow.NewState(block.Block.Header.ToMutable())
+		_, powHash := state.CalculateProofOfWorkValue()
+		block.Block.PoWHash = powHash.String()
+	}
+
 	return &MsgBlockWithTrustedData{
 		Block:        DomainBlockToMsgBlock(block.Block),
 		DAAScore:     block.Block.Header.DAAScore(),

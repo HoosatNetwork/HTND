@@ -69,10 +69,13 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				}
 
 				// TODO (Partial nodes): Convert block to partial block if needed
-
+				if block.PoWHash == "" {
+					state := pow.NewState(block.Header.ToMutable())
+					_, powHash := state.CalculateProofOfWorkValue()
+					block.PoWHash = powHash.String()
+				}
 				log.Debugf("Relaying block %s through IBD to peer %s", hash, peer.Address())
-				blockMessage := appmessage.DomainBlockToMsgBlock(block)
-				ibdBlockMessage := appmessage.NewMsgIBDBlock(blockMessage)
+				ibdBlockMessage := appmessage.NewMsgIBDBlock(appmessage.DomainBlockToMsgBlock(block))
 				err = outgoingRoute.Enqueue(ibdBlockMessage)
 				if err != nil {
 					log.Warnf("failed to enqueue block %s: %s", hash, err)
