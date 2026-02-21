@@ -8,7 +8,7 @@ const DomainSubnetworkIDSize = 20
 // DomainSubnetworkID is the domain representation of a Subnetwork ID
 type DomainSubnetworkID [DomainSubnetworkIDSize]byte
 
-var DomainSubnetworkIDBuf [DomainSubnetworkIDSize + 1]byte
+var DomainSubnetworkIDBuf [256]byte
 
 func fastHex(dst []byte, src []byte) string {
 	n := hex.Encode(dst, src)
