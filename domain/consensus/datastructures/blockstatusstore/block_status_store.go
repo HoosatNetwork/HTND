@@ -75,12 +75,22 @@ func (bss *blockStatusStore) Exists(dbContext model.DBReader, stagingArea *model
 		return true, nil
 	}
 
-	exists, err := dbContext.Has(bss.hashAsKey(blockHash))
+	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))
+
 	if err != nil {
 		return false, err
 	}
 
-	return exists, nil
+	if statusBytes == nil {
+		return false, nil
+	}
+
+	statusDeserialized, err := bss.deserializeBlockStatus(statusBytes)
+	if err != nil {
+		return false, err
+	}
+	bss.cache.Add(blockHash, statusDeserialized)
+	return true, nil
 }
 
 func (bss *blockStatusStore) serializeBlockStatus(status externalapi.BlockStatus) ([]byte, error) {
