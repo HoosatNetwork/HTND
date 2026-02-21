@@ -274,6 +274,13 @@ func RPCUTXOEntryToUTXOEntry(entry *RPCUTXOEntry) (externalapi.UTXOEntry, error)
 	), nil
 }
 
+var sigBuf [128]byte
+
+func fastHex(dst []byte, src []byte) string {
+	n := hex.Encode(dst, src)
+	return string(dst[:n])
+}
+
 // DomainTransactionToRPCTransaction converts DomainTransactions to RPCTransactions
 func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransaction) *RPCTransaction {
 	inputs := make([]*RPCTransactionInput, len(transaction.Inputs))
@@ -283,7 +290,7 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 			TransactionID: transactionID,
 			Index:         input.PreviousOutpoint.Index,
 		}
-		signatureScript := hex.EncodeToString(input.SignatureScript)
+		signatureScript := fastHex(sigBuf[:], input.SignatureScript)
 		inputs[i] = &RPCTransactionInput{
 			PreviousOutpoint: previousOutpoint,
 			SignatureScript:  signatureScript,
@@ -293,7 +300,7 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 	}
 	outputs := make([]*RPCTransactionOutput, len(transaction.Outputs))
 	for i, output := range transaction.Outputs {
-		scriptPublicKey := hex.EncodeToString(output.ScriptPublicKey.Script)
+		scriptPublicKey := fastHex(sigBuf[:], output.ScriptPublicKey.Script)
 		outputs[i] = &RPCTransactionOutput{
 			Amount:          output.Value,
 			ScriptPublicKey: &RPCScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},

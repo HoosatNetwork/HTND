@@ -10,11 +10,24 @@ import (
 const hexTransactionsSeparator = "_"
 
 func encodeTransactionsToHex(transactions [][]byte) string {
-	transactionsInHex := make([]string, len(transactions))
-	for i, transaction := range transactions {
-		transactionsInHex[i] = hex.EncodeToString(transaction)
+	totalHexLen := 0
+	for _, tx := range transactions {
+		totalHexLen += hex.EncodedLen(len(tx))
 	}
-	return strings.Join(transactionsInHex, hexTransactionsSeparator)
+	totalHexLen += len(transactions) - 1 // separators, assume 1-byte sep
+
+	buf := make([]byte, totalHexLen) // one alloc for everything
+	offset := 0
+
+	for i, tx := range transactions {
+		if i > 0 {
+			buf[offset] = hexTransactionsSeparator[0]
+			offset++
+		}
+		n := hex.Encode(buf[offset:], tx)
+		offset += n
+	}
+	return string(buf)
 }
 
 func decodeTransactionsFromHex(transactionsHex string) ([][]byte, error) {

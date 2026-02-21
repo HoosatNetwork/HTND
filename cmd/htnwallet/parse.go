@@ -13,6 +13,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+var sigBuf [128]byte
+
+func fastHex(dst []byte, src []byte) string {
+	n := hex.Encode(dst, src)
+	return string(dst[:n])
+}
+
 func parse(conf *parseConfig) error {
 	if conf.Transaction == "" && conf.TransactionFile == "" {
 		return errors.Errorf("Either --transaction or --transaction-file is required")
@@ -68,7 +75,7 @@ func parse(conf *parseConfig) error {
 
 			addressString := scriptPublicKeyAddress.EncodeAddress()
 			if scriptPublicKeyType == txscript.NonStandardTy {
-				scriptPublicKeyHex := hex.EncodeToString(output.ScriptPublicKey.Script)
+				scriptPublicKeyHex := fastHex(sigBuf[:], output.ScriptPublicKey.Script)
 				addressString = fmt.Sprintf("<Non-standard transaction script public key: %s>", scriptPublicKeyHex)
 			}
 

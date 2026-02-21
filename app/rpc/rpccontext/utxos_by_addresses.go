@@ -11,6 +11,13 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 )
 
+var sigBuf [128]byte
+
+func fastHex(dst []byte, src []byte) string {
+	n := hex.Encode(dst, src)
+	return string(dst[:n])
+}
+
 // ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries converts
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
 func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs []utxoindex.UTXOPair) []*appmessage.UTXOsByAddressesEntry {
@@ -20,7 +27,7 @@ func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pair
 	var scriptHex string
 	var scriptVersion uint16
 	if len(pairs) > 0 {
-		scriptHex = hex.EncodeToString(pairs[0].Entry.ScriptPublicKey().Script)
+		scriptHex = fastHex(sigBuf[:], pairs[0].Entry.ScriptPublicKey().Script)
 		scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
 	}
 
@@ -63,7 +70,7 @@ func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
 		if err != nil {
 			return nil, errors.Errorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 		}
-		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(scriptPublicKey.String())
+		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(fastHex(sigBuf[:], scriptPublicKey.Script))
 		addresses[i] = &UTXOsChangedNotificationAddress{
 			Address:               addressString,
 			ScriptPublicKeyString: scriptPublicKeyString,
