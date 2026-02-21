@@ -27,8 +27,9 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		return nil
 	}
 	if domainBlock.PoWHash == "" {
-		// Defensive: PoWHash should not be empty
-		return nil
+		state := pow.NewState(domainBlock.Header.ToMutable())
+		_, powHash := state.CalculateProofOfWorkValue()
+		domainBlock.PoWHash = powHash.String()
 	}
 	msgTxs := make([]*MsgTx, 0, len(domainBlock.Transactions))
 	for _, domainTransaction := range domainBlock.Transactions {
@@ -69,10 +70,17 @@ func MsgBlockToDomainBlock(msgBlock *MsgBlock) *externalapi.DomainBlock {
 	for _, msgTx := range msgBlock.Transactions {
 		transactions = append(transactions, MsgTxToDomainTransaction(msgTx))
 	}
+	header := BlockHeaderToDomainBlockHeader(&msgBlock.Header)
+	powHash := msgBlock.PoWHash
+	if powHash == "" {
+		state := pow.NewState(header.ToMutable())
+		_, powHashResult := state.CalculateProofOfWorkValue()
+		powHash = powHashResult.String()
+	}
 	return &externalapi.DomainBlock{
-		Header:       BlockHeaderToDomainBlockHeader(&msgBlock.Header),
+		Header:       header,
 		Transactions: transactions,
-		PoWHash:      msgBlock.PoWHash,
+		PoWHash:      powHash,
 	}
 }
 
@@ -440,6 +448,11 @@ func RPCBlockToDomainBlock(block *RPCBlock, powHash string) (*externalapi.Domain
 			return nil, err
 		}
 		transactions[i] = domainTransaction
+	}
+	if powHash == "" {
+		state := pow.NewState(header.ToMutable())
+		_, powHashResult := state.CalculateProofOfWorkValue()
+		powHash = powHashResult.String()
 	}
 	return &externalapi.DomainBlock{
 		Header:       header,
