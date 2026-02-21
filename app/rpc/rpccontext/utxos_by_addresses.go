@@ -11,7 +11,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 )
 
-var sigBuf [128]byte
+var sigBuf [256]byte
 
 func fastHex(dst []byte, src []byte) string {
 	n := hex.Encode(dst, src)
