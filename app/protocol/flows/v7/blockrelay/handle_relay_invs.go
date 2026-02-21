@@ -71,7 +71,7 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 		peer:              peer,
 		connectionManager: connectionManager,
 		netConnection:     netConnection,
-		invsQueue:         make([]invRelayBlock, 0),
+		invsQueue:         make([]invRelayBlock, 0, 1000),
 	}
 
 	// Clean up offenseTracker entry when the connection ends, regardless of how it exits
@@ -90,7 +90,7 @@ const (
 	banThresholdSecs = 300
 )
 
-var offenseTracker = make(map[string][]time.Time)
+var offenseTracker = make(map[string][]time.Time, 5)
 
 func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 	address := flow.netConnection.Address()
