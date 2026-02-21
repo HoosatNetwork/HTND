@@ -77,11 +77,7 @@ func (bss *blockStatusStore) Exists(dbContext model.DBReader, stagingArea *model
 
 	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))
 
-	if err != nil {
-		return false, err
-	}
-
-	if statusBytes == nil {
+	if err != nil || statusBytes == nil {
 		return false, nil
 	}
 

@@ -124,11 +124,7 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
-	if err != nil {
-		return false, err
-	}
-
-	if blockBytes == nil {
+	if err != nil || blockBytes == nil {
 		return false, nil
 	}
 
