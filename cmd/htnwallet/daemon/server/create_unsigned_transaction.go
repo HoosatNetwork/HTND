@@ -53,6 +53,12 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
+
+	err := s.refreshUTXOs()
+	if err != nil {
+		return nil, err
+	}
+
 	toAddress, err := util.DecodeAddress(address, s.params.Prefix)
 	if err != nil {
 		return nil, err
@@ -198,6 +204,12 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
+
+	err := s.refreshUTXOs()
+	if err != nil {
+		return nil, err
+	}
+
 	// make sure address string is correct before proceeding to a
 	// potentially long UTXO refreshment operation
 	toAddress, err := util.DecodeAddress(address, s.params.Prefix)

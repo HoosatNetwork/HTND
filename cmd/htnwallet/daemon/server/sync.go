@@ -24,7 +24,7 @@ func (was walletAddressSet) strings() []string {
 }
 
 func (s *server) syncLoop() error {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	err := s.collectRecentAddresses()
@@ -64,7 +64,7 @@ func (s *server) sync() error {
 		return err
 	}
 
-	return s.refreshUTXOs()
+	return nil
 }
 
 const (
