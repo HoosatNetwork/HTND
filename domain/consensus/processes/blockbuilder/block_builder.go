@@ -130,6 +130,9 @@ func (bb *blockBuilder) buildBlock(stagingArea *model.StagingArea, coinbaseData 
 
 func (bb *blockBuilder) validateTransactions(stagingArea *model.StagingArea,
 	transactions []*externalapi.DomainTransaction) error {
+	if len(transactions) == 0 {
+		return nil
+	}
 
 	invalidTransactions := make([]ruleerrors.InvalidTransaction, 0, 20)
 	for i := range transactions {
