@@ -276,11 +276,6 @@ func RPCUTXOEntryToUTXOEntry(entry *RPCUTXOEntry) (externalapi.UTXOEntry, error)
 
 var sigBuf [256]byte
 
-func fastHex(dst []byte, src []byte) string {
-	n := hex.Encode(dst, src)
-	return string(dst[:n])
-}
-
 // DomainTransactionToRPCTransaction converts DomainTransactions to RPCTransactions
 func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransaction) *RPCTransaction {
 	inputs := make([]*RPCTransactionInput, len(transaction.Inputs))
@@ -290,7 +285,8 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 			TransactionID: transactionID,
 			Index:         input.PreviousOutpoint.Index,
 		}
-		signatureScript := fastHex(sigBuf[:], input.SignatureScript)
+		n := hex.Encode(sigBuf[:], input.SignatureScript)
+		signatureScript := string(sigBuf[:n])
 		inputs[i] = &RPCTransactionInput{
 			PreviousOutpoint: previousOutpoint,
 			SignatureScript:  signatureScript,
@@ -300,14 +296,32 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 	}
 	outputs := make([]*RPCTransactionOutput, len(transaction.Outputs))
 	for i, output := range transaction.Outputs {
-		scriptPublicKey := fastHex(sigBuf[:], output.ScriptPublicKey.Script)
+		n := hex.Encode(sigBuf[:], output.ScriptPublicKey.Script)
+		scriptPublicKey := string(sigBuf[:n])
 		outputs[i] = &RPCTransactionOutput{
 			Amount:          output.Value,
 			ScriptPublicKey: &RPCScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
 		}
 	}
 	subnetworkID := transaction.SubnetworkID.String()
-	payload := hex.EncodeToString(transaction.Payload)
+
+	if len(transaction.Payload) == 0 {
+		return &RPCTransaction{
+			Version:      transaction.Version,
+			Inputs:       inputs,
+			Outputs:      outputs,
+			LockTime:     transaction.LockTime,
+			SubnetworkID: subnetworkID,
+			Gas:          transaction.Gas,
+			Payload:      "",
+		}
+	}
+
+	hexLen := hex.EncodedLen(len(transaction.Payload))
+	dst := make([]byte, hexLen)
+	hex.Encode(dst, transaction.Payload)
+
+	payload := string(dst)
 	return &RPCTransaction{
 		Version:      transaction.Version,
 		Inputs:       inputs,
