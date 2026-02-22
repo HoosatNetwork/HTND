@@ -25,7 +25,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Bloom filter configuration
 	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
 	// ────────────────────────────────────────────────
-	bloomBitsPerKey := 16
+	bloomBitsPerKey := 13
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -37,7 +37,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Memtable tuning
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 256
+		defaultMemTableMB           = 512
 		defaultMemTablesBeforeStall = 4
 	)
 
@@ -126,45 +126,45 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		Levels: [7]pebble.LevelOptions{
 			{ // L0
-				BlockSize:      32 << 10,
-				IndexBlockSize: 32 << 10,
+				BlockSize:      64 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L1
-				BlockSize:      32 << 10,
-				IndexBlockSize: 32 << 10,
+				BlockSize:      64 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L2
-				BlockSize:      32 << 10,
-				IndexBlockSize: 32 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
+				BlockSize:      64 << 10,
+				IndexBlockSize: 64 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L3
-				BlockSize:      32 << 10,
-				IndexBlockSize: 32 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
+				BlockSize:      64 << 10,
+				IndexBlockSize: 64 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L4
-				BlockSize:      32 << 10,
-				IndexBlockSize: 32 << 10,
+				BlockSize:      64 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L5
-				BlockSize:      32 << 10,
-				IndexBlockSize: 32 << 10,
+				BlockSize:      64 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L6
-				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.ZstdCompression },
+				BlockSize:      128 << 10,
+				IndexBlockSize: 128 << 10,
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 		},
@@ -201,16 +201,15 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// 	}
 	// }
 
-	// opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
-	// 	return pebble.ValueSeparationPolicy{
-	// 		Enabled:               true,           // Must be true to activate (default in recent versions)
-	// 		MinimumSize:           128,            // bytes – default in CockroachDB v25.4+
-	// 		MaxBlobReferenceDepth: 100,            // Reasonable cap to limit indirection depth / compaction complexity
-	// 		RewriteMinimumAge:     24 * time.Hour, // 1 day – balances space reclamation vs. write amp
-	// 		TargetGarbageRatio:    0.20,           // 20% garbage triggers rewrite attempts – aggressive enough without excessive writes
-
-	// 	}
-	// }
+	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
+		return pebble.ValueSeparationPolicy{
+			Enabled:               true,
+			MinimumSize:           128,
+			MaxBlobReferenceDepth: 100,
+			RewriteMinimumAge:     24 * time.Hour,
+			TargetGarbageRatio:    0.20,
+		}
+	}
 
 	// ────────────────────────────────────────────────
 	// Optional detailed event logging (useful for tuning & debugging)
