@@ -1,6 +1,7 @@
 package blockrelay
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -22,6 +23,11 @@ const getBlockRetryInterval = 10 * time.Millisecond
 // their corresponding blocks to the requesting peer.
 func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *router.Route,
 	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
+	semaphore := make(chan struct{}, runtime.NumCPU())
+
+	rateLimit := time.NewTicker(time.Second / 20)
+	defer rateLimit.Stop()
+
 	for {
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
@@ -30,8 +36,11 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 		getRelayBlocksMessage := message.(*appmessage.MsgRequestRelayBlocks)
 		hashesLen := len(getRelayBlocksMessage.Hashes)
 		for i := range hashesLen {
+			<-rateLimit.C // wait for rate limiter
 			hash := getRelayBlocksMessage.Hashes[i]
+			semaphore <- struct{}{} // acquire
 			go func(hash *externalapi.DomainHash) {
+				defer func() { <-semaphore }() // release
 				block, found, err := context.Domain().Consensus().GetBlock(hash)
 				if err != nil {
 					log.Warnf("unable to fetch requested block hash %s: %s", hash, err)
