@@ -29,6 +29,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 	defer rateLimit.Stop()
 
 	for {
+		<-rateLimit.C // wait for rate limiter
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err
@@ -36,7 +37,6 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 		getRelayBlocksMessage := message.(*appmessage.MsgRequestRelayBlocks)
 		hashesLen := len(getRelayBlocksMessage.Hashes)
 		for i := range hashesLen {
-			<-rateLimit.C // wait for rate limiter
 			hash := getRelayBlocksMessage.Hashes[i]
 			semaphore <- struct{}{} // acquire
 			go func(hash *externalapi.DomainHash) {

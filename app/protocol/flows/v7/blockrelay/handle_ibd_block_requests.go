@@ -27,6 +27,7 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 	defer rateLimit.Stop()
 
 	for {
+		<-rateLimit.C // wait for rate limiter
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err
@@ -35,7 +36,6 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 		log.Debugf("Got request for %d ibd blocks", len(msgRequestIBDBlocks.Hashes))
 
 		for i := 0; i < len(msgRequestIBDBlocks.Hashes); i++ {
-			<-rateLimit.C // wait for rate limiter
 			hash := msgRequestIBDBlocks.Hashes[i]
 			semaphore <- struct{}{} // acquire
 			go func(hash *externalapi.DomainHash) {
