@@ -22,7 +22,7 @@ func fastHex(dst []byte, src []byte) string {
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
 func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs []utxoindex.UTXOPair) []*appmessage.UTXOsByAddressesEntry {
 	if len(pairs) == 0 {
-		return make([]*appmessage.UTXOsByAddressesEntry, 0)
+		return nil
 	}
 
 	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
@@ -31,7 +31,7 @@ func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pair
 	scriptHex = fastHex(sigBuf[:], pairs[0].Entry.ScriptPublicKey().Script)
 	scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
 
-	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
+	utxosByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
 
 	sharedScript := &appmessage.RPCScriptPublicKey{
 		Script:  scriptHex,
@@ -46,7 +46,7 @@ func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pair
 			IsCoinbase:      pair.Entry.IsCoinbase(),
 		}
 
-		utxosByAddressesEntries[i] = &appmessage.UTXOsByAddressesEntry{
+		utxosByAddressEntries[i] = &appmessage.UTXOsByAddressesEntry{
 			Address: address,
 			Outpoint: &appmessage.RPCOutpoint{
 				TransactionID: pair.Outpoint.TransactionID.String(),
@@ -56,7 +56,7 @@ func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pair
 		}
 	}
 
-	return utxosByAddressesEntries
+	return utxosByAddressEntries
 }
 
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings

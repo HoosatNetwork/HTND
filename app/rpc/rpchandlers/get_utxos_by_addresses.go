@@ -71,6 +71,9 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, total)
 	for i, addressString := range getUTXOsByAddressesRequest.Addresses {
 		entries := rpccontext.ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(addressString, utxoPairsByAddress[i])
+		if entries == nil {
+			continue
+		}
 		allEntries = append(allEntries, entries...)
 	}
 
