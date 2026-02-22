@@ -21,25 +21,29 @@ func fastHex(dst []byte, src []byte) string {
 // ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries converts
 // UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
 func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs []utxoindex.UTXOPair) []*appmessage.UTXOsByAddressesEntry {
-	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
+	if len(pairs) == 0 {
+		return make([]*appmessage.UTXOsByAddressesEntry, 0)
+	}
 
 	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
 	var scriptHex string
 	var scriptVersion uint16
-	if len(pairs) > 0 {
-		scriptHex = fastHex(sigBuf[:], pairs[0].Entry.ScriptPublicKey().Script)
-		scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
+	scriptHex = fastHex(sigBuf[:], pairs[0].Entry.ScriptPublicKey().Script)
+	scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
+
+	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
+
+	sharedScript := &appmessage.RPCScriptPublicKey{
+		Script:  scriptHex,
+		Version: scriptVersion,
 	}
 
 	for i, pair := range pairs {
 		entry := &appmessage.RPCUTXOEntry{
-			Amount: pair.Entry.Amount(),
-			ScriptPublicKey: &appmessage.RPCScriptPublicKey{
-				Script:  scriptHex,
-				Version: scriptVersion,
-			},
-			BlockDAAScore: pair.Entry.BlockDAAScore(),
-			IsCoinbase:    pair.Entry.IsCoinbase(),
+			Amount:          pair.Entry.Amount(),
+			ScriptPublicKey: sharedScript,
+			BlockDAAScore:   pair.Entry.BlockDAAScore(),
+			IsCoinbase:      pair.Entry.IsCoinbase(),
 		}
 
 		utxosByAddressesEntries[i] = &appmessage.UTXOsByAddressesEntry{
