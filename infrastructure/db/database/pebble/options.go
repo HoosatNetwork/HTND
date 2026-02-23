@@ -25,7 +25,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Bloom filter configuration
 	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
 	// ────────────────────────────────────────────────
-	bloomBitsPerKey := 13
+	bloomBitsPerKey := 16
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -38,7 +38,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	const (
 		defaultMemTableMB           = 512
-		defaultMemTablesBeforeStall = 4
+		defaultMemTablesBeforeStall = 8
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -127,43 +127,43 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		Levels: [7]pebble.LevelOptions{
 			{ // L0
 				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
+				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L1
 				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
+				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L2
 				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
+				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L3
 				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
+				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L4
 				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
+				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L5
 				BlockSize:      64 << 10,
-				IndexBlockSize: 64 << 10,
+				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L6
 				BlockSize:      128 << 10,
-				IndexBlockSize: 128 << 10,
+				IndexBlockSize: 256 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
