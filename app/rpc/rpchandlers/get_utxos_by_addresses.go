@@ -78,6 +78,9 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 
 	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, total)
 	for i, address := range getUTXOsByAddressesRequest.Addresses {
+		if len(utxoPairsByAddress[i]) == 0 {
+			continue
+		}
 		sharedScript := &appmessage.RPCScriptPublicKey{
 			Script:  fastHex(sigBuf[:], utxoPairsByAddress[i][0].Entry.ScriptPublicKey().Script),
 			Version: utxoPairsByAddress[i][0].Entry.ScriptPublicKey().Version,
