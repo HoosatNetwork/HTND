@@ -40,18 +40,18 @@ func (dm *difficultyManager) getDifficultyBlock(
 func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startingNode *externalapi.DomainHash, windowSize int) (blockWindow,
 	[]*externalapi.DomainHash, error) {
 
-	window := make(blockWindow, 0, windowSize)
 	windowHashes, err := dm.dagTraversalManager.BlockWindow(stagingArea, startingNode, windowSize)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	for _, hash := range windowHashes {
+	window := make(blockWindow, len(windowHashes))
+	for i, hash := range windowHashes {
 		block, err := dm.getDifficultyBlock(stagingArea, hash)
 		if err != nil {
 			return nil, nil, err
 		}
-		window = append(window, block)
+		window[i] = block
 	}
 	return window, windowHashes, nil
 }

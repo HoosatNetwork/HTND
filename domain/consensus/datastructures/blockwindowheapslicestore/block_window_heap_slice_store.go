@@ -43,6 +43,7 @@ func (bss *blockWindowHeapSliceStore) Get(stagingArea *model.StagingArea, blockH
 	heapSlice, ok := stagingShard.toAdd[newShardKey(blockHash, windowSize)]
 
 	if ok && heapSlice != nil {
+		bss.cache.Add(blockHash, windowSize, heapSlice)
 		return heapSlice, nil
 	}
 
