@@ -1,6 +1,11 @@
 # -- multistage docker build: stage #1: build stage
 FROM golang:1.26 AS build
 
+#
+ENV GOEXPERIMENT=simd,runtimesecrets,goroutineleakprofile,jsonv2,nosizespecializedmalloc,
+ENV GODEBUG=gctrace=1
+
+
 RUN mkdir -p /go/src/github.com/Hoosat-Oy/HTND
 WORKDIR /go/src/github.com/Hoosat-Oy/HTND
 
