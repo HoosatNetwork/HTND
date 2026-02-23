@@ -11,6 +11,8 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/panics"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/experimental"
+	"google.golang.org/grpc/mem"
 	"google.golang.org/grpc/peer"
 )
 
@@ -28,6 +30,7 @@ type gRPCServer struct {
 // newGRPCServer creates a gRPC server
 func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundConnections int, name string) *gRPCServer {
 	log.Debugf("Created new %s GRPC server with maxMessageSize %d and maxInboundConnections %d", name, maxMessageSize, maxInboundConnections)
+	experimental.SetDefaultBufferPool(&mem.NopBufferPool{})
 	return &gRPCServer{
 		server:                     grpc.NewServer(grpc.MaxRecvMsgSize(maxMessageSize), grpc.MaxSendMsgSize(maxMessageSize)),
 		listeningAddresses:         listeningAddresses,
