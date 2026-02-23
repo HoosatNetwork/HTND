@@ -394,20 +394,22 @@ func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
 
 	notification := &appmessage.UTXOsChangedNotificationMessage{}
 	if utxoChangesSize < addressesSize {
+		addedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Added))
 		for _, addedPair := range utxoChanges.Added {
 			scriptPublicKeyString := utxoindex.ScriptPublicKeyString(addedPair.Entry.ScriptPublicKey().String())
 			if listenerAddress, ok := nl.propagateUTXOsChangedNotificationAddresses[scriptPublicKeyString]; ok {
-				utxosByAddressesEntries := ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(listenerAddress.Address, []utxoindex.UTXOPair{addedPair})
+				utxosByAddressesEntries := append(addedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, addedPair))
 				if utxosByAddressesEntries == nil {
 					continue
 				}
 				notification.Added = append(notification.Added, utxosByAddressesEntries...)
 			}
 		}
+		removedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Removed))
 		for _, removedPair := range utxoChanges.Removed {
 			scriptPublicKeyString := utxoindex.ScriptPublicKeyString(removedPair.Entry.ScriptPublicKey().String())
 			if listenerAddress, ok := nl.propagateUTXOsChangedNotificationAddresses[scriptPublicKeyString]; ok {
-				utxosByAddressesEntries := ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(listenerAddress.Address, []utxoindex.UTXOPair{removedPair})
+				utxosByAddressesEntries := append(removedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, removedPair))
 				if utxosByAddressesEntries == nil {
 					continue
 				}
@@ -417,18 +419,20 @@ func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
 	} else if addressesSize > 0 {
 		for _, listenerAddress := range nl.propagateUTXOsChangedNotificationAddresses {
 			listenerScriptPublicKeyString := listenerAddress.ScriptPublicKeyString
+			addedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Added))
 			for _, addedPair := range utxoChanges.Added {
 				if utxoindex.ScriptPublicKeyString(addedPair.Entry.ScriptPublicKey().String()) == listenerScriptPublicKeyString {
-					utxosByAddressesEntries := ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(listenerAddress.Address, []utxoindex.UTXOPair{addedPair})
+					utxosByAddressesEntries := append(addedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, addedPair))
 					if utxosByAddressesEntries == nil {
 						continue
 					}
 					notification.Added = append(notification.Added, utxosByAddressesEntries...)
 				}
 			}
+			removedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Removed))
 			for _, removedPair := range utxoChanges.Removed {
 				if utxoindex.ScriptPublicKeyString(removedPair.Entry.ScriptPublicKey().String()) == listenerScriptPublicKeyString {
-					utxosByAddressesEntries := ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(listenerAddress.Address, []utxoindex.UTXOPair{removedPair})
+					utxosByAddressesEntries := append(removedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, removedPair))
 					if utxosByAddressesEntries == nil {
 						continue
 					}
@@ -437,25 +441,27 @@ func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
 			}
 		}
 	} else {
+		addedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Added))
 		for _, addedPair := range utxoChanges.Added {
 			scriptPublicKeyString := utxoindex.ScriptPublicKeyString(addedPair.Entry.ScriptPublicKey().String())
 			addressString, err := nl.scriptPubKeyStringToAddressString(scriptPublicKeyString)
 			if err != nil {
 				return nil, err
 			}
-			utxosByAddressesEntries := ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(addressString, []utxoindex.UTXOPair{addedPair})
+			utxosByAddressesEntries := append(addedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, addedPair))
 			if utxosByAddressesEntries == nil {
 				continue
 			}
 			notification.Added = append(notification.Added, utxosByAddressesEntries...)
 		}
+		removedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Removed))
 		for _, removedPair := range utxoChanges.Removed {
 			scriptPublicKeyString := utxoindex.ScriptPublicKeyString(removedPair.Entry.ScriptPublicKey().String())
 			addressString, err := nl.scriptPubKeyStringToAddressString(scriptPublicKeyString)
 			if err != nil {
 				return nil, err
 			}
-			utxosByAddressesEntries := ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(addressString, []utxoindex.UTXOPair{removedPair})
+			utxosByAddressesEntries := append(removedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, removedPair))
 			if utxosByAddressesEntries == nil {
 				continue
 			}
