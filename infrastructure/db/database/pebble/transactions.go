@@ -108,7 +108,6 @@ func (tx *PebbleDBTransaction) Get(key *database.Key) ([]byte, error) {
 		}
 		data, closer, err := tx.batch.Get(key.Bytes())
 		if err == nil {
-			// valueCopy := append([]byte(nil), data...)
 			valueCopy := bytes.Clone(data)
 			if closeErr := closer.Close(); closeErr != nil {
 				return nil, errors.WithStack(closeErr)

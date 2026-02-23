@@ -41,7 +41,6 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 
 	var payloadClone []byte
 	if len(tx.Payload) > 0 {
-		//payloadClone = append([]byte(nil), tx.Payload...)
 		payloadClone = bytes.Clone(tx.Payload)
 	}
 

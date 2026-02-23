@@ -2,6 +2,7 @@ package miningmanager_test
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -200,8 +201,8 @@ func TestHandleNewBlockTransactions(t *testing.T) {
 		}
 
 		const partialLength = 3
-		blockWithFirstPartOfTheTransactions := append([]*externalapi.DomainTransaction{nil}, transactionsToInsert[0:partialLength]...)
-		blockWithRestOfTheTransactions := append([]*externalapi.DomainTransaction{nil}, transactionsToInsert[partialLength:]...)
+		blockWithFirstPartOfTheTransactions := slices.Clone(transactionsToInsert[0:partialLength])
+		blockWithRestOfTheTransactions := slices.Clone(transactionsToInsert[partialLength:])
 		_, err = miningManager.HandleNewBlockTransactions(blockWithFirstPartOfTheTransactions)
 		if err != nil {
 			t.Fatalf("HandleNewBlockTransactions: %v", err)

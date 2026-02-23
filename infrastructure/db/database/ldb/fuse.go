@@ -216,8 +216,6 @@ func FuseLevelDB(destPath string, sourcePaths []string, opts FuseOptions) error 
 		for ok := iter.First(); ok; ok = iter.Next() {
 			// IMPORTANT: Iterator Key/Value buffers are reused by goleveldb and only
 			// valid until the next iterator movement. Copy them before writing to dest.
-			// k := append([]byte(nil), iter.Key()...)
-			// v := append([]byte(nil), iter.Value()...)
 			k := bytes.Clone(iter.Key())
 			v := bytes.Clone(iter.Value())
 

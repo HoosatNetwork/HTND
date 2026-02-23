@@ -104,7 +104,6 @@ func (db *PebbleDB) Get(key *database.Key) ([]byte, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
-	// valueCopy := append([]byte(nil), data...)
 	valueCopy := bytes.Clone(data)
 	closer.Close()
 	return valueCopy, nil
