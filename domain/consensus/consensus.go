@@ -162,7 +162,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 		go s.displayMemUse()
 	}
 
-	go s.periodicFreeOSMemory()
+	// go s.periodicFreeOSMemory()
 
 	return nil
 }
