@@ -24,7 +24,7 @@ func (was walletAddressSet) strings() []string {
 }
 
 func (s *server) syncLoop() error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	err := s.collectRecentAddresses()
