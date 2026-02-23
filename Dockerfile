@@ -2,7 +2,7 @@
 FROM golang:1.26 AS build
 
 #
-ENV GOEXPERIMENT=simd,runtimesecrets,goroutineleakprofile,jsonv2,nosizespecializedmalloc,
+ENV GOEXPERIMENT=simd,jsonv2,goroutineleakprofile,nosizespecializedmalloc
 ENV GODEBUG=gctrace=1
 
 
