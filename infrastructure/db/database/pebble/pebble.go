@@ -1,9 +1,9 @@
 package pebble
 
 import (
+	"bytes"
 	"context"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
@@ -78,9 +78,6 @@ func (db *PebbleDB) Close() error {
 func (db *PebbleDB) Put(key *database.Key, value []byte) error {
 	// log.Infof("Put key: %s, value %x", key, value)
 	err := db.db.Set(key.Bytes(), value, pebble.NoSync)
-	// if strings.Contains(string(key.Bytes()), "utxo-index") {
-	// 	log.Infof("Pebble Put, key: %x, value: %x", key.Bytes(), value)
-	// }
 	return errors.WithStack(err)
 }
 
@@ -107,13 +104,9 @@ func (db *PebbleDB) Get(key *database.Key) ([]byte, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
-	// if strings.Contains(string(key.Bytes()), "utxo-index") {
-	// 	log.Infof("Pebble Get, key: %x, data: %x", key.Bytes(), data)
-	// }
-	valueCopy := append([]byte(nil), data...)
-	if closeErr := closer.Close(); closeErr != nil {
-		return nil, errors.WithStack(closeErr)
-	}
+	// valueCopy := append([]byte(nil), data...)
+	valueCopy := bytes.Clone(data)
+	closer.Close()
 	return valueCopy, nil
 }
 
@@ -126,10 +119,7 @@ func (db *PebbleDB) Has(key *database.Key) (bool, error) {
 		}
 		return false, errors.WithStack(err)
 	}
-	if strings.Contains(string(key.Bytes()), "utxo-index") {
-		log.Infof("Pebble Has, key: %s true", key.Bytes())
-	}
-	defer closer.Close()
+	closer.Close()
 	return true, nil
 }
 
