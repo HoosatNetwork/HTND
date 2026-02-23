@@ -1,6 +1,7 @@
 package rpchandlers
 
 import (
+	"encoding/hex"
 	"sync"
 	"time"
 
@@ -19,6 +20,13 @@ var (
 	})
 	utxosByAddressesCacheMutex sync.Mutex
 )
+
+var sigBuf [256]byte
+
+func fastHex(dst []byte, src []byte) string {
+	n := hex.Encode(dst, src)
+	return string(dst[:n])
+}
 
 // HandleGetUTXOsByAddresses handles the respectively named RPC command with 1-second cache
 func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
@@ -69,9 +77,13 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	}
 
 	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, total)
-	for i, addressString := range getUTXOsByAddressesRequest.Addresses {
+	for i, address := range getUTXOsByAddressesRequest.Addresses {
+		sharedScript := &appmessage.RPCScriptPublicKey{
+			Script:  fastHex(sigBuf[:], utxoPairsByAddress[i][0].Entry.ScriptPublicKey().Script),
+			Version: utxoPairsByAddress[i][0].Entry.ScriptPublicKey().Version,
+		}
 		for _, pair := range utxoPairsByAddress[i] {
-			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, pair))
+			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(address, sharedScript, pair))
 		}
 	}
 
