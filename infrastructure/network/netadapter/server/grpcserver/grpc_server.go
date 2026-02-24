@@ -30,7 +30,17 @@ type gRPCServer struct {
 // newGRPCServer creates a gRPC server
 func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundConnections int, name string) *gRPCServer {
 	log.Debugf("Created new %s GRPC server with maxMessageSize %d and maxInboundConnections %d", name, maxMessageSize, maxInboundConnections)
-	experimental.SetDefaultBufferPool(&mem.NopBufferPool{})
+	tieredPool := mem.NewTieredBufferPool(
+		1024,         // 1 KiB
+		4*1024,       // 4 KiB
+		16*1024,      // 16 KiB
+		64*1024,      // 64 KiB
+		256*1024,     // 256 KiB
+		1*1024*1024,  // 1 MiB
+		4*1024*1024,  // 4 MiB
+		16*1024*1024, // 16 MiB
+	)
+	experimental.SetDefaultBufferPool(tieredPool)
 	return &gRPCServer{
 		server:                     grpc.NewServer(grpc.MaxRecvMsgSize(maxMessageSize), grpc.MaxSendMsgSize(maxMessageSize)),
 		listeningAddresses:         listeningAddresses,

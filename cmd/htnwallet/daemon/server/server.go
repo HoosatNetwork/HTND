@@ -131,7 +131,18 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 			printErrorAndExit(errors.Wrap(err, "error syncing the wallet"))
 		}
 	})
-	experimental.SetDefaultBufferPool(&mem.NopBufferPool{}) // or tieredBufferPool if we want to reuse buffers
+
+	tieredPool := mem.NewTieredBufferPool(
+		1024,         // 1 KiB
+		4*1024,       // 4 KiB
+		16*1024,      // 16 KiB
+		64*1024,      // 64 KiB
+		256*1024,     // 256 KiB
+		1*1024*1024,  // 1 MiB
+		4*1024*1024,  // 4 MiB
+		16*1024*1024, // 16 MiB
+	)
+	experimental.SetDefaultBufferPool(tieredPool)
 	grpcServer := grpc.NewServer(
 		grpc.MaxSendMsgSize(MaxDaemonMsgSize),
 		grpc.MaxRecvMsgSize(MaxDaemonMsgSize),
