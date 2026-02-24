@@ -343,6 +343,9 @@ func (ps *pruningStore) CurrentPruningPointIndex(dbContext model.DBReader, stagi
 	}
 
 	pruningPointIndexBytes, err := dbContext.Get(ps.currentPruningPointIndexKey)
+	if errors.Is(err, database.ErrNotFound) {
+		return 0, errors.Wrapf(err, "Pruning point does not exist in db")
+	}
 	if err != nil {
 		return 0, err
 	}

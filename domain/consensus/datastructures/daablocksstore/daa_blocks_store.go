@@ -1,11 +1,13 @@
 package daablocksstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var daaScoreBucketName = []byte("daa-score")
@@ -67,6 +69,9 @@ func (daas *daaBlocksStore) DAAScore(dbContext model.DBReader, stagingArea *mode
 	}
 
 	daaScoreBytes, err := dbContext.Get(daas.daaScoreHashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return 0, errors.Wrapf(err, "DAA block %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return 0, err
 	}

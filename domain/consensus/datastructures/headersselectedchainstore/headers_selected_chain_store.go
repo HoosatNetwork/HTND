@@ -103,6 +103,9 @@ func (hscs *headersSelectedChainStore) GetIndexByHash(dbContext model.DBReader, 
 	}
 
 	indexBytes, err := dbContext.Get(hscs.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return 0, errors.Wrapf(err, "Headers %s selected chain does not exist in db", blockHash)
+	}
 	if err != nil {
 		return 0, err
 	}
