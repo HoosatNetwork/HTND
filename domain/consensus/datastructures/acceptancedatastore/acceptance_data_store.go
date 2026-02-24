@@ -6,7 +6,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("acceptance-data")
@@ -80,12 +79,12 @@ func (ads *acceptanceDataStore) Delete(stagingArea *model.StagingArea, blockHash
 
 func (ads *acceptanceDataStore) serializeAcceptanceData(acceptanceData externalapi.AcceptanceData) ([]byte, error) {
 	dbAcceptanceData := serialization.DomainAcceptanceDataToDbAcceptanceData(acceptanceData)
-	return proto.Marshal(dbAcceptanceData)
+	return dbAcceptanceData.MarshalVT()
 }
 
 func (ads *acceptanceDataStore) deserializeAcceptanceData(acceptanceDataBytes []byte) (externalapi.AcceptanceData, error) {
 	dbAcceptanceData := &serialization.DbAcceptanceData{}
-	err := proto.Unmarshal(acceptanceDataBytes, dbAcceptanceData)
+	err := dbAcceptanceData.UnmarshalVT(acceptanceDataBytes)
 	if err != nil {
 		return nil, err
 	}

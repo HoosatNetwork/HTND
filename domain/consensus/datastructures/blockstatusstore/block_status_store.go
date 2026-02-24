@@ -6,7 +6,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("block-statuses")
@@ -91,12 +90,12 @@ func (bss *blockStatusStore) Exists(dbContext model.DBReader, stagingArea *model
 
 func (bss *blockStatusStore) serializeBlockStatus(status externalapi.BlockStatus) ([]byte, error) {
 	dbBlockStatus := serialization.DomainBlockStatusToDbBlockStatus(status)
-	return proto.Marshal(dbBlockStatus)
+	return dbBlockStatus.MarshalVT()
 }
 
 func (bss *blockStatusStore) deserializeBlockStatus(statusBytes []byte) (externalapi.BlockStatus, error) {
 	dbBlockStatus := &serialization.DbBlockStatus{}
-	err := proto.Unmarshal(statusBytes, dbBlockStatus)
+	err := dbBlockStatus.UnmarshalVT(statusBytes)
 	if err != nil {
 		return 0, err
 	}

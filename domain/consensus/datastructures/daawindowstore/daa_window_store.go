@@ -8,7 +8,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucachehashpairtoblockghostdagdatahashpair"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("daa-window")
@@ -68,7 +67,7 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 
 func deserializePairBytes(pairBytes []byte) (*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	dbPair := &serialization.DbBlockGHOSTDAGDataHashPair{}
-	err := proto.Unmarshal(pairBytes, dbPair)
+	err := dbPair.UnmarshalVT(pairBytes)
 	if err != nil {
 		return nil, err
 	}

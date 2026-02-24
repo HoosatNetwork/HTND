@@ -6,7 +6,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("multisets")
@@ -86,12 +85,12 @@ func (ms *multisetStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
 }
 
 func (ms *multisetStore) serializeMultiset(multiset model.Multiset) ([]byte, error) {
-	return proto.Marshal(serialization.MultisetToDBMultiset(multiset))
+	return serialization.MultisetToDBMultiset(multiset).MarshalVT()
 }
 
 func (ms *multisetStore) deserializeMultiset(multisetBytes []byte) (model.Multiset, error) {
 	dbMultiset := &serialization.DbMultiset{}
-	err := proto.Unmarshal(multisetBytes, dbMultiset)
+	err := dbMultiset.UnmarshalVT(multisetBytes)
 	if err != nil {
 		return nil, err
 	}

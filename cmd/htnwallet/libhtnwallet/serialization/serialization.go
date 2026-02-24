@@ -7,7 +7,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/subnetworks"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 // PartiallySignedTransaction is a type that is intended
@@ -75,7 +74,7 @@ func (psp PubKeySignaturePair) Clone() *PubKeySignaturePair {
 // DeserializePartiallySignedTransaction deserializes a byte slice into PartiallySignedTransaction.
 func DeserializePartiallySignedTransaction(serializedPartiallySignedTransaction []byte) (*PartiallySignedTransaction, error) {
 	protoPartiallySignedTransaction := &protoserialization.PartiallySignedTransaction{}
-	err := proto.Unmarshal(serializedPartiallySignedTransaction, protoPartiallySignedTransaction)
+	err := protoPartiallySignedTransaction.UnmarshalVT(serializedPartiallySignedTransaction)
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +84,13 @@ func DeserializePartiallySignedTransaction(serializedPartiallySignedTransaction 
 
 // SerializePartiallySignedTransaction serializes a PartiallySignedTransaction.
 func SerializePartiallySignedTransaction(partiallySignedTransaction *PartiallySignedTransaction) ([]byte, error) {
-	return proto.Marshal(partiallySignedTransactionToProto(partiallySignedTransaction))
+	return partiallySignedTransactionToProto(partiallySignedTransaction).MarshalVT()
 }
 
 // DeserializeDomainTransaction Deserialize a Transaction to an *externalapi.DomainTransaction
 func DeserializeDomainTransaction(serializedTransactionMessage []byte) (*externalapi.DomainTransaction, error) {
 	protoTransactionMessage := &protoserialization.TransactionMessage{}
-	err := proto.Unmarshal(serializedTransactionMessage, protoTransactionMessage)
+	err := protoTransactionMessage.UnmarshalVT(serializedTransactionMessage)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +100,7 @@ func DeserializeDomainTransaction(serializedTransactionMessage []byte) (*externa
 
 // SerializeDomainTransaction Serialize a *externalapi.DomainTransaction
 func SerializeDomainTransaction(tx *externalapi.DomainTransaction) ([]byte, error) {
-	return proto.Marshal(transactionToProto(tx))
+	return transactionToProto(tx).MarshalVT()
 }
 
 func partiallySignedTransactionFromProto(protoPartiallySignedTransaction *protoserialization.PartiallySignedTransaction) (*PartiallySignedTransaction, error) {

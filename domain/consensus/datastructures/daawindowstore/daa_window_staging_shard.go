@@ -4,7 +4,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"google.golang.org/protobuf/proto"
 )
 
 type dbKey struct {
@@ -51,7 +50,7 @@ func (daawss *daaWindowStagingShard) Commit(dbTx model.DBTransaction) error {
 }
 
 func serializePair(pair *externalapi.BlockGHOSTDAGDataHashPair) ([]byte, error) {
-	return proto.Marshal(serialization.BlockGHOSTDAGDataHashPairToDbBlockGhostdagDataHashPair(pair))
+	return serialization.BlockGHOSTDAGDataHashPairToDbBlockGhostdagDataHashPair(pair).MarshalVT()
 }
 
 func (daawss *daaWindowStagingShard) isStaged() bool {

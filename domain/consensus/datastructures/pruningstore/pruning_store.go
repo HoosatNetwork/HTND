@@ -11,7 +11,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucacheuint64tohash"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 var currentPruningPointIndexKeyName = []byte("pruning-block-index")
@@ -201,12 +200,12 @@ func (ps *pruningStore) PruningPointByIndex(dbContext model.DBReader, stagingAre
 }
 
 func (ps *pruningStore) serializeHash(hash *externalapi.DomainHash) ([]byte, error) {
-	return proto.Marshal(serialization.DomainHashToDbHash(hash))
+	return serialization.DomainHashToDbHash(hash).MarshalVT()
 }
 
 func (ps *pruningStore) deserializePruningPoint(pruningPointBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := proto.Unmarshal(pruningPointBytes, dbHash)
+	err := dbHash.UnmarshalVT(pruningPointBytes)
 	if err != nil {
 		return nil, err
 	}
