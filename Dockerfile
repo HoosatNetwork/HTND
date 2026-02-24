@@ -2,8 +2,7 @@
 FROM golang:1.26 AS build
 
 #
-ENV GOEXPERIMENT=simd,jsonv2,goroutineleakprofile,nosizespecializedmalloc
-ENV GODEBUG=gctrace=1
+ENV GOEXPERIMENT=simd,jsonv2,goroutineleakprofile,nogreenteagc
 
 
 RUN mkdir -p /go/src/github.com/Hoosat-Oy/HTND
@@ -46,7 +45,7 @@ RUN mkdir -p /nonexistent/.htnd && chown nobody:nogroup /nonexistent/.htnd && ch
 # Set ownership and permissions for the binary
 RUN chown nobody:nogroup /app/* && chmod +x /app/*
 
-
+ENV GODEBUG=gctrace=1
 USER nobody
 ENTRYPOINT ["/app/HTND"]
 CMD ["--utxoindex", "--saferpc"]
