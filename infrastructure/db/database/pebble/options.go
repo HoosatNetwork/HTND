@@ -38,7 +38,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	const (
 		defaultMemTableMB           = 512
-		defaultMemTablesBeforeStall = 8
+		defaultMemTablesBeforeStall = 4096 / defaultMemTableMB
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -118,7 +118,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		MaxManifestFileSize: 128 << 20,
 		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
 
-		DisableWAL: true,
+		DisableWAL: false,
 		// WALBytesPerSync: 4 << 20,
 		// BytesPerSync:    4 << 20,
 

@@ -2,7 +2,7 @@
 FROM golang:1.26 AS build
 
 #
-ENV GOEXPERIMENT=simd,jsonv2,goroutineleakprofile,nogreenteagc
+ENV GOEXPERIMENT=simd,jsonv2
 
 
 RUN mkdir -p /go/src/github.com/Hoosat-Oy/HTND
