@@ -41,7 +41,7 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 
 	var payloadClone []byte
 	if len(tx.Payload) > 0 {
-		payloadClone = append([]byte(nil), tx.Payload...)
+		payloadClone = bytes.Clone(tx.Payload)
 	}
 
 	var idClone *DomainTransactionID
@@ -245,11 +245,10 @@ func (spk *ScriptPublicKey) Equal(other *ScriptPublicKey) bool {
 
 // String stringifies a ScriptPublicKey.
 func (spk *ScriptPublicKey) String() string {
-	var versionBytes = make([]byte, 2) // uint16
-	binary.LittleEndian.PutUint16(versionBytes, spk.Version)
-	versionString := string(versionBytes)
-	scriptString := string(spk.Script)
-	return versionString + scriptString
+	b := make([]byte, 2+len(spk.Script))
+	binary.LittleEndian.PutUint16(b, spk.Version)
+	copy(b[2:], spk.Script)
+	return string(b)
 }
 
 // NewScriptPublicKeyFromString converts the given string to a scriptPublicKey

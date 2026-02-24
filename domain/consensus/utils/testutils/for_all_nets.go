@@ -1,12 +1,11 @@
 package testutils
 
 import (
+	"slices"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 )
@@ -15,16 +14,16 @@ var blockVersionTestLock sync.Mutex
 
 func cloneParams(params dagconfig.Params) dagconfig.Params {
 	cloned := params
-	cloned.DNSSeeds = append([]string(nil), params.DNSSeeds...)
-	cloned.K = append([]externalapi.KType(nil), params.K...)
-	cloned.TargetTimePerBlock = append([]time.Duration(nil), params.TargetTimePerBlock...)
-	cloned.FinalityDuration = append([]time.Duration(nil), params.FinalityDuration...)
-	cloned.DifficultyAdjustmentWindowSize = append([]int(nil), params.DifficultyAdjustmentWindowSize...)
-	cloned.PruningMultiplier = append([]uint64(nil), params.PruningMultiplier...)
-	cloned.MaxBlockMass = append([]uint64(nil), params.MaxBlockMass...)
-	cloned.MaxBlockParents = append([]externalapi.KType(nil), params.MaxBlockParents...)
-	cloned.MergeDepth = append([]uint64(nil), params.MergeDepth...)
-	cloned.POWScores = append([]uint64(nil), params.POWScores...)
+	cloned.DNSSeeds = slices.Clone(params.DNSSeeds)
+	cloned.K = slices.Clone(params.K)
+	cloned.TargetTimePerBlock = slices.Clone(params.TargetTimePerBlock)
+	cloned.FinalityDuration = slices.Clone(params.FinalityDuration)
+	cloned.DifficultyAdjustmentWindowSize = slices.Clone(params.DifficultyAdjustmentWindowSize)
+	cloned.PruningMultiplier = slices.Clone(params.PruningMultiplier)
+	cloned.MaxBlockMass = slices.Clone(params.MaxBlockMass)
+	cloned.MaxBlockParents = slices.Clone(params.MaxBlockParents)
+	cloned.MergeDepth = slices.Clone(params.MergeDepth)
+	cloned.POWScores = slices.Clone(params.POWScores)
 	return cloned
 }
 

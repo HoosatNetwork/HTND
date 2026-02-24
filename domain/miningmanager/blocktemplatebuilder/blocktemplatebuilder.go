@@ -121,28 +121,38 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 	coinbaseData *consensusexternalapi.DomainCoinbaseData) (*consensusexternalapi.DomainBlockTemplate, error) {
 
 	mempoolTransactions := btb.mempool.BlockCandidateTransactions()
-	candidateTxs := make([]*candidateTx, 0, len(mempoolTransactions))
-	for i := range mempoolTransactions {
-		gasLimit := uint64(0)
-		if !subnetworks.IsBuiltInOrNative(mempoolTransactions[i].SubnetworkID) {
-			panic("We currently don't support non native subnetworks")
+
+	blockTxs := selectedTransactions{
+		selectedTxs: make([]*consensusexternalapi.DomainTransaction, 0, 0),
+		txMasses:    make([]uint64, 0, 0),
+		txFees:      make([]uint64, 0, 0),
+		totalMass:   0,
+		totalFees:   0,
+	}
+	if len(mempoolTransactions) > 0 {
+		candidateTxs := make([]*candidateTx, 0, len(mempoolTransactions))
+		for i := range mempoolTransactions {
+			gasLimit := uint64(0)
+			if !subnetworks.IsBuiltInOrNative(mempoolTransactions[i].SubnetworkID) {
+				panic("We currently don't support non native subnetworks")
+			}
+			candidateTxs = append(candidateTxs, &candidateTx{
+				DomainTransaction: mempoolTransactions[i],
+				txValue:           btb.calcTxValue(mempoolTransactions[i]),
+				gasLimit:          gasLimit,
+			})
 		}
-		candidateTxs = append(candidateTxs, &candidateTx{
-			DomainTransaction: mempoolTransactions[i],
-			txValue:           btb.calcTxValue(mempoolTransactions[i]),
-			gasLimit:          gasLimit,
-		})
-	}
-	if constants.GetBlockVersion() < 5 {
-		sort.Slice(candidateTxs, func(i, j int) bool {
-			return subnetworks.Less(candidateTxs[i].SubnetworkID, candidateTxs[j].SubnetworkID)
-		})
+		if constants.GetBlockVersion() < 5 {
+			sort.Slice(candidateTxs, func(i, j int) bool {
+				return subnetworks.Less(candidateTxs[i].SubnetworkID, candidateTxs[j].SubnetworkID)
+			})
+		}
+
+		log.Debugf("Considering %d transactions for inclusion to new block",
+			len(candidateTxs))
+		blockTxs = btb.selectTransactions(candidateTxs)
 	}
 
-	log.Debugf("Considering %d transactions for inclusion to new block",
-		len(candidateTxs))
-
-	blockTxs := btb.selectTransactions(candidateTxs)
 	blockTemplate, err := btb.consensusReference.Consensus().BuildBlockTemplate(coinbaseData, blockTxs.selectedTxs)
 
 	invalidTxsErr := ruleerrors.ErrInvalidTransactionsInNewBlock{}

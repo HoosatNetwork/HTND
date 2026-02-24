@@ -1,6 +1,10 @@
 # -- multistage docker build: stage #1: build stage
 FROM golang:1.26 AS build
 
+#
+ENV GOEXPERIMENT=simd,jsonv2
+
+
 RUN mkdir -p /go/src/github.com/Hoosat-Oy/HTND
 WORKDIR /go/src/github.com/Hoosat-Oy/HTND
 
@@ -40,7 +44,6 @@ RUN mkdir -p /nonexistent/.htnd && chown nobody:nogroup /nonexistent/.htnd && ch
 
 # Set ownership and permissions for the binary
 RUN chown nobody:nogroup /app/* && chmod +x /app/*
-
 
 USER nobody
 ENTRYPOINT ["/app/HTND"]

@@ -11,41 +11,32 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 )
 
-// ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries converts
-// UTXOOutpointEntryPairs to a slice of UTXOsByAddressesEntry
-func ConvertUTXOOutpointEntryPairsToUTXOsByAddressesEntries(address string, pairs []utxoindex.UTXOPair) []*appmessage.UTXOsByAddressesEntry {
-	utxosByAddressesEntries := make([]*appmessage.UTXOsByAddressesEntry, len(pairs))
+// ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry converts
+// a UTXOOutpointEntryPair to a slice of UTXOsByAddressesEntry
+func ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(address string, script *appmessage.RPCScriptPublicKey, pair utxoindex.UTXOPair) *appmessage.UTXOsByAddressesEntry {
 
 	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
-	var scriptHex string
-	var scriptVersion uint16
-	if len(pairs) > 0 {
-		scriptHex = hex.EncodeToString(pairs[0].Entry.ScriptPublicKey().Script)
-		scriptVersion = pairs[0].Entry.ScriptPublicKey().Version
+
+	return &appmessage.UTXOsByAddressesEntry{
+		Address: address,
+		Outpoint: &appmessage.RPCOutpoint{
+			TransactionID: pair.Outpoint.TransactionID.String(),
+			Index:         pair.Outpoint.Index,
+		},
+		UTXOEntry: &appmessage.RPCUTXOEntry{
+			Amount:          pair.Entry.Amount(),
+			ScriptPublicKey: script,
+			BlockDAAScore:   pair.Entry.BlockDAAScore(),
+			IsCoinbase:      pair.Entry.IsCoinbase(),
+		},
 	}
+}
 
-	for i, pair := range pairs {
-		entry := &appmessage.RPCUTXOEntry{
-			Amount: pair.Entry.Amount(),
-			ScriptPublicKey: &appmessage.RPCScriptPublicKey{
-				Script:  scriptHex,
-				Version: scriptVersion,
-			},
-			BlockDAAScore: pair.Entry.BlockDAAScore(),
-			IsCoinbase:    pair.Entry.IsCoinbase(),
-		}
+var sigBuf [256]byte
 
-		utxosByAddressesEntries[i] = &appmessage.UTXOsByAddressesEntry{
-			Address: address,
-			Outpoint: &appmessage.RPCOutpoint{
-				TransactionID: pair.Outpoint.TransactionID.String(),
-				Index:         pair.Outpoint.Index,
-			},
-			UTXOEntry: entry,
-		}
-	}
-
-	return utxosByAddressesEntries
+func fastHex(dst []byte, src []byte) string {
+	n := hex.Encode(dst, src)
+	return string(dst[:n])
 }
 
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings
@@ -63,7 +54,7 @@ func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
 		if err != nil {
 			return nil, errors.Errorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 		}
-		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(scriptPublicKey.String())
+		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(fastHex(sigBuf[:], scriptPublicKey.Script))
 		addresses[i] = &UTXOsChangedNotificationAddress{
 			Address:               addressString,
 			ScriptPublicKeyString: scriptPublicKeyString,

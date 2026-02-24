@@ -5,7 +5,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"google.golang.org/protobuf/proto"
 )
 
 var tipsKeyName = []byte("tips")
@@ -46,14 +45,14 @@ func (css *consensusStateStore) StageTips(stagingArea *model.StagingArea, tipHas
 
 func (css *consensusStateStore) serializeTips(tips []*externalapi.DomainHash) ([]byte, error) {
 	dbTips := serialization.TipsToDBTips(tips)
-	return proto.Marshal(dbTips)
+	return dbTips.MarshalVT()
 }
 
 func (css *consensusStateStore) deserializeTips(tipsBytes []byte) ([]*externalapi.DomainHash,
 	error) {
 
 	dbTips := &serialization.DbTips{}
-	err := proto.Unmarshal(tipsBytes, dbTips)
+	err := dbTips.UnmarshalVT(tipsBytes)
 	if err != nil {
 		return nil, err
 	}

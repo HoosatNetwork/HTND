@@ -6,7 +6,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucacheghostdagdata"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var ghostdagDataBucketName = []byte("block-ghostdag-data")
@@ -84,12 +83,12 @@ func (gds *ghostdagDataStore) serializeKey(k key) model.DBKey {
 }
 
 func (gds *ghostdagDataStore) serializeBlockGHOSTDAGData(blockGHOSTDAGData *externalapi.BlockGHOSTDAGData) ([]byte, error) {
-	return proto.Marshal(serialization.BlockGHOSTDAGDataToDBBlockGHOSTDAGData(blockGHOSTDAGData))
+	return serialization.BlockGHOSTDAGDataToDBBlockGHOSTDAGData(blockGHOSTDAGData).MarshalVT()
 }
 
 func (gds *ghostdagDataStore) deserializeBlockGHOSTDAGData(blockGHOSTDAGDataBytes []byte) (*externalapi.BlockGHOSTDAGData, error) {
 	dbBlockGHOSTDAGData := &serialization.DbBlockGhostdagData{}
-	err := proto.Unmarshal(blockGHOSTDAGDataBytes, dbBlockGHOSTDAGData)
+	err := dbBlockGHOSTDAGData.UnmarshalVT(blockGHOSTDAGDataBytes)
 	if err != nil {
 		return nil, err
 	}

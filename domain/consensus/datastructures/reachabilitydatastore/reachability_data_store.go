@@ -7,7 +7,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var reachabilityDataBucketName = []byte("reachability-data")
@@ -142,12 +141,12 @@ func (rds *reachabilityDataStore) reachabilityDataBlockHashAsKey(hash *externala
 }
 
 func (rds *reachabilityDataStore) serializeReachabilityData(reachabilityData model.ReachabilityData) ([]byte, error) {
-	return proto.Marshal(serialization.ReachablityDataToDBReachablityData(reachabilityData))
+	return serialization.ReachablityDataToDBReachablityData(reachabilityData).MarshalVT()
 }
 
 func (rds *reachabilityDataStore) deserializeReachabilityData(reachabilityDataBytes []byte) (model.ReachabilityData, error) {
 	dbReachabilityData := &serialization.DbReachabilityData{}
-	err := proto.Unmarshal(reachabilityDataBytes, dbReachabilityData)
+	err := dbReachabilityData.UnmarshalVT(reachabilityDataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -156,12 +155,12 @@ func (rds *reachabilityDataStore) deserializeReachabilityData(reachabilityDataBy
 }
 
 func (rds *reachabilityDataStore) serializeReachabilityReindexRoot(reachabilityReindexRoot *externalapi.DomainHash) ([]byte, error) {
-	return proto.Marshal(serialization.DomainHashToDbHash(reachabilityReindexRoot))
+	return serialization.DomainHashToDbHash(reachabilityReindexRoot).MarshalVT()
 }
 
 func (rds *reachabilityDataStore) deserializeReachabilityReindexRoot(reachabilityReindexRootBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := proto.Unmarshal(reachabilityReindexRootBytes, dbHash)
+	err := dbHash.UnmarshalVT(reachabilityReindexRootBytes)
 	if err != nil {
 		return nil, err
 	}

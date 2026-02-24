@@ -6,7 +6,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("block-relations")
@@ -88,12 +87,12 @@ func (brs *blockRelationStore) hashAsKey(hash *externalapi.DomainHash) model.DBK
 
 func (brs *blockRelationStore) serializeBlockRelations(blockRelations *model.BlockRelations) ([]byte, error) {
 	dbBlockRelations := serialization.DomainBlockRelationsToDbBlockRelations(blockRelations)
-	return proto.Marshal(dbBlockRelations)
+	return dbBlockRelations.MarshalVT()
 }
 
 func (brs *blockRelationStore) deserializeBlockRelations(blockRelationsBytes []byte) (*model.BlockRelations, error) {
 	dbBlockRelations := &serialization.DbBlockRelations{}
-	err := proto.Unmarshal(blockRelationsBytes, dbBlockRelations)
+	err := dbBlockRelations.UnmarshalVT(blockRelationsBytes)
 	if err != nil {
 		return nil, err
 	}

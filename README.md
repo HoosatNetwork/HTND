@@ -22,11 +22,11 @@ Hoosat Network is open-source, but it also includes patent pending technology to
 
 ## Requirements
 
-Go 1.18 or later.
+Go 1.26 or later.
 
 ## Installation
 
-#### Build from Source
+#### Build from Source (Linux)
 
 - Install Go according to the installation instructions here:
   http://golang.org/doc/install
@@ -43,6 +43,33 @@ $ go version
 $ git clone https://github.com/Hoosat-Oy/HTND
 $ cd HTND
 $ go install . ./cmd/...
+```
+
+- HTND (and utilities) should now be installed in `$(go env GOPATH)/bin`. If you did
+  not already add the bin directory to your system path during Go installation,
+  you are encouraged to do so now.
+
+#### Build from Source (Windows)
+
+- Install Go according to the installation instructions here:
+  http://golang.org/doc/install
+  Download from - https://go.dev/dl/
+
+- Install TDM GCC
+  https://jmeubank.github.io/tdm-gcc/download/
+
+- Ensure Go was installed properly and is a supported version:
+
+```bash
+$ go version
+```
+
+- Run the following commands to obtain and install htnd including all dependencies:
+
+```bash
+git clone https://github.com/Hoosat-Oy/HTND
+cd HTND
+go install -ldflags="-s -w" --tags="deadlock pebblegozstd" . ./cmd/... 
 ```
 
 - HTND (and utilities) should now be installed in `$(go env GOPATH)/bin`. If you did

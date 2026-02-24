@@ -24,7 +24,7 @@ func (was walletAddressSet) strings() []string {
 }
 
 func (s *server) syncLoop() error {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	err := s.collectRecentAddresses()
@@ -64,7 +64,7 @@ func (s *server) sync() error {
 		return err
 	}
 
-	return s.refreshUTXOs()
+	return nil
 }
 
 const (
@@ -265,8 +265,6 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 	}
 
 	sort.Slice(utxos, func(i, j int) bool { return utxos[i].UTXOEntry.Amount() > utxos[j].UTXOEntry.Amount() })
-
-	s.lock.Lock()
 	s.startTimeOfLastCompletedRefresh = refreshStart
 	s.utxosSortedByAmount = utxos
 
@@ -276,7 +274,6 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 			delete(s.usedOutpoints, outpoint)
 		}
 	}
-	s.lock.Unlock()
 
 	return nil
 }

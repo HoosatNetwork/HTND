@@ -3,20 +3,19 @@ package consensusstatestore
 import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"google.golang.org/protobuf/proto"
 )
 
 func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
-	return proto.Marshal(serialization.DomainOutpointToDbOutpoint(outpoint))
+	return serialization.DomainOutpointToDbOutpoint(outpoint).MarshalVT()
 }
 
 func serializeUTXOEntry(entry externalapi.UTXOEntry) ([]byte, error) {
-	return proto.Marshal(serialization.UTXOEntryToDBUTXOEntry(entry))
+	return serialization.UTXOEntryToDBUTXOEntry(entry).MarshalVT()
 }
 
 func deserializeOutpoint(outpointBytes []byte) (*externalapi.DomainOutpoint, error) {
 	dbOutpoint := &serialization.DbOutpoint{}
-	err := proto.Unmarshal(outpointBytes, dbOutpoint)
+	err := dbOutpoint.UnmarshalVT(outpointBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +25,7 @@ func deserializeOutpoint(outpointBytes []byte) (*externalapi.DomainOutpoint, err
 
 func deserializeUTXOEntry(entryBytes []byte) (externalapi.UTXOEntry, error) {
 	dbEntry := &serialization.DbUtxoEntry{}
-	err := proto.Unmarshal(entryBytes, dbEntry)
+	err := dbEntry.UnmarshalVT(entryBytes)
 	if err != nil {
 		return nil, err
 	}

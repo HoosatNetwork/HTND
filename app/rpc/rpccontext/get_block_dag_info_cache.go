@@ -1,6 +1,7 @@
 package rpccontext
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -44,10 +45,10 @@ func cloneGetBlockDAGInfoResponse(src *appmessage.GetBlockDAGInfoResponseMessage
 	dst.BlockCount = src.BlockCount
 	dst.HeaderCount = src.HeaderCount
 	if src.TipHashes != nil {
-		dst.TipHashes = append([]string(nil), src.TipHashes...)
+		dst.TipHashes = slices.Clone(src.TipHashes)
 	}
 	if src.VirtualParentHashes != nil {
-		dst.VirtualParentHashes = append([]string(nil), src.VirtualParentHashes...)
+		dst.VirtualParentHashes = slices.Clone(src.VirtualParentHashes)
 	}
 	dst.Difficulty = src.Difficulty
 	dst.PastMedianTime = src.PastMedianTime

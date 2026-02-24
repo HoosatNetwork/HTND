@@ -71,7 +71,7 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 		peer:              peer,
 		connectionManager: connectionManager,
 		netConnection:     netConnection,
-		invsQueue:         make([]invRelayBlock, 0),
+		invsQueue:         make([]invRelayBlock, 0, 1000),
 	}
 
 	// Clean up offenseTracker entry when the connection ends, regardless of how it exits
@@ -90,7 +90,7 @@ const (
 	banThresholdSecs = 300
 )
 
-var offenseTracker = make(map[string][]time.Time)
+var offenseTracker = make(map[string][]time.Time, 5)
 
 func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 	address := flow.netConnection.Address()
@@ -184,17 +184,17 @@ func (flow *handleRelayInvsFlow) start() error {
 
 		if flow.IsIBDRunning() {
 			// flow.unreadInv(inv)
-			// time.Sleep(100 * time.Millisecond)
-			// log.Debugf("Skipping inv hash %s while IBD is in progress.", inv.Hash)
-			// continue
-			isNearlySynced, err := flow.IsNearlySynced()
-			if err != nil {
-				return err
-			}
-			if !isNearlySynced {
-				log.Debugf("Got block while in IBD and the node is out of sync. Continuing...")
-				continue
-			}
+			time.Sleep(250 * time.Millisecond)
+			log.Debugf("Skipping inv hash %s while IBD is in progress.", inv.Hash)
+			continue
+			// isNearlySynced, err := flow.IsNearlySynced()
+			// if err != nil {
+			// 	return err
+			// }
+			// if !isNearlySynced {
+			// 	log.Debugf("Got block while in IBD and the node is out of sync. Continuing...")
+			// 	continue
+			// }
 		}
 
 		log.Debugf("Requesting block %s", inv.Hash)
@@ -209,23 +209,21 @@ func (flow *handleRelayInvsFlow) start() error {
 		if block.PoWHash == "" && block.Header.Version() >= constants.BanMinVersion {
 			flow.banConnection(false)
 		}
-		if !flow.IsIBDRunning() {
-			daaScore := block.Header.DAAScore()
-			var version uint16 = 1
-			for _, powScore := range flow.Config().ActiveNetParams.POWScores {
-				if daaScore >= powScore {
-					version = version + 1
-				}
+		daaScore := block.Header.DAAScore()
+		var version uint16 = 1
+		for _, powScore := range flow.Config().ActiveNetParams.POWScores {
+			if daaScore >= powScore {
+				version = version + 1
 			}
-			constants.SetBlockVersion(version)
-			if block.Header.Version() != constants.GetBlockVersion() {
-				log.Infof("Cannot process %s, Wrong block version %d, it should be %d", consensushashing.BlockHash(block), block.Header.Version(), constants.GetBlockVersion())
-				log.Infof("Unprocessable block relayed by %s", flow.netConnection.NetAddress().String())
-				if block.Header.Version() >= constants.BanMinVersion {
-					flow.banConnection(false)
-				}
-				continue
+		}
+		constants.SetBlockVersion(version)
+		if block.Header.Version() != constants.GetBlockVersion() {
+			log.Infof("Cannot process %s, Wrong block version %d, it should be %d", consensushashing.BlockHash(block), block.Header.Version(), constants.GetBlockVersion())
+			log.Infof("Unprocessable block relayed by %s", flow.netConnection.NetAddress().String())
+			if block.Header.Version() >= constants.BanMinVersion {
+				flow.banConnection(false)
 			}
+			continue
 		}
 
 		err = flow.banIfBlockIsHeaderOnly(block)

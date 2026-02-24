@@ -168,7 +168,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 }
 
 func (s *consensus) periodicFreeOSMemory() error {
-	minutes := 90
+	minutes := 5
 	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
 	if htnd_gc_timer_argument != "" {
 		var err error

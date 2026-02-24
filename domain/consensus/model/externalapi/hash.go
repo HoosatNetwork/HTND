@@ -61,7 +61,10 @@ func NewDomainHashFromString(hashString string) (*DomainHash, error) {
 
 // String returns the Hash as the hexadecimal string of the hash.
 func (hash DomainHash) String() string {
-	return hex.EncodeToString(hash.hashArray[:])
+	hexLen := hex.EncodedLen(len(hash.hashArray[:]))
+	dst := make([]byte, hexLen)
+	hex.Encode(dst, hash.hashArray[:])
+	return string(dst)
 }
 
 // ByteArray returns the bytes in this hash represented as a byte array.

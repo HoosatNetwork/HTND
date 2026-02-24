@@ -5,7 +5,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 var importedPruningPointUTXOsBucketName = []byte("imported-pruning-point-utxos")
@@ -133,16 +132,16 @@ func (ps *pruningStore) importedPruningPointUTXOKey(outpoint *externalapi.Domain
 }
 
 func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
-	return proto.Marshal(serialization.DomainOutpointToDbOutpoint(outpoint))
+	return serialization.DomainOutpointToDbOutpoint(outpoint).MarshalVT()
 }
 
 func serializeUTXOEntry(entry externalapi.UTXOEntry) ([]byte, error) {
-	return proto.Marshal(serialization.UTXOEntryToDBUTXOEntry(entry))
+	return serialization.UTXOEntryToDBUTXOEntry(entry).MarshalVT()
 }
 
 func deserializeOutpoint(outpointBytes []byte) (*externalapi.DomainOutpoint, error) {
 	dbOutpoint := &serialization.DbOutpoint{}
-	err := proto.Unmarshal(outpointBytes, dbOutpoint)
+	err := dbOutpoint.UnmarshalVT(outpointBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +151,7 @@ func deserializeOutpoint(outpointBytes []byte) (*externalapi.DomainOutpoint, err
 
 func deserializeUTXOEntry(entryBytes []byte) (externalapi.UTXOEntry, error) {
 	dbEntry := &serialization.DbUtxoEntry{}
-	err := proto.Unmarshal(entryBytes, dbEntry)
+	err := dbEntry.UnmarshalVT(entryBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -180,12 +179,12 @@ func (ps *pruningStore) UpdateImportedPruningPointMultiset(dbTx model.DBTransact
 }
 
 func (ps *pruningStore) serializeMultiset(multiset model.Multiset) ([]byte, error) {
-	return proto.Marshal(serialization.MultisetToDBMultiset(multiset))
+	return serialization.MultisetToDBMultiset(multiset).MarshalVT()
 }
 
 func (ps *pruningStore) deserializeMultiset(multisetBytes []byte) (model.Multiset, error) {
 	dbMultiset := &serialization.DbMultiset{}
-	err := proto.Unmarshal(multisetBytes, dbMultiset)
+	err := dbMultiset.UnmarshalVT(multisetBytes)
 	if err != nil {
 		return nil, err
 	}

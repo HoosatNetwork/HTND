@@ -5,7 +5,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var keyName = []byte("headers-selected-tip")
@@ -79,12 +78,12 @@ func (hsts *headerSelectedTipStore) HeadersSelectedTip(dbContext model.DBReader,
 }
 
 func (hsts *headerSelectedTipStore) serializeHeadersSelectedTip(selectedTip *externalapi.DomainHash) ([]byte, error) {
-	return proto.Marshal(serialization.DomainHashToDbHash(selectedTip))
+	return serialization.DomainHashToDbHash(selectedTip).MarshalVT()
 }
 
 func (hsts *headerSelectedTipStore) deserializeHeadersSelectedTip(selectedTipBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := proto.Unmarshal(selectedTipBytes, dbHash)
+	err := dbHash.UnmarshalVT(selectedTipBytes)
 	if err != nil {
 		return nil, err
 	}

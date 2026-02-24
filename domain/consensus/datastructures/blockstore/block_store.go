@@ -8,7 +8,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("blocks")
@@ -123,12 +122,18 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 		return true, nil
 	}
 
-	exists, err := dbContext.Has(bs.hashAsKey(blockHash))
+	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
+	if err != nil || blockBytes == nil {
+		return false, nil
+	}
+
+	blockDeserialized, err := bs.deserializeBlock(blockBytes)
 	if err != nil {
 		return false, err
 	}
 
-	return exists, nil
+	bs.cache.Add(blockHash, blockDeserialized)
+	return true, nil
 }
 
 // Blocks gets the blocks associated with the given blockHashes
@@ -160,12 +165,12 @@ func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *external
 
 func (bs *blockStore) serializeBlock(block *externalapi.DomainBlock) ([]byte, error) {
 	dbBlock := serialization.DomainBlockToDbBlock(block)
-	return proto.Marshal(dbBlock)
+	return dbBlock.MarshalVT()
 }
 
 func (bs *blockStore) deserializeBlock(blockBytes []byte) (*externalapi.DomainBlock, error) {
 	dbBlock := &serialization.DbBlock{}
-	err := proto.Unmarshal(blockBytes, dbBlock)
+	err := dbBlock.UnmarshalVT(blockBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +192,7 @@ func (bs *blockStore) count(stagingShard *blockStagingShard) uint64 {
 
 func (bs *blockStore) deserializeBlockCount(countBytes []byte) (uint64, error) {
 	dbBlockCount := &serialization.DbBlockCount{}
-	err := proto.Unmarshal(countBytes, dbBlockCount)
+	err := dbBlockCount.UnmarshalVT(countBytes)
 	if err != nil {
 		return 0, err
 	}
@@ -196,7 +201,7 @@ func (bs *blockStore) deserializeBlockCount(countBytes []byte) (uint64, error) {
 
 func (bs *blockStore) serializeBlockCount(count uint64) ([]byte, error) {
 	dbBlockCount := &serialization.DbBlockCount{Count: count}
-	return proto.Marshal(dbBlockCount)
+	return dbBlockCount.MarshalVT()
 }
 
 type allBlockHashesIterator struct {

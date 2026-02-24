@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/experimental"
+	"google.golang.org/grpc/mem"
 )
 
 type server struct {
@@ -53,7 +55,7 @@ type server struct {
 
 // MaxDaemonSendMsgSize is the max send message size used for the daemon server.
 // Currently, set to 100MB
-const MaxDaemonSendMsgSize = 1_000_000_000
+const MaxDaemonMsgSize = 1_000_000_000
 
 // Start starts the htnwalletd server
 func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath string, profile string, timeout uint32) error {
@@ -130,7 +132,21 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		}
 	})
 
-	grpcServer := grpc.NewServer(grpc.MaxSendMsgSize(MaxDaemonSendMsgSize))
+	tieredPool := mem.NewTieredBufferPool(
+		1024,         // 1 KiB
+		4*1024,       // 4 KiB
+		16*1024,      // 16 KiB
+		64*1024,      // 64 KiB
+		256*1024,     // 256 KiB
+		1*1024*1024,  // 1 MiB
+		4*1024*1024,  // 4 MiB
+		16*1024*1024, // 16 MiB
+	)
+	experimental.SetDefaultBufferPool(tieredPool)
+	grpcServer := grpc.NewServer(
+		grpc.MaxSendMsgSize(MaxDaemonMsgSize),
+		grpc.MaxRecvMsgSize(MaxDaemonMsgSize),
+	)
 	pb.RegisterHtnwalletdServer(grpcServer, serverInstance)
 
 	spawn("grpcServer.Serve", func() {

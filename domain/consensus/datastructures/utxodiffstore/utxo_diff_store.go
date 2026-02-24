@@ -7,7 +7,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 var utxoDiffBucketName = []byte("utxo-diffs")
@@ -162,8 +161,7 @@ func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]by
 	if err != nil {
 		return nil, err
 	}
-
-	bytes, err := proto.Marshal(dbUtxoDiff)
+	bytes, err := dbUtxoDiff.MarshalVT()
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -173,7 +171,7 @@ func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]by
 
 func (uds *utxoDiffStore) deserializeUTXODiff(utxoDiffBytes []byte) (externalapi.UTXODiff, error) {
 	dbUTXODiff := &serialization.DbUtxoDiff{}
-	err := proto.Unmarshal(utxoDiffBytes, dbUTXODiff)
+	err := dbUTXODiff.UnmarshalVT(utxoDiffBytes)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -182,7 +180,7 @@ func (uds *utxoDiffStore) deserializeUTXODiff(utxoDiffBytes []byte) (externalapi
 }
 
 func (uds *utxoDiffStore) serializeUTXODiffChild(utxoDiffChild *externalapi.DomainHash) ([]byte, error) {
-	bytes, err := proto.Marshal(serialization.DomainHashToDbHash(utxoDiffChild))
+	bytes, err := serialization.DomainHashToDbHash(utxoDiffChild).MarshalVT()
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -191,7 +189,7 @@ func (uds *utxoDiffStore) serializeUTXODiffChild(utxoDiffChild *externalapi.Doma
 
 func (uds *utxoDiffStore) deserializeUTXODiffChild(utxoDiffChildBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := proto.Unmarshal(utxoDiffChildBytes, dbHash)
+	err := dbHash.UnmarshalVT(utxoDiffChildBytes)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
-	"google.golang.org/protobuf/proto"
 )
 
 var bucketName = []byte("block-headers")
@@ -167,12 +166,12 @@ func (bhs *blockHeaderStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey
 
 func (bhs *blockHeaderStore) serializeHeader(header externalapi.BlockHeader) ([]byte, error) {
 	dbBlockHeader := serialization.DomainBlockHeaderToDbBlockHeader(header)
-	return proto.Marshal(dbBlockHeader)
+	return dbBlockHeader.MarshalVT()
 }
 
 func (bhs *blockHeaderStore) deserializeHeader(headerBytes []byte) (externalapi.BlockHeader, error) {
 	dbBlockHeader := &serialization.DbBlockHeader{}
-	err := proto.Unmarshal(headerBytes, dbBlockHeader)
+	err := dbBlockHeader.UnmarshalVT(headerBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +190,7 @@ func (bhs *blockHeaderStore) count(stagingShard *blockHeaderStagingShard) uint64
 
 func (bhs *blockHeaderStore) deserializeHeaderCount(countBytes []byte) (uint64, error) {
 	dbBlockHeaderCount := &serialization.DbBlockHeaderCount{}
-	err := proto.Unmarshal(countBytes, dbBlockHeaderCount)
+	err := dbBlockHeaderCount.UnmarshalVT(countBytes)
 	if err != nil {
 		return 0, err
 	}
@@ -200,7 +199,7 @@ func (bhs *blockHeaderStore) deserializeHeaderCount(countBytes []byte) (uint64, 
 
 func (bhs *blockHeaderStore) serializeHeaderCount(count uint64) ([]byte, error) {
 	dbBlockHeaderCount := &serialization.DbBlockHeaderCount{Count: count}
-	return proto.Marshal(dbBlockHeaderCount)
+	return dbBlockHeaderCount.MarshalVT()
 }
 
 func (bhs *blockHeaderStore) CacheLen() int {

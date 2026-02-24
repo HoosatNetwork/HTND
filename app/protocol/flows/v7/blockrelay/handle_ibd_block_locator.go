@@ -30,8 +30,11 @@ func HandleIBDBlockLocator(context HandleIBDBlockLocatorContext, incomingRoute *
 
 		targetHash := ibdBlockLocatorMessage.TargetHash
 		log.Debugf("Received IBDBlockLocator from %s with targetHash %s", peer, targetHash)
-
-		if context.IsIBDRunning() {
+		synced, err := context.Domain().Consensus().IsNearlySynced()
+		if err != nil {
+			continue
+		}
+		if context.IsIBDRunning() && !synced {
 			log.Debugf("Node is in IBD, responding with not found for targetHash %s", targetHash)
 			ibdBlockLocatorHighestHashNotFoundMessage := appmessage.NewMsgIBDBlockLocatorHighestHashNotFound()
 			err = outgoingRoute.Enqueue(ibdBlockLocatorHighestHashNotFoundMessage)

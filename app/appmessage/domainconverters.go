@@ -27,8 +27,9 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		return nil
 	}
 	if domainBlock.PoWHash == "" {
-		// Defensive: PoWHash should not be empty
-		return nil
+		state := pow.NewState(domainBlock.Header.ToMutable())
+		_, powHash := state.CalculateProofOfWorkValue()
+		domainBlock.PoWHash = powHash.String()
 	}
 	msgTxs := make([]*MsgTx, 0, len(domainBlock.Transactions))
 	for _, domainTransaction := range domainBlock.Transactions {
@@ -69,10 +70,17 @@ func MsgBlockToDomainBlock(msgBlock *MsgBlock) *externalapi.DomainBlock {
 	for _, msgTx := range msgBlock.Transactions {
 		transactions = append(transactions, MsgTxToDomainTransaction(msgTx))
 	}
+	header := BlockHeaderToDomainBlockHeader(&msgBlock.Header)
+	powHash := msgBlock.PoWHash
+	if powHash == "" {
+		state := pow.NewState(header.ToMutable())
+		_, powHashResult := state.CalculateProofOfWorkValue()
+		powHash = powHashResult.String()
+	}
 	return &externalapi.DomainBlock{
-		Header:       BlockHeaderToDomainBlockHeader(&msgBlock.Header),
+		Header:       header,
 		Transactions: transactions,
-		PoWHash:      msgBlock.PoWHash,
+		PoWHash:      powHash,
 	}
 }
 
@@ -266,6 +274,8 @@ func RPCUTXOEntryToUTXOEntry(entry *RPCUTXOEntry) (externalapi.UTXOEntry, error)
 	), nil
 }
 
+var sigBuf [256]byte
+
 // DomainTransactionToRPCTransaction converts DomainTransactions to RPCTransactions
 func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransaction) *RPCTransaction {
 	inputs := make([]*RPCTransactionInput, len(transaction.Inputs))
@@ -275,7 +285,8 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 			TransactionID: transactionID,
 			Index:         input.PreviousOutpoint.Index,
 		}
-		signatureScript := hex.EncodeToString(input.SignatureScript)
+		n := hex.Encode(sigBuf[:], input.SignatureScript)
+		signatureScript := string(sigBuf[:n])
 		inputs[i] = &RPCTransactionInput{
 			PreviousOutpoint: previousOutpoint,
 			SignatureScript:  signatureScript,
@@ -285,14 +296,32 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 	}
 	outputs := make([]*RPCTransactionOutput, len(transaction.Outputs))
 	for i, output := range transaction.Outputs {
-		scriptPublicKey := hex.EncodeToString(output.ScriptPublicKey.Script)
+		n := hex.Encode(sigBuf[:], output.ScriptPublicKey.Script)
+		scriptPublicKey := string(sigBuf[:n])
 		outputs[i] = &RPCTransactionOutput{
 			Amount:          output.Value,
 			ScriptPublicKey: &RPCScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
 		}
 	}
 	subnetworkID := transaction.SubnetworkID.String()
-	payload := hex.EncodeToString(transaction.Payload)
+
+	if len(transaction.Payload) == 0 {
+		return &RPCTransaction{
+			Version:      transaction.Version,
+			Inputs:       inputs,
+			Outputs:      outputs,
+			LockTime:     transaction.LockTime,
+			SubnetworkID: subnetworkID,
+			Gas:          transaction.Gas,
+			Payload:      "",
+		}
+	}
+
+	hexLen := hex.EncodedLen(len(transaction.Payload))
+	dst := make([]byte, hexLen)
+	hex.Encode(dst, transaction.Payload)
+
+	payload := string(dst)
 	return &RPCTransaction{
 		Version:      transaction.Version,
 		Inputs:       inputs,
@@ -440,6 +469,11 @@ func RPCBlockToDomainBlock(block *RPCBlock, powHash string) (*externalapi.Domain
 			return nil, err
 		}
 		transactions[i] = domainTransaction
+	}
+	if powHash == "" {
+		state := pow.NewState(header.ToMutable())
+		_, powHashResult := state.CalculateProofOfWorkValue()
+		powHash = powHashResult.String()
 	}
 	return &externalapi.DomainBlock{
 		Header:       header,

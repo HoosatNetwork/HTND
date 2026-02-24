@@ -22,7 +22,7 @@ func Connect(address string) (pb.HtnwalletdClient, func(), error) {
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(server.MaxDaemonSendMsgSize),
+			grpc.MaxCallRecvMsgSize(server.MaxDaemonMsgSize),
 		),
 	)
 	if err != nil {

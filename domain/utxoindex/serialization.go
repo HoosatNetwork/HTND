@@ -7,17 +7,16 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
 	dbOutpoint := serialization.DomainOutpointToDbOutpoint(outpoint)
-	return proto.Marshal(dbOutpoint)
+	return dbOutpoint.MarshalVT()
 }
 
 func deserializeOutpoint(serializedOutpoint []byte) (*externalapi.DomainOutpoint, error) {
 	var dbOutpoint serialization.DbOutpoint
-	err := proto.Unmarshal(serializedOutpoint, &dbOutpoint)
+	err := dbOutpoint.UnmarshalVT(serializedOutpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -26,12 +25,12 @@ func deserializeOutpoint(serializedOutpoint []byte) (*externalapi.DomainOutpoint
 
 func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
 	dbUTXOEntry := serialization.UTXOEntryToDBUTXOEntry(utxoEntry)
-	return proto.Marshal(dbUTXOEntry)
+	return dbUTXOEntry.MarshalVT()
 }
 
 func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
 	var dbUTXOEntry serialization.DbUtxoEntry
-	err := proto.Unmarshal(serializedUTXOEntry, &dbUTXOEntry)
+	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
 	if err != nil {
 		return nil, err
 	}

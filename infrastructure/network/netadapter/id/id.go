@@ -31,7 +31,10 @@ func (id *ID) IsEqual(other *ID) bool {
 }
 
 func (id *ID) String() string {
-	return hex.EncodeToString(id.bytes[:])
+	hexLen := hex.EncodedLen(len(id.bytes[:]))
+	dst := make([]byte, hexLen)
+	hex.Encode(dst, id.bytes[:])
+	return string(dst)
 }
 
 // Deserialize decodes a block from r into the receiver.
