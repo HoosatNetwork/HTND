@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
@@ -68,7 +67,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	for _, from := range fromAddressesString {
 		fromAddress, exists := s.addressSet[from]
 		if !exists {
-			return nil, fmt.Errorf("specified from address %s does not exists", from)
+			return nil, errors.Errorf("specified from address %s does not exists", from)
 		}
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
@@ -78,8 +77,8 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, err
 	}
 
-	if len(selectedUTXOs) == 0 {
-		return nil, errors.Errorf("couldn't find funds to spend")
+	if len(selectedUTXOs) < 2 {
+		return nil, errors.Errorf("Nothing to compound.")
 	}
 
 	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
@@ -221,7 +220,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 	for _, from := range fromAddressesString {
 		fromAddress, exists := s.addressSet[from]
 		if !exists {
-			return nil, fmt.Errorf("specified from address %s does not exists", from)
+			return nil, errors.Errorf("specified from address %s does not exists", from)
 		}
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
