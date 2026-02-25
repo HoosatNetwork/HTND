@@ -36,6 +36,7 @@ func (s *server) syncLoop() error {
 	if err != nil {
 		return err
 	}
+	log.Infof("Wallet contained %d UTXOs after initial sync", len(s.utxosSortedByAmount))
 
 	s.firstSyncDone.Store(true)
 	log.Infof("Wallet is synced and ready for operation")
