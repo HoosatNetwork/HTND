@@ -290,7 +290,7 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXOPair, error) {
+func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) ([]UTXOPair, error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
@@ -298,7 +298,7 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXO
 	// 	return pair, nil
 	// }
 
-	pair, err := ui.store.UTXOs(scriptPublicKey)
+	pair, err := ui.store.UTXOs(scriptPublicKey, limit)
 	// ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
 	return pair, err
 }

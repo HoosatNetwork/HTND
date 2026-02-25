@@ -436,7 +436,7 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 
 // Deprecated
 func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	pairs, err := uis.UTXOs(scriptPublicKey)
+	pairs, err := uis.UTXOs(scriptPublicKey, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +454,7 @@ type UTXOPair struct {
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
@@ -499,6 +499,9 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 			return nil, err
 		}
 		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		if limit > 0 && uint32(len(pairs)) >= limit {
+			break
+		}
 	}
 
 	// uis.scriptCache.Put(scriptKeyString, pairs)

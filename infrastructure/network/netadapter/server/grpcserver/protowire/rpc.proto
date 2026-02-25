@@ -529,6 +529,7 @@ message StopNotifyingUtxosChangedResponseMessage {
 // This call is only available when this htnd was started with `--utxoindex`
 message GetUtxosByAddressesRequestMessage {
   repeated string addresses = 1;
+  optional uint32 limit     = 2;
 }
 
 message GetUtxosByAddressesResponseMessage {

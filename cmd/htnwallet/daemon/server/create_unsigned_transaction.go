@@ -53,7 +53,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs()
+	err := s.refreshUTXOs(10000)
 	if err != nil {
 		return nil, err
 	}
@@ -147,10 +147,10 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 		})
 		totalValue += highestUTXO.UTXOEntry.Amount()
 	}
-	log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
+	// log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
 
 	s.sortUTXOsByAmountAscending()
-	log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
+	// log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
 
 	// Step 1: Collect up to targetCompoundInputs smallest spendable UTXOs
 	for _, utxo := range s.utxosSortedByAmount {
@@ -182,7 +182,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 		})
 		totalValue += utxo.UTXOEntry.Amount()
 	}
-	log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
+	// log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
 
 	if len(selectedUTXOs) == 0 {
 		return nil, 0, 0, errors.New("no spendable UTXOs for compounding")
@@ -195,6 +195,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 	}
 
 	changeSompi = totalValue - fee
+	log.Infof("Compounding %d HTN and paying %d fee", changeSompi/100_000_000, fee/100_000_000)
 
 	return selectedUTXOs, totalValue, changeSompi, nil
 }
@@ -204,10 +205,10 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	// err := s.refreshUTXOs()
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err := s.refreshUTXOs(10000)
+	if err != nil {
+		return nil, err
+	}
 
 	// make sure address string is correct before proceeding to a
 	// potentially long UTXO refreshment operation

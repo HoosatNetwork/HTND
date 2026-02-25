@@ -20,7 +20,7 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs()
+	err := s.refreshUTXOs(0)
 	if err != nil {
 		return nil, err
 	}

@@ -139,7 +139,7 @@ func TestUTXOIndex(t *testing.T) {
 
 	// Get all the UTXOs and make sure the response is equivalent
 	// to the data collected via notifications
-	utxosByAddressesResponse, err := htnd.rpcClient.GetUTXOsByAddresses([]string{miningAddress1})
+	utxosByAddressesResponse, err := htnd.rpcClient.GetUTXOsByAddresses([]string{miningAddress1}, 0)
 	if err != nil {
 		t.Fatalf("Failed to get UTXOs: %s", err)
 	}

@@ -5,6 +5,7 @@ package appmessage
 type GetUTXOsByAddressesRequestMessage struct {
 	baseMessage
 	Addresses []string
+	Limit     uint32
 }
 
 // Command returns the protocol command string for the message
@@ -13,9 +14,10 @@ func (msg *GetUTXOsByAddressesRequestMessage) Command() MessageCommand {
 }
 
 // NewGetUTXOsByAddressesRequestMessage returns a instance of the message
-func NewGetUTXOsByAddressesRequestMessage(addresses []string) *GetUTXOsByAddressesRequestMessage {
+func NewGetUTXOsByAddressesRequestMessage(addresses []string, limit uint32) *GetUTXOsByAddressesRequestMessage {
 	return &GetUTXOsByAddressesRequestMessage{
 		Addresses: addresses,
+		Limit:     limit,
 	}
 }
 
