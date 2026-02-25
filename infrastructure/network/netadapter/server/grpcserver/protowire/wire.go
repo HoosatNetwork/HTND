@@ -933,6 +933,20 @@ func toRPCPayload(message appmessage.Message) (isHoosatdMessage_Payload, error) 
 			return nil, err
 		}
 		return payload, nil
+	case *appmessage.GetUsableAddressesRequestMessage:
+		payload := new(HoosatdMessage_GetUsableAddressesRequest)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	case *appmessage.GetUsableAddressesResponseMessage:
+		payload := new(HoosatdMessage_GetUsableAddressesResponse)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case *appmessage.NotifyNewBlockTemplateRequestMessage:
 		payload := new(HoosatdMessage_NotifyNewBlockTemplateRequest)
 		err := payload.fromAppMessage(message)

@@ -205,10 +205,10 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs()
-	if err != nil {
-		return nil, err
-	}
+	// err := s.refreshUTXOs()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// make sure address string is correct before proceeding to a
 	// potentially long UTXO refreshment operation

@@ -1232,6 +1232,24 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) CloneVT() isHoosatdMess
 	return r
 }
 
+func (m *HoosatdMessage_GetUsableAddressesRequest) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetUsableAddressesRequest)(nil)
+	}
+	r := new(HoosatdMessage_GetUsableAddressesRequest)
+	r.GetUsableAddressesRequest = m.GetUsableAddressesRequest.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_GetUsableAddressesResponse) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetUsableAddressesResponse)(nil)
+	}
+	r := new(HoosatdMessage_GetUsableAddressesResponse)
+	r.GetUsableAddressesResponse = m.GetUsableAddressesResponse.CloneVT()
+	return r
+}
+
 func (this *HoosatdMessage) EqualVT(that *HoosatdMessage) bool {
 	if this == that {
 		return true
@@ -4560,6 +4578,56 @@ func (this *HoosatdMessage_GetBlockByTransactionIdResponse) EqualVT(thatIface is
 	return true
 }
 
+func (this *HoosatdMessage_GetUsableAddressesRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetUsableAddressesRequest)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetUsableAddressesRequest, that.GetUsableAddressesRequest; p != q {
+		if p == nil {
+			p = &GetUsableAddressesRequestMessage{}
+		}
+		if q == nil {
+			q = &GetUsableAddressesRequestMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_GetUsableAddressesResponse) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetUsableAddressesResponse)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetUsableAddressesResponse, that.GetUsableAddressesResponse; p != q {
+		if p == nil {
+			p = &GetUsableAddressesResponseMessage{}
+		}
+		if q == nil {
+			q = &GetUsableAddressesResponseMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
 // Requires gRPC-Go v1.32.0 or later.
@@ -7595,6 +7663,48 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) MarshalToSizedBufferVT(
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetUsableAddressesRequest != nil {
+		size, err := m.GetUsableAddressesRequest.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0x92
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetUsableAddressesResponse != nil {
+		size, err := m.GetUsableAddressesResponse.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0x9a
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -7624,6 +7734,20 @@ func (m *HoosatdMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) 
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesResponse); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesRequest); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
 	}
 	if msg, ok := m.Payload.(*HoosatdMessage_GetBlockByTransactionIdResponse); ok {
 		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
@@ -11304,6 +11428,48 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) MarshalToSizedBufferVTS
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetUsableAddressesRequest != nil {
+		size, err := m.GetUsableAddressesRequest.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0x92
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetUsableAddressesResponse != nil {
+		size, err := m.GetUsableAddressesResponse.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0x9a
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12897,6 +13063,30 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) SizeVT() (n int) {
 	_ = l
 	if m.GetBlockByTransactionIdResponse != nil {
 		l = m.GetBlockByTransactionIdResponse.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetUsableAddressesRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetUsableAddressesRequest != nil {
+		l = m.GetUsableAddressesRequest.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetUsableAddressesResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetUsableAddressesResponse != nil {
+		l = m.GetUsableAddressesResponse.SizeVT()
 		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	return n
@@ -18340,6 +18530,88 @@ func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetBlockByTransactionIdResponse{GetBlockByTransactionIdResponse: v}
+			}
+			iNdEx = postIndex
+		case 1090:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetUsableAddressesRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesRequest); ok {
+				if err := oneof.GetUsableAddressesRequest.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetUsableAddressesRequestMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetUsableAddressesRequest{GetUsableAddressesRequest: v}
+			}
+			iNdEx = postIndex
+		case 1091:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetUsableAddressesResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesResponse); ok {
+				if err := oneof.GetUsableAddressesResponse.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetUsableAddressesResponseMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetUsableAddressesResponse{GetUsableAddressesResponse: v}
 			}
 			iNdEx = postIndex
 		default:
@@ -23803,6 +24075,88 @@ func (m *HoosatdMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetBlockByTransactionIdResponse{GetBlockByTransactionIdResponse: v}
+			}
+			iNdEx = postIndex
+		case 1090:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetUsableAddressesRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesRequest); ok {
+				if err := oneof.GetUsableAddressesRequest.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetUsableAddressesRequestMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetUsableAddressesRequest{GetUsableAddressesRequest: v}
+			}
+			iNdEx = postIndex
+		case 1091:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetUsableAddressesResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesResponse); ok {
+				if err := oneof.GetUsableAddressesResponse.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetUsableAddressesResponseMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetUsableAddressesResponse{GetUsableAddressesResponse: v}
 			}
 			iNdEx = postIndex
 		default:

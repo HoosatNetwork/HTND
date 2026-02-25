@@ -303,6 +303,15 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXO
 	return pair, err
 }
 
+// UTXOs returns all the UTXOs for the given scriptPublicKey
+func (ui *UTXOIndex) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (bool, error) {
+	ui.mutex.Lock()
+	defer ui.mutex.Unlock()
+
+	usable, err := ui.store.HasUTXOs(scriptPublicKey)
+	return usable, err
+}
+
 // GetCirculatingSompiSupply returns the current circulating supply of sompis in the network
 func (ui *UTXOIndex) GetCirculatingSompiSupply() (uint64, error) {
 

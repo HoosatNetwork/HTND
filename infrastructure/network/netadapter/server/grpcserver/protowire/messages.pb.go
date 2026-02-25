@@ -157,6 +157,8 @@ type HoosatdMessage struct {
 	//	*HoosatdMessage_GetCoinSupplyResponse
 	//	*HoosatdMessage_GetBlockByTransactionIdRequest
 	//	*HoosatdMessage_GetBlockByTransactionIdResponse
+	//	*HoosatdMessage_GetUsableAddressesRequest
+	//	*HoosatdMessage_GetUsableAddressesResponse
 	Payload       isHoosatdMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1387,6 +1389,24 @@ func (x *HoosatdMessage) GetGetBlockByTransactionIdResponse() *GetBlockByTransac
 	return nil
 }
 
+func (x *HoosatdMessage) GetGetUsableAddressesRequest() *GetUsableAddressesRequestMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*HoosatdMessage_GetUsableAddressesRequest); ok {
+			return x.GetUsableAddressesRequest
+		}
+	}
+	return nil
+}
+
+func (x *HoosatdMessage) GetGetUsableAddressesResponse() *GetUsableAddressesResponseMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*HoosatdMessage_GetUsableAddressesResponse); ok {
+			return x.GetUsableAddressesResponse
+		}
+	}
+	return nil
+}
+
 type isHoosatdMessage_Payload interface {
 	isHoosatdMessage_Payload()
 }
@@ -1919,6 +1939,14 @@ type HoosatdMessage_GetBlockByTransactionIdResponse struct {
 	GetBlockByTransactionIdResponse *GetBlockByTransactionIDResponseMessage `protobuf:"bytes,1089,opt,name=getBlockByTransactionIdResponse,proto3,oneof"`
 }
 
+type HoosatdMessage_GetUsableAddressesRequest struct {
+	GetUsableAddressesRequest *GetUsableAddressesRequestMessage `protobuf:"bytes,1090,opt,name=getUsableAddressesRequest,proto3,oneof"`
+}
+
+type HoosatdMessage_GetUsableAddressesResponse struct {
+	GetUsableAddressesResponse *GetUsableAddressesResponseMessage `protobuf:"bytes,1091,opt,name=getUsableAddressesResponse,proto3,oneof"`
+}
+
 func (*HoosatdMessage_Addresses) isHoosatdMessage_Payload() {}
 
 func (*HoosatdMessage_Block) isHoosatdMessage_Payload() {}
@@ -2185,11 +2213,15 @@ func (*HoosatdMessage_GetBlockByTransactionIdRequest) isHoosatdMessage_Payload()
 
 func (*HoosatdMessage_GetBlockByTransactionIdResponse) isHoosatdMessage_Payload() {}
 
+func (*HoosatdMessage_GetUsableAddressesRequest) isHoosatdMessage_Payload() {}
+
+func (*HoosatdMessage_GetUsableAddressesResponse) isHoosatdMessage_Payload() {}
+
 var File_messages_proto protoreflect.FileDescriptor
 
 const file_messages_proto_rawDesc = "" +
 	"\n" +
-	"\x0emessages.proto\x12\tprotowire\x1a\tp2p.proto\x1a\trpc.proto\"\xbdo\n" +
+	"\x0emessages.proto\x12\tprotowire\x1a\tp2p.proto\x1a\trpc.proto\"\x9cq\n" +
 	"\x0eHoosatdMessage\x12;\n" +
 	"\taddresses\x18\x01 \x01(\v2\x1b.protowire.AddressesMessageH\x00R\taddresses\x12/\n" +
 	"\x05block\x18\x02 \x01(\v2\x17.protowire.BlockMessageH\x00R\x05block\x12A\n" +
@@ -2325,7 +2357,9 @@ const file_messages_proto_rawDesc = "" +
 	"\x14getCoinSupplyRequest\x18\xbe\b \x01(\v2&.protowire.GetCoinSupplyRequestMessageH\x00R\x14getCoinSupplyRequest\x12`\n" +
 	"\x15getCoinSupplyResponse\x18\xbf\b \x01(\v2'.protowire.GetCoinSupplyResponseMessageH\x00R\x15getCoinSupplyResponse\x12{\n" +
 	"\x1egetBlockByTransactionIdRequest\x18\xc0\b \x01(\v20.protowire.GetBlockByTransactionIDRequestMessageH\x00R\x1egetBlockByTransactionIdRequest\x12~\n" +
-	"\x1fgetBlockByTransactionIdResponse\x18\xc1\b \x01(\v21.protowire.GetBlockByTransactionIDResponseMessageH\x00R\x1fgetBlockByTransactionIdResponseB\t\n" +
+	"\x1fgetBlockByTransactionIdResponse\x18\xc1\b \x01(\v21.protowire.GetBlockByTransactionIDResponseMessageH\x00R\x1fgetBlockByTransactionIdResponse\x12l\n" +
+	"\x19getUsableAddressesRequest\x18\xc2\b \x01(\v2+.protowire.GetUsableAddressesRequestMessageH\x00R\x19getUsableAddressesRequest\x12o\n" +
+	"\x1agetUsableAddressesResponse\x18\xc3\b \x01(\v2,.protowire.GetUsableAddressesResponseMessageH\x00R\x1agetUsableAddressesResponseB\t\n" +
 	"\apayload2R\n" +
 	"\x03P2P\x12K\n" +
 	"\rMessageStream\x12\x19.protowire.HoosatdMessage\x1a\x19.protowire.HoosatdMessage\"\x00(\x010\x012R\n" +
@@ -2478,6 +2512,8 @@ var file_messages_proto_goTypes = []any{
 	(*GetCoinSupplyResponseMessage)(nil),                               // 129: protowire.GetCoinSupplyResponseMessage
 	(*GetBlockByTransactionIDRequestMessage)(nil),                      // 130: protowire.GetBlockByTransactionIDRequestMessage
 	(*GetBlockByTransactionIDResponseMessage)(nil),                     // 131: protowire.GetBlockByTransactionIDResponseMessage
+	(*GetUsableAddressesRequestMessage)(nil),                           // 132: protowire.GetUsableAddressesRequestMessage
+	(*GetUsableAddressesResponseMessage)(nil),                          // 133: protowire.GetUsableAddressesResponseMessage
 }
 var file_messages_proto_depIdxs = []int32{
 	1,   // 0: protowire.HoosatdMessage.addresses:type_name -> protowire.AddressesMessage
@@ -2612,15 +2648,17 @@ var file_messages_proto_depIdxs = []int32{
 	129, // 129: protowire.HoosatdMessage.getCoinSupplyResponse:type_name -> protowire.GetCoinSupplyResponseMessage
 	130, // 130: protowire.HoosatdMessage.getBlockByTransactionIdRequest:type_name -> protowire.GetBlockByTransactionIDRequestMessage
 	131, // 131: protowire.HoosatdMessage.getBlockByTransactionIdResponse:type_name -> protowire.GetBlockByTransactionIDResponseMessage
-	0,   // 132: protowire.P2P.MessageStream:input_type -> protowire.HoosatdMessage
-	0,   // 133: protowire.RPC.MessageStream:input_type -> protowire.HoosatdMessage
-	0,   // 134: protowire.P2P.MessageStream:output_type -> protowire.HoosatdMessage
-	0,   // 135: protowire.RPC.MessageStream:output_type -> protowire.HoosatdMessage
-	134, // [134:136] is the sub-list for method output_type
-	132, // [132:134] is the sub-list for method input_type
-	132, // [132:132] is the sub-list for extension type_name
-	132, // [132:132] is the sub-list for extension extendee
-	0,   // [0:132] is the sub-list for field type_name
+	132, // 132: protowire.HoosatdMessage.getUsableAddressesRequest:type_name -> protowire.GetUsableAddressesRequestMessage
+	133, // 133: protowire.HoosatdMessage.getUsableAddressesResponse:type_name -> protowire.GetUsableAddressesResponseMessage
+	0,   // 134: protowire.P2P.MessageStream:input_type -> protowire.HoosatdMessage
+	0,   // 135: protowire.RPC.MessageStream:input_type -> protowire.HoosatdMessage
+	0,   // 136: protowire.P2P.MessageStream:output_type -> protowire.HoosatdMessage
+	0,   // 137: protowire.RPC.MessageStream:output_type -> protowire.HoosatdMessage
+	136, // [136:138] is the sub-list for method output_type
+	134, // [134:136] is the sub-list for method input_type
+	134, // [134:134] is the sub-list for extension type_name
+	134, // [134:134] is the sub-list for extension extendee
+	0,   // [0:134] is the sub-list for field type_name
 }
 
 func init() { file_messages_proto_init() }
@@ -2763,6 +2801,8 @@ func file_messages_proto_init() {
 		(*HoosatdMessage_GetCoinSupplyResponse)(nil),
 		(*HoosatdMessage_GetBlockByTransactionIdRequest)(nil),
 		(*HoosatdMessage_GetBlockByTransactionIdResponse)(nil),
+		(*HoosatdMessage_GetUsableAddressesRequest)(nil),
+		(*HoosatdMessage_GetUsableAddressesResponse)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
