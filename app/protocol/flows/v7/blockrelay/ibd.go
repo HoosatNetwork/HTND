@@ -109,7 +109,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 			isFinishedSuccessfully = true
 		}
 	case <-time.After(timeout):
-		log.Warnf("IBD with peer %s timed out after %v, disconnecting and banning peer", flow.peer, timeout)
+		log.Warnf("IBD with peer %s timed out after %v, disconnecting and trying to ban the peer depending on --enablebanning setting", flow.peer, timeout)
 		// Disconnect & Remove the peer from address manager to prevent immediate reconnection
 		flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out"))
 		netAddress := flow.peer.Connection().NetAddress()
@@ -117,7 +117,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 			log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
 		}
 		flow.peer.Connection().Disconnect()
-		return protocolerrors.Errorf(false, "IBD timed out")
+		return protocolerrors.Errorf(true, "IBD timed out, nothing to worry, we will find another peer soon!")
 	}
 
 	return err
