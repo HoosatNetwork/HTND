@@ -1,6 +1,7 @@
 package acceptancedatastore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -55,6 +56,10 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 
 	acceptanceDataBytes, err := dbContext.Get(ads.hashAsKey(blockHash))
 	if err != nil {
+		if database.IsNotFoundError(err) {
+			log.Infof("initializeCount failed to retrieve with %s\n", blockHash)
+			return nil, err
+		}
 		return nil, err
 	}
 
