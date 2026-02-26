@@ -810,7 +810,7 @@ func (s *consensus) GetVirtualSelectedParent() (*externalapi.DomainHash, error) 
 
 	virtualGHOSTDAGData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, model.VirtualBlockHash, false)
 	if database.IsNotFoundError(err) {
-		log.Infof("GetVirtualSelectedParent failed to retrieve with %s\n", model.VirtualBlockHash)
+		log.Debugf("GetVirtualSelectedParent failed to retrieve with %s\n", model.VirtualBlockHash)
 		return nil, err
 	}
 	if err != nil {
