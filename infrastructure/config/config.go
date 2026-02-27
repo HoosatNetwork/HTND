@@ -211,7 +211,7 @@ func defaultFlags() *Flags {
 		MaxUTXOCacheSize:               defaultMaxUTXOCacheSize,
 		ServiceOptions:                 &ServiceOptions{},
 		ProtocolVersion:                defaultProtocolVersion,
-		DisableIBDTimeout:              defaultDisbleIBDTimeout,
+		DisableIBDTimeout:              defaultDisableIBDTimeout,
 		NearlySyncedIBDTimeout:         defaultNearlySyncedIBDTimeout,
 		IBDTimeout:                     defaultIBDTimeout,
 		DisallowLoopbackP2PConnections: false,
