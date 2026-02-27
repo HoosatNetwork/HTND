@@ -109,34 +109,39 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 			isFinishedSuccessfully = true
 		}
 	case <-time.After(timeout):
-		log.Warnf("IBD with peer %s timed out after %v, disconnecting and trying to ban the peer depending on --enablebanning setting", flow.peer, timeout)
-		// Disconnect & Remove the peer from address manager to prevent immediate reconnection
-		flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out"))
-		netAddress := flow.peer.Connection().NetAddress()
-		if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
-			log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
+		if !flow.Config().DisableIBDTimeout || timeout == 0 {
+			log.Warnf("IBD with peer %s timed out after %v, disconnecting and trying to ban the peer depending on --enablebanning setting", flow.peer, timeout)
+			// Disconnect & Remove the peer from address manager to prevent immediate reconnection
+			flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out"))
+			netAddress := flow.peer.Connection().NetAddress()
+			if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
+				log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
+			}
+			flow.peer.Connection().Disconnect()
+			return protocolerrors.Errorf(true, "IBD timed out, nothing to worry, we will find another peer soon!")
 		}
-		flow.peer.Connection().Disconnect()
-		return protocolerrors.Errorf(true, "IBD timed out, nothing to worry, we will find another peer soon!")
 	}
 
 	return err
 }
 
 func (flow *handleIBDFlow) getIBDTimeout() time.Duration {
-	isNearlySynced, err := flow.Domain().Consensus().IsNearlySynced()
-	if err != nil {
-		log.Warnf("Failed to check if nearly synced, using default timeout: %v", err)
-		return flow.Config().IBDTimeout
-	}
+	if !flow.Config().DisableIBDTimeout {
+		isNearlySynced, err := flow.Domain().Consensus().IsNearlySynced()
+		if err != nil {
+			log.Warnf("Failed to check if nearly synced, using default timeout: %v", err)
+			return flow.Config().IBDTimeout
+		}
 
-	if isNearlySynced {
-		// If nearly synced, IBD should be faster, use shorter timeout
-		return flow.Config().NearlySyncedIBDTimeout
-	} else {
-		// If not nearly synced, allow more time for IBD
-		return flow.Config().IBDTimeout
+		if isNearlySynced {
+			// If nearly synced, IBD should be faster, use shorter timeout
+			return flow.Config().NearlySyncedIBDTimeout
+		} else {
+			// If not nearly synced, allow more time for IBD
+			return flow.Config().IBDTimeout
+		}
 	}
+	return 0
 }
 
 func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
