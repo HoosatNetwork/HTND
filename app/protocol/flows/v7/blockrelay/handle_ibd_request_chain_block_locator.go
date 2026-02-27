@@ -45,7 +45,7 @@ func (flow *handleRequestIBDChainBlockLocatorFlow) start() error {
 		} else {
 			locator, err = flow.Domain().Consensus().CreateHeadersSelectedChainBlockLocator(lowHash, highHash)
 		}
-		if errors.Is(model.ErrBlockNotInSelectedParentChain, err) {
+		if errors.Is(err, model.ErrBlockNotInSelectedParentChain) {
 			// The chain has been modified, signal it by sending an empty locator
 			locator, err = externalapi.BlockLocator{}, nil
 		}
