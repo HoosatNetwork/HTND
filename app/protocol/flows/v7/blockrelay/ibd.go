@@ -132,7 +132,7 @@ func (flow *handleIBDFlow) getIBDTimeout() time.Duration {
 
 	if isNearlySynced {
 		// If nearly synced, IBD should be faster, use shorter timeout
-		return 10 * time.Minute
+		return flow.Config().NearlySyncedIBDTimeout
 	} else {
 		// If not nearly synced, allow more time for IBD
 		return flow.Config().IBDTimeout
