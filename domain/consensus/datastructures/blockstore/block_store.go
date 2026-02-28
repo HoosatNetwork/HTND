@@ -98,6 +98,9 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Block %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

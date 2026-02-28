@@ -1,6 +1,7 @@
 package utxodiffstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -106,6 +107,9 @@ func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *m
 	}
 
 	utxoDiffChildBytes, err := dbContext.Get(uds.utxoDiffChildHashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "UTXO diff for %s block does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

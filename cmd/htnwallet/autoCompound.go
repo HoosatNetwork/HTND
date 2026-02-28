@@ -53,22 +53,12 @@ func autoCompound(conf *autoCompoundConfig) error {
 	defer ticker.Stop()
 
 	if err := compoundOnce(conf, daemonClient, mnemonics, keysFile.ECDSA); err != nil {
-		if errors.Is(err, errRateLimited) {
-			fmt.Printf("[%s] rate limited, backing off for 2m\n", time.Now().Format("15:04:05"))
-			time.Sleep(2 * time.Minute)
-		} else {
-			fmt.Printf("[%s] compound failed: %v\n", time.Now().Format("15:04:05"), err)
-		}
+		fmt.Printf("[%s] compound failed: %v\n", time.Now().Format("15:04:05"), err)
 	}
 	for {
 		<-ticker.C
 		if err := compoundOnce(conf, daemonClient, mnemonics, keysFile.ECDSA); err != nil {
-			if errors.Is(err, errRateLimited) {
-				fmt.Printf("[%s] rate limited, backing off for 2m\n", time.Now().Format("15:04:05"))
-				time.Sleep(2 * time.Minute)
-			} else {
-				fmt.Printf("[%s] compound failed: %v\n", time.Now().Format("15:04:05"), err)
-			}
+			fmt.Printf("[%s] compound failed: %v\n", time.Now().Format("15:04:05"), err)
 			continue
 		}
 	}
@@ -88,6 +78,7 @@ func compoundOnce(
 		From:                     conf.FromAddresses,
 		Address:                  conf.ToAddress,
 		UseExistingChangeAddress: conf.UseExistingChangeAddress,
+		Limit:                    &conf.Limit,
 	})
 	if err != nil {
 		fmt.Printf("[%s] NOTHING TO COMPOUND → Error: %s, backing off for 5m\n", time.Now().Format("15:04:05"), err)

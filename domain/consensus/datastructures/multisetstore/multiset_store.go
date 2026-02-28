@@ -1,11 +1,13 @@
 package multisetstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var bucketName = []byte("multisets")
@@ -56,6 +58,9 @@ func (ms *multisetStore) Get(dbContext model.DBReader, stagingArea *model.Stagin
 	}
 
 	multisetBytes, err := dbContext.Get(ms.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Multiset %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

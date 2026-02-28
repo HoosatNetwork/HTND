@@ -3,8 +3,8 @@ package rpcclient
 import "github.com/Hoosat-Oy/HTND/app/appmessage"
 
 // GetUTXOsByAddresses sends an RPC request respective to the function's name and returns the RPC server's response
-func (c *RPCClient) GetUTXOsByAddresses(addresses []string) (*appmessage.GetUTXOsByAddressesResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetUTXOsByAddressesRequestMessage(addresses))
+func (c *RPCClient) GetUTXOsByAddresses(addresses []string, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error) {
+	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetUTXOsByAddressesRequestMessage(addresses, limit))
 	if err != nil {
 		return nil, err
 	}

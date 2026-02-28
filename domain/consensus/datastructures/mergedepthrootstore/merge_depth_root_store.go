@@ -1,10 +1,12 @@
 package mergedepthrootstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var bucketName = []byte("merge-depth-roots")
@@ -43,6 +45,9 @@ func (mdrs *mergeDepthRootStore) MergeDepthRoot(dbContext model.DBReader, stagin
 	}
 
 	rootBytes, err := dbContext.Get(mdrs.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Merge depth root %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

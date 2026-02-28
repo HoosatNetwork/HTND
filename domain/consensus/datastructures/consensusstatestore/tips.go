@@ -5,6 +5,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/cockroachdb/errors"
 )
 
 var tipsKeyName = []byte("tips")
@@ -21,9 +22,8 @@ func (css *consensusStateStore) Tips(stagingArea *model.StagingArea, dbContext m
 	}
 
 	tipsBytes, err := dbContext.Get(css.tipsKey)
-	if database.IsNotFoundError(err) {
-		log.Infof("Tips failed to retrieve with %s\n", css.tipsKey)
-		return nil, err
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Tip does not exist in db")
 	}
 	if err != nil {
 		return nil, err

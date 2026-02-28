@@ -24,7 +24,7 @@ func (was walletAddressSet) strings() []string {
 }
 
 func (s *server) syncLoop() error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	err := s.collectRecentAddresses()
@@ -32,10 +32,11 @@ func (s *server) syncLoop() error {
 		return err
 	}
 
-	err = s.refreshUTXOs()
+	err = s.refreshUTXOs(0)
 	if err != nil {
 		return err
 	}
+	log.Infof("Wallet contained %d UTXOs after initial sync", len(s.utxosSortedByAmount))
 
 	s.firstSyncDone.Store(true)
 	log.Infof("Wallet is synced and ready for operation")
@@ -63,6 +64,11 @@ func (s *server) sync() error {
 	if err != nil {
 		return err
 	}
+
+	// err = s.refreshUTXOs()
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -165,12 +171,12 @@ func (s *server) collectAddresses(start, end uint32) error {
 		return err
 	}
 
-	getBalancesByAddressesResponse, err := s.backgroundRPCClient.GetBalancesByAddresses(addressSet.strings())
+	getUsableAddressesResponse, err := s.backgroundRPCClient.GetUsableAddresses(addressSet.strings())
 	if err != nil {
 		return err
 	}
 
-	err = s.updateAddressesAndLastUsedIndexes(addressSet, getBalancesByAddressesResponse)
+	err = s.updateAddressesAndLastUsedIndexes(addressSet, getUsableAddressesResponse)
 	if err != nil {
 		return err
 	}
@@ -179,21 +185,17 @@ func (s *server) collectAddresses(start, end uint32) error {
 }
 
 func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAddressSet,
-	getBalancesByAddressesResponse *appmessage.GetBalancesByAddressesResponseMessage) error {
+	getUsableAddressesResponse *appmessage.GetUsableAddressesResponseMessage) error {
 	lastUsedExternalIndex := s.keysFile.LastUsedExternalIndex()
 	lastUsedInternalIndex := s.keysFile.LastUsedInternalIndex()
 
-	for _, entry := range getBalancesByAddressesResponse.Entries {
-		walletAddress, ok := requestedAddressSet[entry.Address]
+	for _, address := range getUsableAddressesResponse.Addresses {
+		walletAddress, ok := requestedAddressSet[address]
 		if !ok {
-			return errors.Errorf("Got result from address %s even though it wasn't requested", entry.Address)
+			return errors.Errorf("Got result from address %s even though it wasn't requested", address)
 		}
 
-		if entry.Balance == 0 {
-			continue
-		}
-
-		s.addressSet[entry.Address] = walletAddress
+		s.addressSet[address] = walletAddress
 
 		if walletAddress.keyChain == libhtnwallet.ExternalKeychain {
 			if walletAddress.index > lastUsedExternalIndex {
@@ -267,6 +269,7 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 	sort.Slice(utxos, func(i, j int) bool { return utxos[i].UTXOEntry.Amount() > utxos[j].UTXOEntry.Amount() })
 	s.startTimeOfLastCompletedRefresh = refreshStart
 	s.utxosSortedByAmount = utxos
+	//log.Infof("Updating %d UTXOs", len(s.utxosSortedByAmount))
 
 	// Cleanup expired used outpoints to avoid a memory leak
 	for outpoint, broadcastTime := range s.usedOutpoints {
@@ -278,7 +281,7 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 	return nil
 }
 
-func (s *server) refreshUTXOs() error {
+func (s *server) refreshUTXOs(limit uint32) error {
 	refreshStart := time.Now()
 
 	// No need to lock for reading since the only writer of this set is on `syncLoop` on the same goroutine.
@@ -293,10 +296,11 @@ func (s *server) refreshUTXOs() error {
 		return err
 	}
 
-	getUTXOsByAddressesResponse, err := s.backgroundRPCClient.GetUTXOsByAddresses(addresses)
+	getUTXOsByAddressesResponse, err := s.backgroundRPCClient.GetUTXOsByAddresses(addresses, limit)
 	if err != nil {
 		return err
 	}
+	//log.Infof("Got %d UTXOs from node", len(getUTXOsByAddressesResponse.Entries))
 
 	return s.updateUTXOSet(getUTXOsByAddressesResponse.Entries, mempoolEntriesByAddresses.Entries, refreshStart)
 }

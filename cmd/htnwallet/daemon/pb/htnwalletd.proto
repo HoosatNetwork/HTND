@@ -41,6 +41,7 @@ message CreateUnsignedTransactionsRequest {
   bool useExistingChangeAddress = 4;
   bool isSendAll = 5;
   bytes payload = 6;
+  optional string limit = 7;
 }
 
 message CreateUnsignedTransactionsResponse {
@@ -51,6 +52,7 @@ message CreateUnsignedCompoundTransactionRequest {
   string address = 1;
   repeated string from = 2;
   bool useExistingChangeAddress = 3;
+  optional string limit = 4;
 }
 
 message CreateUnsignedCompoundTransactionResponse {
@@ -125,6 +127,7 @@ message SendRequest{
   repeated string from = 4;
   bool useExistingChangeAddress = 5;
   bool isSendAll = 6;
+  optional string limit = 7;
 }
 
 message SendResponse{

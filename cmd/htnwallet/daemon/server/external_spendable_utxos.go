@@ -17,7 +17,7 @@ func (s *server) GetExternalSpendableUTXOs(_ context.Context, request *pb.GetExt
 	if err != nil {
 		return nil, err
 	}
-	externalUTXOs, err := s.rpcClient.GetUTXOsByAddresses([]string{request.Address})
+	externalUTXOs, err := s.rpcClient.GetUTXOsByAddresses([]string{request.Address}, 0)
 	if err != nil {
 		return nil, err
 	}

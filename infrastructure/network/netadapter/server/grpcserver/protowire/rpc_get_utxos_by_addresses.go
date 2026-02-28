@@ -15,6 +15,7 @@ func (x *HoosatdMessage_GetUtxosByAddressesRequest) toAppMessage() (appmessage.M
 func (x *HoosatdMessage_GetUtxosByAddressesRequest) fromAppMessage(message *appmessage.GetUTXOsByAddressesRequestMessage) error {
 	x.GetUtxosByAddressesRequest = &GetUtxosByAddressesRequestMessage{
 		Addresses: message.Addresses,
+		Limit:     &message.Limit,
 	}
 	return nil
 }
@@ -25,6 +26,7 @@ func (x *GetUtxosByAddressesRequestMessage) toAppMessage() (appmessage.Message, 
 	}
 	return &appmessage.GetUTXOsByAddressesRequestMessage{
 		Addresses: x.Addresses,
+		Limit:     x.GetLimit(),
 	}, nil
 }
 

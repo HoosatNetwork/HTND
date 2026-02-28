@@ -1,11 +1,13 @@
 package blockstatusstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var bucketName = []byte("block-statuses")
@@ -49,7 +51,9 @@ func (bss *blockStatusStore) Get(dbContext model.DBReader, stagingArea *model.St
 	}
 
 	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))
-
+	if errors.Is(err, database.ErrNotFound) {
+		return 0, errors.Wrapf(err, "Block status %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -75,7 +79,6 @@ func (bss *blockStatusStore) Exists(dbContext model.DBReader, stagingArea *model
 	}
 
 	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))
-
 	if err != nil || statusBytes == nil {
 		return false, nil
 	}

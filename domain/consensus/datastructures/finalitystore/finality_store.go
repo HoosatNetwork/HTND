@@ -1,10 +1,12 @@
 package finalitystore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var bucketName = []byte("finality-points")
@@ -43,6 +45,9 @@ func (fs *finalityStore) FinalityPoint(dbContext model.DBReader, stagingArea *mo
 	}
 
 	finalityPointHashBytes, err := dbContext.Get(fs.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Finality Point hash %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

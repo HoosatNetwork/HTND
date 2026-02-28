@@ -7,6 +7,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/pkg/errors"
 )
 
 var bucketName = []byte("block-headers")
@@ -100,6 +101,9 @@ func (bhs *blockHeaderStore) blockHeader(dbContext model.DBReader, stagingShard 
 	}
 
 	headerBytes, err := dbContext.Get(bhs.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Header %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

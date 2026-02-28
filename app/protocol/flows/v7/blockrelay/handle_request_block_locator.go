@@ -2,10 +2,10 @@ package blockrelay
 
 import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
 	"github.com/Hoosat-Oy/HTND/domain"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/cockroachdb/errors"
 )
 
 // RequestBlockLocatorContext is the interface for the context needed for the HandleRequestBlockLocator flow.
@@ -40,11 +40,8 @@ func (flow *handleRequestBlockLocatorFlow) start() error {
 
 		locator, err := flow.Domain().Consensus().CreateBlockLocatorFromPruningPoint(highHash, limit)
 		if err != nil || len(locator) == 0 {
-			if err != nil {
-				log.Debugf("Received error from CreateBlockLocatorFromPruningPoint: %s", err)
-			}
-			return protocolerrors.Errorf(false, "couldn't build a block "+
-				"locator between the pruning point and %s", highHash)
+			return errors.Wrapf(err, "couldn't build a block "+
+				"locator between the pruning point and %s with limit %d", highHash, limit)
 		}
 
 		err = flow.sendBlockLocator(locator)

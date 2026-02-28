@@ -21,9 +21,10 @@ type HandleIBDBlockRequestsContext interface {
 // their corresponding blocks to the requesting peer.
 func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute *router.Route,
 	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
-	semaphore := make(chan struct{}, runtime.NumCPU())
+	threadcount := runtime.NumCPU() * 2
+	semaphore := make(chan struct{}, threadcount)
 
-	rateLimit := time.NewTicker(time.Second / 2)
+	rateLimit := time.NewTicker(time.Second / time.Duration(threadcount*2))
 	defer rateLimit.Stop()
 
 	for {

@@ -2,7 +2,6 @@ package blockrelay
 
 import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
 	"github.com/Hoosat-Oy/HTND/domain"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -45,15 +44,14 @@ func (flow *handleRequestIBDChainBlockLocatorFlow) start() error {
 			locator, err = flow.Domain().Consensus().CreateFullHeadersSelectedChainBlockLocator()
 		} else {
 			locator, err = flow.Domain().Consensus().CreateHeadersSelectedChainBlockLocator(lowHash, highHash)
-			if errors.Is(model.ErrBlockNotInSelectedParentChain, err) {
-				// The chain has been modified, signal it by sending an empty locator
-				locator, err = externalapi.BlockLocator{}, nil
-			}
+		}
+		if errors.Is(err, model.ErrBlockNotInSelectedParentChain) {
+			// The chain has been modified, signal it by sending an empty locator
+			locator, err = externalapi.BlockLocator{}, nil
 		}
 
 		if err != nil {
-			log.Debugf("Received error from CreateHeadersSelectedChainBlockLocator: %s", err)
-			return protocolerrors.Errorf(false, "couldn't build a block "+
+			return errors.Wrapf(err, "couldn't build a block "+
 				"locator between %s and %s", lowHash, highHash)
 		}
 

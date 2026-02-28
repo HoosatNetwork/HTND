@@ -1,10 +1,12 @@
 package headersselectedtipstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var keyName = []byte("headers-selected-tip")
@@ -65,6 +67,9 @@ func (hsts *headerSelectedTipStore) HeadersSelectedTip(dbContext model.DBReader,
 	}
 
 	selectedTipBytes, err := dbContext.Get(hsts.key)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Headers selected tip %s does not exist in db", hsts.key)
+	}
 	if err != nil {
 		return nil, err
 	}

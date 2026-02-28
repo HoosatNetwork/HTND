@@ -165,6 +165,8 @@ const (
 	CmdGetMempoolEntriesByAddressesResponseMessage
 	CmdGetCoinSupplyRequestMessage
 	CmdGetCoinSupplyResponseMessage
+	CmdGetUsableAddressesRequestMessage
+	CmdGetUsableAddressesResponseMessage
 )
 
 // ProtocolMessageCommandToString maps all MessageCommands to their string representation
@@ -302,6 +304,8 @@ var RPCMessageCommandToString = map[MessageCommand]string{
 	CmdGetMempoolEntriesByAddressesResponseMessage:                "GetMempoolEntriesByAddressesResponse",
 	CmdGetCoinSupplyRequestMessage:                                "GetCoinSupplyRequest",
 	CmdGetCoinSupplyResponseMessage:                               "GetCoinSupplyResponse",
+	CmdGetUsableAddressesRequestMessage:                           "GetUsableAddressesRequest",
+	CmdGetUsableAddressesResponseMessage:                          "GetUsableAddressesResponse",
 }
 
 // Message is an interface that describes a hoosat message. A type that

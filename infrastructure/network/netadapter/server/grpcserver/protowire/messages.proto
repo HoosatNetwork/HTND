@@ -141,6 +141,8 @@ message HoosatdMessage {
     GetCoinSupplyResponseMessage getCoinSupplyResponse= 1087;
     GetBlockByTransactionIDRequestMessage getBlockByTransactionIdRequest = 1088;
     GetBlockByTransactionIDResponseMessage getBlockByTransactionIdResponse = 1089;
+    GetUsableAddressesRequestMessage getUsableAddressesRequest = 1090;
+    GetUsableAddressesResponseMessage getUsableAddressesResponse = 1091;
   }
 }
 

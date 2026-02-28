@@ -7,6 +7,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var reachabilityDataBucketName = []byte("reachability-data")
@@ -124,6 +125,9 @@ func (rds *reachabilityDataStore) ReachabilityReindexRoot(dbContext model.DBRead
 	}
 
 	reachabilityReindexRootBytes, err := dbContext.Get(rds.reachabilityReindexRootKey)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Reachability reindex root does not exist in db")
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -529,6 +529,7 @@ message StopNotifyingUtxosChangedResponseMessage {
 // This call is only available when this htnd was started with `--utxoindex`
 message GetUtxosByAddressesRequestMessage {
   repeated string addresses = 1;
+  optional uint32 limit     = 2;
 }
 
 message GetUtxosByAddressesResponseMessage {
@@ -563,6 +564,17 @@ message BalancesByAddressEntry{
 
 message GetBalancesByAddressesResponseMessage {
   repeated BalancesByAddressEntry entries = 1;
+
+  RPCError error = 1000;
+}
+
+
+message GetUsableAddressesRequestMessage {
+  repeated string addresses = 1;
+}
+
+message GetUsableAddressesResponseMessage {
+  repeated string addresses = 1;
 
   RPCError error = 1000;
 }
@@ -731,8 +743,8 @@ message GetCoinSupplyRequestMessage{
 }
 
 message GetCoinSupplyResponseMessage{
-        uint64 maxSompi = 1; // note: this is a hard coded maxSupply, actual maxSupply is expected to deviate by upto -5%, but cannot be measured exactly.
-        uint64 circulatingSompi = 2;
+  uint64 maxSompi = 1; // note: this is a hard coded maxSupply, actual maxSupply is expected to deviate by upto -5%, but cannot be measured exactly.
+  uint64 circulatingSompi = 2;
 
-        RPCError error = 1000;
+  RPCError error = 1000;
 }

@@ -49,12 +49,15 @@ const (
 	defaultMinRelayTxFee         = 1e-5 // 1 sompi per byte
 	defaultMaxOrphanTransactions = 100
 	//DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
-	DefaultMaxOrphanTxSize  = 100_000
-	defaultSigCacheMaxSize  = 100_000
-	sampleConfigFilename    = "sample-htnd.conf"
-	defaultMaxUTXOCacheSize = 5_000_000_000
-	defaultProtocolVersion  = 7
-	defaultIBDTimeout       = 120 * time.Minute
+	DefaultMaxOrphanTxSize        = 100_000
+	defaultSigCacheMaxSize        = 100_000
+	sampleConfigFilename          = "sample-htnd.conf"
+	defaultMaxUTXOCacheSize       = 5_000_000_000
+	defaultProtocolVersion        = 7
+	defaultIBDTimeout             = 120 * time.Minute
+	defaultNearlySyncedIBDTimeout = 10 * time.Minute
+	defaultDisableIBDTimeout      = false
+	defaultIBDDequeueTimeout      = 1 * time.Minute
 )
 
 var (
@@ -138,7 +141,10 @@ type Flags struct {
 	// Wallet freezing flags
 	FrozenAddresses []string `long:"freeze-address" description:"Address to freeze (can be specified multiple times)"`
 
-	IBDTimeout time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
+	DisableIBDTimeout      bool          `long:"disable-ibd-timeout" description:"Disable IBD timeout"`
+	NearlySyncedIBDTimeout time.Duration `long:"nearly-synced-ibd-timeout" description:"Maximum time to allow IBD to run when the node is nearly synced before disconnecting the peer and trying another"`
+	IBDTimeout             time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
+	IBDDequeueTimeout      time.Duration `long:"ibd-dequeue-timeout" description:"Maximum time to wait for a block to be dequeued during IBD before disconnecting the peer and trying another"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -207,7 +213,10 @@ func defaultFlags() *Flags {
 		MaxUTXOCacheSize:               defaultMaxUTXOCacheSize,
 		ServiceOptions:                 &ServiceOptions{},
 		ProtocolVersion:                defaultProtocolVersion,
+		DisableIBDTimeout:              defaultDisableIBDTimeout,
+		NearlySyncedIBDTimeout:         defaultNearlySyncedIBDTimeout,
 		IBDTimeout:                     defaultIBDTimeout,
+		IBDDequeueTimeout:              defaultIBDDequeueTimeout,
 		DisallowLoopbackP2PConnections: false,
 	}
 }

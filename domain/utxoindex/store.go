@@ -436,7 +436,7 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 
 // Deprecated
 func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	pairs, err := uis.UTXOs(scriptPublicKey)
+	pairs, err := uis.UTXOs(scriptPublicKey, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +454,7 @@ type UTXOPair struct {
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
@@ -478,10 +478,9 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 	}
 
 	// Preallocate
-	pairs := make([]UTXOPair, count)
+	pairs := make([]UTXOPair, 0, count)
 
 	// Second pass: fill
-	i := 0
 	for ok := cursor.First(); ok; ok = cursor.Next() {
 		key, err := cursor.Key()
 		if err != nil {
@@ -499,15 +498,31 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (
 		if err != nil {
 			return nil, err
 		}
-		pairs[i] = UTXOPair{Outpoint: *outpoint, Entry: utxoEntry}
-		i++
-		if i >= count { // Don't iterate over the preallocated amount on this request
+		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		if limit > 0 && uint32(len(pairs)) >= limit {
 			break
 		}
 	}
 
 	// uis.scriptCache.Put(scriptKeyString, pairs)
 	return pairs, nil
+}
+
+// UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
+func (uis *utxoIndexStore) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (bool, error) {
+	if uis.isAnythingStaged() {
+		return false, errors.Errorf("cannot get UTXOs while staging isn't empty")
+	}
+
+	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
+	cursor, err := uis.database.Cursor(bucket)
+	if err != nil {
+		return false, err
+	}
+
+	ok := cursor.First()
+	cursor.Close()
+	return ok, nil
 }
 
 // ForEachUTXO provides an iterator-style API for advanced streaming

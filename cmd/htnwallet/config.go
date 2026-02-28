@@ -66,6 +66,7 @@ type sendConfig struct {
 	IsSendAll                bool     `long:"send-all" description:"Send all the Hoosat in the wallet (mutually exclusive with --send-amount). If --from-address was used, will send all only from the specified addresses."`
 	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" description:"Will use an existing change address (in case no change address was ever used, it will use a new one)"`
 	Verbose                  bool     `long:"show-serialized" short:"s" description:"Show a list of hex encoded sent transactions"`
+	Limit                    string   `long:"limit" short:"l" description:"Limit the number of UTXO to fetch before sending (default: 10,000), (0 equals no limit)"`
 	config.NetworkFlags
 }
 
@@ -78,6 +79,7 @@ type autoCompoundConfig struct {
 	FromAddresses            []string `long:"from-address" short:"a" description:"Specific public address to send Hoosat from. Repeat multiple times (adding -a before each) to accept several addresses" required:"false"`
 	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" description:"Will use an existing change address (in case no change address was ever used, it will use a new one)"`
 	Verbose                  bool     `long:"show-serialized" short:"s" description:"Show a list of hex encoded sent transactions"`
+	Limit                    string   `long:"limit" short:"l" description:"Limit the number of UTXO to fetch before sending (default: 10,000), (0 equals no limit)"`
 	config.NetworkFlags
 }
 

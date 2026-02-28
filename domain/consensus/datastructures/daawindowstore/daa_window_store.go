@@ -3,11 +3,13 @@ package daawindowstore
 import (
 	"encoding/binary"
 
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucachehashpairtoblockghostdagdatahashpair"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/cockroachdb/errors"
 )
 
 var bucketName = []byte("daa-window")
@@ -52,6 +54,9 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 	}
 
 	pairBytes, err := dbContext.Get(daaws.key(dbKey))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "DAA window %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

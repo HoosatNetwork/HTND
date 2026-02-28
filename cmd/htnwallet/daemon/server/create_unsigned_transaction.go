@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
@@ -26,8 +26,17 @@ func (s *server) CreateUnsignedTransactions(_ context.Context, request *pb.Creat
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	limit := uint32(10000)
+	if request.GetLimit() != "" {
+		limit64, err := strconv.ParseUint(request.GetLimit(), 10, 32)
+		if err != nil {
+			return nil, errors.Errorf("invalid limit: %s", request.GetLimit())
+		}
+		limit = uint32(limit64)
+	}
+
 	unsignedTransactions, err := s.createUnsignedTransactions(request.Address, request.Amount, request.IsSendAll,
-		request.From, request.UseExistingChangeAddress, request.Payload)
+		request.From, request.UseExistingChangeAddress, request.Payload, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +50,16 @@ func (s *server) CreateUnsignedCompoundTransaction(_ context.Context, request *p
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	unsignedTransactions, err := s.createUnsignedCompoundTransaction(request.Address, request.From, request.UseExistingChangeAddress)
+	limit := uint32(10000)
+	if request.GetLimit() != "" {
+		limit64, err := strconv.ParseUint(request.GetLimit(), 10, 32)
+		if err != nil {
+			return nil, errors.Errorf("invalid limit: %s", request.GetLimit())
+		}
+		limit = uint32(limit64)
+	}
+
+	unsignedTransactions, err := s.createUnsignedCompoundTransaction(request.Address, request.From, request.UseExistingChangeAddress, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -49,15 +67,16 @@ func (s *server) CreateUnsignedCompoundTransaction(_ context.Context, request *p
 	return &pb.CreateUnsignedCompoundTransactionResponse{UnsignedTransactions: unsignedTransactions}, nil
 }
 
-func (s *server) createUnsignedCompoundTransaction(address string, fromAddressesString []string, useExistingChangeAddress bool) ([][]byte, error) {
+func (s *server) createUnsignedCompoundTransaction(address string, fromAddressesString []string, useExistingChangeAddress bool, limit uint32) ([][]byte, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs()
+	err := s.refreshUTXOs(limit)
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("Fetched %d UTXO from the Node", len(s.utxosSortedByAmount))
 
 	toAddress, err := util.DecodeAddress(address, s.params.Prefix)
 	if err != nil {
@@ -68,7 +87,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	for _, from := range fromAddressesString {
 		fromAddress, exists := s.addressSet[from]
 		if !exists {
-			return nil, fmt.Errorf("specified from address %s does not exists", from)
+			return nil, errors.Errorf("specified from address %s does not exists", from)
 		}
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
@@ -78,8 +97,8 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, err
 	}
 
-	if len(selectedUTXOs) == 0 {
-		return nil, errors.Errorf("couldn't find funds to spend")
+	if len(selectedUTXOs) < 2 {
+		return nil, errors.Errorf("Nothing to compound.")
 	}
 
 	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
@@ -148,10 +167,10 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 		})
 		totalValue += highestUTXO.UTXOEntry.Amount()
 	}
-	log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
+	// log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
 
 	s.sortUTXOsByAmountAscending()
-	log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
+	// log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
 
 	// Collect up to targetCompoundInputs smallest spendable UTXOs for compounding
 	for _, utxo := range s.utxosSortedByAmount {
@@ -183,7 +202,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 		})
 		totalValue += utxo.UTXOEntry.Amount()
 	}
-	log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
+	// log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
 
 	if len(selectedUTXOs) == 0 {
 		return nil, 0, 0, errors.New("no spendable UTXOs for compounding")
@@ -201,16 +220,17 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 	}
 
 	changeSompi = totalValue - fee
+	log.Infof("Compounding %d HTN and paying %f fee", changeSompi/100_000_000, float64(fee)/float64(100_000_000))
 
 	return selectedUTXOs, totalValue, changeSompi, nil
 }
 
-func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte) ([][]byte, error) {
+func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte, limit uint32) ([][]byte, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs()
+	err := s.refreshUTXOs(limit)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +246,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 	for _, from := range fromAddressesString {
 		fromAddress, exists := s.addressSet[from]
 		if !exists {
-			return nil, fmt.Errorf("specified from address %s does not exists", from)
+			return nil, errors.Errorf("specified from address %s does not exists", from)
 		}
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
