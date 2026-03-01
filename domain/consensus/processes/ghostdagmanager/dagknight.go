@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const paperFaithful = false
+const paperFaithful = true
 
 // makeKey creates a composite DomainHash key from block and G slice
 // func makeKey(block *externalapi.DomainHash, g []*externalapi.DomainHash) externalapi.DomainHash {
