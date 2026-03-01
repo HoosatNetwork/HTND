@@ -1,6 +1,7 @@
 package consensusstatestore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
@@ -108,6 +109,9 @@ func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContex
 	}
 
 	serializedUTXOEntry, err := dbContext.Get(key)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, false, errors.Wrapf(err, "UTXO entry %s does not exist in db", outpoint)
+	}
 	if err != nil {
 		return nil, false, err
 	}

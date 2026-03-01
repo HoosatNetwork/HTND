@@ -68,6 +68,9 @@ func (ps *pruningStore) PruningPointCandidate(dbContext model.DBReader, stagingA
 	}
 
 	candidateBytes, err := dbContext.Get(ps.candidatePruningPointHashKey)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Imported pruning point candidate does not exist in db")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +190,9 @@ func (ps *pruningStore) PruningPointByIndex(dbContext model.DBReader, stagingAre
 	}
 
 	pruningPointBytes, err := dbContext.Get(ps.indexAsKey(index))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Pruning point at index %d does not exist in db", index)
+	}
 	if err != nil {
 		return nil, err
 	}
