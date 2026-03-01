@@ -1,11 +1,23 @@
 package rpchandlers
 
 import (
+	"sync"
+	"time"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+)
+
+var (
+	getBlocksCache = make(map[*externalapi.DomainHash]struct {
+		RPCBlocks   []*appmessage.RPCBlock
+		BlockHashes []string
+		timestamp   time.Time
+	})
+	getBlocksCacheMutex sync.Mutex
 )
 
 // HandleGetBlocks handles the respectively named RPC command
@@ -34,7 +46,9 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 
 		blockInfo, err := context.Domain.Consensus().GetBlockInfo(lowHash)
 		if err != nil {
-			return nil, err
+			return &appmessage.GetBlocksResponseMessage{
+				Error: appmessage.RPCErrorf("Could not get block info for lowHash %s: %s", getBlocksRequest.LowHash, err),
+			}, nil
 		}
 
 		if !blockInfo.HasHeader() {
@@ -43,6 +57,17 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			}, nil
 		}
 	}
+
+	getBlocksCacheMutex.Lock()
+	cached, found := getBlocksCache[lowHash]
+	if found && time.Since(cached.timestamp) < time.Second {
+		getBlocksCacheMutex.Unlock()
+		response := appmessage.NewGetBlocksResponseMessage()
+		response.Blocks = cached.RPCBlocks
+		response.BlockHashes = cached.BlockHashes
+		return response, nil
+	}
+	getBlocksCacheMutex.Unlock()
 
 	// Get hashes between lowHash and virtualSelectedParent
 	virtualSelectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
@@ -101,6 +126,18 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 		}
 		response.Blocks = rpcBlocks
 	}
+
+	getBlocksCacheMutex.Lock()
+	getBlocksCache[lowHash] = struct {
+		RPCBlocks   []*appmessage.RPCBlock
+		BlockHashes []string
+		timestamp   time.Time
+	}{
+		RPCBlocks:   response.Blocks,
+		BlockHashes: response.BlockHashes,
+		timestamp:   time.Now(),
+	}
+	getBlocksCacheMutex.Unlock()
 
 	return response, nil
 }
