@@ -47,7 +47,10 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	// Get hashes between lowHash and virtualSelectedParent
 	virtualSelectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
 	if err != nil {
-		return nil, err
+		return &appmessage.GetBlocksResponseMessage{
+			Error: appmessage.RPCErrorf(
+				"Couldn't get virtual selected parent: %s", err),
+		}, nil
 	}
 
 	// We use +1 because lowHash is also returned
@@ -55,7 +58,10 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	maxBlocks := context.Config.NetParams().MergeSetSizeLimit + 1
 	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, maxBlocks)
 	if err != nil {
-		return nil, err
+		return &appmessage.GetBlocksResponseMessage{
+			Error: appmessage.RPCErrorf(
+				"Couldn't get hashes between %s and %s: %s", lowHash, virtualSelectedParent, err),
+		}, nil
 	}
 
 	// prepend low hash to make it inclusive
