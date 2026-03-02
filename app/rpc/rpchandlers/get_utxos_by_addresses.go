@@ -28,6 +28,10 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 
 	getUTXOsByAddressesRequest := request.(*appmessage.GetUTXOsByAddressesRequestMessage)
 
+	if getUTXOsByAddressesRequest.Limit == 0 || (getUTXOsByAddressesRequest.Limit > context.Config.UTXODefaultMaxLimit && context.Config.UTXODefaultMaxLimit != 0) {
+		getUTXOsByAddressesRequest.Limit = context.Config.UTXODefaultMaxLimit
+	}
+
 	total := 0
 	utxoPairsByAddress := make([][]utxoindex.UTXOPair, len(getUTXOsByAddressesRequest.Addresses))
 	for i, addressString := range getUTXOsByAddressesRequest.Addresses {

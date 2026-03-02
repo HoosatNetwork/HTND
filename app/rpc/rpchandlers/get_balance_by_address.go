@@ -40,7 +40,7 @@ func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, re
 	}
 	balanceByAddressCacheMutex.Unlock()
 
-	balance, err := getBalanceByAddress(context, getBalanceByAddressRequest.Address, 0)
+	balance, err := getBalanceByAddress(context, getBalanceByAddressRequest.Address, context.Config.UTXODefaultMaxLimit)
 	if err != nil {
 		rpcError := &appmessage.RPCError{}
 		if !errors.As(err, &rpcError) {

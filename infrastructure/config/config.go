@@ -58,6 +58,7 @@ const (
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
+	defaultUTXODefaultMaxLimit    = 0
 )
 
 var (
@@ -141,6 +142,8 @@ type Flags struct {
 	// Wallet freezing flags
 	FrozenAddresses []string `long:"freeze-address" description:"Address to freeze (can be specified multiple times)"`
 
+	UTXODefaultMaxLimit uint32 `long:"utxo-default-max-limit" description:"Default max limit for UTXO pull requests"`
+
 	DisableIBDTimeout      bool          `long:"disable-ibd-timeout" description:"Disable IBD timeout"`
 	NearlySyncedIBDTimeout time.Duration `long:"nearly-synced-ibd-timeout" description:"Maximum time to allow IBD to run when the node is nearly synced before disconnecting the peer and trying another"`
 	IBDTimeout             time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
@@ -217,6 +220,7 @@ func defaultFlags() *Flags {
 		NearlySyncedIBDTimeout:         defaultNearlySyncedIBDTimeout,
 		IBDTimeout:                     defaultIBDTimeout,
 		IBDDequeueTimeout:              defaultIBDDequeueTimeout,
+		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 	}
 }
