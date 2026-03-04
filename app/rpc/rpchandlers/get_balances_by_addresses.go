@@ -53,6 +53,7 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	if cap(allEntries) < len(getBalancesByAddressesRequest.Addresses) {
 		allEntries = make([]*appmessage.BalancesByAddressesEntry, 0, len(getBalancesByAddressesRequest.Addresses))
 	}
+	allEntries = allEntries[:len(getBalancesByAddressesRequest.Addresses)]
 	for i, address := range getBalancesByAddressesRequest.Addresses {
 		balance, err := getBalanceByAddress(context, address, context.Config.UTXODefaultMaxLimit)
 
