@@ -117,6 +117,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 		if cap(rpcBlocks) < len(blockHashes) {
 			rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
 		}
+		rpcBlocks = rpcBlocks[:len(blockHashes)]
 		for i, blockHash := range blockHashes {
 			block, err := context.Domain.Consensus().GetBlockEvenIfHeaderOnly(blockHash)
 			if err != nil {
