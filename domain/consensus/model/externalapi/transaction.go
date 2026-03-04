@@ -5,9 +5,16 @@ import (
 	"encoding/binary"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/pkg/errors"
 )
+
+var scriptPublicKeyStringPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 0, 1024)
+	},
+}
 
 // DomainTransaction represents a Hoosat transaction
 type DomainTransaction struct {
@@ -245,10 +252,18 @@ func (spk *ScriptPublicKey) Equal(other *ScriptPublicKey) bool {
 
 // String stringifies a ScriptPublicKey.
 func (spk *ScriptPublicKey) String() string {
-	b := make([]byte, 2+len(spk.Script))
+	needed := 2 + len(spk.Script)
+	b := scriptPublicKeyStringPool.Get().([]byte)
+	if cap(b) < needed {
+		b = make([]byte, needed)
+	} else {
+		b = b[:needed]
+	}
 	binary.LittleEndian.PutUint16(b, spk.Version)
 	copy(b[2:], spk.Script)
-	return string(b)
+	s := string(b)
+	scriptPublicKeyStringPool.Put(b[:0])
+	return s
 }
 
 // NewScriptPublicKeyFromString converts the given string to a scriptPublicKey
