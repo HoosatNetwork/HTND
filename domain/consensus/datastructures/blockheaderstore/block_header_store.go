@@ -47,9 +47,8 @@ func (bhs *blockHeaderStore) initializeCount(dbContext model.DBReader) error {
 	}
 	if hasCountBytes {
 		countBytes, err := dbContext.Get(bhs.countKey)
-		if database.IsNotFoundError(err) {
-			log.Infof("initializeCount failed to retrieve with %s\n", bhs.countKey)
-			return err
+		if errors.Is(err, database.ErrNotFound) {
+			return errors.Wrapf(err, "Header %s does not exist in db", bhs.countKey)
 		}
 		if err != nil {
 			return err

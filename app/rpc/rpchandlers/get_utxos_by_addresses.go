@@ -6,7 +6,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
-	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 )
@@ -28,9 +27,19 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 
 	getUTXOsByAddressesRequest := request.(*appmessage.GetUTXOsByAddressesRequestMessage)
 
-	total := 0
-	utxoPairsByAddress := make([][]utxoindex.UTXOPair, len(getUTXOsByAddressesRequest.Addresses))
-	for i, addressString := range getUTXOsByAddressesRequest.Addresses {
+	if getUTXOsByAddressesRequest.Limit == 0 || (getUTXOsByAddressesRequest.Limit > context.Config.UTXODefaultMaxLimit && context.Config.UTXODefaultMaxLimit != 0) {
+		getUTXOsByAddressesRequest.Limit = context.Config.UTXODefaultMaxLimit
+	}
+
+	// Set a reasonable total limit to prevent excessive memory allocation
+	// Preallocate with initial capacity to reduce reallocations
+	preallocateByLimit := getUTXOsByAddressesRequest.Limit
+	if getUTXOsByAddressesRequest.Limit == 0 {
+		preallocateByLimit = 10_000
+	}
+	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(getUTXOsByAddressesRequest.Addresses)*int(preallocateByLimit))
+
+	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
@@ -47,21 +56,15 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		if err != nil {
 			return nil, err
 		}
-		utxoPairsByAddress[i] = utxoOutpointEntryPairs
-		total += len(utxoOutpointEntryPairs)
-	}
-
-	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, total)
-	for i, address := range getUTXOsByAddressesRequest.Addresses {
-		if len(utxoPairsByAddress[i]) == 0 {
+		if len(utxoOutpointEntryPairs) == 0 {
 			continue
 		}
 		sharedScript := &appmessage.RPCScriptPublicKey{
-			Script:  fastHex(sigBuf[:], utxoPairsByAddress[i][0].Entry.ScriptPublicKey().Script),
-			Version: utxoPairsByAddress[i][0].Entry.ScriptPublicKey().Version,
+			Script:  fastHex(sigBuf[:], utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script),
+			Version: utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Version,
 		}
-		for _, pair := range utxoPairsByAddress[i] {
-			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(address, sharedScript, pair))
+		for _, pair := range utxoOutpointEntryPairs {
+			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair))
 		}
 	}
 

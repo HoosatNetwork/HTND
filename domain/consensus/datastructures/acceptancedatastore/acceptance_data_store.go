@@ -7,6 +7,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
 	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/pkg/errors"
 )
 
 var bucketName = []byte("acceptance-data")
@@ -55,11 +56,10 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 	}
 
 	acceptanceDataBytes, err := dbContext.Get(ads.hashAsKey(blockHash))
+	if database.IsNotFoundError(err) {
+		return nil, errors.Wrapf(err, "initializeCount failed to retrieve with %s", blockHash)
+	}
 	if err != nil {
-		if database.IsNotFoundError(err) {
-			log.Infof("initializeCount failed to retrieve with %s\n", blockHash)
-			return nil, err
-		}
 		return nil, err
 	}
 

@@ -70,7 +70,7 @@ func (daas *daaBlocksStore) DAAScore(dbContext model.DBReader, stagingArea *mode
 
 	daaScoreBytes, err := dbContext.Get(daas.daaScoreHashAsKey(blockHash))
 	if errors.Is(err, database.ErrNotFound) {
-		return 0, errors.Wrapf(err, "DAA block %s does not exist in db", blockHash)
+		return 0, errors.Wrapf(err, "DAA score %s does not exist in db", blockHash)
 	}
 	if err != nil {
 		return 0, err
@@ -96,6 +96,9 @@ func (daas *daaBlocksStore) DAAAddedBlocks(dbContext model.DBReader, stagingArea
 	}
 
 	addedBlocksBytes, err := dbContext.Get(daas.daaAddedBlocksHashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "DAA added blocks %s does not exist in db", blockHash)
+	}
 	if err != nil {
 		return nil, err
 	}

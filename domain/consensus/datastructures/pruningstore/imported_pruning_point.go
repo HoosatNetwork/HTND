@@ -1,6 +1,7 @@
 package pruningstore
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -164,6 +165,9 @@ func (ps *pruningStore) ClearImportedPruningPointMultiset(dbContext model.DBWrit
 
 func (ps *pruningStore) ImportedPruningPointMultiset(dbContext model.DBReader) (model.Multiset, error) {
 	multisetBytes, err := dbContext.Get(ps.importedPruningPointMultisetKey)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Imported pruning point multiset does not exist in db")
+	}
 	if err != nil {
 		return nil, err
 	}

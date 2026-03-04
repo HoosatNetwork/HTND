@@ -115,6 +115,13 @@ func (csm *consensusStateManager) restorePastUTXO(
 	nextBlockHash := blockHash
 	for {
 		log.Debugf("Collecting UTXO diff for block %s", nextBlockHash)
+		blockStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, nextBlockHash)
+		if err != nil {
+			return nil, err
+		}
+		if blockStatus == externalapi.StatusHeaderOnly {
+			return nil, errors.Errorf("block %s has a selected parent with no body", blockHash)
+		}
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
 			return nil, err
