@@ -3,6 +3,7 @@ package appmessage
 import (
 	"encoding/hex"
 	"math/big"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -16,6 +17,36 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionid"
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 )
+
+var txInSlicePool = sync.Pool{
+	New: func() interface{} {
+		return make([]*TxIn, 0, 16)
+	},
+}
+
+var txOutSlicePool = sync.Pool{
+	New: func() interface{} {
+		return make([]*TxOut, 0, 16)
+	},
+}
+
+var msgTxSlicePool = sync.Pool{
+	New: func() interface{} {
+		return make([]*MsgTx, 0, 2048)
+	},
+}
+
+var txInPool = sync.Pool{
+	New: func() interface{} {
+		return &TxIn{}
+	},
+}
+
+var txOutPool = sync.Pool{
+	New: func() interface{} {
+		return &TxOut{}
+	},
+}
 
 // DomainBlockToMsgBlock converts an externalapi.DomainBlock to MsgBlock
 func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
@@ -31,7 +62,10 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		_, powHash := state.CalculateProofOfWorkValue()
 		domainBlock.PoWHash = powHash.String()
 	}
-	msgTxs := make([]*MsgTx, 0, len(domainBlock.Transactions))
+	msgTxs := msgTxSlicePool.Get().([]*MsgTx)[:0]
+	if cap(msgTxs) < len(domainBlock.Transactions) {
+		msgTxs = make([]*MsgTx, 0, len(domainBlock.Transactions))
+	}
 	for _, domainTransaction := range domainBlock.Transactions {
 		if domainTransaction == nil {
 			// Defensive: skip nil transactions
@@ -39,9 +73,12 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		}
 		msgTxs = append(msgTxs, DomainTransactionToMsgTx(domainTransaction))
 	}
+	transactions := make([]*MsgTx, len(msgTxs))
+	copy(transactions, msgTxs)
+	msgTxSlicePool.Put(msgTxs)
 	return &MsgBlock{
 		Header:       *DomainBlockHeaderToBlockHeader(domainBlock.Header),
-		Transactions: msgTxs,
+		Transactions: transactions,
 		PoWHash:      domainBlock.PoWHash,
 	}
 }
@@ -104,20 +141,49 @@ func BlockHeaderToDomainBlockHeader(blockHeader *MsgBlockHeader) externalapi.Blo
 
 // DomainTransactionToMsgTx converts an externalapi.DomainTransaction into an MsgTx
 func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) *MsgTx {
-	txIns := make([]*TxIn, 0, len(domainTransaction.Inputs))
+	txIns := txInSlicePool.Get().([]*TxIn)[:0]
+	if cap(txIns) < len(domainTransaction.Inputs) {
+		txIns = make([]*TxIn, 0, len(domainTransaction.Inputs))
+	}
 	for _, input := range domainTransaction.Inputs {
 		txIns = append(txIns, domainTransactionInputToTxIn(input))
 	}
 
-	txOuts := make([]*TxOut, 0, len(domainTransaction.Outputs))
+	txOuts := txOutSlicePool.Get().([]*TxOut)[:0]
+	if cap(txOuts) < len(domainTransaction.Outputs) {
+		txOuts = make([]*TxOut, 0, len(domainTransaction.Outputs))
+	}
 	for _, output := range domainTransaction.Outputs {
 		txOuts = append(txOuts, domainTransactionOutputToTxOut(output))
 	}
 
+	txInCopy := make([]*TxIn, len(txIns))
+	for i, txIn := range txIns {
+		txInCopy[i] = &TxIn{
+			PreviousOutpoint: txIn.PreviousOutpoint,
+			SignatureScript:  txIn.SignatureScript,
+			Sequence:         txIn.Sequence,
+			SigOpCount:       txIn.SigOpCount,
+		}
+		txInPool.Put(txIn)
+	}
+
+	txOutCopy := make([]*TxOut, len(txOuts))
+	for i, txOut := range txOuts {
+		txOutCopy[i] = &TxOut{
+			Value:        txOut.Value,
+			ScriptPubKey: txOut.ScriptPubKey,
+		}
+		txOutPool.Put(txOut)
+	}
+
+	txInSlicePool.Put(txIns)
+	txOutSlicePool.Put(txOuts)
+
 	return &MsgTx{
 		Version:      domainTransaction.Version,
-		TxIn:         txIns,
-		TxOut:        txOuts,
+		TxIn:         txInCopy,
+		TxOut:        txOutCopy,
 		LockTime:     domainTransaction.LockTime,
 		SubnetworkID: domainTransaction.SubnetworkID,
 		Gas:          domainTransaction.Gas,
@@ -126,19 +192,19 @@ func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) 
 }
 
 func domainTransactionOutputToTxOut(domainTransactionOutput *externalapi.DomainTransactionOutput) *TxOut {
-	return &TxOut{
-		Value:        domainTransactionOutput.Value,
-		ScriptPubKey: domainTransactionOutput.ScriptPublicKey,
-	}
+	txOut := txOutPool.Get().(*TxOut)
+	txOut.Value = domainTransactionOutput.Value
+	txOut.ScriptPubKey = domainTransactionOutput.ScriptPublicKey
+	return txOut
 }
 
 func domainTransactionInputToTxIn(domainTransactionInput *externalapi.DomainTransactionInput) *TxIn {
-	return &TxIn{
-		PreviousOutpoint: *domainOutpointToOutpoint(domainTransactionInput.PreviousOutpoint),
-		SignatureScript:  domainTransactionInput.SignatureScript,
-		Sequence:         domainTransactionInput.Sequence,
-		SigOpCount:       domainTransactionInput.SigOpCount,
-	}
+	txIn := txInPool.Get().(*TxIn)
+	txIn.PreviousOutpoint = *domainOutpointToOutpoint(domainTransactionInput.PreviousOutpoint)
+	txIn.SignatureScript = domainTransactionInput.SignatureScript
+	txIn.Sequence = domainTransactionInput.Sequence
+	txIn.SigOpCount = domainTransactionInput.SigOpCount
+	return txIn
 }
 
 func domainOutpointToOutpoint(domainOutpoint externalapi.DomainOutpoint) *Outpoint {

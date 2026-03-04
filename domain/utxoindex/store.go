@@ -440,19 +440,6 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 	return len(uis.toAdd) > 0 || len(uis.toRemove) > 0
 }
 
-// Deprecated
-func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	pairs, err := uis.UTXOs(scriptPublicKey, 0)
-	if err != nil {
-		return nil, err
-	}
-	result := make(UTXOOutpointEntryPairs)
-	for _, pair := range pairs {
-		result[pair.Outpoint] = pair.Entry
-	}
-	return result, nil
-}
-
 // UTXOPair is a struct for streaming UTXO results efficiently
 type UTXOPair struct {
 	Outpoint externalapi.DomainOutpoint
@@ -460,7 +447,7 @@ type UTXOPair struct {
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
@@ -484,9 +471,8 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 
 	// Preallocate exactly to avoid reallocations during append
-	pairs := utxoPairPool.Get().([]UTXOPair)[:0] // Reset length to 0, keep capacity
-	if cap(pairs) < count {
-		pairs = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	if cap(buffer) < count {
+		buffer = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
 	}
 
 	// Second pass: fill
@@ -507,15 +493,13 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		if err != nil {
 			return nil, err
 		}
-		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-		if limit > 0 && uint32(len(pairs)) >= limit {
+		buffer = append(buffer, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		if limit > 0 && uint32(len(buffer)) >= limit {
 			break
 		}
 	}
 
-	// uis.scriptCache.Put(scriptKeyString, pairs)
-	utxoPairPool.Put(pairs) // Return the slice header to the pool, but not the underlying array to avoid data
-	return pairs, nil
+	return buffer, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
