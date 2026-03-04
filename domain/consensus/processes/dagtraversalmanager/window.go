@@ -1,6 +1,8 @@
 package dagtraversalmanager
 
 import (
+	"strconv"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
@@ -17,6 +19,11 @@ func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, h
 func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
 	windowSize int) ([]*externalapi.DomainHash, error) {
 
+	key := highHash.String() + ":" + strconv.Itoa(windowSize)
+	if cached, ok := dtm.blockWindowCache.get(key); ok {
+		return cached, nil
+	}
+
 	windowHeap, err := dtm.blockWindowHeap(stagingArea, highHash, windowSize)
 	if err != nil {
 		return nil, err
@@ -26,6 +33,8 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 	for _, b := range windowHeap.impl.slice {
 		window = append(window, b.Hash)
 	}
+
+	dtm.blockWindowCache.put(key, window)
 	return window, nil
 }
 
