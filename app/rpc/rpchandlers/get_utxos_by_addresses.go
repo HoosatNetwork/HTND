@@ -2,6 +2,7 @@ package rpchandlers
 
 import (
 	"encoding/hex"
+	"sync"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
@@ -11,6 +12,12 @@ import (
 )
 
 var sigBuf [256]byte
+
+var utxoEntriesPool = sync.Pool{
+	New: func() interface{} {
+		return make([]*appmessage.UTXOsByAddressesEntry, 0, 1000)
+	},
+}
 
 func fastHex(dst []byte, src []byte) string {
 	n := hex.Encode(dst, src)
@@ -33,11 +40,11 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 
 	// Set a reasonable total limit to prevent excessive memory allocation
 	// Preallocate with initial capacity to reduce reallocations
-	preallocateByLimit := getUTXOsByAddressesRequest.Limit
-	if getUTXOsByAddressesRequest.Limit == 0 {
-		preallocateByLimit = 10_000
+	allEntries := utxoEntriesPool.Get().([]*appmessage.UTXOsByAddressesEntry)[:0] // Reset length
+	needed := int(getUTXOsByAddressesRequest.Limit) * len(getUTXOsByAddressesRequest.Addresses)
+	if cap(allEntries) < needed {
+		allEntries = make([]*appmessage.UTXOsByAddressesEntry, 0, needed)
 	}
-	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(getUTXOsByAddressesRequest.Addresses)*int(preallocateByLimit))
 
 	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
@@ -69,5 +76,6 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	}
 
 	response := appmessage.NewGetUTXOsByAddressesResponseMessage(allEntries)
+	utxoEntriesPool.Put(allEntries) // Return slice to pool for reuse
 	return response, nil
 }

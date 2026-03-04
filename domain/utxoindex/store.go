@@ -16,6 +16,12 @@ var utxoIndexBucket = database.MakeBucket([]byte("utxo-index"))
 var virtualParentsKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
 var circulatingSupplyKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
 
+var utxoPairPool = sync.Pool{
+	New: func() interface{} {
+		return make([]UTXOPair, 0, 16)
+	},
+}
+
 type utxoIndexStore struct {
 	database database.Database
 	toAdd    map[ScriptPublicKeyString]UTXOOutpointEntryPairs
@@ -478,7 +484,10 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 
 	// Preallocate exactly to avoid reallocations during append
-	pairs := make([]UTXOPair, 0, count)
+	pairs := utxoPairPool.Get().([]UTXOPair)[:0] // Reset length to 0, keep capacity
+	if cap(pairs) < count {
+		pairs = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	}
 
 	// Second pass: fill
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -505,6 +514,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 
 	uis.scriptCache.Put(scriptKeyString, pairs)
+	utxoPairPool.Put(pairs) // Return the slice header to the pool, but not the underlying array to avoid data
 	return pairs, nil
 }
 
