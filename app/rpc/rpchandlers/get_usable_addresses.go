@@ -34,6 +34,12 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	return hasUTXOs, nil
 }
 
+var usableAddressesPool = sync.Pool{
+	New: func() interface{} {
+		return make([]string, 0, 2)
+	},
+}
+
 // HandleGetUsableAddresses handles the respectively named RPC command
 func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 
@@ -49,7 +55,10 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 
 	getUsableAddressesRequest := request.(*appmessage.GetUsableAddressesRequestMessage)
 
-	UsableAddresses := make([]string, 0, len(getUsableAddressesRequest.Addresses))
+	UsableAddresses := usableAddressesPool.Get().([]string)[:0]
+	if cap(UsableAddresses) < len(getUsableAddressesRequest.Addresses) {
+		UsableAddresses = make([]string, 0, len(getUsableAddressesRequest.Addresses))
+	}
 	for _, address := range getUsableAddressesRequest.Addresses {
 		usable, err := getUsabilityOfAddress(context, address)
 
@@ -70,5 +79,6 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 	// log.Infof("Found %s usable addresses", len(UsableAddresses))
 	// log.Infof("-----------------------------------------------------------")
 	response := appmessage.NewGetUsableAddressesResponse(UsableAddresses)
+	usableAddressesPool.Put(UsableAddresses)
 	return response, nil
 }

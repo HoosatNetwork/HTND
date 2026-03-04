@@ -21,7 +21,6 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 	}
 
 	for _, addressString := range getMempoolEntriesByAddressesRequest.Addresses {
-
 		address, err := util.DecodeAddress(addressString, context.Config.NetParams().Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetMempoolEntriesByAddressesResponseMessage{}
