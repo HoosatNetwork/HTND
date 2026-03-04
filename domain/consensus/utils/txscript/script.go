@@ -7,10 +7,10 @@ package txscript
 import (
 	"bytes"
 	"fmt"
-	"sync"
+
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 )
 
 // These are the constants specified for maximums in individual scripts.
@@ -66,20 +66,11 @@ func isPushOnly(pops []parsedOpcode) bool {
 	return true
 }
 
-var scriptPool = sync.Pool{
-	New: func() interface{} {
-		return make([]parsedOpcode, 0, 2)
-	},
-}
-
 // parseScriptTemplate is the same as parseScript but allows the passing of the
 // template list for testing purposes. When there are parse errors, it returns
 // the list of parsed opcodes up to the point of failure along with the error.
 func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, error) {
-	retScript := scriptPool.Get().([]parsedOpcode)[:0]
-	if cap(retScript) < len(script) {
-		retScript = make([]parsedOpcode, 0, len(script))
-	}
+	retScript := make([]parsedOpcode, 0, len(script))
 	for i := 0; i < len(script); {
 		instr := script[i]
 		op := &opcodes[instr]
@@ -159,7 +150,6 @@ func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, e
 		retScript = append(retScript, pop)
 	}
 
-	scriptPool.Put(retScript)
 	return retScript, nil
 }
 
