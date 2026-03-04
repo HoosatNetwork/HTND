@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
@@ -99,6 +100,11 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 
 	if len(selectedUTXOs) < 2 {
 		return nil, errors.Errorf("Nothing to compound.")
+	}
+
+	// Mark the selected UTXOs as used to prevent respending in case of submission failure
+	for _, utxo := range selectedUTXOs {
+		s.usedOutpoints[*utxo.Outpoint] = time.Now()
 	}
 
 	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
