@@ -16,137 +16,143 @@ var utxoIndexBucket = database.MakeBucket([]byte("utxo-index"))
 var virtualParentsKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
 var circulatingSupplyKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
 
+var utxoPairPool = sync.Pool{
+	New: func() interface{} {
+		return make([]UTXOPair, 0, 16)
+	},
+}
+
 type utxoIndexStore struct {
 	database database.Database
 	toAdd    map[ScriptPublicKeyString]UTXOOutpointEntryPairs
 	toRemove map[ScriptPublicKeyString]UTXOOutpointEntryPairs
 
 	virtualParents []*externalapi.DomainHash
-	scriptCache    *scriptLRUCache
-	maxCacheSize   int
+	// scriptCache    *scriptLRUCache
+	// maxCacheSize   int
 }
 
 func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 	// Default cache size, can be made configurable
 	const defaultCacheSize = 1000
 	return &utxoIndexStore{
-		database:     database,
-		toAdd:        make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
-		toRemove:     make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
-		scriptCache:  newScriptLRUCache(defaultCacheSize),
-		maxCacheSize: defaultCacheSize,
+		database: database,
+		toAdd:    make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		toRemove: make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		// scriptCache:  newScriptLRUCache(defaultCacheSize),
+		// maxCacheSize: defaultCacheSize,
 	}
 }
 
 // scriptLRUCache is a thread-safe LRU cache for ScriptPublicKeyString -> []UTXOPair
-type scriptLRUCache struct {
-	mu         sync.Mutex
-	maxSize    int
-	items      map[string]*scriptLRUNode
-	head, tail *scriptLRUNode
-}
+// type scriptLRUCache struct {
+// 	mu         sync.Mutex
+// 	maxSize    int
+// 	items      map[string]*scriptLRUNode
+// 	head, tail *scriptLRUNode
+// }
 
-type scriptLRUNode struct {
-	key        string
-	value      []UTXOPair
-	prev, next *scriptLRUNode
-}
+// type scriptLRUNode struct {
+// 	key        string
+// 	value      []UTXOPair
+// 	prev, next *scriptLRUNode
+// }
 
-func newScriptLRUCache(maxSize int) *scriptLRUCache {
-	return &scriptLRUCache{
-		maxSize: maxSize,
-		items:   make(map[string]*scriptLRUNode),
-	}
-}
+// func newScriptLRUCache(maxSize int) *scriptLRUCache {
+// 	return &scriptLRUCache{
+// 		maxSize: maxSize,
+// 		items:   make(map[string]*scriptLRUNode),
+// 	}
+// }
 
-func (c *scriptLRUCache) Get(key string) ([]UTXOPair, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	node, ok := c.items[key]
-	if !ok {
-		return nil, false
-	}
-	c.moveToFront(node)
-	return node.value, true
-}
+// func (c *scriptLRUCache) Get(key string) ([]UTXOPair, bool) {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
+// 	node, ok := c.items[key]
+// 	if !ok {
+// 		return nil, false
+// 	}
+// 	c.moveToFront(node)
+// 	return node.value, true
+// }
 
-func (c *scriptLRUCache) Put(key string, value []UTXOPair) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	copiedValue := copyUTXOPairs(value)
-	if node, ok := c.items[key]; ok {
-		node.value = copiedValue
-		c.moveToFront(node)
-		return
-	}
-	node := &scriptLRUNode{key: key, value: copiedValue}
-	c.items[key] = node
-	c.addToFront(node)
-	if len(c.items) > c.maxSize {
-		c.evict()
-	}
-}
+// func (c *scriptLRUCache) Put(key string, value []UTXOPair) {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
+// 	copiedValue := copyUTXOPairs(value)
+// 	if node, ok := c.items[key]; ok {
+// 		node.value = copiedValue
+// 		c.moveToFront(node)
+// 		return
+// 	}
+// 	node := &scriptLRUNode{key: key, value: copiedValue}
+// 	c.items[key] = node
+// 	c.addToFront(node)
+// 	if len(c.items) > c.maxSize {
+// 		c.evict()
+// 	}
+// }
 
-func (c *scriptLRUCache) Delete(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	node, ok := c.items[key]
-	if !ok {
-		return
-	}
-	c.remove(node)
-	delete(c.items, key)
-}
+// func (c *scriptLRUCache) Delete(key string) {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
+// 	node, ok := c.items[key]
+// 	if !ok {
+// 		return
+// 	}
+// 	c.remove(node)
+// 	delete(c.items, key)
+// }
 
-func (c *scriptLRUCache) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items = make(map[string]*scriptLRUNode)
-	c.head = nil
-	c.tail = nil
-}
+// func (c *scriptLRUCache) Clear() {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
+// 	c.items = make(map[string]*scriptLRUNode)
+// 	c.head = nil
+// 	c.tail = nil
+// }
 
-func (c *scriptLRUCache) moveToFront(node *scriptLRUNode) {
-	if c.head == node {
-		return
-	}
-	c.remove(node)
-	c.addToFront(node)
-}
+// func (c *scriptLRUCache) moveToFront(node *scriptLRUNode) {
+// 	if c.head == node {
+// 		return
+// 	}
+// 	c.remove(node)
+// 	c.addToFront(node)
+// }
 
-func (c *scriptLRUCache) addToFront(node *scriptLRUNode) {
-	node.prev = nil
-	node.next = c.head
-	if c.head != nil {
-		c.head.prev = node
-	}
-	c.head = node
-	if c.tail == nil {
-		c.tail = node
-	}
-}
+// func (c *scriptLRUCache) addToFront(node *scriptLRUNode) {
+// 	node.prev = nil
+// 	node.next = c.head
+// 	if c.head != nil {
+// 		c.head.prev = node
+// 	}
+// 	c.head = node
+// 	if c.tail == nil {
+// 		c.tail = node
+// 	}
+// }
 
-func (c *scriptLRUCache) remove(node *scriptLRUNode) {
-	if node.prev != nil {
-		node.prev.next = node.next
-	} else {
-		c.head = node.next
-	}
-	if node.next != nil {
-		node.next.prev = node.prev
-	} else {
-		c.tail = node.prev
-	}
-}
+// func (c *scriptLRUCache) remove(node *scriptLRUNode) {
+// 	if node.prev != nil {
+// 		node.prev.next = node.next
+// 	} else {
+// 		c.head = node.next
+// 	}
+// 	if node.next != nil {
+// 		node.next.prev = node.prev
+// 	} else {
+// 		c.tail = node.prev
+// 	}
+// }
 
-func (c *scriptLRUCache) evict() {
-	if c.tail == nil {
-		return
-	}
-	key := c.tail.key
-	c.remove(c.tail)
-	delete(c.items, key)
-}
+// func (c *scriptLRUCache) evict() {
+// 	if c.tail == nil {
+// 		return
+// 	}
+// 	key := c.tail.key
+// 	c.remove(c.tail)
+// 	delete(c.items, key)
+// }
 
 // copyUTXOPairs creates a copy of UTXOPair slice to prevent slice mutation.
 // Note: This performs a shallow copy of the slice structure. The individual
@@ -167,7 +173,7 @@ func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, out
 		outpoint.TransactionID, outpoint.Index, key)
 
 	// Invalidate the per-script cache for this key
-	uis.scriptCache.Delete(string(key))
+	// uis.scriptCache.Delete(string(key))
 
 	// If the outpoint exists in `toRemove` simply remove it from there and return
 	if toRemoveOutpointsOfKey, ok := uis.toRemove[key]; ok {
@@ -202,7 +208,7 @@ func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, 
 		outpoint.TransactionID, outpoint.Index, key)
 
 	// Invalidate the per-script cache for this key
-	uis.scriptCache.Delete(string(key))
+	// uis.scriptCache.Delete(string(key))
 
 	// If the outpoint exists in `toAdd` simply remove it from there and return
 	if toAddPairsOfKey, ok := uis.toAdd[key]; ok {
@@ -245,7 +251,7 @@ func (uis *utxoIndexStore) discard() {
 		delete(uis.toRemove, k)
 	}
 	uis.virtualParents = nil
-	uis.scriptCache.Clear()
+	// uis.scriptCache.Clear()
 }
 
 func (uis *utxoIndexStore) commit() error {
@@ -264,7 +270,7 @@ func (uis *utxoIndexStore) commit() error {
 		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 		bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 		// Invalidate per-script cache for this key
-		uis.scriptCache.Delete(string(scriptPublicKeyString))
+		// uis.scriptCache.Delete(string(scriptPublicKeyString))
 		for outpointToRemove, utxoEntryToRemove := range toRemoveUTXOOutpointEntryPairs {
 			key, err := uis.convertOutpointToKey(bucket, &outpointToRemove)
 			if err != nil {
@@ -284,7 +290,7 @@ func (uis *utxoIndexStore) commit() error {
 		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 		bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 		// Invalidate per-script cache for this key
-		uis.scriptCache.Delete(string(scriptPublicKeyString))
+		// uis.scriptCache.Delete(string(scriptPublicKeyString))
 		for outpointToAdd, utxoEntryToAdd := range toAddUTXOOutpointEntryPairs {
 			key, err := uis.convertOutpointToKey(bucket, &outpointToAdd)
 			if err != nil {
@@ -434,19 +440,6 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 	return len(uis.toAdd) > 0 || len(uis.toRemove) > 0
 }
 
-// Deprecated
-func (uis *utxoIndexStore) getUTXOOutpointEntryPairs(scriptPublicKey *externalapi.ScriptPublicKey) (UTXOOutpointEntryPairs, error) {
-	pairs, err := uis.UTXOs(scriptPublicKey, 0)
-	if err != nil {
-		return nil, err
-	}
-	result := make(UTXOOutpointEntryPairs)
-	for _, pair := range pairs {
-		result[pair.Outpoint] = pair.Entry
-	}
-	return result, nil
-}
-
 // UTXOPair is a struct for streaming UTXO results efficiently
 type UTXOPair struct {
 	Outpoint externalapi.DomainOutpoint
@@ -454,15 +447,15 @@ type UTXOPair struct {
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
-	scriptKeyString := scriptPublicKey.String()
-	if cachedPairs, ok := uis.scriptCache.Get(scriptKeyString); ok {
-		return cachedPairs, nil
-	}
+	// scriptKeyString := scriptPublicKey.String()
+	// if cachedPairs, ok := uis.scriptCache.Get(scriptKeyString); ok {
+	// 	return cachedPairs, nil
+	// }
 
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
@@ -478,7 +471,9 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 
 	// Preallocate exactly to avoid reallocations during append
-	pairs := make([]UTXOPair, 0, count)
+	if cap(buffer) < count {
+		buffer = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	}
 
 	// Second pass: fill
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -498,14 +493,13 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		if err != nil {
 			return nil, err
 		}
-		pairs = append(pairs, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-		if limit > 0 && uint32(len(pairs)) >= limit {
+		buffer = append(buffer, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		if limit > 0 && uint32(len(buffer)) >= limit {
 			break
 		}
 	}
 
-	uis.scriptCache.Put(scriptKeyString, pairs)
-	return pairs, nil
+	return buffer, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
@@ -608,7 +602,7 @@ func (uis *utxoIndexStore) deleteAll() error {
 	}
 
 	// Clear both caches after deleting all data
-	uis.scriptCache.Clear()
+	// uis.scriptCache.Clear()
 
 	return nil
 }

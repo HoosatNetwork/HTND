@@ -51,6 +51,19 @@ type Engine struct {
 	savedFirstStack     [][]byte // stack from first script for ps2h scripts
 }
 
+// Reset clears the Engine state for reuse, preserving slice capacities.
+func (vm *Engine) Reset() {
+	vm.scripts = vm.scripts[:0]
+	vm.scriptIdx = 0
+	vm.scriptOff = 0
+	vm.dstack.stk = vm.dstack.stk[:0]
+	vm.astack.stk = vm.astack.stk[:0]
+	vm.condStack = vm.condStack[:0]
+	vm.numOps = 0
+	vm.isP2SH = false
+	vm.savedFirstStack = nil
+}
+
 // isBranchExecuting returns whether or not the current conditional branch is
 // actively executing. For example, when the data stack has an OP_FALSE on it
 // and an OP_IF is encountered, the branch is inactive until an OP_ELSE or
@@ -429,11 +442,23 @@ func (vm *Engine) SetAltStack(data [][]byte) {
 func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
 	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues) (*Engine, error) {
 
+	vm := &Engine{}
+	err := vm.Init(scriptPubKey, tx, txIdx, flags, sigCache, sigCacheECDSA, sighashReusedValues)
+	if err != nil {
+		return nil, err
+	}
+	return vm, nil
+}
+
+// init initializes the Engine with the provided parameters.
+func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues) error {
+
 	// The provided transaction input index must refer to a valid input.
 	if txIdx < 0 || txIdx >= len(tx.Inputs) {
 		str := fmt.Sprintf("transaction input index %d is negative or "+
 			">= %d", txIdx, len(tx.Inputs))
-		return nil, scriptError(ErrInvalidIndex, str)
+		return scriptError(ErrInvalidIndex, str)
 	}
 	scriptSig := tx.Inputs[txIdx].SignatureScript
 
@@ -442,27 +467,30 @@ func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.Domain
 	// empty which is equivalent to a false top element. Thus, just return
 	// the relevant error now as an optimization.
 	if len(scriptSig) == 0 && len(scriptPubKey.Script) == 0 {
-		return nil, scriptError(ErrEvalFalse,
+		return scriptError(ErrEvalFalse,
 			"false stack entry at end of script execution")
 	}
-	vm := Engine{scriptVersion: scriptPubKey.Version, flags: flags, sigCache: sigCache, sigCacheECDSA: sigCacheECDSA}
+	vm.scriptVersion = scriptPubKey.Version
+	vm.flags = flags
+	vm.sigCache = sigCache
+	vm.sigCacheECDSA = sigCacheECDSA
 
 	if vm.scriptVersion > constants.MaxScriptPublicKeyVersion {
-		return &vm, nil
+		return nil
 	}
 	parsedScriptSig, err := parseScriptAndVerifySize(scriptSig)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// The signature script must only contain data pushes
 	if !isPushOnly(parsedScriptSig) {
-		return nil, scriptError(ErrNotPushOnly,
+		return scriptError(ErrNotPushOnly,
 			"signature script is not push only")
 	}
 
 	parsedScriptPubKey, err := parseScriptAndVerifySize(scriptPubKey.Script)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// The engine stores the scripts in parsed form using a slice. This
@@ -481,7 +509,7 @@ func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.Domain
 	if isScriptHash(vm.scripts[1]) {
 		// Only accept input scripts that push data for P2SH.
 		if !isPushOnly(vm.scripts[0]) {
-			return nil, scriptError(ErrNotPushOnly,
+			return scriptError(ErrNotPushOnly,
 				"pay to script hash is not push only")
 		}
 		vm.isP2SH = true
@@ -492,7 +520,7 @@ func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.Domain
 
 	vm.sigHashReusedValues = sighashReusedValues
 
-	return &vm, nil
+	return nil
 }
 
 func parseScriptAndVerifySize(script []byte) ([]parsedOpcode, error) {

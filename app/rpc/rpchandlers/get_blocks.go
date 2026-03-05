@@ -20,6 +20,12 @@ var (
 	getBlocksCacheMutex sync.Mutex
 )
 
+var blocksPool = sync.Pool{
+	New: func() interface{} {
+		return make([]*appmessage.RPCBlock, 0, 2)
+	},
+}
+
 // HandleGetBlocks handles the respectively named RPC command
 func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlocksRequest := request.(*appmessage.GetBlocksRequestMessage)
@@ -107,7 +113,11 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	response := appmessage.NewGetBlocksResponseMessage()
 	response.BlockHashes = hashes.ToStrings(blockHashes)
 	if getBlocksRequest.IncludeBlocks {
-		rpcBlocks := make([]*appmessage.RPCBlock, len(blockHashes))
+		rpcBlocks := blocksPool.Get().([]*appmessage.RPCBlock)[:0]
+		if cap(rpcBlocks) < len(blockHashes) {
+			rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
+		}
+		rpcBlocks = rpcBlocks[:len(blockHashes)]
 		for i, blockHash := range blockHashes {
 			block, err := context.Domain.Consensus().GetBlockEvenIfHeaderOnly(blockHash)
 			if err != nil {
@@ -125,6 +135,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			}
 		}
 		response.Blocks = rpcBlocks
+		blocksPool.Put(rpcBlocks)
 	}
 
 	getBlocksCacheMutex.Lock()

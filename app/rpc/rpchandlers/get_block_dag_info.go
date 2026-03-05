@@ -40,13 +40,20 @@ func HandleGetBlockDAGInfo(context *rpccontext.Context, rpcRouter *router.Router
 
 	virtualInfo, err := consensus.GetVirtualInfo()
 	if err != nil {
-		return nil, err
+		// During operations like UTXO index reset, virtual info might not be available
+		// Return defaults to handle gracefully without panicking
+		response.VirtualParentHashes = []string{}
+		response.Difficulty = 0
+		response.PastMedianTime = 0
+		response.VirtualDAAScore = 0
+		response.BlueScore = 0
+	} else {
+		response.VirtualParentHashes = hashes.ToStrings(virtualInfo.ParentHashes)
+		response.Difficulty = context.GetDifficultyRatio(virtualInfo.Bits, context.Config.ActiveNetParams)
+		response.PastMedianTime = virtualInfo.PastMedianTime
+		response.VirtualDAAScore = virtualInfo.DAAScore
+		response.BlueScore = virtualInfo.BlueScore
 	}
-	response.VirtualParentHashes = hashes.ToStrings(virtualInfo.ParentHashes)
-	response.Difficulty = context.GetDifficultyRatio(virtualInfo.Bits, context.Config.ActiveNetParams)
-	response.PastMedianTime = virtualInfo.PastMedianTime
-	response.VirtualDAAScore = virtualInfo.DAAScore
-	response.BlueScore = virtualInfo.BlueScore
 
 	pruningPoint, err := context.Domain.Consensus().PruningPoint()
 	if err != nil {

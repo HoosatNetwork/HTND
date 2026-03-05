@@ -1,6 +1,8 @@
 package transactionvalidator
 
 import (
+	"sync"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/util/txmass"
@@ -23,6 +25,7 @@ type transactionValidator struct {
 	sigCache                                *txscript.SigCache
 	sigCacheECDSA                           *txscript.SigCacheECDSA
 	txMassCalculator                        *txmass.Calculator
+	enginePool                              *sync.Pool
 }
 
 // New instantiates a new TransactionValidator
@@ -50,5 +53,10 @@ func New(blockCoinbaseMaturity uint64,
 		sigCache:                                txscript.NewSigCache(sigCacheSize),
 		sigCacheECDSA:                           txscript.NewSigCacheECDSA(sigCacheSize),
 		txMassCalculator:                        txMassCalculator,
+		enginePool: &sync.Pool{
+			New: func() interface{} {
+				return &txscript.Engine{}
+			},
+		},
 	}
 }

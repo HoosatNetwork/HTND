@@ -3,12 +3,19 @@ package externalapi
 import (
 	"bytes"
 	"encoding/hex"
+	"sync"
 
 	"github.com/pkg/errors"
 )
 
 // DomainHashSize of array used to store hashes.
 const DomainHashSize = 32
+
+var domainHashStringPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 0, 64) // 32*2 for hex
+	},
+}
 
 // DomainHash is the domain representation of a Hash
 type DomainHash struct {
@@ -62,9 +69,16 @@ func NewDomainHashFromString(hashString string) (*DomainHash, error) {
 // String returns the Hash as the hexadecimal string of the hash.
 func (hash DomainHash) String() string {
 	hexLen := hex.EncodedLen(len(hash.hashArray[:]))
-	dst := make([]byte, hexLen)
+	dst := domainHashStringPool.Get().([]byte)
+	if cap(dst) < hexLen {
+		dst = make([]byte, hexLen)
+	} else {
+		dst = dst[:hexLen]
+	}
 	hex.Encode(dst, hash.hashArray[:])
-	return string(dst)
+	s := string(dst)
+	domainHashStringPool.Put(dst[:0])
+	return s
 }
 
 // ByteArray returns the bytes in this hash represented as a byte array.

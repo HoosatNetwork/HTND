@@ -18,6 +18,12 @@ var (
 	balancesByAddressesCacheMutex sync.Mutex
 )
 
+var balancesByAddressesPool = sync.Pool{
+	New: func() interface{} {
+		return make([]*appmessage.BalancesByAddressesEntry, 0, 2)
+	},
+}
+
 // HandleGetBalancesByAddresses handles the respectively named RPC command
 func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 
@@ -43,7 +49,11 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	}
 	balancesByAddressesCacheMutex.Unlock()
 
-	allEntries := make([]*appmessage.BalancesByAddressesEntry, len(getBalancesByAddressesRequest.Addresses))
+	allEntries := balancesByAddressesPool.Get().([]*appmessage.BalancesByAddressesEntry)[:0]
+	if cap(allEntries) < len(getBalancesByAddressesRequest.Addresses) {
+		allEntries = make([]*appmessage.BalancesByAddressesEntry, 0, len(getBalancesByAddressesRequest.Addresses))
+	}
+	allEntries = allEntries[:len(getBalancesByAddressesRequest.Addresses)]
 	for i, address := range getBalancesByAddressesRequest.Addresses {
 		balance, err := getBalanceByAddress(context, address, context.Config.UTXODefaultMaxLimit)
 
@@ -71,5 +81,6 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	}
 	balancesByAddressesCacheMutex.Unlock()
 	response := appmessage.NewGetBalancesByAddressesResponse(allEntries)
+	balancesByAddressesPool.Put(allEntries)
 	return response, nil
 }
