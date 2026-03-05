@@ -20,7 +20,6 @@ type dagTraversalManager struct {
 	genesisHash                    *externalapi.DomainHash
 	difficultyAdjustmentWindowSize []int
 	windowHeapSliceStore           model.WindowHeapSliceStore
-	blockWindowCache               *blockWindowLRUCache
 }
 
 // New instantiates a new DAGTraversalManager
@@ -45,7 +44,6 @@ func New(
 		genesisHash:                    genesisHash,
 		difficultyAdjustmentWindowSize: difficultyAdjustmentWindowSize,
 		windowHeapSliceStore:           windowHeapSliceStore,
-		blockWindowCache:               newBlockWindowLRUCache(1000),
 	}
 }
 

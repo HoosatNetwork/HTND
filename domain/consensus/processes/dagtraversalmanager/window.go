@@ -17,22 +17,32 @@ func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, h
 func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
 	windowSize int) ([]*externalapi.DomainHash, error) {
 
-	// key := highHash.String() + ":" + strconv.Itoa(windowSize)
-	// if cached, ok := dtm.blockWindowCache.get(key); ok {
-	// 	return cached, nil
-	// }
+	// Fast path: if the heap slice is already cached in the staging-area-aware
+	// store, extract hashes directly without allocating a heap wrapper or
+	// cloning the slice. This is the common case for already-committed blocks.
+	cachedSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, highHash, windowSize)
+	if err == nil {
+		window := make([]*externalapi.DomainHash, len(cachedSlice))
+		for i, pair := range cachedSlice {
+			window[i] = pair.Hash
+		}
+		return window, nil
+	}
+	if !database.IsNotFoundError(err) {
+		return nil, err
+	}
 
+	// Slow path: full computation (cache miss)
 	windowHeap, err := dtm.blockWindowHeap(stagingArea, highHash, windowSize)
 	if err != nil {
 		return nil, err
 	}
 
-	window := make([]*externalapi.DomainHash, 0, len(windowHeap.impl.slice))
-	for _, b := range windowHeap.impl.slice {
-		window = append(window, b.Hash)
+	window := make([]*externalapi.DomainHash, len(windowHeap.impl.slice))
+	for i, b := range windowHeap.impl.slice {
+		window[i] = b.Hash
 	}
 
-	// dtm.blockWindowCache.put(key, window)
 	return window, nil
 }
 
