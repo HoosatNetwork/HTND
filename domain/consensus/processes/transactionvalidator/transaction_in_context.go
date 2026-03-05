@@ -243,8 +243,11 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 		}
 
 		scriptPubKey := utxoEntry.ScriptPublicKey()
-		vm, err := txscript.NewEngine(scriptPubKey, tx, i, txscript.ScriptNoFlags, v.sigCache, v.sigCacheECDSA, sighashReusedValues)
+		vm := v.enginePool.Get().(*txscript.Engine)
+		err := vm.Init(scriptPubKey, tx, i, txscript.ScriptNoFlags, v.sigCache, v.sigCacheECDSA, sighashReusedValues)
 		if err != nil {
+			vm.Reset()
+			v.enginePool.Put(vm)
 			return errors.Wrapf(ruleerrors.ErrScriptMalformed, "failed to parse input "+
 				"%d which references output %s - "+
 				"%s (input script bytes %x, prev "+
@@ -255,6 +258,8 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 
 		// Execute the script pair.
 		if err := vm.Execute(); err != nil {
+			vm.Reset()
+			v.enginePool.Put(vm)
 			return errors.Wrapf(ruleerrors.ErrScriptValidation, "failed to validate input "+
 				"%d which references output %s - "+
 				"%s (input script bytes %x, prev output "+
@@ -262,6 +267,8 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 				i,
 				tx.Inputs[i].PreviousOutpoint, err, sigScript, scriptPubKey)
 		}
+		vm.Reset()
+		v.enginePool.Put(vm)
 	}
 	if len(missingOutpoints) > 0 {
 		return ruleerrors.NewErrMissingTxOut(missingOutpoints)
