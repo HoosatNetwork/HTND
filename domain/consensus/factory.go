@@ -13,6 +13,7 @@ import (
 	parentssanager "github.com/Hoosat-Oy/HTND/domain/consensus/processes/parentsmanager"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/processes/pruningproofmanager"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
 
@@ -77,6 +78,9 @@ type Config struct {
 
 	// DeletionDepth specifies the depth for block deletion during pruning
 	DeletionDepth uint64
+
+	// UseHoohashCLibrary indicates whether to use the hoohash C library for block versions >= 5
+	UseHoohashCLibrary bool
 }
 
 // Factory instantiates new Consensuses
@@ -117,6 +121,9 @@ func NewFactory() Factory {
 func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
 	consensusEventsChan chan externalapi.ConsensusEvent) (
 	consensusInstance externalapi.Consensus, shouldMigrate bool, err error) {
+
+	// Set the global flag for using hoohash C library
+	pow.SetUseHoohashCLibrary(config.UseHoohashCLibrary)
 
 	dbManager := consensusdatabase.New(db)
 	prefixBucket := consensusdatabase.MakeBucket(dbPrefix.Serialize())
