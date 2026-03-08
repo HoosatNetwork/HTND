@@ -6,26 +6,18 @@ package pow
 /*
 #cgo LDFLAGS: -L./libs -lhoohash -lm -lblake3
 #include <stdint.h>
-#include <stdlib.h>
 
-// Define the structures needed for hoohash
-typedef struct {
-    uint8_t PrevHeader[32];
-    int64_t Timestamp;
-    uint64_t Nonce;
-} HoohashState;
-
-typedef struct {
-    double mat[64][64];
-} HoohashMatrix;
-
-// Function declarations from hoohash.h
-void generateHoohashMatrixV110(uint8_t *prevHeader, double *mat);
-void CalculateProofOfWorkValueV110(HoohashState *state, double *mat, uint8_t *result);
+// We only need the external Matrix Multiplier from your libhoohash.a
+// This takes the pre-calculated Blake3 hash and runs the FPU math safely.
+extern void HoohashMatrixMultiplication(double mat[64][64], const uint8_t *hashBytes, uint8_t *output, uint64_t nonce);
 */
 import "C"
 
 import (
+	//  "fmt"
+	"math/big"
+	"unsafe"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
@@ -33,24 +25,18 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
 	"github.com/Hoosat-Oy/HTND/util/difficulty"
 
-	"math/big"
-
-	"github.com/pkg/errors"
 )
 
-// UseHoohashCLibrary indicates whether to use the hoohash C library for block versions >= 5
 var UseHoohashCLibrary bool
 
-// SetUseHoohashCLibrary sets the global flag for using the hoohash C library
 func SetUseHoohashCLibrary(use bool) {
 	UseHoohashCLibrary = use
 }
 
-// State is an intermediate data structure with pre-computed values to speed up mining.
 type State struct {
 	mat          matrix
 	floatMat     floatMatrix
-	cMatrix      [64][64]C.double // C matrix for hoohash C library
+	cMatrix      [64][64]C.double // Persist the C Matrix safely on the Go struct
 	Timestamp    int64
 	Nonce        uint64
 	Target       big.Int
@@ -59,44 +45,21 @@ type State struct {
 	useCLibrary  bool
 }
 
-// NewState creates a new state with pre-computed values to speed up mining
-// It takes the target from the Bits field
 func NewState(header externalapi.MutableBlockHeader) *State {
 	target := difficulty.CompactToBig(header.Bits())
-	// Zero out the time and nonce.
 	timestamp, nonce := header.TimeInMilliseconds(), header.Nonce()
 	header.SetTimeInMilliseconds(0)
 	header.SetNonce(0)
 	prevHeader := consensushashing.HeaderHash(header)
 	header.SetTimeInMilliseconds(timestamp)
 	header.SetNonce(nonce)
+
 	if header.Version() == 1 {
-		return &State{
-			Target:       *target,
-			PrevHeader:   *prevHeader,
-			mat:          *GenerateMatrix(prevHeader),
-			Timestamp:    timestamp,
-			Nonce:        nonce,
-			BlockVersion: header.Version(),
-		}
+		return &State{Target: *target, PrevHeader: *prevHeader, mat: *GenerateMatrix(prevHeader), Timestamp: timestamp, Nonce: nonce, BlockVersion: header.Version()}
 	} else if header.Version() == 2 {
-		return &State{
-			Target:       *target,
-			PrevHeader:   *prevHeader,
-			mat:          *GenerateHoohashMatrix(prevHeader),
-			Timestamp:    timestamp,
-			Nonce:        nonce,
-			BlockVersion: header.Version(),
-		}
+		return &State{Target: *target, PrevHeader: *prevHeader, mat: *GenerateHoohashMatrix(prevHeader), Timestamp: timestamp, Nonce: nonce, BlockVersion: header.Version()}
 	} else if header.Version() == 3 || header.Version() == 4 {
-		return &State{
-			Target:       *target,
-			PrevHeader:   *prevHeader,
-			mat:          *GenerateMatrix(prevHeader),
-			Timestamp:    timestamp,
-			Nonce:        nonce,
-			BlockVersion: header.Version(),
-		}
+		return &State{Target: *target, PrevHeader: *prevHeader, mat: *GenerateMatrix(prevHeader), Timestamp: timestamp, Nonce: nonce, BlockVersion: header.Version()}
 	} else if header.Version() >= 5 {
 		state := &State{
 			Target:       *target,
@@ -106,25 +69,22 @@ func NewState(header externalapi.MutableBlockHeader) *State {
 			BlockVersion: header.Version(),
 			useCLibrary:  UseHoohashCLibrary,
 		}
-		if UseHoohashCLibrary {
-			// Generate C matrix
-			prevHeaderBytes := prevHeader.ByteSlice()
-			C.generateHoohashMatrixV110((*C.uint8_t)(&prevHeaderBytes[0]), (*C.double)(&state.cMatrix[0][0]))
-		} else {
-			state.floatMat = *GenerateHoohashMatrixV110(prevHeader)
+
+		// ALWAYS let Go generate the matrix. There's no divergence in this.
+		state.floatMat = *GenerateHoohashMatrixV110(prevHeader)
+
+		// Copy it once into the C array so we don't have memory leaks or GC panics.
+		if state.useCLibrary {
+			for i := 0; i < 64; i++ {
+				for j := 0; j < 64; j++ {
+					state.cMatrix[i][j] = C.double(state.floatMat[i][j])
+				}
+			}
 		}
 		return state
 	} else {
-		return &State{
-			Target:       *target,
-			PrevHeader:   *prevHeader,
-			mat:          *GenerateMatrix(prevHeader),
-			Timestamp:    timestamp,
-			Nonce:        nonce,
-			BlockVersion: header.Version(),
-		}
+		return &State{Target: *target, PrevHeader: *prevHeader, mat: *GenerateMatrix(prevHeader), Timestamp: timestamp, Nonce: nonce, BlockVersion: header.Version()}
 	}
-
 }
 
 func (state *State) CalculateProofOfWorkValue() (*big.Int, *externalapi.DomainHash) {
@@ -137,119 +97,82 @@ func (state *State) CalculateProofOfWorkValue() (*big.Int, *externalapi.DomainHa
 	} else if state.BlockVersion >= 5 {
 		return state.CalculateProofOfWorkValueHoohashV110()
 	} else {
-		return state.CalculateProofOfWorkValuePyrinhash() // default to the oldest version.
+		return state.CalculateProofOfWorkValuePyrinhash()
 	}
 }
 
 func (state *State) CalculateProofOfWorkValueHoohashV1() (*big.Int, *externalapi.DomainHash) {
-	// PRE_POW_HASH || TIME || 32 zero byte padding || NONCE
 	writer := hashes.Blake3HashWriter()
 	writer.InfallibleWrite(state.PrevHeader.ByteSlice())
-	err := serialization.WriteElement(writer, state.Timestamp)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	serialization.WriteElement(writer, state.Timestamp)
 	zeroes := [32]byte{}
 	writer.InfallibleWrite(zeroes[:])
-	err = serialization.WriteElement(writer, state.Nonce)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	serialization.WriteElement(writer, state.Nonce)
 	powHash := writer.Finalize()
 	multiplied := state.mat.HoohashMatrixMultiplicationV1(powHash)
 	return toBig(multiplied), multiplied
 }
 
 func (state *State) CalculateProofOfWorkValueHoohashV101() (*big.Int, *externalapi.DomainHash) {
-	// PRE_POW_HASH || TIME || 32 zero byte padding || NONCE
 	writer := hashes.Blake3HashWriter()
 	writer.InfallibleWrite(state.PrevHeader.ByteSlice())
-	err := serialization.WriteElement(writer, state.Timestamp)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	serialization.WriteElement(writer, state.Timestamp)
 	zeroes := [32]byte{}
 	writer.InfallibleWrite(zeroes[:])
-	err = serialization.WriteElement(writer, state.Nonce)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	serialization.WriteElement(writer, state.Nonce)
 	powHash := writer.Finalize()
 	multiplied := state.mat.HoohashMatrixMultiplicationV101(powHash)
 	return toBig(multiplied), multiplied
 }
 
 func (state *State) CalculateProofOfWorkValueHoohashV110() (*big.Int, *externalapi.DomainHash) {
-	if UseHoohashCLibrary {
-		// Use C library implementation
-		var cState C.HoohashState
-		prevHeaderBytes := state.PrevHeader.ByteSlice()
-		for i := 0; i < 32; i++ {
-			cState.PrevHeader[i] = C.uint8_t(prevHeaderBytes[i])
-		}
-		cState.Timestamp = C.int64_t(state.Timestamp)
-		cState.Nonce = C.uint64_t(state.Nonce)
-
-		var result [32]C.uint8_t
-		C.CalculateProofOfWorkValueV110(&cState, (*C.double)(&state.cMatrix[0][0]), (*C.uint8_t)(&result[0]))
-
-		// Convert result to DomainHash
-		hashBytes := make([]byte, 32)
-		for i := 0; i < 32; i++ {
-			hashBytes[i] = byte(result[i])
-		}
-		hash, err := externalapi.NewDomainHashFromByteSlice(hashBytes)
-		if err != nil {
-			panic(errors.Wrap(err, "failed to create domain hash from C library result"))
-		}
-		return toBig(hash), hash
-	}
-
-	// PRE_POW_HASH || TIME || 32 zero byte padding || NONCE
+	// Run the first pass safely in Go 
 	writer := hashes.Blake3HashWriter()
 	writer.InfallibleWrite(state.PrevHeader.ByteSlice())
 	err := serialization.WriteElement(writer, state.Timestamp)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	if err != nil { panic(err) }
 	zeroes := [32]byte{}
 	writer.InfallibleWrite(zeroes[:])
 	err = serialization.WriteElement(writer, state.Nonce)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
+	if err != nil { panic(err) }
+
+	firstPass := writer.Finalize()
+
+	if state.useCLibrary {
+		var result [32]byte
+		firstPassBytes := firstPass.ByteSlice()
+
+		// Pass the exact 32-byte Blake3 output directly into the C Matrix Math
+		C.HoohashMatrixMultiplication(
+			&state.cMatrix[0],
+			(*C.uint8_t)(unsafe.Pointer(&firstPassBytes[0])),
+			(*C.uint8_t)(unsafe.Pointer(&result[0])),
+			C.uint64_t(state.Nonce),
+		)
+
+		hash, err := externalapi.NewDomainHashFromByteSlice(result[:])
+		if err != nil { panic(err) }
+		return toBig(hash), hash
 	}
-	powHash := writer.Finalize()
-	multiplied := state.floatMat.HoohashMatrixMultiplicationV110(powHash, state.Nonce)
+
+	multiplied := state.floatMat.HoohashMatrixMultiplicationV110(firstPass, state.Nonce)
 	return toBig(multiplied), multiplied
 }
 
-// CalculateProofOfWorkValue hashes the internal header and returns its big.Int value
 func (state *State) CalculateProofOfWorkValuePyrinhash() (*big.Int, *externalapi.DomainHash) {
-	// PRE_POW_HASH || TIME || 32 zero byte padding || NONCE
-	writer := hashes.PoWHashWriter() // Blake 3
+	writer := hashes.PoWHashWriter()
 	writer.InfallibleWrite(state.PrevHeader.ByteSlice())
-	err := serialization.WriteElement(writer, state.Timestamp)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	serialization.WriteElement(writer, state.Timestamp)
 	zeroes := [32]byte{}
 	writer.InfallibleWrite(zeroes[:])
-	err = serialization.WriteElement(writer, state.Nonce)
-	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. Hash digest should never return an error"))
-	}
+	serialization.WriteElement(writer, state.Nonce)
 	powHash := writer.Finalize()
 	hash := state.mat.bHeavyHash(powHash)
 	return toBig(hash), hash
 }
 
-// IncrementNonce the nonce in State by 1
-func (state *State) IncrementNonce() {
-	state.Nonce++
-}
+func (state *State) IncrementNonce() { state.Nonce++ }
 
-// CheckProofOfWork check's if the block has a valid PoW according to the provided target
-// it does not check if the difficulty itself is valid or less than the maximum for the appropriate network
 func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip bool) bool {
 	powNum, _ := state.CalculateProofOfWorkValue()
 	if state.BlockVersion < constants.PoWIntegrityMinVersion {
@@ -258,9 +181,7 @@ func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip boo
 		return powNum.Cmp(&state.Target) <= 0
 	} else if state.BlockVersion >= constants.PoWIntegrityMinVersion {
 		powHash, err := externalapi.NewDomainHashFromString(block.PoWHash)
-		if err != nil {
-			return false
-		}
+		if err != nil { return false }
 		if !powHash.Equal(new(externalapi.DomainHash)) {
 			submittedPowNum := toBig(powHash)
 			if submittedPowNum.Cmp(powNum) == 0 {
@@ -271,35 +192,81 @@ func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip boo
 	return false
 }
 
-// CheckProofOfWorkByBits check's if the block has a valid PoW according to its Bits field
-// it does not check if the difficulty itself is valid or less than the maximum for the appropriate network
 func CheckProofOfWorkByBits(header externalapi.MutableBlockHeader, block *externalapi.DomainBlock, powSkip bool) bool {
 	return NewState(header).CheckProofOfWork(block, powSkip)
 }
 
-// ToBig converts a externalapi.DomainHash into a big.Int treated as a little endian string.
 func toBig(hash *externalapi.DomainHash) *big.Int {
-	// We treat the Hash as little-endian for PoW purposes, but the big package wants the bytes in big-endian, so reverse them.
 	buf := hash.ByteSlice()
 	blen := len(buf)
 	for i := 0; i < blen/2; i++ {
 		buf[i], buf[blen-1-i] = buf[blen-1-i], buf[i]
 	}
-
 	return new(big.Int).SetBytes(buf)
 }
 
-// BlockLevel returns the block level of the given header.
 func BlockLevel(header externalapi.BlockHeader, maxBlockLevel int) int {
-	// Genesis is defined to be the root of all blocks at all levels, so we define it to be the maximal
-	// block level.
 	if len(header.DirectParents()) == 0 {
 		return maxBlockLevel
 	}
 
-	proofOfWorkValue, _ := NewState(header.ToMutable()).CalculateProofOfWorkValue()
-	level := max(
-		// If the block has a level lower than genesis make it zero.
-		maxBlockLevel-proofOfWorkValue.BitLen(), 0)
+	state := NewState(header.ToMutable())
+
+/*
+	//  DEBUGGING FOR THE FAILING BLOCK ---
+	blockHash := consensushashing.HeaderHash(header)
+	if blockHash.String() == "9d0c2b145952b2476530d8faf456025c93358bb9bce775236872c960a5fc0cbe" {
+		fmt.Printf("\n======================================================\n")
+		fmt.Printf("[DEBUG] INTERCEPTED FAILING BLOCK: %s\n", blockHash.String())
+		fmt.Printf("[DEBUG] Version: %d\n", state.BlockVersion)
+		fmt.Printf("[DEBUG] Timestamp: %d\n", state.Timestamp)
+		fmt.Printf("[DEBUG] Nonce: %d\n", state.Nonce)
+		fmt.Printf("[DEBUG] Pre-PoW Hash: %s\n", state.PrevHeader.String())
+
+		if state.BlockVersion >= 5 {
+			fmt.Printf("[DEBUG] Go Matrix [0][0]: %f\n", state.floatMat[0][0])
+
+			// 1. ManuallyGo Blake3
+			writer := hashes.Blake3HashWriter()
+			writer.InfallibleWrite(state.PrevHeader.ByteSlice())
+			serialization.WriteElement(writer, state.Timestamp)
+			zeroes := [32]byte{}
+			writer.InfallibleWrite(zeroes[:])
+			serialization.WriteElement(writer, state.Nonce)
+			firstPassGo := writer.Finalize()
+			fmt.Printf("[DEBUG] Blake3 First-Pass: %s\n", firstPassGo.String())
+
+			// 2. Go Final Hash
+			finalGoHash := state.floatMat.HoohashMatrixMultiplicationV110(firstPassGo, state.Nonce)
+			fmt.Printf("[DEBUG] Pure Go Final Hash: %s (BitLen: %d)\n", finalGoHash.String(), toBig(finalGoHash).BitLen())
+
+			// 3.  C Final Hash
+			var resultC [32]byte
+			firstPassBytes := firstPassGo.ByteSlice()
+			
+			// Copy the Go matrix into a temporary C matrix just for this debug call
+			var tempCMat [64][64]C.double
+			for i := 0; i < 64; i++ {
+				for j := 0; j < 64; j++ {
+					tempCMat[i][j] = C.double(state.floatMat[i][j])
+				}
+			}
+
+			C.HoohashMatrixMultiplication(
+				&tempCMat[0],
+				(*C.uint8_t)(unsafe.Pointer(&firstPassBytes[0])),
+				(*C.uint8_t)(unsafe.Pointer(&resultC[0])),
+				C.uint64_t(state.Nonce),
+			)
+			finalCHash, _ := externalapi.NewDomainHashFromByteSlice(resultC[:])
+			fmt.Printf("[DEBUG] Pure C Final Hash : %s (BitLen: %d)\n", finalCHash.String(), toBig(finalCHash).BitLen())
+		}
+		fmt.Printf("======================================================\n\n")
+	}
+	// --- END DEBUGGING ---
+*/
+
+	proofOfWorkValue, _ := state.CalculateProofOfWorkValue()
+	level := max(maxBlockLevel-proofOfWorkValue.BitLen(), 0)
 	return level
 }
