@@ -36,9 +36,9 @@ func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 	// Default cache size, can be made configurable
 	const defaultCacheSize = 1000
 	return &utxoIndexStore{
-		database: database,
-		toAdd:    make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
-		toRemove: make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		database:     database,
+		toAdd:        make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
+		toRemove:     make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
 		scriptCache:  newScriptLRUCache(defaultCacheSize),
 		maxCacheSize: defaultCacheSize,
 	}

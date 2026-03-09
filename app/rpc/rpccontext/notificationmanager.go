@@ -385,123 +385,94 @@ func (nm *NotificationManager) StopPropagatingUTXOsChangedNotifications(nl *Noti
 }
 
 func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
-	utxoChanges *utxoindex.UTXOChanges) (*appmessage.UTXOsChangedNotificationMessage, error) {
+	utxoChanges *utxoindex.UTXOChanges,
+) (*appmessage.UTXOsChangedNotificationMessage, error) {
 
-	// As an optimization, we iterate over the smaller set (O(n)) among the two below
-	// and check existence over the larger set (O(1))
-	utxoChangesSize := len(utxoChanges.Added) + len(utxoChanges.Removed)
-	addressesSize := len(nl.propagateUTXOsChangedNotificationAddresses)
+	if len(utxoChanges.Added) == 0 && len(utxoChanges.Removed) == 0 {
+		return &appmessage.UTXOsChangedNotificationMessage{}, nil
+	}
 
 	notification := &appmessage.UTXOsChangedNotificationMessage{}
-	if utxoChangesSize < addressesSize {
-		if len(utxoChanges.Added) > 0 {
-			addedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Added))
-			addedSharedScript := &appmessage.RPCScriptPublicKey{
-				Script:  fastHex(sigBuf[:], utxoChanges.Added[0].Entry.ScriptPublicKey().Script),
-				Version: utxoChanges.Added[0].Entry.ScriptPublicKey().Version,
+
+	addressesCount := len(nl.propagateUTXOsChangedNotificationAddresses)
+
+	scriptCache := make(map[utxoindex.ScriptPublicKeyString]*appmessage.RPCScriptPublicKey, 8)
+
+	getRPCScript := func(spk *externalapi.ScriptPublicKey, key utxoindex.ScriptPublicKeyString) *appmessage.RPCScriptPublicKey {
+		if cached, ok := scriptCache[key]; ok {
+			return cached
+		}
+		rpcSpk := &appmessage.RPCScriptPublicKey{
+			Script:  fastHex(sigBuf[:], spk.Script),
+			Version: spk.Version,
+		}
+		scriptCache[key] = rpcSpk
+		return rpcSpk
+	}
+
+	if addressesCount > 0 {
+		// Filter mode: only send changes matching registered addresses.
+		// Uses O(1) map lookup per pair instead of the old O(addresses × changes) nested loop.
+		for _, pair := range utxoChanges.Added {
+			spk := pair.Entry.ScriptPublicKey()
+			scriptStr := utxoindex.ScriptPublicKeyString(spk.String())
+			listener, ok := nl.propagateUTXOsChangedNotificationAddresses[scriptStr]
+			if !ok {
+				continue
 			}
-			for _, addedPair := range utxoChanges.Added {
-				scriptPublicKeyString := utxoindex.ScriptPublicKeyString(addedPair.Entry.ScriptPublicKey().String())
-				if listenerAddress, ok := nl.propagateUTXOsChangedNotificationAddresses[scriptPublicKeyString]; ok {
-					utxosByAddressesEntries := append(addedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, addedSharedScript, addedPair))
-					if utxosByAddressesEntries == nil {
-						continue
-					}
-					notification.Added = append(notification.Added, utxosByAddressesEntries...)
-				}
+			rpcSpk := getRPCScript(spk, scriptStr)
+			entry := ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(
+				listener.Address, rpcSpk, pair)
+			if entry != nil {
+				notification.Added = append(notification.Added, entry)
 			}
 		}
-		if len(utxoChanges.Removed) > 0 {
-			removedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Removed))
-			removedSharedScript := &appmessage.RPCScriptPublicKey{
-				Script:  fastHex(sigBuf[:], utxoChanges.Removed[0].Entry.ScriptPublicKey().Script),
-				Version: utxoChanges.Removed[0].Entry.ScriptPublicKey().Version,
+
+		for _, pair := range utxoChanges.Removed {
+			spk := pair.Entry.ScriptPublicKey()
+			scriptStr := utxoindex.ScriptPublicKeyString(spk.String())
+			listener, ok := nl.propagateUTXOsChangedNotificationAddresses[scriptStr]
+			if !ok {
+				continue
 			}
-			for _, removedPair := range utxoChanges.Removed {
-				scriptPublicKeyString := utxoindex.ScriptPublicKeyString(removedPair.Entry.ScriptPublicKey().String())
-				if listenerAddress, ok := nl.propagateUTXOsChangedNotificationAddresses[scriptPublicKeyString]; ok {
-					utxosByAddressesEntries := append(removedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, removedSharedScript, removedPair))
-					if utxosByAddressesEntries == nil {
-						continue
-					}
-					notification.Removed = append(notification.Removed, utxosByAddressesEntries...)
-				}
-			}
-		}
-	} else if addressesSize > 0 {
-		for _, listenerAddress := range nl.propagateUTXOsChangedNotificationAddresses {
-			listenerScriptPublicKeyString := listenerAddress.ScriptPublicKeyString
-			if len(utxoChanges.Added) > 0 {
-				addedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Added))
-				addedSharedScript := &appmessage.RPCScriptPublicKey{
-					Script:  fastHex(sigBuf[:], utxoChanges.Added[0].Entry.ScriptPublicKey().Script),
-					Version: utxoChanges.Added[0].Entry.ScriptPublicKey().Version,
-				}
-				for _, addedPair := range utxoChanges.Added {
-					if utxoindex.ScriptPublicKeyString(addedPair.Entry.ScriptPublicKey().String()) == listenerScriptPublicKeyString {
-						utxosByAddressesEntries := append(addedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, addedSharedScript, addedPair))
-						if utxosByAddressesEntries == nil {
-							continue
-						}
-						notification.Added = append(notification.Added, utxosByAddressesEntries...)
-					}
-				}
-			}
-			if len(utxoChanges.Removed) > 0 {
-				removedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Removed))
-				removedSharedScript := &appmessage.RPCScriptPublicKey{
-					Script:  fastHex(sigBuf[:], utxoChanges.Removed[0].Entry.ScriptPublicKey().Script),
-					Version: utxoChanges.Removed[0].Entry.ScriptPublicKey().Version,
-				}
-				for _, removedPair := range utxoChanges.Removed {
-					if utxoindex.ScriptPublicKeyString(removedPair.Entry.ScriptPublicKey().String()) == listenerScriptPublicKeyString {
-						utxosByAddressesEntries := append(removedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(listenerAddress.Address, removedSharedScript, removedPair))
-						if utxosByAddressesEntries == nil {
-							continue
-						}
-						notification.Removed = append(notification.Removed, utxosByAddressesEntries...)
-					}
-				}
+			rpcSpk := getRPCScript(spk, scriptStr)
+			entry := ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(
+				listener.Address, rpcSpk, pair)
+			if entry != nil {
+				notification.Removed = append(notification.Removed, entry)
 			}
 		}
 	} else {
-		addedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Added))
-		if len(utxoChanges.Added) > 0 {
-			addedSharedScript := &appmessage.RPCScriptPublicKey{
-				Script:  fastHex(sigBuf[:], utxoChanges.Added[0].Entry.ScriptPublicKey().Script),
-				Version: utxoChanges.Added[0].Entry.ScriptPublicKey().Version,
-			}
-			for _, addedPair := range utxoChanges.Added {
-				scriptPublicKeyString := utxoindex.ScriptPublicKeyString(addedPair.Entry.ScriptPublicKey().String())
-				addressString, err := nl.scriptPubKeyStringToAddressString(scriptPublicKeyString)
-				if err != nil {
-					return nil, err
-				}
+		// Broadcast mode: send all changes (no address filter)
+		for _, pair := range utxoChanges.Added {
+			spk := pair.Entry.ScriptPublicKey()
+			scriptStr := utxoindex.ScriptPublicKeyString(spk.String())
 
-				utxosByAddressesEntries := append(addedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, addedSharedScript, addedPair))
-				if utxosByAddressesEntries == nil {
-					continue
-				}
-				notification.Added = append(notification.Added, utxosByAddressesEntries...)
+			addr, err := nl.scriptPubKeyStringToAddressString(scriptStr)
+			if err != nil {
+				return nil, err
+			}
+
+			rpcSpk := getRPCScript(spk, scriptStr)
+			entry := ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addr, rpcSpk, pair)
+			if entry != nil {
+				notification.Added = append(notification.Added, entry)
 			}
 		}
-		if len(utxoChanges.Removed) > 0 {
-			removedUTXOsByAddressEntries := make([]*appmessage.UTXOsByAddressesEntry, len(utxoChanges.Removed))
-			removedSharedScript := &appmessage.RPCScriptPublicKey{
-				Script:  fastHex(sigBuf[:], utxoChanges.Removed[0].Entry.ScriptPublicKey().Script),
-				Version: utxoChanges.Removed[0].Entry.ScriptPublicKey().Version,
+
+		for _, pair := range utxoChanges.Removed {
+			spk := pair.Entry.ScriptPublicKey()
+			scriptStr := utxoindex.ScriptPublicKeyString(spk.String())
+
+			addr, err := nl.scriptPubKeyStringToAddressString(scriptStr)
+			if err != nil {
+				return nil, err
 			}
-			for _, removedPair := range utxoChanges.Removed {
-				scriptPublicKeyString := utxoindex.ScriptPublicKeyString(removedPair.Entry.ScriptPublicKey().String())
-				addressString, err := nl.scriptPubKeyStringToAddressString(scriptPublicKeyString)
-				if err != nil {
-					return nil, err
-				}
-				utxosByAddressesEntries := append(removedUTXOsByAddressEntries, ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, removedSharedScript, removedPair))
-				if utxosByAddressesEntries == nil {
-					continue
-				}
-				notification.Removed = append(notification.Removed, utxosByAddressesEntries...)
+
+			rpcSpk := getRPCScript(spk, scriptStr)
+			entry := ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addr, rpcSpk, pair)
+			if entry != nil {
+				notification.Removed = append(notification.Removed, entry)
 			}
 		}
 	}
