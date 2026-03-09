@@ -174,7 +174,7 @@ func (nm *NotificationManager) NotifyFinalityConflict(notification *appmessage.F
 
 	for router, listener := range nm.listeners {
 		if listener.propagateFinalityConflictNotifications {
-			err := router.OutgoingRoute().Enqueue(notification)
+			err := router.OutgoingRoute().MaybeEnqueue(notification)
 			if err != nil {
 				return err
 			}
@@ -190,7 +190,7 @@ func (nm *NotificationManager) NotifyFinalityConflictResolved(notification *appm
 
 	for router, listener := range nm.listeners {
 		if listener.propagateFinalityConflictResolvedNotifications {
-			err := router.OutgoingRoute().Enqueue(notification)
+			err := router.OutgoingRoute().MaybeEnqueue(notification)
 			if err != nil {
 				return err
 			}
@@ -275,7 +275,7 @@ func (nm *NotificationManager) NotifyNewBlockTemplate(
 
 	for router, listener := range nm.listeners {
 		if listener.propagateNewBlockTemplateNotifications {
-			err := router.OutgoingRoute().Enqueue(notification)
+			err := router.OutgoingRoute().MaybeEnqueue(notification)
 			if err != nil {
 				return err
 			}
@@ -292,7 +292,7 @@ func (nm *NotificationManager) NotifyPruningPointUTXOSetOverride() error {
 
 	for router, listener := range nm.listeners {
 		if listener.propagatePruningPointUTXOSetOverrideNotifications {
-			err := router.OutgoingRoute().Enqueue(appmessage.NewPruningPointUTXOSetOverrideNotificationMessage())
+			err := router.OutgoingRoute().MaybeEnqueue(appmessage.NewPruningPointUTXOSetOverrideNotificationMessage())
 			if err != nil {
 				return err
 			}
