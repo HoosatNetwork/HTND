@@ -3,11 +3,24 @@ package utxoindex
 import (
 	"encoding/binary"
 	"io"
+	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
+
+var dbUtxoEntryPool = sync.Pool{
+	New: func() interface{} {
+		return &serialization.DbUtxoEntry{}
+	},
+}
+
+var dbOutpointPool = sync.Pool{
+	New: func() interface{} {
+		return &serialization.DbOutpoint{}
+	},
+}
 
 func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
 	dbOutpoint := serialization.DomainOutpointToDbOutpoint(outpoint)
@@ -15,12 +28,18 @@ func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
 }
 
 func deserializeOutpoint(serializedOutpoint []byte) (*externalapi.DomainOutpoint, error) {
-	var dbOutpoint serialization.DbOutpoint
+	dbOutpoint := dbOutpointPool.Get().(*serialization.DbOutpoint)
 	err := dbOutpoint.UnmarshalVT(serializedOutpoint)
+	if err != nil {
+		dbOutpointPool.Put(dbOutpoint)
+		return nil, err
+	}
+	outpoint, err := serialization.DbOutpointToDomainOutpoint(dbOutpoint)
+	dbOutpointPool.Put(dbOutpoint)
 	if err != nil {
 		return nil, err
 	}
-	return serialization.DbOutpointToDomainOutpoint(&dbOutpoint)
+	return outpoint, nil
 }
 
 func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
@@ -29,12 +48,15 @@ func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
 }
 
 func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
-	var dbUTXOEntry serialization.DbUtxoEntry
+	dbUTXOEntry := dbUtxoEntryPool.Get().(*serialization.DbUtxoEntry)
 	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
 	if err != nil {
+		dbUtxoEntryPool.Put(dbUTXOEntry)
 		return nil, err
 	}
-	return serialization.DBUTXOEntryToUTXOEntry(&dbUTXOEntry)
+	utxoEntry, err := serialization.DBUTXOEntryToUTXOEntry(dbUTXOEntry)
+	dbUtxoEntryPool.Put(dbUTXOEntry)
+	return utxoEntry, err
 }
 
 const hashesLengthSize = 8

@@ -22,7 +22,7 @@ var utxoEntriesPool = sync.Pool{
 
 var utxoPairPool = sync.Pool{
 	New: func() interface{} {
-		return make([]utxoindex.UTXOPair, 0, 16)
+		return make([]utxoindex.UTXOPair, 0, 1000)
 	},
 }
 
