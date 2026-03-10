@@ -2,6 +2,7 @@ package blockrelay
 
 import (
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -26,8 +27,11 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 
 	rateLimit := time.NewTicker(time.Second / time.Duration(threadcount))
 	defer rateLimit.Stop()
-
+	var done atomic.Bool
 	for {
+		if done.Load() {
+			return nil
+		}
 		<-rateLimit.C // wait for rate limiter
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
@@ -37,18 +41,26 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 		log.Debugf("Got request for %d ibd blocks", len(msgRequestIBDBlocks.Hashes))
 
 		for i := 0; i < len(msgRequestIBDBlocks.Hashes); i++ {
+			if done.Load() {
+				return nil
+			}
 			hash := msgRequestIBDBlocks.Hashes[i]
 			semaphore <- struct{}{} // acquire
 			go func(hash *externalapi.DomainHash) {
 				defer func() { <-semaphore }() // release
+				if done.Load() {
+					return
+				}
 				// Fetch the block from the database.
 				block, found, err := context.Domain().Consensus().GetBlock(hash)
 				if err != nil {
 					log.Warnf("unable to fetch requested block hash %s: %s", hash, err)
+					done.Store(true)
 					return
 				}
 				if !found {
 					log.Warnf("IBD block %s not found", hash)
+					done.Store(true)
 					return
 				}
 
