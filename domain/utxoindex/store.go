@@ -524,39 +524,32 @@ func (uis *utxoIndexStore) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 	return ok, nil
 }
 
-// ForEachUTXO provides an iterator-style API for advanced streaming
-func (uis *utxoIndexStore) ForEachUTXO(scriptPublicKey *externalapi.ScriptPublicKey, fn func(outpoint externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error) error {
+// GetBalance returns the total balance for a ScriptPublicKey without allocating full UTXO entries
+func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (uint64, error) {
 	if uis.isAnythingStaged() {
-		return errors.Errorf("cannot iterate UTXOs while staging isn't empty")
+		return 0, errors.Errorf("cannot get balance while staging isn't empty")
 	}
+
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer cursor.Close()
-	for cursor.Next() {
-		key, err := cursor.Key()
-		if err != nil {
-			return err
-		}
-		outpoint, err := uis.convertKeyToOutpoint(key)
-		if err != nil {
-			return err
-		}
+
+	var balance uint64
+	for ok := cursor.First(); ok; ok = cursor.Next() {
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
-			return err
+			return 0, err
 		}
-		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		amount, err := deserializeUTXOAmount(serializedUTXOEntry)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		if err := fn(*outpoint, utxoEntry); err != nil {
-			return err
-		}
+		balance += amount
 	}
-	return nil
+	return balance, nil
 }
 
 func (uis *utxoIndexStore) getVirtualParents() ([]*externalapi.DomainHash, error) {
@@ -626,12 +619,12 @@ func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
 		if err != nil {
 			return err
 		}
-		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		utxoAmount, err := deserializeUTXOAmount(serializedUTXOEntry)
 		if err != nil {
 			return err
 		}
 
-		circulatingSompiSupplyInDatabase = circulatingSompiSupplyInDatabase + utxoEntry.Amount()
+		circulatingSompiSupplyInDatabase = circulatingSompiSupplyInDatabase + utxoAmount
 	}
 
 	err = uis.database.Put(

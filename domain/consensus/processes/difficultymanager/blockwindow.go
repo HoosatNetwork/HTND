@@ -18,21 +18,6 @@ type difficultyBlock struct {
 
 type blockWindow []difficultyBlock
 
-func (dm *difficultyManager) getDifficultyBlock(
-	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (difficultyBlock, error) {
-
-	header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, blockHash)
-	if err != nil {
-		return difficultyBlock{}, err
-	}
-	return difficultyBlock{
-		timeInMilliseconds: header.TimeInMilliseconds(),
-		Bits:               header.Bits(),
-		hash:               blockHash,
-		blueWork:           header.BlueWork(),
-	}, nil
-}
-
 // blockWindow returns a blockWindow of the given size that contains the
 // blocks in the past of startingBlock, the sorting is unspecified.
 // If the number of blocks in the past of startingBlock is less then windowSize,
@@ -47,11 +32,16 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 
 	window := make(blockWindow, len(windowHashes))
 	for i, hash := range windowHashes {
-		block, err := dm.getDifficultyBlock(stagingArea, hash)
+		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
 		if err != nil {
 			return nil, nil, err
 		}
-		window[i] = block
+		window[i] = difficultyBlock{
+			timeInMilliseconds: header.TimeInMilliseconds(),
+			Bits:               header.Bits(),
+			hash:               hash,
+			blueWork:           header.BlueWork(),
+		}
 	}
 	return window, windowHashes, nil
 }

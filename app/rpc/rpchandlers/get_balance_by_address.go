@@ -74,17 +74,10 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string, limi
 	if err != nil {
 		return 0, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 	}
-	utxoOutpointEntryPairs := utxoPairPool.Get().([]utxoindex.UTXOPair)[:0] // Reset length
 
-	utxoOutpointEntryPairs, err = context.UTXOIndex.UTXOs(scriptPublicKey, limit, utxoOutpointEntryPairs)
+	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey)
 	if err != nil {
 		return 0, err
 	}
-
-	balance := uint64(0)
-	for _, pair := range utxoOutpointEntryPairs {
-		balance += pair.Entry.Amount()
-	}
-	utxoPairPool.Put(utxoOutpointEntryPairs) // Return UTXOPair slice to pool
 	return balance, nil
 }
