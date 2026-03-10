@@ -75,6 +75,7 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				err = outgoingRoute.Enqueue(ibdBlockMessage)
 				if err != nil {
 					log.Warnf("failed to enqueue block %s: %s", hash, err)
+					done.Store(true)
 					return
 				}
 			}(hash)
