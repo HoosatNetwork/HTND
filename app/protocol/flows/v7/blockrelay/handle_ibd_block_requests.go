@@ -27,12 +27,9 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 
 	rateLimit := time.NewTicker(time.Second / time.Duration(threadcount))
 	defer rateLimit.Stop()
-	var done atomic.Bool
 	for {
-		if done.Load() {
-			return nil
-		}
 		<-rateLimit.C // wait for rate limiter
+		var done atomic.Bool
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err

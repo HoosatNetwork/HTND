@@ -29,13 +29,10 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 
 	rateLimit := time.NewTicker(time.Second / time.Duration(threadcount*2))
 	defer rateLimit.Stop()
-	var done atomic.Bool
 
 	for {
-		if done.Load() {
-			return nil
-		}
 		<-rateLimit.C // wait for rate limiter
+		var done atomic.Bool
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err
