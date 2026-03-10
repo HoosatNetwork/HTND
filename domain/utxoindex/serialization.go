@@ -3,24 +3,11 @@ package utxoindex
 import (
 	"encoding/binary"
 	"io"
-	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
-
-var dbUtxoEntryPool = sync.Pool{
-	New: func() interface{} {
-		return &serialization.DbUtxoEntry{}
-	},
-}
-
-var dbOutpointPool = sync.Pool{
-	New: func() interface{} {
-		return &serialization.DbOutpoint{}
-	},
-}
 
 func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
 	dbOutpoint := serialization.DomainOutpointToDbOutpoint(outpoint)
@@ -28,14 +15,12 @@ func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
 }
 
 func deserializeOutpoint(serializedOutpoint []byte) (*externalapi.DomainOutpoint, error) {
-	dbOutpoint := dbOutpointPool.Get().(*serialization.DbOutpoint)
+	dbOutpoint := &serialization.DbOutpoint{}
 	err := dbOutpoint.UnmarshalVT(serializedOutpoint)
 	if err != nil {
-		dbOutpointPool.Put(dbOutpoint)
 		return nil, err
 	}
 	outpoint, err := serialization.DbOutpointToDomainOutpoint(dbOutpoint)
-	dbOutpointPool.Put(dbOutpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -48,26 +33,22 @@ func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
 }
 
 func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
-	dbUTXOEntry := dbUtxoEntryPool.Get().(*serialization.DbUtxoEntry)
+	dbUTXOEntry := &serialization.DbUtxoEntry{}
 	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
 	if err != nil {
-		dbUtxoEntryPool.Put(dbUTXOEntry)
 		return nil, err
 	}
 	utxoEntry, err := serialization.DBUTXOEntryToUTXOEntry(dbUTXOEntry)
-	dbUtxoEntryPool.Put(dbUTXOEntry)
 	return utxoEntry, err
 }
 
 func deserializeUTXOAmount(serializedUTXOEntry []byte) (uint64, error) {
-	dbUTXOEntry := dbUtxoEntryPool.Get().(*serialization.DbUtxoEntry)
+	dbUTXOEntry := &serialization.DbUtxoEntry{}
 	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
 	if err != nil {
-		dbUtxoEntryPool.Put(dbUTXOEntry)
 		return 0, err
 	}
 	amount := dbUTXOEntry.Amount
-	dbUtxoEntryPool.Put(dbUTXOEntry)
 	return amount, nil
 }
 
