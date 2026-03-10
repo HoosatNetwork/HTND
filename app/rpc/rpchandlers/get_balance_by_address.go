@@ -7,7 +7,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
-	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/pkg/errors"
@@ -74,17 +73,10 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string, limi
 	if err != nil {
 		return 0, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 	}
-	utxoOutpointEntryPairs := utxoPairPool.Get().([]utxoindex.UTXOPair)[:0] // Reset length
 
-	utxoOutpointEntryPairs, err = context.UTXOIndex.UTXOs(scriptPublicKey, limit, utxoOutpointEntryPairs)
+	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey)
 	if err != nil {
 		return 0, err
 	}
-
-	balance := uint64(0)
-	for _, pair := range utxoOutpointEntryPairs {
-		balance += pair.Entry.Amount()
-	}
-	utxoPairPool.Put(utxoOutpointEntryPairs) // Return UTXOPair slice to pool
 	return balance, nil
 }

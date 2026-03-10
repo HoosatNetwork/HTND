@@ -59,6 +59,18 @@ func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, er
 	return utxoEntry, err
 }
 
+func deserializeUTXOAmount(serializedUTXOEntry []byte) (uint64, error) {
+	dbUTXOEntry := dbUtxoEntryPool.Get().(*serialization.DbUtxoEntry)
+	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
+	if err != nil {
+		dbUtxoEntryPool.Put(dbUTXOEntry)
+		return 0, err
+	}
+	amount := dbUTXOEntry.Amount
+	dbUtxoEntryPool.Put(dbUTXOEntry)
+	return amount, nil
+}
+
 const hashesLengthSize = 8
 
 func serializeHashes(hashes []*externalapi.DomainHash) []byte {
