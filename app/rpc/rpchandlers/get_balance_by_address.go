@@ -74,7 +74,7 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string, limi
 		return 0, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 	}
 
-	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey)
+	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey, limit)
 	if err != nil {
 		return 0, err
 	}
