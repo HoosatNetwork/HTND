@@ -9,6 +9,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 
 	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 )
 
 var (
@@ -43,7 +44,13 @@ func (*FlowContext) HandleError(err error, flowName string, isStopping *uint32, 
 			// Convert to a ProtocolError that should ban the peer
 			err = protocolerrors.Errorf(true, "invalid wire-format data: %s", err.Error())
 		} else if protocolErr := (protocolerrors.ProtocolError{}); !errors.As(err, &protocolErr) {
-			panic(err)
+			// Check if this is a rule error and treat it as a protocol error
+			// instead of panicking. Rule violations from consensus should ban the peer.
+			if ruleErr := (ruleerrors.RuleError{}); errors.As(err, &ruleErr) {
+				err = protocolerrors.Wrapf(true, err, "rule violation in %s", flowName)
+			} else {
+				panic(err)
+			}
 		}
 		if errors.Is(err, ErrPingTimeout) {
 			// Avoid printing the call stack on ping timeouts, since users get panicked and this case is not interesting
