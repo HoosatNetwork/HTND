@@ -200,7 +200,6 @@ func (am *AddressManager) MarkConnectionFailure(address *appmessage.NetAddress) 
 	}
 
 	now := time.Now()
-	entry.lastAttempt = now
 
 	// Implement time-based decay: reset failure count if it's been more than 24 hours
 	// since the last failure
@@ -208,6 +207,7 @@ func (am *AddressManager) MarkConnectionFailure(address *appmessage.NetAddress) 
 		entry.connectionFailedCount = 0
 		log.Debugf("Resetting failure count for %s due to age", address)
 	}
+	entry.lastAttempt = now
 
 	entry.connectionFailedCount = entry.connectionFailedCount + 1
 
@@ -340,7 +340,7 @@ func (am *AddressManager) unbanIfOldEnough(key addressKey) error {
 		return nil
 	}
 
-	const maxBanTime = 24 * time.Hour
+	maxBanTime := am.cfg.BanDuration
 	if mstime.Since(address.netAddress.Timestamp) > maxBanTime {
 		err := am.store.removeBanned(key)
 		if err != nil {

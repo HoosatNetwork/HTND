@@ -255,7 +255,7 @@ func (c *ConnectionManager) extractAddressIPs(address string) ([]net.IP, error) 
 
 func (c *ConnectionManager) seedFromDNS() {
 	cfg := c.cfg
-	if len(c.activeOutgoing) == 0 && !cfg.DisableDNSSeed {
+	if c.needsMoreOutboundPeers() && !cfg.DisableDNSSeed {
 		dnsseed.SeedFromDNS(cfg.NetParams(), cfg.DNSSeed, false, nil,
 			cfg.Lookup, func(addresses []*appmessage.NetAddress) {
 				// Hoosatd uses a lookup of the dns seeder here. Since seeder returns
@@ -269,4 +269,8 @@ func (c *ConnectionManager) seedFromDNS() {
 				_ = c.addressManager.AddAddresses(addresses...)
 			})
 	}
+}
+
+func (c *ConnectionManager) needsMoreOutboundPeers() bool {
+	return len(c.activeOutgoing) < c.targetOutgoing
 }
