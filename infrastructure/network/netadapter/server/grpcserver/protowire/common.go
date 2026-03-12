@@ -91,6 +91,9 @@ func (x *SubnetworkId) toDomain() (*externalapi.DomainSubnetworkID, error) {
 	if x == nil {
 		return nil, errors.Wrap(errorNil, "SubnetworkId is nil")
 	}
+	if len(x.Bytes) == 0 {
+		return &subnetworks.SubnetworkIDNative, nil
+	}
 	return subnetworks.FromBytes(x.Bytes)
 }
 
@@ -98,9 +101,7 @@ func domainSubnetworkIDToProto(id *externalapi.DomainSubnetworkID) *SubnetworkId
 	if id == nil {
 		return nil
 	}
-	return &SubnetworkId{
-		Bytes: id[:],
-	}
+	return &SubnetworkId{Bytes: id[:]}
 }
 
 func (x *NetAddress) toAppMessage() (*appmessage.NetAddress, error) {

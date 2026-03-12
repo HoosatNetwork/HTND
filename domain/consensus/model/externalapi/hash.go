@@ -3,6 +3,7 @@ package externalapi
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -38,8 +39,8 @@ func NewDomainHashFromByteArray(hashBytes *[DomainHashSize]byte) *DomainHash {
 // Returns an error if the length of the byte slice is not exactly `DomainHashSize`
 func NewDomainHashFromByteSlice(hashBytes []byte) (*DomainHash, error) {
 	if len(hashBytes) != DomainHashSize {
-		return nil, errors.Errorf("invalid hash size. Want: %d, got: %d",
-			DomainHashSize, len(hashBytes))
+		return nil, errors.WithStack(fmt.Errorf("invalid hash size. Want: %d, got: %d",
+			DomainHashSize, len(hashBytes)))
 	}
 	domainHash := DomainHash{
 		hashArray: [DomainHashSize]byte{},
