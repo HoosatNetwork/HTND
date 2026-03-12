@@ -30,7 +30,7 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 		return nil, nil, err
 	}
 
-	window := make(blockWindow, len(windowHashes))
+	window := make([]difficultyBlock, len(windowHashes))
 	for i, hash := range windowHashes {
 		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
 		if err != nil {
@@ -42,6 +42,7 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 			hash:               hash,
 			blueWork:           header.BlueWork(),
 		}
+
 	}
 	return window, windowHashes, nil
 }
