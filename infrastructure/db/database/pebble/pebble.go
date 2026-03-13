@@ -104,6 +104,8 @@ func (db *PebbleDB) Get(key *database.Key) ([]byte, error) {
 		}
 		return nil, errors.WithStack(err)
 	}
+	// Pebble Get returned data is unsafe after closing the closer as such we're copying it before closing.
+	// Wonders of the world, node runs without this on Golang 1.26.0 and it seems to be fine, but let's be safe here.
 	valueCopy := bytes.Clone(data)
 	closer.Close()
 	return valueCopy, nil
