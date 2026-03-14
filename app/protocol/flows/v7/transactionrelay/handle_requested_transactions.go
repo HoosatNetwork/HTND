@@ -30,7 +30,7 @@ func (flow *handleRequestedTransactionsFlow) start() error {
 		}
 
 		for _, transactionID := range msgRequestTransactions.IDs {
-			tx, _, ok := flow.Domain().MiningManager().GetTransaction(transactionID, true, false)
+			tx, _, ok := flow.Domain().MiningManager().GetTransactionNoClone(transactionID, true, false)
 
 			if !ok {
 				msgTransactionNotFound := appmessage.NewMsgTransactionNotFound(transactionID)

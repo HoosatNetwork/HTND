@@ -2,6 +2,7 @@ package blockrelay
 
 import (
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -31,6 +32,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 
 	for {
 		<-rateLimit.C // wait for rate limiter
+		var done atomic.Bool
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err
@@ -38,17 +40,25 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 		getRelayBlocksMessage := message.(*appmessage.MsgRequestRelayBlocks)
 		hashesLen := len(getRelayBlocksMessage.Hashes)
 		for i := range hashesLen {
+			if done.Load() {
+				return nil
+			}
 			hash := getRelayBlocksMessage.Hashes[i]
 			semaphore <- struct{}{} // acquire
 			go func(hash *externalapi.DomainHash) {
 				defer func() { <-semaphore }() // release
+				if done.Load() {
+					return
+				}
 				block, found, err := context.Domain().Consensus().GetBlock(hash)
 				if err != nil {
 					log.Warnf("unable to fetch requested block hash %s: %s", hash, err)
+					done.Store(true)
 					return
 				}
 				if !found {
 					log.Warnf("Relay block %s not found", hash)
+					done.Store(true)
 					return
 				}
 
@@ -61,6 +71,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 				err = outgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))
 				if err != nil {
 					log.Warnf("failed to enqueue block %s: %s", hash, err)
+					done.Store(true)
 					return
 				}
 			}(hash)

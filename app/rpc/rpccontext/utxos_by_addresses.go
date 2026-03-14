@@ -32,11 +32,18 @@ func ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(address string, script 
 	}
 }
 
-var sigBuf [256]byte
-
-func fastHex(dst []byte, src []byte) string {
-	n := hex.Encode(dst, src)
-	return string(dst[:n])
+func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	needed := hex.EncodedLen(len(value))
+	if needed == 0 {
+		return buffer[:0], ""
+	}
+	if cap(buffer) < needed {
+		buffer = make([]byte, needed)
+	} else {
+		buffer = buffer[:needed]
+	}
+	hex.Encode(buffer, value)
+	return buffer, string(buffer)
 }
 
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings
@@ -45,6 +52,7 @@ func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
 	addressStrings []string) ([]*UTXOsChangedNotificationAddress, error) {
 
 	addresses := make([]*UTXOsChangedNotificationAddress, len(addressStrings))
+	var reusableHexBuffer []byte
 	for i, addressString := range addressStrings {
 		address, err := util.DecodeAddress(addressString, ctx.Config.ActiveNetParams.Prefix)
 		if err != nil {
@@ -54,7 +62,9 @@ func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
 		if err != nil {
 			return nil, errors.Errorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 		}
-		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(fastHex(sigBuf[:], scriptPublicKey.Script))
+		var scriptHex string
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
+		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(scriptHex)
 		addresses[i] = &UTXOsChangedNotificationAddress{
 			Address:               addressString,
 			ScriptPublicKeyString: scriptPublicKeyString,

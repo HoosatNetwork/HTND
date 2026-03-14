@@ -312,6 +312,15 @@ func (ui *UTXOIndex) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (boo
 	return usable, err
 }
 
+// GetBalance returns the total balance for the given scriptPublicKey
+func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) (uint64, error) {
+	ui.mutex.Lock()
+	defer ui.mutex.Unlock()
+
+	balance, err := ui.store.GetBalance(scriptPublicKey, limit)
+	return balance, err
+}
+
 // GetCirculatingSompiSupply returns the current circulating supply of sompis in the network
 func (ui *UTXOIndex) GetCirculatingSompiSupply() (uint64, error) {
 

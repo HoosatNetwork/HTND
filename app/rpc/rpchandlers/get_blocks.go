@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	getBlocksCache = make(map[*externalapi.DomainHash]struct {
+	getBlocksCache = make(map[string]struct {
 		RPCBlocks   []*appmessage.RPCBlock
 		BlockHashes []string
 		timestamp   time.Time
@@ -20,10 +20,34 @@ var (
 	getBlocksCacheMutex sync.Mutex
 )
 
+const getBlocksCacheTTL = time.Second
+
 var blocksPool = sync.Pool{
 	New: func() interface{} {
 		return make([]*appmessage.RPCBlock, 0, 2)
 	},
+}
+
+func cloneRPCBlocks(blocks []*appmessage.RPCBlock) []*appmessage.RPCBlock {
+	if len(blocks) == 0 {
+		return nil
+	}
+	clone := make([]*appmessage.RPCBlock, len(blocks))
+	copy(clone, blocks)
+	return clone
+}
+
+func releaseRPCBlocks(blocks []*appmessage.RPCBlock) {
+	clear(blocks[:cap(blocks)])
+	blocksPool.Put(blocks[:0])
+}
+
+func purgeExpiredGetBlocksCache(now time.Time) {
+	for key, entry := range getBlocksCache {
+		if now.Sub(entry.timestamp) >= getBlocksCacheTTL {
+			delete(getBlocksCache, key)
+		}
+	}
 }
 
 // HandleGetBlocks handles the respectively named RPC command
@@ -63,10 +87,13 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			}, nil
 		}
 	}
+	cacheKey := lowHash.String()
 
 	getBlocksCacheMutex.Lock()
-	cached, found := getBlocksCache[lowHash]
-	if found && time.Since(cached.timestamp) < time.Second {
+	now := time.Now()
+	purgeExpiredGetBlocksCache(now)
+	cached, found := getBlocksCache[cacheKey]
+	if found {
 		getBlocksCacheMutex.Unlock()
 		response := appmessage.NewGetBlocksResponseMessage()
 		response.Blocks = cached.RPCBlocks
@@ -117,6 +144,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 		if cap(rpcBlocks) < len(blockHashes) {
 			rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
 		}
+		defer releaseRPCBlocks(rpcBlocks)
 		rpcBlocks = rpcBlocks[:len(blockHashes)]
 		for i, blockHash := range blockHashes {
 			block, err := context.Domain.Consensus().GetBlockEvenIfHeaderOnly(blockHash)
@@ -129,24 +157,24 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			} else {
 				rpcBlocks[i] = appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
 			}
-			err = context.PopulateBlockWithVerboseData(rpcBlocks[i], block.Header, nil, getBlocksRequest.IncludeTransactions)
+			err = context.PopulateBlockWithVerboseData(rpcBlocks[i], block.Header, block, getBlocksRequest.IncludeTransactions)
 			if err != nil {
 				return nil, err
 			}
 		}
-		response.Blocks = rpcBlocks
-		blocksPool.Put(rpcBlocks)
+		response.Blocks = cloneRPCBlocks(rpcBlocks)
 	}
 
 	getBlocksCacheMutex.Lock()
-	getBlocksCache[lowHash] = struct {
+	purgeExpiredGetBlocksCache(now)
+	getBlocksCache[cacheKey] = struct {
 		RPCBlocks   []*appmessage.RPCBlock
 		BlockHashes []string
 		timestamp   time.Time
 	}{
 		RPCBlocks:   response.Blocks,
 		BlockHashes: response.BlockHashes,
-		timestamp:   time.Now(),
+		timestamp:   now,
 	}
 	getBlocksCacheMutex.Unlock()
 

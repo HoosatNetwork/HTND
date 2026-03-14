@@ -3,7 +3,6 @@ package appmessage
 import (
 	"encoding/hex"
 	"math/big"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -17,36 +16,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionid"
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 )
-
-var txInSlicePool = sync.Pool{
-	New: func() interface{} {
-		return make([]*TxIn, 0, 16)
-	},
-}
-
-var txOutSlicePool = sync.Pool{
-	New: func() interface{} {
-		return make([]*TxOut, 0, 16)
-	},
-}
-
-var msgTxSlicePool = sync.Pool{
-	New: func() interface{} {
-		return make([]*MsgTx, 0, 2048)
-	},
-}
-
-var txInPool = sync.Pool{
-	New: func() interface{} {
-		return &TxIn{}
-	},
-}
-
-var txOutPool = sync.Pool{
-	New: func() interface{} {
-		return &TxOut{}
-	},
-}
 
 // DomainBlockToMsgBlock converts an externalapi.DomainBlock to MsgBlock
 func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
@@ -62,20 +31,20 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		_, powHash := state.CalculateProofOfWorkValue()
 		domainBlock.PoWHash = powHash.String()
 	}
-	msgTxs := msgTxSlicePool.Get().([]*MsgTx)[:0]
-	if cap(msgTxs) < len(domainBlock.Transactions) {
-		msgTxs = make([]*MsgTx, 0, len(domainBlock.Transactions))
-	}
-	for _, domainTransaction := range domainBlock.Transactions {
-		if domainTransaction == nil {
-			// Defensive: skip nil transactions
-			continue
+	var transactions []*MsgTx
+	if len(domainBlock.Transactions) > 0 {
+		transactions = make([]*MsgTx, len(domainBlock.Transactions))
+		transactionCount := 0
+		for _, domainTransaction := range domainBlock.Transactions {
+			if domainTransaction == nil {
+				// Defensive: skip nil transactions
+				continue
+			}
+			transactions[transactionCount] = DomainTransactionToMsgTx(domainTransaction)
+			transactionCount++
 		}
-		msgTxs = append(msgTxs, DomainTransactionToMsgTx(domainTransaction))
+		transactions = transactions[:transactionCount]
 	}
-	transactions := make([]*MsgTx, len(msgTxs))
-	copy(transactions, msgTxs)
-	msgTxSlicePool.Put(msgTxs)
 	return &MsgBlock{
 		Header:       *DomainBlockHeaderToBlockHeader(domainBlock.Header),
 		Transactions: transactions,
@@ -103,9 +72,12 @@ func DomainBlockHeaderToBlockHeader(domainBlockHeader externalapi.BlockHeader) *
 
 // MsgBlockToDomainBlock converts a MsgBlock to externalapi.DomainBlock
 func MsgBlockToDomainBlock(msgBlock *MsgBlock) *externalapi.DomainBlock {
-	transactions := make([]*externalapi.DomainTransaction, 0, len(msgBlock.Transactions))
-	for _, msgTx := range msgBlock.Transactions {
-		transactions = append(transactions, MsgTxToDomainTransaction(msgTx))
+	var transactions []*externalapi.DomainTransaction
+	if len(msgBlock.Transactions) > 0 {
+		transactions = make([]*externalapi.DomainTransaction, len(msgBlock.Transactions))
+		for i, msgTx := range msgBlock.Transactions {
+			transactions[i] = MsgTxToDomainTransaction(msgTx)
+		}
 	}
 	header := BlockHeaderToDomainBlockHeader(&msgBlock.Header)
 	powHash := msgBlock.PoWHash
@@ -141,49 +113,26 @@ func BlockHeaderToDomainBlockHeader(blockHeader *MsgBlockHeader) externalapi.Blo
 
 // DomainTransactionToMsgTx converts an externalapi.DomainTransaction into an MsgTx
 func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) *MsgTx {
-	txIns := txInSlicePool.Get().([]*TxIn)[:0]
-	if cap(txIns) < len(domainTransaction.Inputs) {
-		txIns = make([]*TxIn, 0, len(domainTransaction.Inputs))
-	}
-	for _, input := range domainTransaction.Inputs {
-		txIns = append(txIns, domainTransactionInputToTxIn(input))
-	}
-
-	txOuts := txOutSlicePool.Get().([]*TxOut)[:0]
-	if cap(txOuts) < len(domainTransaction.Outputs) {
-		txOuts = make([]*TxOut, 0, len(domainTransaction.Outputs))
-	}
-	for _, output := range domainTransaction.Outputs {
-		txOuts = append(txOuts, domainTransactionOutputToTxOut(output))
-	}
-
-	txInCopy := make([]*TxIn, len(txIns))
-	for i, txIn := range txIns {
-		txInCopy[i] = &TxIn{
-			PreviousOutpoint: txIn.PreviousOutpoint,
-			SignatureScript:  txIn.SignatureScript,
-			Sequence:         txIn.Sequence,
-			SigOpCount:       txIn.SigOpCount,
+	var txIns []*TxIn
+	if len(domainTransaction.Inputs) > 0 {
+		txIns = make([]*TxIn, len(domainTransaction.Inputs))
+		for i, input := range domainTransaction.Inputs {
+			txIns[i] = domainTransactionInputToTxIn(input)
 		}
-		txInPool.Put(txIn)
 	}
 
-	txOutCopy := make([]*TxOut, len(txOuts))
-	for i, txOut := range txOuts {
-		txOutCopy[i] = &TxOut{
-			Value:        txOut.Value,
-			ScriptPubKey: txOut.ScriptPubKey,
+	var txOuts []*TxOut
+	if len(domainTransaction.Outputs) > 0 {
+		txOuts = make([]*TxOut, len(domainTransaction.Outputs))
+		for i, output := range domainTransaction.Outputs {
+			txOuts[i] = domainTransactionOutputToTxOut(output)
 		}
-		txOutPool.Put(txOut)
 	}
-
-	txInSlicePool.Put(txIns)
-	txOutSlicePool.Put(txOuts)
 
 	return &MsgTx{
 		Version:      domainTransaction.Version,
-		TxIn:         txInCopy,
-		TxOut:        txOutCopy,
+		TxIn:         txIns,
+		TxOut:        txOuts,
 		LockTime:     domainTransaction.LockTime,
 		SubnetworkID: domainTransaction.SubnetworkID,
 		Gas:          domainTransaction.Gas,
@@ -192,37 +141,40 @@ func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) 
 }
 
 func domainTransactionOutputToTxOut(domainTransactionOutput *externalapi.DomainTransactionOutput) *TxOut {
-	txOut := txOutPool.Get().(*TxOut)
-	txOut.Value = domainTransactionOutput.Value
-	txOut.ScriptPubKey = domainTransactionOutput.ScriptPublicKey
-	return txOut
+	return &TxOut{
+		Value:        domainTransactionOutput.Value,
+		ScriptPubKey: domainTransactionOutput.ScriptPublicKey,
+	}
 }
 
 func domainTransactionInputToTxIn(domainTransactionInput *externalapi.DomainTransactionInput) *TxIn {
-	txIn := txInPool.Get().(*TxIn)
-	txIn.PreviousOutpoint = *domainOutpointToOutpoint(domainTransactionInput.PreviousOutpoint)
-	txIn.SignatureScript = domainTransactionInput.SignatureScript
-	txIn.Sequence = domainTransactionInput.Sequence
-	txIn.SigOpCount = domainTransactionInput.SigOpCount
-	return txIn
-}
-
-func domainOutpointToOutpoint(domainOutpoint externalapi.DomainOutpoint) *Outpoint {
-	return NewOutpoint(
-		&domainOutpoint.TransactionID,
-		domainOutpoint.Index)
+	return &TxIn{
+		PreviousOutpoint: Outpoint{
+			TxID:  domainTransactionInput.PreviousOutpoint.TransactionID,
+			Index: domainTransactionInput.PreviousOutpoint.Index,
+		},
+		SignatureScript: domainTransactionInput.SignatureScript,
+		Sequence:        domainTransactionInput.Sequence,
+		SigOpCount:      domainTransactionInput.SigOpCount,
+	}
 }
 
 // MsgTxToDomainTransaction converts an MsgTx into externalapi.DomainTransaction
 func MsgTxToDomainTransaction(msgTx *MsgTx) *externalapi.DomainTransaction {
-	transactionInputs := make([]*externalapi.DomainTransactionInput, 0, len(msgTx.TxIn))
-	for _, txIn := range msgTx.TxIn {
-		transactionInputs = append(transactionInputs, txInToDomainTransactionInput(txIn))
+	var transactionInputs []*externalapi.DomainTransactionInput
+	if len(msgTx.TxIn) > 0 {
+		transactionInputs = make([]*externalapi.DomainTransactionInput, len(msgTx.TxIn))
+		for i, txIn := range msgTx.TxIn {
+			transactionInputs[i] = txInToDomainTransactionInput(txIn)
+		}
 	}
 
-	transactionOutputs := make([]*externalapi.DomainTransactionOutput, 0, len(msgTx.TxOut))
-	for _, txOut := range msgTx.TxOut {
-		transactionOutputs = append(transactionOutputs, txOutToDomainTransactionOutput(txOut))
+	var transactionOutputs []*externalapi.DomainTransactionOutput
+	if len(msgTx.TxOut) > 0 {
+		transactionOutputs = make([]*externalapi.DomainTransactionOutput, len(msgTx.TxOut))
+		for i, txOut := range msgTx.TxOut {
+			transactionOutputs[i] = txOutToDomainTransactionOutput(txOut)
+		}
 	}
 
 	return &externalapi.DomainTransaction{
@@ -245,48 +197,58 @@ func txOutToDomainTransactionOutput(txOut *TxOut) *externalapi.DomainTransaction
 
 func txInToDomainTransactionInput(txIn *TxIn) *externalapi.DomainTransactionInput {
 	return &externalapi.DomainTransactionInput{
-		PreviousOutpoint: *outpointToDomainOutpoint(&txIn.PreviousOutpoint), //TODO
-		SignatureScript:  txIn.SignatureScript,
-		SigOpCount:       txIn.SigOpCount,
-		Sequence:         txIn.Sequence,
-	}
-}
-
-func outpointToDomainOutpoint(outpoint *Outpoint) *externalapi.DomainOutpoint {
-	return &externalapi.DomainOutpoint{
-		TransactionID: outpoint.TxID,
-		Index:         outpoint.Index,
+		PreviousOutpoint: externalapi.DomainOutpoint{
+			TransactionID: txIn.PreviousOutpoint.TxID,
+			Index:         txIn.PreviousOutpoint.Index,
+		},
+		SignatureScript: txIn.SignatureScript,
+		SigOpCount:      txIn.SigOpCount,
+		Sequence:        txIn.Sequence,
 	}
 }
 
 // RPCTransactionToDomainTransaction converts RPCTransactions to DomainTransactions
 func RPCTransactionToDomainTransaction(rpcTransaction *RPCTransaction) (*externalapi.DomainTransaction, error) {
-	inputs := make([]*externalapi.DomainTransactionInput, len(rpcTransaction.Inputs))
-	for i, input := range rpcTransaction.Inputs {
-		previousOutpoint, err := RPCOutpointToDomainOutpoint(input.PreviousOutpoint)
-		if err != nil {
-			return nil, err
-		}
-		signatureScript, err := hex.DecodeString(input.SignatureScript)
-		if err != nil {
-			return nil, err
-		}
-		inputs[i] = &externalapi.DomainTransactionInput{
-			PreviousOutpoint: *previousOutpoint,
-			SignatureScript:  signatureScript,
-			Sequence:         input.Sequence,
-			SigOpCount:       input.SigOpCount,
+	var inputs []*externalapi.DomainTransactionInput
+	if len(rpcTransaction.Inputs) > 0 {
+		inputs = make([]*externalapi.DomainTransactionInput, len(rpcTransaction.Inputs))
+		for i, input := range rpcTransaction.Inputs {
+			previousOutpoint, err := RPCOutpointToDomainOutpoint(input.PreviousOutpoint)
+			if err != nil {
+				return nil, err
+			}
+			var signatureScript []byte
+			if input.SignatureScript != "" {
+				var err error
+				signatureScript, err = hex.DecodeString(input.SignatureScript)
+				if err != nil {
+					return nil, err
+				}
+			}
+			inputs[i] = &externalapi.DomainTransactionInput{
+				PreviousOutpoint: *previousOutpoint,
+				SignatureScript:  signatureScript,
+				Sequence:         input.Sequence,
+				SigOpCount:       input.SigOpCount,
+			}
 		}
 	}
-	outputs := make([]*externalapi.DomainTransactionOutput, len(rpcTransaction.Outputs))
-	for i, output := range rpcTransaction.Outputs {
-		scriptPublicKey, err := hex.DecodeString(output.ScriptPublicKey.Script)
-		if err != nil {
-			return nil, err
-		}
-		outputs[i] = &externalapi.DomainTransactionOutput{
-			Value:           output.Amount,
-			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
+	var outputs []*externalapi.DomainTransactionOutput
+	if len(rpcTransaction.Outputs) > 0 {
+		outputs = make([]*externalapi.DomainTransactionOutput, len(rpcTransaction.Outputs))
+		for i, output := range rpcTransaction.Outputs {
+			var scriptPublicKey []byte
+			if output.ScriptPublicKey.Script != "" {
+				var err error
+				scriptPublicKey, err = hex.DecodeString(output.ScriptPublicKey.Script)
+				if err != nil {
+					return nil, err
+				}
+			}
+			outputs[i] = &externalapi.DomainTransactionOutput{
+				Value:           output.Amount,
+				ScriptPublicKey: &externalapi.ScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
+			}
 		}
 	}
 
@@ -294,9 +256,12 @@ func RPCTransactionToDomainTransaction(rpcTransaction *RPCTransaction) (*externa
 	if err != nil {
 		return nil, err
 	}
-	payload, err := hex.DecodeString(rpcTransaction.Payload)
-	if err != nil {
-		return nil, err
+	var payload []byte
+	if rpcTransaction.Payload != "" {
+		payload, err = hex.DecodeString(rpcTransaction.Payload)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &externalapi.DomainTransaction{
@@ -324,9 +289,13 @@ func RPCOutpointToDomainOutpoint(outpoint *RPCOutpoint) (*externalapi.DomainOutp
 
 // RPCUTXOEntryToUTXOEntry converts RPCUTXOEntry to UTXOEntry
 func RPCUTXOEntryToUTXOEntry(entry *RPCUTXOEntry) (externalapi.UTXOEntry, error) {
-	script, err := hex.DecodeString(entry.ScriptPublicKey.Script)
-	if err != nil {
-		return nil, err
+	var script []byte
+	if entry.ScriptPublicKey.Script != "" {
+		var err error
+		script, err = hex.DecodeString(entry.ScriptPublicKey.Script)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return utxo.NewUTXOEntry(
@@ -340,54 +309,61 @@ func RPCUTXOEntryToUTXOEntry(entry *RPCUTXOEntry) (externalapi.UTXOEntry, error)
 	), nil
 }
 
-var sigBuf [256]byte
+func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	needed := hex.EncodedLen(len(value))
+	if needed == 0 {
+		return buffer[:0], ""
+	}
+	if cap(buffer) < needed {
+		buffer = make([]byte, needed)
+	} else {
+		buffer = buffer[:needed]
+	}
+	hex.Encode(buffer, value)
+	return buffer, string(buffer)
+}
 
 // DomainTransactionToRPCTransaction converts DomainTransactions to RPCTransactions
 func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransaction) *RPCTransaction {
-	inputs := make([]*RPCTransactionInput, len(transaction.Inputs))
-	for i, input := range transaction.Inputs {
-		transactionID := input.PreviousOutpoint.TransactionID.String()
-		previousOutpoint := &RPCOutpoint{
-			TransactionID: transactionID,
-			Index:         input.PreviousOutpoint.Index,
-		}
-		n := hex.Encode(sigBuf[:], input.SignatureScript)
-		signatureScript := string(sigBuf[:n])
-		inputs[i] = &RPCTransactionInput{
-			PreviousOutpoint: previousOutpoint,
-			SignatureScript:  signatureScript,
-			Sequence:         input.Sequence,
-			SigOpCount:       input.SigOpCount,
+	var reusableHexBuffer []byte
+	var inputs []*RPCTransactionInput
+	if len(transaction.Inputs) > 0 {
+		inputs = make([]*RPCTransactionInput, len(transaction.Inputs))
+		for i, input := range transaction.Inputs {
+			var signatureScript string
+			reusableHexBuffer, signatureScript = encodeHexString(reusableHexBuffer, input.SignatureScript)
+			inputs[i] = &RPCTransactionInput{
+				PreviousOutpoint: &RPCOutpoint{
+					TransactionID: input.PreviousOutpoint.TransactionID.String(),
+					Index:         input.PreviousOutpoint.Index,
+				},
+				SignatureScript: signatureScript,
+				Sequence:        input.Sequence,
+				SigOpCount:      input.SigOpCount,
+			}
 		}
 	}
-	outputs := make([]*RPCTransactionOutput, len(transaction.Outputs))
-	for i, output := range transaction.Outputs {
-		n := hex.Encode(sigBuf[:], output.ScriptPublicKey.Script)
-		scriptPublicKey := string(sigBuf[:n])
-		outputs[i] = &RPCTransactionOutput{
-			Amount:          output.Value,
-			ScriptPublicKey: &RPCScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
+	var outputs []*RPCTransactionOutput
+	if len(transaction.Outputs) > 0 {
+		outputs = make([]*RPCTransactionOutput, len(transaction.Outputs))
+		for i, output := range transaction.Outputs {
+			var scriptPublicKey string
+			reusableHexBuffer, scriptPublicKey = encodeHexString(reusableHexBuffer, output.ScriptPublicKey.Script)
+			outputs[i] = &RPCTransactionOutput{
+				Amount:          output.Value,
+				ScriptPublicKey: &RPCScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
+			}
 		}
 	}
 	subnetworkID := transaction.SubnetworkID.String()
 
+	var payload string
 	if len(transaction.Payload) == 0 {
-		return &RPCTransaction{
-			Version:      transaction.Version,
-			Inputs:       inputs,
-			Outputs:      outputs,
-			LockTime:     transaction.LockTime,
-			SubnetworkID: subnetworkID,
-			Gas:          transaction.Gas,
-			Payload:      "",
-		}
+		payload = ""
+	} else {
+		reusableHexBuffer, payload = encodeHexString(reusableHexBuffer, transaction.Payload)
 	}
 
-	hexLen := hex.EncodedLen(len(transaction.Payload))
-	dst := make([]byte, hexLen)
-	hex.Encode(dst, transaction.Payload)
-
-	payload := string(dst)
 	return &RPCTransaction{
 		Version:      transaction.Version,
 		Inputs:       inputs,

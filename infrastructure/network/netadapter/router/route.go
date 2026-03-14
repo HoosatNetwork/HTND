@@ -42,7 +42,7 @@ func NewRoute(name string) *Route {
 	return NewRouteWithCapacity(name, DefaultMaxMessages)
 	// return &Route{
 	// 	name:     name,
-	// 	channel:  make(chan appmessage.Message, DefaultMaxMessages),
+	// 	channel:  make(chan appmessage.Message),
 	// 	closed:   false,
 	// 	capacity: -1,
 	// }

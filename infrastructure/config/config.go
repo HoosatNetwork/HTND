@@ -58,7 +58,7 @@ const (
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
-	defaultUTXODefaultMaxLimit    = 0
+	defaultUTXODefaultMaxLimit    = 1000
 )
 
 var (
@@ -148,6 +148,8 @@ type Flags struct {
 	NearlySyncedIBDTimeout time.Duration `long:"nearly-synced-ibd-timeout" description:"Maximum time to allow IBD to run when the node is nearly synced before disconnecting the peer and trying another"`
 	IBDTimeout             time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
 	IBDDequeueTimeout      time.Duration `long:"ibd-dequeue-timeout" description:"Maximum time to wait for a block to be dequeued during IBD before disconnecting the peer and trying another"`
+
+	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions

@@ -15,12 +15,16 @@ func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {
 }
 
 func deserializeOutpoint(serializedOutpoint []byte) (*externalapi.DomainOutpoint, error) {
-	var dbOutpoint serialization.DbOutpoint
+	dbOutpoint := &serialization.DbOutpoint{}
 	err := dbOutpoint.UnmarshalVT(serializedOutpoint)
 	if err != nil {
 		return nil, err
 	}
-	return serialization.DbOutpointToDomainOutpoint(&dbOutpoint)
+	outpoint, err := serialization.DbOutpointToDomainOutpoint(dbOutpoint)
+	if err != nil {
+		return nil, err
+	}
+	return outpoint, nil
 }
 
 func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
@@ -29,12 +33,23 @@ func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
 }
 
 func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
-	var dbUTXOEntry serialization.DbUtxoEntry
+	dbUTXOEntry := &serialization.DbUtxoEntry{}
 	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
 	if err != nil {
 		return nil, err
 	}
-	return serialization.DBUTXOEntryToUTXOEntry(&dbUTXOEntry)
+	utxoEntry, err := serialization.DBUTXOEntryToUTXOEntry(dbUTXOEntry)
+	return utxoEntry, err
+}
+
+func deserializeUTXOAmount(serializedUTXOEntry []byte) (uint64, error) {
+	dbUTXOEntry := &serialization.DbUtxoEntry{}
+	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
+	if err != nil {
+		return 0, err
+	}
+	amount := dbUTXOEntry.Amount
+	return amount, nil
 }
 
 const hashesLengthSize = 8

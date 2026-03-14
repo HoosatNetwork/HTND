@@ -2,6 +2,7 @@ package blockrelay
 
 import (
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -21,14 +22,14 @@ type HandleIBDBlockRequestsContext interface {
 // their corresponding blocks to the requesting peer.
 func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute *router.Route,
 	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
-	threadcount := runtime.NumCPU() * 2
+	threadcount := runtime.NumCPU() * 8
 	semaphore := make(chan struct{}, threadcount)
 
-	rateLimit := time.NewTicker(time.Second / time.Duration(threadcount*2))
+	rateLimit := time.NewTicker(time.Second / time.Duration(threadcount))
 	defer rateLimit.Stop()
-
 	for {
 		<-rateLimit.C // wait for rate limiter
+		var done atomic.Bool
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err
@@ -37,18 +38,26 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 		log.Debugf("Got request for %d ibd blocks", len(msgRequestIBDBlocks.Hashes))
 
 		for i := 0; i < len(msgRequestIBDBlocks.Hashes); i++ {
+			if done.Load() {
+				return nil
+			}
 			hash := msgRequestIBDBlocks.Hashes[i]
 			semaphore <- struct{}{} // acquire
 			go func(hash *externalapi.DomainHash) {
 				defer func() { <-semaphore }() // release
+				if done.Load() {
+					return
+				}
 				// Fetch the block from the database.
 				block, found, err := context.Domain().Consensus().GetBlock(hash)
 				if err != nil {
 					log.Warnf("unable to fetch requested block hash %s: %s", hash, err)
+					done.Store(true)
 					return
 				}
 				if !found {
 					log.Warnf("IBD block %s not found", hash)
+					done.Store(true)
 					return
 				}
 
@@ -63,6 +72,7 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				err = outgoingRoute.Enqueue(ibdBlockMessage)
 				if err != nil {
 					log.Warnf("failed to enqueue block %s: %s", hash, err)
+					done.Store(true)
 					return
 				}
 			}(hash)

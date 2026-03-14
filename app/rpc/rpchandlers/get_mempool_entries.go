@@ -10,14 +10,13 @@ import (
 func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getMempoolEntriesRequest := request.(*appmessage.GetMempoolEntriesRequestMessage)
 
-	entries := make([]*appmessage.MempoolEntry, 0)
-
-	transactionPoolTransactions, orphanPoolTransactions := context.Domain.MiningManager().AllTransactions(!getMempoolEntriesRequest.FilterTransactionPool, getMempoolEntriesRequest.IncludeOrphanPool)
+	transactionPoolTransactions, orphanPoolTransactions := context.Domain.MiningManager().AllTransactionsNoClone(!getMempoolEntriesRequest.FilterTransactionPool, getMempoolEntriesRequest.IncludeOrphanPool)
+	entries := make([]*appmessage.MempoolEntry, 0, len(transactionPoolTransactions)+len(orphanPoolTransactions))
 
 	if !getMempoolEntriesRequest.FilterTransactionPool {
 		for _, transaction := range transactionPoolTransactions {
 			rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-			err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+			err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -31,7 +30,7 @@ func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, requ
 	if getMempoolEntriesRequest.IncludeOrphanPool {
 		for _, transaction := range orphanPoolTransactions {
 			rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-			err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+			err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 			if err != nil {
 				return nil, err
 			}

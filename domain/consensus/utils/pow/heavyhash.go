@@ -421,11 +421,17 @@ func (mat *floatMatrix) HoohashMatrixMultiplicationV110(hash *externalapi.Domain
 	for i := range 64 {
 		for j := range 64 {
 			if sw <= 0.02 {
-				input := (mat[i][j]*hashMod*float64(vector[j]) + nonceMod)
-				output := ForComplex(input) * float64(vector[j]) * multiplier
-				product[i] += output
+				mathashmod := mat[i][j] * hashMod
+				mathashmodvector := mathashmod * float64(vector[j])
+				input := (mathashmodvector + nonceMod)
+				forComplex := ForComplex(input)
+				outputMultipliedByvector := forComplex * float64(vector[j])
+				outputMultipliedByMultiplier := outputMultipliedByvector * multiplier
+				product[i] += outputMultipliedByMultiplier
 			} else {
-				product[i] += mat[i][j] * divider * float64(vector[j])
+				outputMultipliedByDivider := mat[i][j] * divider
+				outputMultipliedByVector := outputMultipliedByDivider * float64(vector[j])
+				product[i] += outputMultipliedByVector
 			}
 			sw = TransformFactor(product[i])
 		}

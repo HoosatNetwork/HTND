@@ -21,6 +21,14 @@ type Mempool interface {
 		transactionPoolTransaction *externalapi.DomainTransaction,
 		isOrphan bool,
 		found bool)
+	GetTransactionNoClone(
+		transactionID *externalapi.DomainTransactionID,
+		includeTransactionPool bool,
+		includeOrphanPool bool,
+	) (
+		transactionPoolTransaction *externalapi.DomainTransaction,
+		isOrphan bool,
+		found bool)
 	GetTransactionsByAddresses(
 		includeTransactionPool bool,
 		includeOrphanPool bool) (
@@ -29,7 +37,21 @@ type Mempool interface {
 		sendingInOrphanPool map[string]*externalapi.DomainTransaction,
 		receivingInOrphanPool map[string]*externalapi.DomainTransaction,
 		err error)
+	GetTransactionsByAddressesNoClone(
+		includeTransactionPool bool,
+		includeOrphanPool bool) (
+		sendingInTransactionPool map[string]*externalapi.DomainTransaction,
+		receivingInTransactionPool map[string]*externalapi.DomainTransaction,
+		sendingInOrphanPool map[string]*externalapi.DomainTransaction,
+		receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+		err error)
 	AllTransactions(
+		includeTransactionPool bool,
+		includeOrphanPool bool,
+	) (
+		transactionPoolTransactions []*externalapi.DomainTransaction,
+		orphanPoolTransactions []*externalapi.DomainTransaction)
+	AllTransactionsNoClone(
 		includeTransactionPool bool,
 		includeOrphanPool bool,
 	) (

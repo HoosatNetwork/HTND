@@ -277,6 +277,8 @@ var MainnetParams = Params{
 		"hoosat.seed-fi.evern00b.com",
 		"hoosat.seed-de.evern00b.com",
 		"hoosat.seed-in.evern00b.com",
+		// Seeder run by Foztor in the UK
+		"htn-mainnet-seed.htn.foztor.net",
 	},
 
 	// DAG parameters

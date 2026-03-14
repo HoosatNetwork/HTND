@@ -12,8 +12,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/util"
 )
 
-var sigBuf [256]byte
-
 var utxoEntriesPool = sync.Pool{
 	New: func() interface{} {
 		return make([]*appmessage.UTXOsByAddressesEntry, 0, 1000)
@@ -22,13 +20,32 @@ var utxoEntriesPool = sync.Pool{
 
 var utxoPairPool = sync.Pool{
 	New: func() interface{} {
-		return make([]utxoindex.UTXOPair, 0, 16)
+		return make([]utxoindex.UTXOPair, 0, 1000)
 	},
 }
 
-func fastHex(dst []byte, src []byte) string {
-	n := hex.Encode(dst, src)
-	return string(dst[:n])
+func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	needed := hex.EncodedLen(len(value))
+	if needed == 0 {
+		return buffer[:0], ""
+	}
+	if cap(buffer) < needed {
+		buffer = make([]byte, needed)
+	} else {
+		buffer = buffer[:needed]
+	}
+	hex.Encode(buffer, value)
+	return buffer, string(buffer)
+}
+
+func releaseUTXOsByAddressesEntries(entries []*appmessage.UTXOsByAddressesEntry) {
+	clear(entries[:cap(entries)])
+	utxoEntriesPool.Put(entries[:0])
+}
+
+func releaseUTXOPairs(pairs []utxoindex.UTXOPair) {
+	clear(pairs[:cap(pairs)])
+	utxoPairPool.Put(pairs[:0])
 }
 
 // HandleGetUTXOsByAddresses handles the respectively named RPC command with 1-second cache
@@ -52,10 +69,18 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	if cap(allEntries) < needed {
 		allEntries = make([]*appmessage.UTXOsByAddressesEntry, 0, needed)
 	}
+	defer func() {
+		releaseUTXOsByAddressesEntries(allEntries)
+	}()
 
 	utxoOutpointEntryPairs := utxoPairPool.Get().([]utxoindex.UTXOPair)[:0] // Reset length
+	defer func() {
+		releaseUTXOPairs(utxoOutpointEntryPairs)
+	}()
+	var reusableHexBuffer []byte
 
 	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
+		utxoOutpointEntryPairs = utxoOutpointEntryPairs[:0]
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
@@ -75,8 +100,10 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		if len(utxoOutpointEntryPairs) == 0 {
 			continue
 		}
+		var scriptHex string
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script)
 		sharedScript := &appmessage.RPCScriptPublicKey{
-			Script:  fastHex(sigBuf[:], utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script),
+			Script:  scriptHex,
 			Version: utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Version,
 		}
 		for _, pair := range utxoOutpointEntryPairs {
@@ -84,8 +111,8 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		}
 	}
 
-	response := appmessage.NewGetUTXOsByAddressesResponseMessage(allEntries)
-	utxoEntriesPool.Put(allEntries)
-	utxoPairPool.Put(utxoOutpointEntryPairs)
+	responseEntries := make([]*appmessage.UTXOsByAddressesEntry, len(allEntries))
+	copy(responseEntries, allEntries)
+	response := appmessage.NewGetUTXOsByAddressesResponseMessage(responseEntries)
 	return response, nil
 }

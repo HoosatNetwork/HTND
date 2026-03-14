@@ -126,43 +126,43 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		Levels: [7]pebble.LevelOptions{
 			{ // L0
-				BlockSize:      64 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L1
-				BlockSize:      64 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L2
-				BlockSize:      64 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L3
-				BlockSize:      64 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L4
-				BlockSize:      64 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L5
-				BlockSize:      64 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L6
-				BlockSize:      128 << 10,
+				BlockSize:      16 << 10,
 				IndexBlockSize: 256 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
@@ -204,7 +204,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		return pebble.ValueSeparationPolicy{
 			Enabled:               true,
-			MinimumSize:           128,
+			MinimumSize:           1024, // 1 KiB – reduces write amplification for typical value sizes (UTXO entries, scripts, etc.)
 			MaxBlobReferenceDepth: 100,
 			RewriteMinimumAge:     24 * time.Hour,
 			TargetGarbageRatio:    0.20,
