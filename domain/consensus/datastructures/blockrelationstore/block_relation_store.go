@@ -42,12 +42,12 @@ func (brs *blockRelationStore) BlockRelation(dbContext model.DBReader, stagingAr
 	stagingShard := brs.stagingShard(stagingArea)
 	blockRelations, ok := stagingShard.toAdd[*blockHash]
 	if ok && blockRelations != nil {
-		return blockRelations.Clone(), nil
+		return blockRelations, nil
 	}
 
 	blockRelationsCached, ok := brs.cache.Get(blockHash)
 	if ok && blockRelationsCached != nil {
-		return blockRelationsCached.Clone(), nil
+		return blockRelationsCached, nil
 	}
 
 	blockRelationsBytes, err := dbContext.Get(brs.hashAsKey(blockHash))
@@ -63,7 +63,8 @@ func (brs *blockRelationStore) BlockRelation(dbContext model.DBReader, stagingAr
 		return nil, err
 	}
 	brs.cache.Add(blockHash, blockRelationsDeserialized)
-	return blockRelationsDeserialized.Clone(), nil
+
+	return blockRelationsDeserialized, nil
 }
 
 func (brs *blockRelationStore) Has(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
