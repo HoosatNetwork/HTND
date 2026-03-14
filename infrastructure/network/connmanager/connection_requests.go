@@ -22,7 +22,7 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 	for address, connReq := range c.activeRequested {
 		connection, matchedAddress, ok, err := c.findRequestedConnectionInSet(connSet, address)
 		if err != nil {
-			log.Warnf("Failed to match active requested connection %s: %s", address, err)
+			log.Debugf("Failed to match active requested connection %s: %s", address, err)
 			continue
 		}
 		if !ok { // a requested connection was disconnected
@@ -52,7 +52,7 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 
 		connection, matchedAddress, ok, err := c.findRequestedConnectionInSet(connSet, address)
 		if err != nil {
-			log.Warnf("Failed to match pending requested connection %s: %s", address, err)
+			log.Debugf("Failed to match pending requested connection %s: %s", address, err)
 			continue
 		}
 		// The pending connection request has already connected - move it to active
