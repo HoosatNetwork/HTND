@@ -17,7 +17,7 @@ func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, requ
 	if !getMempoolEntriesRequest.FilterTransactionPool {
 		for _, transaction := range transactionPoolTransactions {
 			rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-			err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+			err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -31,7 +31,7 @@ func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, requ
 	if getMempoolEntriesRequest.IncludeOrphanPool {
 		for _, transaction := range orphanPoolTransactions {
 			rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-			err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+			err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 			if err != nil {
 				return nil, err
 			}

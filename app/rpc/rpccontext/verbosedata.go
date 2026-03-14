@@ -101,8 +101,13 @@ func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, dom
 	block.VerboseData.TransactionIDs = transactionIDs
 
 	if includeTransactionVerboseData {
-		for _, transaction := range block.Transactions {
-			err := ctx.PopulateTransactionWithVerboseData(transaction, domainBlockHeader)
+		for i, transaction := range block.Transactions {
+			var domainTransaction *externalapi.DomainTransaction
+			if i < len(domainBlock.Transactions) {
+				domainTransaction = domainBlock.Transactions[i]
+			}
+
+			err := ctx.PopulateTransactionWithVerboseData(transaction, domainTransaction, domainBlockHeader)
 			if err != nil {
 				return err
 			}
@@ -113,13 +118,18 @@ func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, dom
 }
 
 // PopulateTransactionWithVerboseData populates the given `transaction` with
-// verbose data from `domainTransaction`
+// verbose data. When domainTransaction is provided, it is used directly to
+// avoid rebuilding the domain transaction from the RPC representation.
 func (ctx *Context) PopulateTransactionWithVerboseData(
-	transaction *appmessage.RPCTransaction, domainBlockHeader externalapi.BlockHeader) error {
+	transaction *appmessage.RPCTransaction, domainTransaction *externalapi.DomainTransaction,
+	domainBlockHeader externalapi.BlockHeader) error {
 
-	domainTransaction, err := appmessage.RPCTransactionToDomainTransaction(transaction)
-	if err != nil {
-		return err
+	if domainTransaction == nil {
+		var err error
+		domainTransaction, err = appmessage.RPCTransactionToDomainTransaction(transaction)
+		if err != nil {
+			return err
+		}
 	}
 	ctx.Domain.Consensus().PopulateMass(domainTransaction)
 

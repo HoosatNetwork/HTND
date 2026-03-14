@@ -42,7 +42,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 
 			if transaction, found := sendingInTransactionPool[scriptPublicKey.String()]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -57,7 +57,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 
 			if transaction, found := receivingInTransactionPool[scriptPublicKey.String()]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -74,7 +74,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 
 			if transaction, found := sendingInOrphanPool[scriptPublicKey.String()]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -89,7 +89,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 
 			if transaction, found := receivingInOrphanPool[scriptPublicKey.String()]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}

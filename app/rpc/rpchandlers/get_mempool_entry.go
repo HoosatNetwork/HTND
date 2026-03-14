@@ -32,7 +32,7 @@ func HandleGetMempoolEntry(context *rpccontext.Context, _ *router.Router, reques
 	}
 
 	rpcTransaction := appmessage.DomainTransactionToRPCTransaction(mempoolTransaction)
-	err = context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+	err = context.PopulateTransactionWithVerboseData(rpcTransaction, mempoolTransaction, nil)
 	if err != nil {
 		return nil, err
 	}
