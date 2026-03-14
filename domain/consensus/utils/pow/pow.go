@@ -27,6 +27,15 @@ type State struct {
 	BlockVersion uint16
 }
 
+var UseHoohashCLibrary bool
+
+func SetUseHoohashCLibrary(use bool) {
+        UseHoohashCLibrary = false // Not available on not aarch64 linux
+	_ = use
+}
+
+
+
 // NewState creates a new state with pre-computed values to speed up mining
 // It takes the target from the Bits field
 func NewState(header externalapi.MutableBlockHeader) *State {
