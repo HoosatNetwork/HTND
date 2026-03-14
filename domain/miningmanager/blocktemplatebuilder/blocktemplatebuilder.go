@@ -123,24 +123,24 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 	mempoolTransactions := btb.mempool.BlockCandidateTransactions()
 
 	blockTxs := selectedTransactions{
-		selectedTxs: make([]*consensusexternalapi.DomainTransaction, 0, 0),
-		txMasses:    make([]uint64, 0, 0),
-		txFees:      make([]uint64, 0, 0),
+		selectedTxs: nil,
+		txMasses:    nil,
+		txFees:      nil,
 		totalMass:   0,
 		totalFees:   0,
 	}
 	if len(mempoolTransactions) > 0 {
-		candidateTxs := make([]*candidateTx, 0, len(mempoolTransactions))
+		candidateTxs := make([]*candidateTx, len(mempoolTransactions))
 		for i := range mempoolTransactions {
 			gasLimit := uint64(0)
 			if !subnetworks.IsBuiltInOrNative(mempoolTransactions[i].SubnetworkID) {
 				panic("We currently don't support non native subnetworks")
 			}
-			candidateTxs = append(candidateTxs, &candidateTx{
+			candidateTxs[i] = &candidateTx{
 				DomainTransaction: mempoolTransactions[i],
 				txValue:           btb.calcTxValue(mempoolTransactions[i]),
 				gasLimit:          gasLimit,
-			})
+			}
 		}
 		if constants.GetBlockVersion() < 5 {
 			sort.Slice(candidateTxs, func(i, j int) bool {

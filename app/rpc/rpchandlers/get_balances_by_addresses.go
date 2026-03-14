@@ -1,6 +1,7 @@
 package rpchandlers
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -50,10 +51,17 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 
 	getBalancesByAddressesRequest := request.(*appmessage.GetBalancesByAddressesRequestMessage)
 
-	cacheKey := ""
+	totalAddressLength := 0
 	for _, addr := range getBalancesByAddressesRequest.Addresses {
-		cacheKey += addr + ","
+		totalAddressLength += len(addr) + 1
 	}
+	var cacheKeyBuilder strings.Builder
+	cacheKeyBuilder.Grow(totalAddressLength)
+	for _, addr := range getBalancesByAddressesRequest.Addresses {
+		cacheKeyBuilder.WriteString(addr)
+		cacheKeyBuilder.WriteByte(',')
+	}
+	cacheKey := cacheKeyBuilder.String()
 
 	balancesByAddressesCacheMutex.Lock()
 	now := time.Now()

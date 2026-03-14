@@ -162,10 +162,15 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		})
 	}
 
-	for i := 0; i < len(selectedTxs); i++ {
-		txsForBlockTemplate.selectedTxs = append(txsForBlockTemplate.selectedTxs, selectedTxs[i].DomainTransaction)
-		txsForBlockTemplate.txMasses = append(txsForBlockTemplate.txMasses, selectedTxs[i].Mass)
-		txsForBlockTemplate.txFees = append(txsForBlockTemplate.txFees, selectedTxs[i].Fee)
+	if len(selectedTxs) > 0 {
+		txsForBlockTemplate.selectedTxs = make([]*consensusexternalapi.DomainTransaction, len(selectedTxs))
+		txsForBlockTemplate.txMasses = make([]uint64, len(selectedTxs))
+		txsForBlockTemplate.txFees = make([]uint64, len(selectedTxs))
+		for i := 0; i < len(selectedTxs); i++ {
+			txsForBlockTemplate.selectedTxs[i] = selectedTxs[i].DomainTransaction
+			txsForBlockTemplate.txMasses[i] = selectedTxs[i].Mass
+			txsForBlockTemplate.txFees[i] = selectedTxs[i].Fee
+		}
 	}
 	return txsForBlockTemplate
 }

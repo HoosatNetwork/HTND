@@ -12,8 +12,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/util"
 )
 
-var sigBuf [256]byte
-
 var utxoEntriesPool = sync.Pool{
 	New: func() interface{} {
 		return make([]*appmessage.UTXOsByAddressesEntry, 0, 1000)
@@ -26,6 +24,20 @@ var utxoPairPool = sync.Pool{
 	},
 }
 
+func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	needed := hex.EncodedLen(len(value))
+	if needed == 0 {
+		return buffer[:0], ""
+	}
+	if cap(buffer) < needed {
+		buffer = make([]byte, needed)
+	} else {
+		buffer = buffer[:needed]
+	}
+	hex.Encode(buffer, value)
+	return buffer, string(buffer)
+}
+
 func releaseUTXOsByAddressesEntries(entries []*appmessage.UTXOsByAddressesEntry) {
 	clear(entries[:cap(entries)])
 	utxoEntriesPool.Put(entries[:0])
@@ -34,11 +46,6 @@ func releaseUTXOsByAddressesEntries(entries []*appmessage.UTXOsByAddressesEntry)
 func releaseUTXOPairs(pairs []utxoindex.UTXOPair) {
 	clear(pairs[:cap(pairs)])
 	utxoPairPool.Put(pairs[:0])
-}
-
-func fastHex(dst []byte, src []byte) string {
-	n := hex.Encode(dst, src)
-	return string(dst[:n])
 }
 
 // HandleGetUTXOsByAddresses handles the respectively named RPC command with 1-second cache
@@ -70,6 +77,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	defer func() {
 		releaseUTXOPairs(utxoOutpointEntryPairs)
 	}()
+	var reusableHexBuffer []byte
 
 	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
 		utxoOutpointEntryPairs = utxoOutpointEntryPairs[:0]
@@ -92,8 +100,10 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		if len(utxoOutpointEntryPairs) == 0 {
 			continue
 		}
+		var scriptHex string
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script)
 		sharedScript := &appmessage.RPCScriptPublicKey{
-			Script:  fastHex(sigBuf[:], utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script),
+			Script:  scriptHex,
 			Version: utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Version,
 		}
 		for _, pair := range utxoOutpointEntryPairs {

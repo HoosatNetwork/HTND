@@ -131,7 +131,9 @@ func (ctx *Context) PopulateTransactionWithVerboseData(
 			return err
 		}
 	}
-	ctx.Domain.Consensus().PopulateMass(domainTransaction)
+	if domainTransaction.Mass == 0 {
+		ctx.Domain.Consensus().PopulateMass(domainTransaction)
+	}
 
 	transaction.VerboseData = &appmessage.RPCTransactionVerboseData{
 		TransactionID: consensushashing.TransactionID(domainTransaction).String(),
@@ -145,7 +147,12 @@ func (ctx *Context) PopulateTransactionWithVerboseData(
 	for _, input := range transaction.Inputs {
 		ctx.populateTransactionInputWithVerboseData(input)
 	}
-	for _, output := range transaction.Outputs {
+	for i, output := range transaction.Outputs {
+		if i < len(domainTransaction.Outputs) {
+			ctx.populateTransactionOutputWithDomainOutput(output, domainTransaction.Outputs[i])
+			continue
+		}
+
 		err := ctx.populateTransactionOutputWithVerboseData(output)
 		if err != nil {
 			return err
@@ -156,6 +163,25 @@ func (ctx *Context) PopulateTransactionWithVerboseData(
 
 func (ctx *Context) populateTransactionInputWithVerboseData(transactionInput *appmessage.RPCTransactionInput) {
 	transactionInput.VerboseData = &appmessage.RPCTransactionInputVerboseData{}
+}
+
+func (ctx *Context) populateTransactionOutputWithDomainOutput(
+	transactionOutput *appmessage.RPCTransactionOutput,
+	domainOutput *externalapi.DomainTransactionOutput,
+) {
+	// Ignore the error here since an error means the script couldn't be parsed and
+	// there's no additional information about it anyways.
+	scriptPublicKeyType, scriptPublicKeyAddress, _ := txscript.ExtractScriptPubKeyAddress(
+		domainOutput.ScriptPublicKey, ctx.Config.ActiveNetParams)
+
+	var encodedScriptPublicKeyAddress string
+	if scriptPublicKeyAddress != nil {
+		encodedScriptPublicKeyAddress = scriptPublicKeyAddress.EncodeAddress()
+	}
+	transactionOutput.VerboseData = &appmessage.RPCTransactionOutputVerboseData{
+		ScriptPublicKeyType:    scriptPublicKeyType.String(),
+		ScriptPublicKeyAddress: encodedScriptPublicKeyAddress,
+	}
 }
 
 func (ctx *Context) populateTransactionOutputWithVerboseData(transactionOutput *appmessage.RPCTransactionOutput) error {

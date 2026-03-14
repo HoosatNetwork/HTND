@@ -397,13 +397,16 @@ func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
 	addressesCount := len(nl.propagateUTXOsChangedNotificationAddresses)
 
 	scriptCache := make(map[utxoindex.ScriptPublicKeyString]*appmessage.RPCScriptPublicKey, 8)
+	var reusableHexBuffer []byte
 
 	getRPCScript := func(spk *externalapi.ScriptPublicKey, key utxoindex.ScriptPublicKeyString) *appmessage.RPCScriptPublicKey {
 		if cached, ok := scriptCache[key]; ok {
 			return cached
 		}
+		var scriptHex string
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, spk.Script)
 		rpcSpk := &appmessage.RPCScriptPublicKey{
-			Script:  fastHex(sigBuf[:], spk.Script),
+			Script:  scriptHex,
 			Version: spk.Version,
 		}
 		scriptCache[key] = rpcSpk
