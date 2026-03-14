@@ -17,6 +17,8 @@ service htnwalletd {
   rpc Sign(SignRequest) returns (SignResponse) {}
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {}
   rpc CreateUnsignedCompoundTransaction (CreateUnsignedCompoundTransactionRequest) returns (CreateUnsignedCompoundTransactionResponse) {}
+  rpc GetMempoolEntry (GetMempoolEntryRequest) returns (GetMempoolEntryResponse) {}
+  rpc WaitForMempoolEntries (WaitForMempoolEntriesRequest) returns (WaitForMempoolEntriesResponse) {}
 }
 
 message GetBalanceRequest {
@@ -150,4 +152,29 @@ message GetVersionRequest{
 
 message GetVersionResponse{
   string version = 1;
+}
+
+// Foztor - lets try making auto compound more robust
+message GetMempoolEntryRequest {
+  string txid = 1;
+}
+
+message GetMempoolEntryResponse {
+  bool found = 1;
+  bool is_orphan = 2;
+  string error = 3; // optional human-readable error (empty if none)
+}
+
+message WaitForMempoolEntriesRequest {
+  repeated string txids = 1;
+  // timeout in seconds to wait for all txids to appear in mempool/orphan pool
+  uint32 timeout_seconds = 2;
+}
+
+message WaitForMempoolEntriesResponse {
+  // true if all txids were observed before timeout
+  bool ok = 1;
+  // list of txids that were observed (subset, may be all)
+  repeated string observed_txids = 2;
+  string error = 3;
 }
