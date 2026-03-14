@@ -40,7 +40,9 @@ func (uds *utxoDiffStore) Stage(stagingArea *model.StagingArea, blockHash *exter
 	stagingShard := uds.stagingShard(stagingArea)
 
 	stagingShard.utxoDiffToAdd[*blockHash] = utxoDiff
-	stagingShard.utxoDiffChildToAdd[*blockHash] = utxoDiffChild
+	if utxoDiffChild != nil {
+		stagingShard.utxoDiffChildToAdd[*blockHash] = utxoDiffChild
+	}
 }
 
 func (uds *utxoDiffStore) IsStaged(stagingArea *model.StagingArea) bool {
@@ -98,7 +100,7 @@ func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *m
 	stagingShard := uds.stagingShard(stagingArea)
 
 	utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
-	if ok {
+	if ok && utxoDiffChild != nil {
 		return utxoDiffChild, nil
 	}
 	utxoDiffChildCached, ok := uds.utxoDiffChildCache.Get(blockHash)
