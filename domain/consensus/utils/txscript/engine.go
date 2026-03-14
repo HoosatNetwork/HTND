@@ -53,11 +53,15 @@ type Engine struct {
 
 // Reset clears the Engine state for reuse, preserving slice capacities.
 func (vm *Engine) Reset() {
+	clear(vm.scripts)
 	vm.scripts = vm.scripts[:0]
 	vm.scriptIdx = 0
 	vm.scriptOff = 0
+	clear(vm.dstack.stk)
 	vm.dstack.stk = vm.dstack.stk[:0]
+	clear(vm.astack.stk)
 	vm.astack.stk = vm.astack.stk[:0]
+	clear(vm.condStack)
 	vm.condStack = vm.condStack[:0]
 	vm.numOps = 0
 	vm.isP2SH = false

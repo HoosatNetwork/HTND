@@ -40,6 +40,11 @@ var usableAddressesPool = sync.Pool{
 	},
 }
 
+func releaseUsableAddresses(addresses []string) {
+	clear(addresses[:cap(addresses)])
+	usableAddressesPool.Put(addresses[:0])
+}
+
 // HandleGetUsableAddresses handles the respectively named RPC command
 func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 
@@ -59,6 +64,7 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 	if cap(UsableAddresses) < len(getUsableAddressesRequest.Addresses) {
 		UsableAddresses = make([]string, 0, len(getUsableAddressesRequest.Addresses))
 	}
+	defer releaseUsableAddresses(UsableAddresses)
 	for _, address := range getUsableAddressesRequest.Addresses {
 		usable, err := getUsabilityOfAddress(context, address)
 
@@ -78,7 +84,7 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 	// log.Infof("-----------------------------------------------------------")
 	// log.Infof("Found %s usable addresses", len(UsableAddresses))
 	// log.Infof("-----------------------------------------------------------")
-	response := appmessage.NewGetUsableAddressesResponse(UsableAddresses)
-	usableAddressesPool.Put(UsableAddresses)
+	responseAddresses := append(make([]string, 0, len(UsableAddresses)), UsableAddresses...)
+	response := appmessage.NewGetUsableAddressesResponse(responseAddresses)
 	return response, nil
 }

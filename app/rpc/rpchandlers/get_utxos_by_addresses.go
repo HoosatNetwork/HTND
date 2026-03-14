@@ -26,6 +26,16 @@ var utxoPairPool = sync.Pool{
 	},
 }
 
+func releaseUTXOsByAddressesEntries(entries []*appmessage.UTXOsByAddressesEntry) {
+	clear(entries[:cap(entries)])
+	utxoEntriesPool.Put(entries[:0])
+}
+
+func releaseUTXOPairs(pairs []utxoindex.UTXOPair) {
+	clear(pairs[:cap(pairs)])
+	utxoPairPool.Put(pairs[:0])
+}
+
 func fastHex(dst []byte, src []byte) string {
 	n := hex.Encode(dst, src)
 	return string(dst[:n])
@@ -52,10 +62,17 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	if cap(allEntries) < needed {
 		allEntries = make([]*appmessage.UTXOsByAddressesEntry, 0, needed)
 	}
+	defer func() {
+		releaseUTXOsByAddressesEntries(allEntries)
+	}()
 
 	utxoOutpointEntryPairs := utxoPairPool.Get().([]utxoindex.UTXOPair)[:0] // Reset length
+	defer func() {
+		releaseUTXOPairs(utxoOutpointEntryPairs)
+	}()
 
 	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
+		utxoOutpointEntryPairs = utxoOutpointEntryPairs[:0]
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
@@ -84,8 +101,8 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		}
 	}
 
-	response := appmessage.NewGetUTXOsByAddressesResponseMessage(allEntries)
-	utxoEntriesPool.Put(allEntries)
-	utxoPairPool.Put(utxoOutpointEntryPairs)
+	responseEntries := make([]*appmessage.UTXOsByAddressesEntry, len(allEntries))
+	copy(responseEntries, allEntries)
+	response := appmessage.NewGetUTXOsByAddressesResponseMessage(responseEntries)
 	return response, nil
 }

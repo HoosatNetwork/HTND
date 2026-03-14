@@ -32,6 +32,11 @@ func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, re
 	cacheKey := getBalanceByAddressRequest.Address
 
 	balanceByAddressCacheMutex.Lock()
+	for key, entry := range balanceByAddressCache {
+		if time.Since(entry.timestamp) >= time.Second {
+			delete(balanceByAddressCache, key)
+		}
+	}
 	cached, found := balanceByAddressCache[cacheKey]
 	if found && time.Since(cached.timestamp) < time.Second {
 		balanceByAddressCacheMutex.Unlock()

@@ -18,10 +18,25 @@ var (
 	balancesByAddressesCacheMutex sync.Mutex
 )
 
+const balancesByAddressesCacheTTL = time.Second
+
 var balancesByAddressesPool = sync.Pool{
 	New: func() interface{} {
 		return make([]*appmessage.BalancesByAddressesEntry, 0, 2)
 	},
+}
+
+func releaseBalancesByAddressesEntries(entries []*appmessage.BalancesByAddressesEntry) {
+	clear(entries[:cap(entries)])
+	balancesByAddressesPool.Put(entries[:0])
+}
+
+func purgeExpiredBalancesByAddressesCache(now time.Time) {
+	for key, entry := range balancesByAddressesCache {
+		if now.Sub(entry.timestamp) >= balancesByAddressesCacheTTL {
+			delete(balancesByAddressesCache, key)
+		}
+	}
 }
 
 // HandleGetBalancesByAddresses handles the respectively named RPC command
@@ -41,8 +56,10 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	}
 
 	balancesByAddressesCacheMutex.Lock()
+	now := time.Now()
+	purgeExpiredBalancesByAddressesCache(now)
 	cached, found := balancesByAddressesCache[cacheKey]
-	if found && time.Since(cached.timestamp) < time.Second {
+	if found {
 		balancesByAddressesCacheMutex.Unlock()
 		response := appmessage.NewGetBalancesByAddressesResponse(cached.balances)
 		return response, nil
@@ -53,6 +70,7 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	if cap(allEntries) < len(getBalancesByAddressesRequest.Addresses) {
 		allEntries = make([]*appmessage.BalancesByAddressesEntry, 0, len(getBalancesByAddressesRequest.Addresses))
 	}
+	defer releaseBalancesByAddressesEntries(allEntries)
 	allEntries = allEntries[:len(getBalancesByAddressesRequest.Addresses)]
 	for i, address := range getBalancesByAddressesRequest.Addresses {
 		balance, err := getBalanceByAddress(context, address, context.Config.UTXODefaultMaxLimit)
@@ -71,16 +89,18 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 			Balance: balance,
 		}
 	}
+	responseEntries := make([]*appmessage.BalancesByAddressesEntry, len(allEntries))
+	copy(responseEntries, allEntries)
 	balancesByAddressesCacheMutex.Lock()
+	purgeExpiredBalancesByAddressesCache(now)
 	balancesByAddressesCache[cacheKey] = struct {
 		balances  []*appmessage.BalancesByAddressesEntry
 		timestamp time.Time
 	}{
-		balances:  allEntries,
-		timestamp: time.Now(),
+		balances:  responseEntries,
+		timestamp: now,
 	}
 	balancesByAddressesCacheMutex.Unlock()
-	response := appmessage.NewGetBalancesByAddressesResponse(allEntries)
-	balancesByAddressesPool.Put(allEntries)
+	response := appmessage.NewGetBalancesByAddressesResponse(responseEntries)
 	return response, nil
 }

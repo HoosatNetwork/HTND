@@ -249,14 +249,14 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 					candidatesByLevelToReferenceBlocksMap[blockLevel][*parent] = referenceBlocks
 				}
 
-				for k := range toRemove {
-					delete(toRemove, k)
-				}
+				clear(toRemove)
 				hashSetPool.Put((map[externalapi.DomainHash]struct{})(toRemove))
 			}
 		}
 	}
 
+	clear(directParentHashesCopy[:cap(directParentHashesCopy)])
+	clear(directParentHeaders[:cap(directParentHeaders)])
 	domainHashSlicePool.Put(directParentHashesCopy[:0])
 	blockHeaderSlicePool.Put(directParentHeaders[:0])
 

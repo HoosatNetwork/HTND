@@ -75,6 +75,7 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 	}
 	transactions := make([]*MsgTx, len(msgTxs))
 	copy(transactions, msgTxs)
+	clear(msgTxs[:cap(msgTxs)])
 	msgTxSlicePool.Put(msgTxs)
 	return &MsgBlock{
 		Header:       *DomainBlockHeaderToBlockHeader(domainBlock.Header),
@@ -165,6 +166,7 @@ func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) 
 			Sequence:         txIn.Sequence,
 			SigOpCount:       txIn.SigOpCount,
 		}
+		*txIn = TxIn{}
 		txInPool.Put(txIn)
 	}
 
@@ -174,9 +176,12 @@ func DomainTransactionToMsgTx(domainTransaction *externalapi.DomainTransaction) 
 			Value:        txOut.Value,
 			ScriptPubKey: txOut.ScriptPubKey,
 		}
+		*txOut = TxOut{}
 		txOutPool.Put(txOut)
 	}
 
+	clear(txIns[:cap(txIns)])
+	clear(txOuts[:cap(txOuts)])
 	txInSlicePool.Put(txIns)
 	txOutSlicePool.Put(txOuts)
 
