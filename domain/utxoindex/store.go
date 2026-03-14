@@ -469,11 +469,10 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	defer cursor.Close()
 
 	// First pass: count entries
-	count := 0
-	for ok := cursor.First(); ok; ok = cursor.Next() {
-		count++
-		if limit > 0 && uint32(count) >= limit {
-			break
+	count := int(limit)
+	if count == 0 {
+		for ok := cursor.First(); ok; ok = cursor.Next() {
+			count++
 		}
 	}
 
