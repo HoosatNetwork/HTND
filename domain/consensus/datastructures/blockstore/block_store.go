@@ -89,12 +89,12 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 
 	block, ok := stagingShard.toAdd[*blockHash]
 	if ok && block != nil {
-		return block, nil
+		return block.Clone(), nil
 	}
 
 	blockCached, ok := bs.cache.Get(blockHash)
 	if ok && blockCached != nil {
-		return blockCached, nil
+		return blockCached.Clone(), nil
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
@@ -110,7 +110,7 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 		return nil, err
 	}
 	bs.cache.Add(blockHash, blockDeserialized)
-	return blockDeserialized, nil
+	return blockDeserialized.Clone(), nil
 }
 
 // HasBlock returns whether a block with a given hash exists in the store.
