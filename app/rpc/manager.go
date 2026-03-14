@@ -90,8 +90,11 @@ func (m *Manager) notifyBlockAddedToDAG(block *externalapi.DomainBlock) error {
 		return nil
 	}
 
-	rpcBlock := appmessage.DomainBlockToRPCBlock(block)
-	err := m.context.PopulateBlockWithVerboseData(rpcBlock, block.Header, block, true)
+	// Block-added notifications only need header-level block data and
+	// transaction IDs in verbose data. Avoid materializing the full RPC
+	// transaction tree for every accepted block.
+	rpcBlock := appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
+	err := m.context.PopulateBlockWithVerboseData(rpcBlock, block.Header, block, false)
 	if err != nil {
 		return err
 	}
