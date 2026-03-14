@@ -187,15 +187,13 @@ func (c *ConnectionManager) isPermanent(addressString string) bool {
 	c.connectionRequestsLock.RLock()
 	defer c.connectionRequestsLock.RUnlock()
 
-	if conn, ok := c.activeRequested[addressString]; ok {
-		return conn.isPermanent
+	connReq, _, err := c.findRequestedConnection(addressString)
+	if err != nil {
+		log.Warnf("Failed to determine whether %s is a permanent connection: %s", addressString, err)
+		return false
 	}
 
-	if conn, ok := c.pendingRequested[addressString]; ok {
-		return conn.isPermanent
-	}
-
-	return false
+	return connReq != nil && connReq.isPermanent
 }
 
 func (c *ConnectionManager) ipHasPermanentConnection(ip net.IP) (bool, error) {
@@ -251,6 +249,94 @@ func (c *ConnectionManager) extractAddressIPs(address string) ([]net.IP, error) 
 	}
 
 	return []net.IP{ip}, nil
+}
+
+func (c *ConnectionManager) findRequestedConnection(address string) (*connectionRequest, string, error) {
+	if connReq, ok := c.activeRequested[address]; ok {
+		return connReq, address, nil
+	}
+
+	if connReq, ok := c.pendingRequested[address]; ok {
+		return connReq, address, nil
+	}
+
+	matchingAddress, connReq, err := c.findMatchingRequestedConnectionByResolvedAddress(address, c.activeRequested)
+	if err != nil {
+		return nil, "", err
+	}
+	if connReq != nil {
+		return connReq, matchingAddress, nil
+	}
+
+	matchingAddress, connReq, err = c.findMatchingRequestedConnectionByResolvedAddress(address, c.pendingRequested)
+	if err != nil {
+		return nil, "", err
+	}
+	if connReq != nil {
+		return connReq, matchingAddress, nil
+	}
+
+	return nil, "", nil
+}
+
+func (c *ConnectionManager) findMatchingRequestedConnectionByResolvedAddress(address string,
+	requested map[string]*connectionRequest) (string, *connectionRequest, error) {
+	for requestedAddress, connReq := range requested {
+		matches, err := c.addressesMatch(requestedAddress, address)
+		if err != nil {
+			return "", nil, err
+		}
+		if matches {
+			return requestedAddress, connReq, nil
+		}
+	}
+
+	return "", nil, nil
+}
+
+func (c *ConnectionManager) addressesMatch(firstAddress, secondAddress string) (bool, error) {
+	firstHost, firstPort, err := net.SplitHostPort(firstAddress)
+	if err != nil {
+		return false, err
+	}
+
+	secondHost, secondPort, err := net.SplitHostPort(secondAddress)
+	if err != nil {
+		return false, err
+	}
+
+	if firstPort != secondPort {
+		return false, nil
+	}
+
+	firstIPs, err := c.hostIPs(firstHost)
+	if err != nil {
+		return false, err
+	}
+
+	secondIPs, err := c.hostIPs(secondHost)
+	if err != nil {
+		return false, err
+	}
+
+	for _, firstIP := range firstIPs {
+		for _, secondIP := range secondIPs {
+			if firstIP.Equal(secondIP) {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func (c *ConnectionManager) hostIPs(host string) ([]net.IP, error) {
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return []net.IP{ip}, nil
+	}
+
+	return c.cfg.Lookup(host)
 }
 
 func (c *ConnectionManager) seedFromDNS() {

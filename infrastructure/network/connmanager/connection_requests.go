@@ -2,6 +2,8 @@ package connmanager
 
 import (
 	"time"
+
+	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter"
 )
 
 const (
@@ -18,7 +20,11 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 	now := time.Now()
 
 	for address, connReq := range c.activeRequested {
-		connection, ok := connSet.get(address)
+		connection, matchedAddress, ok, err := c.findRequestedConnectionInSet(connSet, address)
+		if err != nil {
+			log.Warnf("Failed to match active requested connection %s: %s", address, err)
+			continue
+		}
 		if !ok { // a requested connection was disconnected
 			delete(c.activeRequested, address)
 
@@ -30,6 +36,12 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 			continue
 		}
 
+		if matchedAddress != address {
+			delete(c.activeRequested, address)
+			c.activeRequested[matchedAddress] = connReq
+			connReq.address = matchedAddress
+		}
+
 		connSet.remove(connection)
 	}
 
@@ -38,13 +50,18 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 			continue
 		}
 
-		connection, ok := connSet.get(address)
+		connection, matchedAddress, ok, err := c.findRequestedConnectionInSet(connSet, address)
+		if err != nil {
+			log.Warnf("Failed to match pending requested connection %s: %s", address, err)
+			continue
+		}
 		// The pending connection request has already connected - move it to active
 		// This can happen in rare cases such as when the other side has connected to our node
 		// while it has been pending on our side.
 		if ok {
 			delete(c.pendingRequested, address)
-			c.pendingRequested[address] = connReq
+			c.activeRequested[matchedAddress] = connReq
+			connReq.address = matchedAddress
 
 			connSet.remove(connection)
 
@@ -53,7 +70,7 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 
 		// try to initiate connection
 		log.Debugf("Connecting to connection request %s", connReq.address)
-		err := c.initiateConnection(connReq.address)
+		err = c.initiateConnection(connReq.address)
 		if err != nil {
 			log.Debugf("Couldn't connect to requested connection %s: %s", address, err)
 			// if connection request is one try - remove from pending and ignore failure
@@ -72,6 +89,25 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 		delete(c.pendingRequested, address)
 		c.activeRequested[address] = connReq
 	}
+}
+
+func (c *ConnectionManager) findRequestedConnectionInSet(connSet connectionSet,
+	requestedAddress string) (*netadapter.NetConnection, string, bool, error) {
+	if connection, ok := connSet.get(requestedAddress); ok {
+		return connection, requestedAddress, true, nil
+	}
+
+	for liveAddress, connection := range connSet {
+		matches, err := c.addressesMatch(requestedAddress, liveAddress)
+		if err != nil {
+			return nil, "", false, err
+		}
+		if matches {
+			return connection, liveAddress, true, nil
+		}
+	}
+
+	return nil, "", false, nil
 }
 
 // AddConnectionRequest adds the given address to list of pending connection requests
