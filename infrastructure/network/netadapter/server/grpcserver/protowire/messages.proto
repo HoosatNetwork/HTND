@@ -143,6 +143,8 @@ message HoosatdMessage {
     GetBlockByTransactionIDResponseMessage getBlockByTransactionIdResponse = 1089;
     GetUsableAddressesRequestMessage getUsableAddressesRequest = 1090;
     GetUsableAddressesResponseMessage getUsableAddressesResponse = 1091;
+    GetPaginatedUtxosByAddressesRequestMessage getPaginatedUtxosByAddressesRequest = 1092;
+    GetPaginatedUtxosByAddressesResponseMessage getPaginatedUtxosByAddressesResponse = 1093;
   }
 }
 

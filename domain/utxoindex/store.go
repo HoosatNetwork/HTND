@@ -450,6 +450,64 @@ type UTXOPair struct {
 	Entry    externalapi.UTXOEntry
 }
 
+func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
+	if uis.isAnythingStaged() {
+		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+	}
+
+	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
+	cursor, err := uis.database.Cursor(bucket)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	iterator := uint32(0)
+	count := 0
+	if limit == 0 {
+		for ok := cursor.First(); ok; ok = cursor.Next() {
+			if iterator > offset {
+				count++
+			}
+			iterator++
+		}
+	} else {
+		count = int(limit)
+	}
+
+	if cap(buffer) < int(count) {
+		buffer = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	}
+
+	iterator = uint32(0) // reset iterator to reuse for filling buffer
+	for ok := cursor.First(); ok; ok = cursor.Next() {
+		if iterator > offset {
+			key, err := cursor.Key()
+			if err != nil {
+				return nil, err
+			}
+			outpoint, err := uis.convertKeyToOutpoint(key)
+			if err != nil {
+				return nil, err
+			}
+			serializedUTXOEntry, err := cursor.Value()
+			if err != nil {
+				return nil, err
+			}
+			utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+			if err != nil {
+				return nil, err
+			}
+			buffer = append(buffer, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+			if limit > 0 && uint32(len(buffer)) >= offset+limit {
+				break
+			}
+			iterator++
+		}
+	}
+	return buffer, nil
+}
+
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
 func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
@@ -469,11 +527,13 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	defer cursor.Close()
 
 	// First pass: count entries
-	count := int(limit)
-	if count == 0 {
+	count := 0
+	if limit == 0 {
 		for ok := cursor.First(); ok; ok = cursor.Next() {
 			count++
 		}
+	} else {
+		count = int(limit)
 	}
 
 	// Preallocate exactly to avoid reallocations during append

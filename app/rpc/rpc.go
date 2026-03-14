@@ -57,6 +57,7 @@ var handlers = map[appmessage.MessageCommand]handler{
 	appmessage.CmdGetCoinSupplyRequestMessage:                               rpchandlers.HandleGetCoinSupply,
 	appmessage.CmdGetMempoolEntriesByAddressesRequestMessage:                rpchandlers.HandleGetMempoolEntriesByAddresses,
 	appmessage.CmdGetUsableAddressesRequestMessage:                          rpchandlers.HandleGetUsableAddresses,
+	appmessage.CmdGetPaginatedUTXOsByAddressesRequestMessage:                rpchandlers.HandleGetPaginatedUTXOsByAddresses,
 }
 
 func (m *Manager) routerInitializer(router *router.Router, netConnection *netadapter.NetConnection) {
