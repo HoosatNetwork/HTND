@@ -159,6 +159,8 @@ type HoosatdMessage struct {
 	//	*HoosatdMessage_GetBlockByTransactionIdResponse
 	//	*HoosatdMessage_GetUsableAddressesRequest
 	//	*HoosatdMessage_GetUsableAddressesResponse
+	//	*HoosatdMessage_GetPaginatedUtxosByAddressesRequest
+	//	*HoosatdMessage_GetPaginatedUtxosByAddressesResponse
 	Payload       isHoosatdMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1407,6 +1409,24 @@ func (x *HoosatdMessage) GetGetUsableAddressesResponse() *GetUsableAddressesResp
 	return nil
 }
 
+func (x *HoosatdMessage) GetGetPaginatedUtxosByAddressesRequest() *GetPaginatedUtxosByAddressesRequestMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesRequest); ok {
+			return x.GetPaginatedUtxosByAddressesRequest
+		}
+	}
+	return nil
+}
+
+func (x *HoosatdMessage) GetGetPaginatedUtxosByAddressesResponse() *GetPaginatedUtxosByAddressesResponseMessage {
+	if x != nil {
+		if x, ok := x.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse); ok {
+			return x.GetPaginatedUtxosByAddressesResponse
+		}
+	}
+	return nil
+}
+
 type isHoosatdMessage_Payload interface {
 	isHoosatdMessage_Payload()
 }
@@ -1947,6 +1967,14 @@ type HoosatdMessage_GetUsableAddressesResponse struct {
 	GetUsableAddressesResponse *GetUsableAddressesResponseMessage `protobuf:"bytes,1091,opt,name=getUsableAddressesResponse,proto3,oneof"`
 }
 
+type HoosatdMessage_GetPaginatedUtxosByAddressesRequest struct {
+	GetPaginatedUtxosByAddressesRequest *GetPaginatedUtxosByAddressesRequestMessage `protobuf:"bytes,1092,opt,name=getPaginatedUtxosByAddressesRequest,proto3,oneof"`
+}
+
+type HoosatdMessage_GetPaginatedUtxosByAddressesResponse struct {
+	GetPaginatedUtxosByAddressesResponse *GetPaginatedUtxosByAddressesResponseMessage `protobuf:"bytes,1093,opt,name=getPaginatedUtxosByAddressesResponse,proto3,oneof"`
+}
+
 func (*HoosatdMessage_Addresses) isHoosatdMessage_Payload() {}
 
 func (*HoosatdMessage_Block) isHoosatdMessage_Payload() {}
@@ -2217,11 +2245,15 @@ func (*HoosatdMessage_GetUsableAddressesRequest) isHoosatdMessage_Payload() {}
 
 func (*HoosatdMessage_GetUsableAddressesResponse) isHoosatdMessage_Payload() {}
 
+func (*HoosatdMessage_GetPaginatedUtxosByAddressesRequest) isHoosatdMessage_Payload() {}
+
+func (*HoosatdMessage_GetPaginatedUtxosByAddressesResponse) isHoosatdMessage_Payload() {}
+
 var File_messages_proto protoreflect.FileDescriptor
 
 const file_messages_proto_rawDesc = "" +
 	"\n" +
-	"\x0emessages.proto\x12\tprotowire\x1a\tp2p.proto\x1a\trpc.proto\"\x9cq\n" +
+	"\x0emessages.proto\x12\tprotowire\x1a\tp2p.proto\x1a\trpc.proto\"\xb9s\n" +
 	"\x0eHoosatdMessage\x12;\n" +
 	"\taddresses\x18\x01 \x01(\v2\x1b.protowire.AddressesMessageH\x00R\taddresses\x12/\n" +
 	"\x05block\x18\x02 \x01(\v2\x17.protowire.BlockMessageH\x00R\x05block\x12A\n" +
@@ -2359,7 +2391,9 @@ const file_messages_proto_rawDesc = "" +
 	"\x1egetBlockByTransactionIdRequest\x18\xc0\b \x01(\v20.protowire.GetBlockByTransactionIDRequestMessageH\x00R\x1egetBlockByTransactionIdRequest\x12~\n" +
 	"\x1fgetBlockByTransactionIdResponse\x18\xc1\b \x01(\v21.protowire.GetBlockByTransactionIDResponseMessageH\x00R\x1fgetBlockByTransactionIdResponse\x12l\n" +
 	"\x19getUsableAddressesRequest\x18\xc2\b \x01(\v2+.protowire.GetUsableAddressesRequestMessageH\x00R\x19getUsableAddressesRequest\x12o\n" +
-	"\x1agetUsableAddressesResponse\x18\xc3\b \x01(\v2,.protowire.GetUsableAddressesResponseMessageH\x00R\x1agetUsableAddressesResponseB\t\n" +
+	"\x1agetUsableAddressesResponse\x18\xc3\b \x01(\v2,.protowire.GetUsableAddressesResponseMessageH\x00R\x1agetUsableAddressesResponse\x12\x8a\x01\n" +
+	"#getPaginatedUtxosByAddressesRequest\x18\xc4\b \x01(\v25.protowire.GetPaginatedUtxosByAddressesRequestMessageH\x00R#getPaginatedUtxosByAddressesRequest\x12\x8d\x01\n" +
+	"$getPaginatedUtxosByAddressesResponse\x18\xc5\b \x01(\v26.protowire.GetPaginatedUtxosByAddressesResponseMessageH\x00R$getPaginatedUtxosByAddressesResponseB\t\n" +
 	"\apayload2R\n" +
 	"\x03P2P\x12K\n" +
 	"\rMessageStream\x12\x19.protowire.HoosatdMessage\x1a\x19.protowire.HoosatdMessage\"\x00(\x010\x012R\n" +
@@ -2514,6 +2548,8 @@ var file_messages_proto_goTypes = []any{
 	(*GetBlockByTransactionIDResponseMessage)(nil),                     // 131: protowire.GetBlockByTransactionIDResponseMessage
 	(*GetUsableAddressesRequestMessage)(nil),                           // 132: protowire.GetUsableAddressesRequestMessage
 	(*GetUsableAddressesResponseMessage)(nil),                          // 133: protowire.GetUsableAddressesResponseMessage
+	(*GetPaginatedUtxosByAddressesRequestMessage)(nil),                 // 134: protowire.GetPaginatedUtxosByAddressesRequestMessage
+	(*GetPaginatedUtxosByAddressesResponseMessage)(nil),                // 135: protowire.GetPaginatedUtxosByAddressesResponseMessage
 }
 var file_messages_proto_depIdxs = []int32{
 	1,   // 0: protowire.HoosatdMessage.addresses:type_name -> protowire.AddressesMessage
@@ -2650,15 +2686,17 @@ var file_messages_proto_depIdxs = []int32{
 	131, // 131: protowire.HoosatdMessage.getBlockByTransactionIdResponse:type_name -> protowire.GetBlockByTransactionIDResponseMessage
 	132, // 132: protowire.HoosatdMessage.getUsableAddressesRequest:type_name -> protowire.GetUsableAddressesRequestMessage
 	133, // 133: protowire.HoosatdMessage.getUsableAddressesResponse:type_name -> protowire.GetUsableAddressesResponseMessage
-	0,   // 134: protowire.P2P.MessageStream:input_type -> protowire.HoosatdMessage
-	0,   // 135: protowire.RPC.MessageStream:input_type -> protowire.HoosatdMessage
-	0,   // 136: protowire.P2P.MessageStream:output_type -> protowire.HoosatdMessage
-	0,   // 137: protowire.RPC.MessageStream:output_type -> protowire.HoosatdMessage
-	136, // [136:138] is the sub-list for method output_type
-	134, // [134:136] is the sub-list for method input_type
-	134, // [134:134] is the sub-list for extension type_name
-	134, // [134:134] is the sub-list for extension extendee
-	0,   // [0:134] is the sub-list for field type_name
+	134, // 134: protowire.HoosatdMessage.getPaginatedUtxosByAddressesRequest:type_name -> protowire.GetPaginatedUtxosByAddressesRequestMessage
+	135, // 135: protowire.HoosatdMessage.getPaginatedUtxosByAddressesResponse:type_name -> protowire.GetPaginatedUtxosByAddressesResponseMessage
+	0,   // 136: protowire.P2P.MessageStream:input_type -> protowire.HoosatdMessage
+	0,   // 137: protowire.RPC.MessageStream:input_type -> protowire.HoosatdMessage
+	0,   // 138: protowire.P2P.MessageStream:output_type -> protowire.HoosatdMessage
+	0,   // 139: protowire.RPC.MessageStream:output_type -> protowire.HoosatdMessage
+	138, // [138:140] is the sub-list for method output_type
+	136, // [136:138] is the sub-list for method input_type
+	136, // [136:136] is the sub-list for extension type_name
+	136, // [136:136] is the sub-list for extension extendee
+	0,   // [0:136] is the sub-list for field type_name
 }
 
 func init() { file_messages_proto_init() }
@@ -2803,6 +2841,8 @@ func file_messages_proto_init() {
 		(*HoosatdMessage_GetBlockByTransactionIdResponse)(nil),
 		(*HoosatdMessage_GetUsableAddressesRequest)(nil),
 		(*HoosatdMessage_GetUsableAddressesResponse)(nil),
+		(*HoosatdMessage_GetPaginatedUtxosByAddressesRequest)(nil),
+		(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
