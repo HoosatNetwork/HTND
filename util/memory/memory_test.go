@@ -89,18 +89,18 @@ func BenchmarkGolangSlice(b *testing.B) {
 
 func BenchmarkCalloc(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		blk := Calloc[int](1024 * 1024 * 10) // 10 million ints ~ 40MB
+		blk := Calloc[int](1024 * 1024 * 256) // 256 million ints ~ 1GB
 		Free(blk)
 	}
 }
 
 func BenchmarkRealloc(b *testing.B) {
 	b.StopTimer()
-	blk := Malloc[int](1024)
+	blk := Malloc[int](1024 * 1024 * 256) // 256 million ints ~ 1GB
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		blk = Realloc(blk, 2048)
-		blk = Realloc(blk, 1024)
+		blk = Realloc(blk, 1024*1024*512)
+		blk = Realloc(blk, 1024*1024*256)
 	}
 	b.StopTimer()
 	Free(blk)

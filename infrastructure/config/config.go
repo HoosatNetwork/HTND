@@ -58,7 +58,7 @@ const (
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
-	defaultUTXODefaultMaxLimit    = 1000
+	defaultUTXODefaultMaxLimit    = 100000
 )
 
 var (
