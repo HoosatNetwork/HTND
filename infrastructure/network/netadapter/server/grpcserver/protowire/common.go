@@ -51,6 +51,9 @@ func (x *TransactionId) toDomain() (*externalapi.DomainTransactionID, error) {
 	if x == nil {
 		return nil, errors.Wrap(errorNil, "TransactionId is nil")
 	}
+	if len(x.Bytes) == 0 {
+		return nil, errors.Wrapf(errorNil, "TransactionId Bytes is empty")
+	}
 	return transactionid.FromBytes(x.Bytes)
 }
 

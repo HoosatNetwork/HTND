@@ -86,7 +86,7 @@ func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
 	}
 
 	totalLen := len(transactionsAcceptedToMempool) + len(txIDsToRebroadcast)
-	txIDsToBroadcast := make([]*externalapi.DomainTransactionID, totalLen)
+	txIDsToBroadcast := make([]*externalapi.DomainTransactionID, 0, totalLen)
 
 	for i := range transactionsAcceptedToMempool {
 		txID := consensushashing.TransactionID(transactionsAcceptedToMempool[i])
@@ -95,10 +95,8 @@ func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
 		}
 	}
 
-	offset := len(transactionsAcceptedToMempool)
-	for i := 0; i < len(txIDsToRebroadcast); i++ {
-		txIDsToBroadcast[offset+i] = txIDsToRebroadcast[i]
-	}
+	txIDsToBroadcast = append(txIDsToBroadcast, txIDsToRebroadcast...)
+
 	if len(txIDsToBroadcast) == 0 {
 		return nil
 	}
