@@ -708,6 +708,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	}
 
 	ibdBatchSize := getIBDBatchSize()
+	// Allocate the map once with the maximum capacity needed.
+        // This prevents the map from having to dynamically grow and wait for the damn GC to arrive
+        receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
 		var hashesToRequest []*externalapi.DomainHash
 		if offset+ibdBatchSize < len(hashes) {
@@ -717,7 +720,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		}
 
 		// Cache to store received blocks for this batch only
-		receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, len(hashesToRequest))
+                clear(receivedBlocks) // Re-use is better than re-allocation :)
 
 		// Request blocks
 		err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(hashesToRequest))
