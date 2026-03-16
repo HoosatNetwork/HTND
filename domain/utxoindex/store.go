@@ -587,7 +587,7 @@ func (uis *utxoIndexStore) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 }
 
 // GetBalance returns the total balance for a ScriptPublicKey without allocating full UTXO entries
-func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) (uint64, error) {
+func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (uint64, error) {
 	if uis.isAnythingStaged() {
 		return 0, errors.Errorf("cannot get balance while staging isn't empty")
 	}
@@ -600,7 +600,6 @@ func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicK
 	defer cursor.Close()
 
 	var balance uint64
-	count := uint32(0)
 	for ok := cursor.First(); ok; ok = cursor.Next() {
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
@@ -611,10 +610,6 @@ func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicK
 			return 0, err
 		}
 		balance += amount
-		count++
-		if limit > 0 && count >= limit {
-			break
-		}
 	}
 	return balance, nil
 }

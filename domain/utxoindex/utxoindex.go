@@ -327,11 +327,11 @@ func (ui *UTXOIndex) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (boo
 }
 
 // GetBalance returns the total balance for the given scriptPublicKey
-func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32) (uint64, error) {
+func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (uint64, error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
-	balance, err := ui.store.GetBalance(scriptPublicKey, limit)
+	balance, err := ui.store.GetBalance(scriptPublicKey)
 	return balance, err
 }
 

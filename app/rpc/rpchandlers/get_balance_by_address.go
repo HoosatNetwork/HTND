@@ -45,7 +45,7 @@ func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, re
 	}
 	balanceByAddressCacheMutex.Unlock()
 
-	balance, err := getBalanceByAddress(context, getBalanceByAddressRequest.Address, 0)
+	balance, err := getBalanceByAddress(context, getBalanceByAddressRequest.Address)
 	if err != nil {
 		rpcError := &appmessage.RPCError{}
 		if !errors.As(err, &rpcError) {
@@ -68,7 +68,7 @@ func HandleGetBalanceByAddress(context *rpccontext.Context, _ *router.Router, re
 	return response, nil
 }
 
-func getBalanceByAddress(context *rpccontext.Context, addressString string, limit uint32) (uint64, error) {
+func getBalanceByAddress(context *rpccontext.Context, addressString string) (uint64, error) {
 	address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 	if err != nil {
 		return 0, appmessage.RPCErrorf("Couldn't decode address '%s': %s", addressString, err)
@@ -79,7 +79,7 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string, limi
 		return 0, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 	}
 
-	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey, limit)
+	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey)
 	if err != nil {
 		return 0, err
 	}
