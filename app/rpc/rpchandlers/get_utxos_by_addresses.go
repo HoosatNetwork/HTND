@@ -10,6 +10,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
 var utxoEntriesPool = sync.Pool{
@@ -73,14 +74,9 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		releaseUTXOsByAddressesEntries(allEntries)
 	}()
 
-	utxoOutpointEntryPairs := utxoPairPool.Get().([]utxoindex.UTXOPair)[:0] // Reset length
-	defer func() {
-		releaseUTXOPairs(utxoOutpointEntryPairs)
-	}()
 	var reusableHexBuffer []byte
 
 	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
-		utxoOutpointEntryPairs = utxoOutpointEntryPairs[:0]
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
@@ -93,11 +89,20 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			errorMessage.Error = appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairs)
+
+		utxoOutpointEntryPairsBuffer := memory.Malloc[utxoindex.UTXOPair](1000)
+		if utxoOutpointEntryPairsBuffer == nil {
+			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
+			errorMessage.Error = appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
+			return errorMessage, nil
+		}
+		utxoOutpointEntryPairs, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
+			memory.Free(utxoOutpointEntryPairsBuffer)
 			return nil, err
 		}
 		if len(utxoOutpointEntryPairs) == 0 {
+			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}
 		var scriptHex string
@@ -109,6 +114,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		for _, pair := range utxoOutpointEntryPairs {
 			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair))
 		}
+		memory.Free(utxoOutpointEntryPairsBuffer)
 	}
 
 	responseEntries := make([]*appmessage.UTXOsByAddressesEntry, len(allEntries))

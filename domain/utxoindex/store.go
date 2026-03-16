@@ -9,6 +9,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -509,7 +510,7 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
@@ -536,10 +537,12 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		count = int(limit)
 	}
 
+	slice := buffer.Slice()[:0]
 	// Preallocate exactly to avoid reallocations during append
-	if cap(buffer) < count {
-		buffer = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	if cap(slice) < count {
+		buffer = memory.Realloc(buffer, count) // reallocate if existing capacity is insufficient
 	}
+	slice = buffer.Slice()[:0]
 
 	// Second pass: fill
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -559,14 +562,14 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		if err != nil {
 			return nil, err
 		}
-		buffer = append(buffer, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-		if limit > 0 && uint32(len(buffer)) >= limit {
+		slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		if limit > 0 && uint32(len(slice)) >= limit {
 			break
 		}
 	}
 
 	// uis.scriptCache.Put(scriptKeyString, buffer)
-	return buffer, nil
+	return slice, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
