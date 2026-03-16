@@ -634,6 +634,11 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 
 	receivedChunkCount := 0
 	receivedUTXOCount := 0
+	// Pre-allocate a buffer to hold the domain pairs.
+	// 1000 is the standard chunk size defined in sendPruningPointUTXOSet.
+	// Instead of leaving a mess for the GC to tidy up afterwards
+	domainPairsBuffer := make([]*externalapi.OutpointAndUTXOEntryPair, 0, 1000)
+
 	for {
 		message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
 		if err != nil {
@@ -641,12 +646,17 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 		}
 
 		switch message := message.(type) {
-		case *appmessage.MsgPruningPointUTXOSetChunk:
+                case *appmessage.MsgPruningPointUTXOSetChunk:
 			receivedUTXOCount += len(message.OutpointAndUTXOEntryPairs)
-			domainOutpointAndUTXOEntryPairs :=
-				appmessage.OutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(message.OutpointAndUTXOEntryPairs)
+			
+			// Clear the buffer, but keep the backing array allocation
+			domainPairsBuffer = domainPairsBuffer[:0]
+			
+			// Use the new helper to populate the buffer
+			domainPairsBuffer = appmessage.AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
+				message.OutpointAndUTXOEntryPairs, domainPairsBuffer)
 
-			err := consensus.AppendImportedPruningPointUTXOs(domainOutpointAndUTXOEntryPairs)
+			err := consensus.AppendImportedPruningPointUTXOs(domainPairsBuffer)
 			if err != nil {
 				return false, err
 			}

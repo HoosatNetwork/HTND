@@ -693,3 +693,15 @@ func DomainPruningPointProofToMsgPruningPointProof(pruningPointProof *externalap
 		Headers: headers,
 	}
 }
+
+// AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs converts and appends
+// OutpointAndUTXOEntryPairs to a pre-allocated domain OutpointAndUTXOEntryPairs buffer
+func AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
+	outpointAndUTXOEntryPairs []*OutpointAndUTXOEntryPair,
+	buffer []*externalapi.OutpointAndUTXOEntryPair) []*externalapi.OutpointAndUTXOEntryPair {
+
+	for _, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
+		buffer = append(buffer, outpointAndUTXOEntryPairToDomainOutpointAndUTXOEntryPair(outpointAndUTXOEntryPair))
+	}
+	return buffer
+}
