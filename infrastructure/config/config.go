@@ -224,6 +224,7 @@ func defaultFlags() *Flags {
 		IBDDequeueTimeout:              defaultIBDDequeueTimeout,
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
+		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
 	}
 }
 
