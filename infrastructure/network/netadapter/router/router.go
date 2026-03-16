@@ -10,9 +10,8 @@ import (
 
 const outgoingRouteMaxMessages = appmessage.MaxInvPerMsg + DefaultMaxMessages
 
-// OnRouteCapacityReachedHandler is a function that is to
-// be called when one of the routes reaches capacity.
-type OnRouteCapacityReachedHandler func()
+// OnRouteCapacityReachedHandler is called when a route cannot accept another message.
+type OnRouteCapacityReachedHandler func(route *Route, message appmessage.Message)
 
 // Router routes messages by type to their respective
 // input channels

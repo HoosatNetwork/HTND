@@ -60,21 +60,26 @@ var handlers = map[appmessage.MessageCommand]handler{
 	appmessage.CmdGetPaginatedUTXOsByAddressesRequestMessage:                rpchandlers.HandleGetPaginatedUTXOsByAddresses,
 }
 
-func (m *Manager) routerInitializer(router *router.Router, netConnection *netadapter.NetConnection) {
+func (m *Manager) routerInitializer(rtr *router.Router, netConnection *netadapter.NetConnection) {
 	messageTypes := make([]appmessage.MessageCommand, 0, len(handlers))
 	for messageType := range handlers {
 		messageTypes = append(messageTypes, messageType)
 	}
-	incomingRoute, err := router.AddIncomingRoute("rpc router", messageTypes)
+	rtr.OutgoingRoute().SetOnCapacityReachedHandler(func(route *router.Route, message appmessage.Message) {
+		log.Warnf("Disconnecting slow RPC client %s because outgoing route '%s' is full (%d/%d) while sending '%s'",
+			netConnection, route.Name(), route.Length(), route.Capacity(), message.Command())
+		netConnection.Disconnect()
+	})
+	incomingRoute, err := rtr.AddIncomingRoute("rpc router", messageTypes)
 	if err != nil {
 		panic(err)
 	}
-	m.context.NotificationManager.AddListener(router)
+	m.context.NotificationManager.AddListener(rtr)
 
 	spawn("routerInitializer-handleIncomingMessages", func() {
-		defer m.context.NotificationManager.RemoveListener(router)
+		defer m.context.NotificationManager.RemoveListener(rtr)
 
-		err := m.handleIncomingMessages(router, incomingRoute, netConnection)
+		err := m.handleIncomingMessages(rtr, incomingRoute, netConnection)
 		m.handleError(err, netConnection)
 	})
 }
@@ -113,6 +118,11 @@ func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection
 		return
 	}
 	if errors.Is(err, router.ErrRouteClosed) {
+		return
+	}
+	if errors.Is(err, router.ErrRouteCapacityReached) {
+		log.Warnf("Disconnecting slow RPC client %s after outgoing route capacity was reached", netConnection)
+		netConnection.Disconnect()
 		return
 	}
 	panic(err)

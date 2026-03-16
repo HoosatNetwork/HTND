@@ -26,15 +26,21 @@ var (
 	ErrRouteCapacityReached = protocolerrors.New(false, "route capacity has been reached")
 )
 
+func defaultOnRouteCapacityReachedHandler(route *Route, message appmessage.Message) {
+	log.Infof("Route '%s' is full (%d/%d). Dropping outgoing '%s' message",
+		route.name, len(route.channel), route.capacity, message.Command())
+}
+
 // Route represents an incoming or outgoing Router route
 type Route struct {
 	name    string
 	channel chan appmessage.Message
 	// closed and closeLock are used to protect us from writing to a closed channel
 	// reads use the channel's built-in mechanism to check if the channel is closed
-	closed    bool
-	closeLock sync.Mutex
-	capacity  int
+	closed                   bool
+	closeLock                sync.Mutex
+	capacity                 int
+	onCapacityReachedHandler OnRouteCapacityReachedHandler
 }
 
 // NewRoute create a new Route
@@ -50,25 +56,31 @@ func NewRoute(name string) *Route {
 
 func NewRouteWithCapacity(name string, capacity int) *Route {
 	return &Route{
-		name:     name,
-		channel:  make(chan appmessage.Message, capacity),
-		closed:   false,
-		capacity: capacity,
+		name:                     name,
+		channel:                  make(chan appmessage.Message, capacity),
+		closed:                   false,
+		capacity:                 capacity,
+		onCapacityReachedHandler: defaultOnRouteCapacityReachedHandler,
 	}
 }
 
 // Enqueue enqueues a message to the Route
 func (r *Route) Enqueue(message appmessage.Message) error {
 	r.closeLock.Lock()
-	defer r.closeLock.Unlock()
-
 	if r.closed {
+		r.closeLock.Unlock()
 		return errors.WithStack(ErrRouteClosed)
 	}
 	if len(r.channel) == r.capacity {
+		handler := r.onCapacityReachedHandler
+		r.closeLock.Unlock()
+		if handler != nil {
+			handler(r, message)
+		}
 		return errors.Wrapf(ErrRouteCapacityReached, "route '%s' reached capacity of %d", r.name, r.capacity)
 	}
 	r.channel <- message
+	r.closeLock.Unlock()
 	return nil
 }
 
@@ -82,7 +94,6 @@ func (r *Route) MaybeEnqueue(message appmessage.Message) error {
 	}
 
 	if errors.Is(err, ErrRouteCapacityReached) {
-		log.Infof("Capacity (%d) of route '%s' has been reached. Couldn't send message", r.capacity, r.name)
 		return nil
 	}
 
@@ -134,4 +145,30 @@ func (r *Route) Close() {
 
 	r.closed = true
 	close(r.channel)
+}
+
+// Name returns the route name.
+func (r *Route) Name() string {
+	return r.name
+}
+
+// Length returns the current number of queued messages.
+func (r *Route) Length() int {
+	return len(r.channel)
+}
+
+// Capacity returns the maximum number of queued messages.
+func (r *Route) Capacity() int {
+	return r.capacity
+}
+
+// SetOnCapacityReachedHandler registers a callback for queue saturation.
+func (r *Route) SetOnCapacityReachedHandler(handler OnRouteCapacityReachedHandler) {
+	r.closeLock.Lock()
+	defer r.closeLock.Unlock()
+
+	if handler == nil {
+		handler = defaultOnRouteCapacityReachedHandler
+	}
+	r.onCapacityReachedHandler = handler
 }
