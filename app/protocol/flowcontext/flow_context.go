@@ -51,6 +51,7 @@ type FlowContext struct {
 
 	ibdPeer      *peerpkg.Peer
 	ibdPeerMutex sync.RWMutex
+	loweredGCForIBD bool // Tracks if we lowered the GC during TrySetIBDRunning
 
 	peers      map[id.ID]*peerpkg.Peer
 	peersMutex sync.RWMutex

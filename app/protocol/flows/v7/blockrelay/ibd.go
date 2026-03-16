@@ -28,7 +28,7 @@ type IBDContext interface {
 	OnNewBlockTemplate() error
 	OnPruningPointUTXOSetOverride() error
 	IsIBDRunning() bool
-	TrySetIBDRunning(ibdPeer *peerpkg.Peer) bool
+	TrySetIBDRunning(ibdPeer *peerpkg.Peer, isNearlySynced bool) bool
 	UnsetIBDRunning()
 	IsRecoverableError(err error) bool
 	AddressManager() *addressmanager.AddressManager
@@ -78,7 +78,12 @@ func (flow *handleIBDFlow) updateBlockVersionFromDAAScore(daaScore uint64) {
 }
 
 func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) error {
-	wasIBDNotRunning := flow.TrySetIBDRunning(flow.peer)
+	isNearlySynced, errNs := flow.Domain().Consensus().IsNearlySynced()
+	if errNs != nil {
+		isNearlySynced = false // If we can't tell, err on the side of caution
+	}
+
+	wasIBDNotRunning := flow.TrySetIBDRunning(flow.peer, isNearlySynced)
 	if !wasIBDNotRunning {
 		log.Debugf("IBD is already running")
 		return nil

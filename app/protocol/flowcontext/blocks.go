@@ -2,6 +2,9 @@ package flowcontext
 
 import (
 	"time"
+	"os"
+	"runtime/debug"
+	"strconv"
 
 	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
 	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
@@ -141,9 +144,23 @@ func (f *FlowContext) IsIBDRunning() bool {
 	return f.ibdPeer != nil
 }
 
+// Helper to determine what GC percent to restore to
+func getOriginalGCPercent() int {
+	if gcStr := os.Getenv("GOGC"); gcStr != "" {
+		if gcStr == "off" {
+			return -1 // -1 disables GC
+		}
+		if gc, err := strconv.Atoi(gcStr); err == nil {
+			return gc
+		}
+	}
+	return 100 // Default
+}
+
 // TrySetIBDRunning attempts to set `isInIBD`. Returns false
-// if it is already set
-func (f *FlowContext) TrySetIBDRunning(ibdPeer *peerpkg.Peer) bool {
+// if it is already set. `isNearlySynced` tells us if this is a massive
+// initial sync or just a small catch-up sync.
+func (f *FlowContext) TrySetIBDRunning(ibdPeer *peerpkg.Peer, isNearlySynced bool) bool {
 	f.ibdPeerMutex.Lock()
 	defer f.ibdPeerMutex.Unlock()
 
@@ -151,6 +168,17 @@ func (f *FlowContext) TrySetIBDRunning(ibdPeer *peerpkg.Peer) bool {
 		return false
 	}
 	f.ibdPeer = ibdPeer
+
+	// Only trade CPU for memory if this is a MASSIVE initial sync (not nearly synced)
+	// and the user hasn't explicitly disabled it.
+	if !isNearlySynced && os.Getenv("HTND_HIGCIBD") != "" {
+		log.Infof("Entering Initial IBD - Trading CPU for memory by lowering GC target to 20%%")
+		debug.SetGCPercent(20)
+		f.loweredGCForIBD = true // We need to add this boolean to the FlowContext struct!
+	} else {
+		log.Debugf("Entering Catch-up IBD (or HIGCIBD NOT set) - Keeping normal GC target")
+		f.loweredGCForIBD = false
+	}
 
 	return true
 }
@@ -165,6 +193,14 @@ func (f *FlowContext) UnsetIBDRunning() {
 	}
 
 	f.ibdPeer = nil
+
+	// Only restore normal GC behavior if WE were the ones who lowered it
+	if f.loweredGCForIBD {
+		origGC := getOriginalGCPercent()
+		log.Infof("Exiting Initial IBD - Restoring normal GC target to %d%%", origGC)
+		debug.SetGCPercent(origGC)
+		f.loweredGCForIBD = false
+	}
 }
 
 // IBDPeer returns the current IBD peer or null if the node is not
