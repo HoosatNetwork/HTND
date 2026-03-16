@@ -705,3 +705,26 @@ func AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
 	}
 	return buffer
 }
+
+
+// The sending version of  AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs() 
+func AppendDomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
+	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair,
+	buffer []*OutpointAndUTXOEntryPair) []*OutpointAndUTXOEntryPair {
+
+	for _, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
+		buffer = append(buffer, &OutpointAndUTXOEntryPair{
+			Outpoint: &Outpoint{
+				TxID:  outpointAndUTXOEntryPair.Outpoint.TransactionID,
+				Index: outpointAndUTXOEntryPair.Outpoint.Index,
+			},
+			UTXOEntry: &UTXOEntry{
+				Amount:          outpointAndUTXOEntryPair.UTXOEntry.Amount(),
+				ScriptPublicKey: outpointAndUTXOEntryPair.UTXOEntry.ScriptPublicKey(),
+				IsCoinbase:      outpointAndUTXOEntryPair.UTXOEntry.IsCoinbase(),
+				BlockDAAScore:   outpointAndUTXOEntryPair.UTXOEntry.BlockDAAScore(),
+			},
+		})
+	}
+	return buffer
+}

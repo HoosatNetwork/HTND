@@ -85,6 +85,10 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 	const step = 1000
 	var fromOutpoint *externalapi.DomainOutpoint
 	chunksSent := 0
+	
+	// Pre-allocate the wire-message buffer once
+	wirePairsBuffer := make([]*appmessage.OutpointAndUTXOEntryPair, 0, step)
+
 	for {
 		pruningPointUTXOs, err := flow.Domain().Consensus().GetPruningPointUTXOs(
 			msgRequestPruningPointUTXOSet.PruningPointHash, fromOutpoint, step)
@@ -97,9 +101,12 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 		log.Debugf("Retrieved %d UTXOs for pruning block %s",
 			len(pruningPointUTXOs), msgRequestPruningPointUTXOSet.PruningPointHash)
 
-		outpointAndUTXOEntryPairs :=
-			appmessage.DomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(pruningPointUTXOs)
-		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgPruningPointUTXOSetChunk(outpointAndUTXOEntryPairs))
+		// Reuse the buffer slice
+		wirePairsBuffer = wirePairsBuffer[:0]
+		wirePairsBuffer = appmessage.AppendDomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
+			pruningPointUTXOs, wirePairsBuffer)
+
+		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgPruningPointUTXOSetChunk(wirePairsBuffer))
 		if err != nil {
 			return err
 		}
