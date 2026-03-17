@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/blockheader"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/pebble"
 	"github.com/Hoosat-Oy/HTND/stability-tests/common"
@@ -48,6 +49,8 @@ func prepareBlocks() (blocks []*externalapi.DomainBlock, topBlock *externalapi.D
 			return nil, nil, errors.Wrap(err, "error in BuildBlockWithParents")
 		}
 
+		block.Header = headerWithExpectedVersion(block.Header, config.ActiveNetParams.POWScores)
+
 		mine.SolveBlock(block)
 		err = testConsensus.ValidateAndInsertBlock(block, true, true)
 		if err != nil {
@@ -59,4 +62,40 @@ func prepareBlocks() (blocks []*externalapi.DomainBlock, topBlock *externalapi.D
 	}
 
 	return blocks[:len(blocks)-1], blocks[len(blocks)-1], nil
+}
+
+func headerWithExpectedVersion(header externalapi.BlockHeader, powScores []uint64) externalapi.BlockHeader {
+	expectedVersion := expectedBlockVersion(header.DAAScore(), powScores)
+	if header.Version() == expectedVersion {
+		return header
+	}
+
+	return blockheader.NewImmutableBlockHeader(
+		expectedVersion,
+		header.Parents(),
+		header.HashMerkleRoot(),
+		header.AcceptedIDMerkleRoot(),
+		header.UTXOCommitment(),
+		header.TimeInMilliseconds(),
+		header.Bits(),
+		header.Nonce(),
+		header.DAAScore(),
+		header.BlueScore(),
+		header.BlueWork(),
+		header.PruningPoint(),
+	)
+}
+
+func expectedBlockVersion(daaScore uint64, powScores []uint64) uint16 {
+	if daaScore == 0 {
+		return 1
+	}
+
+	version := uint16(1)
+	for _, powScore := range powScores {
+		if daaScore >= powScore {
+			version++
+		}
+	}
+	return version
 }

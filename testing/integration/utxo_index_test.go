@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+	"github.com/Hoosat-Oy/HTND/internal/ci"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -17,6 +18,7 @@ import (
 )
 
 func TestUTXOIndex(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	// Setup a single htnd instance
 	harnessParams := &harnessParams{
 		p2pAddress:              p2pAddress1,
