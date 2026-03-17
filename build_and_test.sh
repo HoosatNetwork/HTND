@@ -10,7 +10,7 @@ go mod download
 go install $FLAGS golang.org/x/lint/golint@latest
 go install $FLAGS honnef.co/go/tools/cmd/staticcheck@latest
 
-UNFORMATTED=$(find . -name '*.go' -not -path './vendor/*' | xargs gofmt -l)
+UNFORMATTED=$(find . -type f -name '*.go' -not -path './vendor/*' -exec gofmt -l {} +)
 test -z "${UNFORMATTED}"
 
 golint -set_exit_status ./...
