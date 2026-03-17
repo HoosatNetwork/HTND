@@ -37,10 +37,10 @@ type handleIBDFlow struct {
 	IBDContext
 	incomingRoute, outgoingRoute *router.Route
 	peer                         *peerpkg.Peer
-	lastRateCheckTime           time.Time
-	consecutiveLowRateCount     int
-	minHeadersPerSecond         float64
-	minBlocksPerSecond          float64
+	lastRateCheckTime            time.Time
+	consecutiveLowRateCount      int
+	minHeadersPerSecond          float64
+	minBlocksPerSecond           float64
 }
 
 // HandleIBD handles IBD
@@ -94,8 +94,8 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 
 	flow.lastRateCheckTime = time.Now()
 	flow.consecutiveLowRateCount = 0
-	flow.minHeadersPerSecond = float64(flow.Config().MinHeadersPerSecond) 
-	flow.minBlocksPerSecond = float64(flow.Config().MinBlocksPerSecond)   
+	flow.minHeadersPerSecond = float64(flow.Config().MinHeadersPerSecond)
+	flow.minBlocksPerSecond = float64(flow.Config().MinBlocksPerSecond)
 
 	flow.updateBlockVersionFromDAAScore(block.Header.DAAScore())
 	isFinishedSuccessfully := false
