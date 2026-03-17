@@ -18,7 +18,7 @@ func RunHoosatdForTesting(t *testing.T, testName string, rpcAddress string) func
 	}
 
 	htndRunCommand, err := StartCmd("HSATD",
-		"htnd",
+		"HTND",
 		NetworkCliArgumentFromNetParams(&dagconfig.DevnetParams),
 		"--appdir", appDir,
 		"--rpclisten", rpcAddress,

@@ -40,7 +40,7 @@ func commandLoop(argsChan <-chan []string) ([]commandFailure, error) {
 			return nil, err
 		}
 
-		cmd := exec.Command("htnd", args...)
+		cmd := exec.Command("HTND", args...)
 		cmd.Stdout = common.NewLogWriter(log, logger.LevelTrace, "HSATD-STDOUT")
 		cmd.Stderr = common.NewLogWriter(log, logger.LevelWarn, "HSATD-STDERR")
 
