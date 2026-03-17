@@ -1,7 +1,7 @@
 #!/bin/bash
 rm -rf /tmp/htnd-temp
 
-HTND --devnet --appdir=/tmp/htnd-temp --profile=6061 &
+HTND --devnet --appdir=/tmp/htnd-temp --rpclisten localhost:16610 --listen localhost:16611 --profile=6061 &
 HOOSATD_PID=$!
 
 sleep 1

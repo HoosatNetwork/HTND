@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -42,6 +43,9 @@ func ConnectToRPC(config *Config, dagParams *dagconfig.Params) (*Client, error) 
 	}
 	rpcClient.SetTimeout(time.Second * 120)
 	rpcClient.SetOnErrorHandler(func(err error) {
+		if strings.Contains(err.Error(), "client connection is closing") || strings.Contains(err.Error(), "code = Canceled") {
+			return
+		}
 		log.Errorf("Error from Client: %+v", err)
 	})
 

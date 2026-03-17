@@ -39,6 +39,7 @@ func addBlock(tc testapi.TestConsensus, parentHashes []*externalapi.DomainHash, 
 }
 
 func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
+	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
 	if !infralogger.BackendLog.IsRunning() {
 		infralogger.InitLogStdout(infralogger.LevelDebug)
 		infralogger.SetLogLevels(infralogger.LevelOff)

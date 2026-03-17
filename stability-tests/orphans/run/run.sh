@@ -1,7 +1,7 @@
 #!/bin/bash
 rm -rf /tmp/htnd-temp
 
-HTND --simnet --appdir=/tmp/htnd-temp --profile=6061 &
+HTND --simnet --appdir=/tmp/htnd-temp --rpclisten localhost:16510 --listen localhost:16511 --profile=6061 &
 HOOSATD_PID=$!
 
 sleep 1
