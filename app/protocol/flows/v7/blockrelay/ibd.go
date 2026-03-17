@@ -865,8 +865,8 @@ func (flow *handleIBDFlow) checkRateAndDisconnectIfNeeded(itemsProcessed int, mi
 	if rate < minRate {
 		flow.consecutiveLowRateCount++
 		log.Warnf("Peer %s sent %.2f %s/sec (below %.2f threshold), low rate count: %d", flow.peer, rate, itemType, minRate, flow.consecutiveLowRateCount)
-		if flow.consecutiveLowRateCount >= 3 {
-			log.Warnf("Peer %s consistently sent low %s rate for 3 ticks, disconnecting", flow.peer, itemType)
+		if flow.consecutiveLowRateCount >= 10 {
+			log.Warnf("Peer %s consistently sent low %s rate for 10 ticks, disconnecting", flow.peer, itemType)
 			return flow.disconnectPeerDueToLowRate()
 		}
 	} else {
