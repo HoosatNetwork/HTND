@@ -2,7 +2,9 @@ package integration
 
 import (
 	"encoding/hex"
+	"net"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,18 +16,6 @@ import (
 )
 
 const (
-	p2pAddress1 = "127.0.0.1:45321"
-	p2pAddress2 = "127.0.0.1:45322"
-	p2pAddress3 = "127.0.0.1:45323"
-	p2pAddress4 = "127.0.0.1:45324"
-	p2pAddress5 = "127.0.0.1:45325"
-
-	rpcAddress1 = "127.0.0.1:21345"
-	rpcAddress2 = "127.0.0.1:21346"
-	rpcAddress3 = "127.0.0.1:21347"
-	rpcAddress4 = "127.0.0.1:21348"
-	rpcAddress5 = "127.0.0.1:21349"
-
 	defaultTimeout = 30 * time.Second
 )
 
@@ -33,6 +23,20 @@ const (
 // private keys (32-byte hex), because some tests sign spends from coinbase UTXOs.
 // Keep these deterministic.
 var (
+	addressInitOnce sync.Once
+
+	p2pAddress1 string
+	p2pAddress2 string
+	p2pAddress3 string
+	p2pAddress4 string
+	p2pAddress5 string
+
+	rpcAddress1 string
+	rpcAddress2 string
+	rpcAddress3 string
+	rpcAddress4 string
+	rpcAddress5 string
+
 	miningAddress1PrivateKey = "0000000000000000000000000000000000000000000000000000000000000001"
 	miningAddress2PrivateKey = "0000000000000000000000000000000000000000000000000000000000000002"
 	miningAddress3PrivateKey = "0000000000000000000000000000000000000000000000000000000000000003"
@@ -41,6 +45,31 @@ var (
 	miningAddress2 = mustSchnorrAddressFromPrivateKeyHex(miningAddress2PrivateKey)
 	miningAddress3 = mustSchnorrAddressFromPrivateKeyHex(miningAddress3PrivateKey)
 )
+
+func initTestAddresses() {
+	addressInitOnce.Do(func() {
+		p2pAddress1 = reserveLoopbackAddress()
+		p2pAddress2 = reserveLoopbackAddress()
+		p2pAddress3 = reserveLoopbackAddress()
+		p2pAddress4 = reserveLoopbackAddress()
+		p2pAddress5 = reserveLoopbackAddress()
+
+		rpcAddress1 = reserveLoopbackAddress()
+		rpcAddress2 = reserveLoopbackAddress()
+		rpcAddress3 = reserveLoopbackAddress()
+		rpcAddress4 = reserveLoopbackAddress()
+		rpcAddress5 = reserveLoopbackAddress()
+	})
+}
+
+func reserveLoopbackAddress() string {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	defer listener.Close()
+	return listener.Addr().String()
+}
 
 func mustSchnorrAddressFromPrivateKeyHex(privateKeyHex string) string {
 	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
@@ -67,6 +96,7 @@ func mustSchnorrAddressFromPrivateKeyHex(privateKeyHex string) string {
 }
 
 func setConfig(t *testing.T, harness *appHarness, protocolVersion uint32) {
+	initTestAddresses()
 	harness.config = commonConfig()
 	harness.config.AppDir = randomDirectory(t)
 	harness.config.Listeners = []string{harness.p2pAddress}
