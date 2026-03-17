@@ -1,7 +1,7 @@
 #!/bin/bash
 rm -rf /tmp/htnd-temp
 
-htnd --simnet --appdir=/tmp/htnd-temp --profile=6061 &
+HTND --simnet --appdir=/tmp/htnd-temp --profile=6061 &
 HOOSATD_PID=$!
 
 sleep 1
