@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient"
+	"github.com/Hoosat-Oy/HTND/internal/ci"
 	"github.com/Hoosat-Oy/HTND/stability-tests/common"
 	"github.com/Hoosat-Oy/HTND/util/panics"
 	"github.com/Hoosat-Oy/HTND/util/profiling"
@@ -16,7 +17,7 @@ const (
 )
 
 func TestMempoolLimits(t *testing.T) {
-	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	if os.Getenv("RUN_STABILITY_TESTS") == "" {
 		t.Skip()
 	}

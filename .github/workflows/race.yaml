@@ -8,6 +8,8 @@ on:
 jobs:
   race_test:
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -tags=ci
     strategy:
       fail-fast: false
       matrix:

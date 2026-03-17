@@ -11,6 +11,8 @@ jobs:
 
   build:
     runs-on: ${{ matrix.os }}
+    env:
+      GOFLAGS: -tags=ci
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +46,8 @@ jobs:
 
   stability-test-fast:
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -tags=ci
     name: Fast stability tests, ${{ github.head_ref }}
     steps:
 
@@ -71,6 +75,8 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -tags=ci
     name: Produce code coverage
     steps:
       - name: Check out code into the Go module directory
