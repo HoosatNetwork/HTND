@@ -58,6 +58,9 @@ const (
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
 	defaultUTXODefaultMaxLimit    = 0
+	defaultMinHeadersPerSecond    = 10
+	defaultMinBlocksPerSecond     = 10
+	defaultUTXODefaultMaxLimit    = 10000
 )
 
 var (
@@ -147,6 +150,8 @@ type Flags struct {
 	NearlySyncedIBDTimeout time.Duration `long:"nearly-synced-ibd-timeout" description:"Maximum time to allow IBD to run when the node is nearly synced before disconnecting the peer and trying another"`
 	IBDTimeout             time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
 	IBDDequeueTimeout      time.Duration `long:"ibd-dequeue-timeout" description:"Maximum time to wait for a block to be dequeued during IBD before disconnecting the peer and trying another"`
+	MinHeadersPerSecond int `long:"min-headers-per-second" description:"Minimum headers per second required from IBD peer before disconnecting"`
+	MinBlocksPerSecond  int `long:"min-blocks-per-second" description:"Minimum blocks per second required from IBD peer before disconnecting"`
 
 	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
@@ -221,6 +226,8 @@ func defaultFlags() *Flags {
 		NearlySyncedIBDTimeout:         defaultNearlySyncedIBDTimeout,
 		IBDTimeout:                     defaultIBDTimeout,
 		IBDDequeueTimeout:              defaultIBDDequeueTimeout,
+		MinHeadersPerSecond:            defaultMinHeadersPerSecond,
+		MinBlocksPerSecond:             defaultMinBlocksPerSecond,
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
