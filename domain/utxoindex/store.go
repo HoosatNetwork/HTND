@@ -451,7 +451,7 @@ type UTXOPair struct {
 	Entry    externalapi.UTXOEntry
 }
 
-func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
@@ -476,9 +476,11 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		count = int(limit)
 	}
 
-	if cap(buffer) < int(count) {
-		buffer = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	slice := buffer.Slice()[:0]
+	if cap(slice) < count {
+		buffer = memory.Realloc(buffer, count)
 	}
+	slice = buffer.Slice()[:0]
 
 	iterator = uint32(0) // reset iterator to reuse for filling buffer
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -499,14 +501,14 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 			if err != nil {
 				return nil, err
 			}
-			buffer = append(buffer, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-			if limit > 0 && uint32(len(buffer)) >= offset+limit {
+			slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+			if limit > 0 && uint32(len(slice)) >= limit {
 				break
 			}
-			iterator++
 		}
+		iterator++
 	}
-	return buffer, nil
+	return slice, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)

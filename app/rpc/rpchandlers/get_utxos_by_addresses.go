@@ -2,7 +2,6 @@ package rpchandlers
 
 import (
 	"encoding/hex"
-	"sync"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
@@ -12,18 +11,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/Hoosat-Oy/HTND/util/memory"
 )
-
-var utxoEntriesPool = sync.Pool{
-	New: func() interface{} {
-		return make([]*appmessage.UTXOsByAddressesEntry, 0, 1000)
-	},
-}
-
-var utxoPairPool = sync.Pool{
-	New: func() interface{} {
-		return make([]utxoindex.UTXOPair, 0, 1000)
-	},
-}
 
 func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
 	needed := hex.EncodedLen(len(value))
@@ -37,16 +24,6 @@ func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
 	}
 	hex.Encode(buffer, value)
 	return buffer, string(buffer)
-}
-
-func releaseUTXOsByAddressesEntries(entries []*appmessage.UTXOsByAddressesEntry) {
-	clear(entries[:cap(entries)])
-	utxoEntriesPool.Put(entries[:0])
-}
-
-func releaseUTXOPairs(pairs []utxoindex.UTXOPair) {
-	clear(pairs[:cap(pairs)])
-	utxoPairPool.Put(pairs[:0])
 }
 
 // HandleGetUTXOsByAddresses handles the respectively named RPC command with 1-second cache
@@ -63,16 +40,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		getUTXOsByAddressesRequest.Limit = context.Config.UTXODefaultMaxLimit
 	}
 
-	// Set a reasonable total limit to prevent excessive memory allocation
-	// Preallocate with initial capacity to reduce reallocations
-	allEntries := utxoEntriesPool.Get().([]*appmessage.UTXOsByAddressesEntry)[:0] // Reset length
-	needed := int(getUTXOsByAddressesRequest.Limit) * len(getUTXOsByAddressesRequest.Addresses)
-	if cap(allEntries) < needed {
-		allEntries = make([]*appmessage.UTXOsByAddressesEntry, 0, needed)
-	}
-	defer func() {
-		releaseUTXOsByAddressesEntries(allEntries)
-	}()
+	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(getUTXOsByAddressesRequest.Addresses))
 
 	var reusableHexBuffer []byte
 
@@ -117,8 +85,6 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		memory.Free(utxoOutpointEntryPairsBuffer)
 	}
 
-	responseEntries := make([]*appmessage.UTXOsByAddressesEntry, len(allEntries))
-	copy(responseEntries, allEntries)
-	response := appmessage.NewGetUTXOsByAddressesResponseMessage(responseEntries)
+	response := appmessage.NewGetUTXOsByAddressesResponseMessage(allEntries)
 	return response, nil
 }

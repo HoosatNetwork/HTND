@@ -9,7 +9,6 @@ func TestMallocAndFree(t *testing.T) {
 	if b == nil {
 		t.Fatal("Expected block, got nil")
 	}
-	defer Free(b)
 
 	s := b.Slice()
 	if len(s) != 10 {
@@ -23,6 +22,38 @@ func TestMallocAndFree(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		if s[i] != i*2 {
 			t.Fatalf("Expected %d, got %d at index %d", i*2, s[i], i)
+		}
+	}
+	Free(b)
+	s2 := b.Slice()
+	if len(s2) != 0 {
+		t.Fatalf("Expected length 0 after free, got %d", len(s2))
+	}
+}
+
+func TestMallocReallocAndFree(t *testing.T) {
+	for x := 0; x < 5; x++ {
+		b := Malloc[int](1024 * 1024 * 1024) // 1 billion ints ~ 4GB
+		if b == nil {
+			t.Fatal("Expected block, got nil")
+		}
+
+		s := b.Slice()
+		for i := 0; i < 5; i++ {
+			s[i] = i + 1
+		}
+		b = Realloc(b, 1024*1024*2048) // 2 billion ints ~ 8GB
+		s = b.Slice()
+		if b == nil {
+			t.Fatal("Expected valid block after Realloc")
+		}
+		for i := 5; i > 0; i-- {
+			s[i] = i
+		}
+		Free(b)
+		s = b.Slice()
+		if len(s) != 0 {
+			t.Fatalf("Expected length 0 after free, got %d", len(s))
 		}
 	}
 }

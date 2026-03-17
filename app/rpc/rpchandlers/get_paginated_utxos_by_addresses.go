@@ -1,37 +1,14 @@
 package rpchandlers
 
 import (
-	"sync"
-
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
-
-var paginatedUtxoEntriesPool = sync.Pool{
-	New: func() interface{} {
-		return make([]*appmessage.UTXOsByAddressesEntry, 0, 1000)
-	},
-}
-
-var paginatedUtxoPairPool = sync.Pool{
-	New: func() interface{} {
-		return make([]utxoindex.UTXOPair, 0, 1000)
-	},
-}
-
-func releasePaginatedUTXOsByAddressesEntries(entries []*appmessage.UTXOsByAddressesEntry) {
-	clear(entries[:cap(entries)])
-	utxoEntriesPool.Put(entries[:0])
-}
-
-func releasePaginatedUTXOPairs(pairs []utxoindex.UTXOPair) {
-	clear(pairs[:cap(pairs)])
-	utxoPairPool.Put(pairs[:0])
-}
 
 // HandleGetPaginatedUTXOsByAddresses handles the respectively named RPC command with 1-second cache
 func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
@@ -46,26 +23,10 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 	if getPaginatedUTXOsByAddressesRequest.Limit == 0 || (getPaginatedUTXOsByAddressesRequest.Limit > context.Config.UTXODefaultMaxLimit && context.Config.UTXODefaultMaxLimit != 0) {
 		getPaginatedUTXOsByAddressesRequest.Limit = context.Config.UTXODefaultMaxLimit
 	}
+	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(getPaginatedUTXOsByAddressesRequest.Addresses))
 
-	// Set a reasonable total limit to prevent excessive memory allocation
-	// Preallocate with initial capacity to reduce reallocations
-	allEntries := utxoEntriesPool.Get().([]*appmessage.UTXOsByAddressesEntry)[:0] // Reset length
-	needed := int(getPaginatedUTXOsByAddressesRequest.Limit) * len(getPaginatedUTXOsByAddressesRequest.Addresses)
-	if cap(allEntries) < needed {
-		allEntries = make([]*appmessage.UTXOsByAddressesEntry, 0, needed)
-	}
-	defer func() {
-		releasePaginatedUTXOsByAddressesEntries(allEntries)
-	}()
-
-	utxoOutpointEntryPairs := utxoPairPool.Get().([]utxoindex.UTXOPair)[:0] // Reset length
-	defer func() {
-		releasePaginatedUTXOPairs(utxoOutpointEntryPairs)
-	}()
 	var reusableHexBuffer []byte
-
 	for _, addressString := range getPaginatedUTXOsByAddressesRequest.Addresses {
-		utxoOutpointEntryPairs = utxoOutpointEntryPairs[:0]
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
 			errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
@@ -74,15 +35,23 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 		}
 		scriptPublicKey, err := txscript.PayToAddrScript(address)
 		if err != nil {
-			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
+			errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
 			errorMessage.Error = appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairs)
+		utxoOutpointEntryPairsBuffer := memory.Malloc[utxoindex.UTXOPair](1000)
+		if utxoOutpointEntryPairsBuffer == nil {
+			errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
+			errorMessage.Error = appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
+			return errorMessage, nil
+		}
+		utxoOutpointEntryPairs, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
+			memory.Free(utxoOutpointEntryPairsBuffer)
 			return nil, err
 		}
 		if len(utxoOutpointEntryPairs) == 0 {
+			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}
 		var scriptHex string
@@ -94,10 +63,9 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 		for _, pair := range utxoOutpointEntryPairs {
 			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair))
 		}
+		memory.Free(utxoOutpointEntryPairsBuffer)
 	}
 
-	responseEntries := make([]*appmessage.UTXOsByAddressesEntry, len(allEntries))
-	copy(responseEntries, allEntries)
-	response := appmessage.NewGetPaginatedUTXOsByAddressesResponseMessage(responseEntries)
+	response := appmessage.NewGetPaginatedUTXOsByAddressesResponseMessage(allEntries)
 	return response, nil
 }

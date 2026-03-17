@@ -305,7 +305,7 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit u
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
+func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
