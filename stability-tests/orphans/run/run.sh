@@ -1,12 +1,12 @@
 #!/bin/bash
 rm -rf /tmp/htnd-temp
 
-HTND --simnet --appdir=/tmp/htnd-temp --rpclisten localhost:16510 --listen localhost:16511 --profile=6061 &
+HTND --simnet --appdir=/tmp/htnd-temp --rpclisten 127.0.0.1:42420 --listen 127.0.0.1:42421 --profile=6061 &
 HOOSATD_PID=$!
 
 sleep 1
 
-orphans --simnet -alocalhost:16511 -n20 --profile=7000
+orphans --simnet --rpcserver 127.0.0.1:42420 -a127.0.0.1:42421 -n20 --profile=7000
 TEST_EXIT_CODE=$?
 
 kill $HOOSATD_PID
