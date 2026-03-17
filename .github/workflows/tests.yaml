@@ -89,11 +89,12 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Delete the stability tests from coverage
-        run: rm -r stability-tests
-
       - name: Create coverage file
-        run: go test -v -covermode=atomic -coverpkg=./... -coverprofile coverage.txt ./...
+        shell: bash
+        run: |
+          packages=$(go list ./... | grep -v '^github.com/Hoosat-Oy/HTND/stability-tests')
+          coverpkg=$(printf '%s\n' "$packages" | paste -sd, -)
+          go test -v -covermode=atomic -coverpkg "$coverpkg" -coverprofile coverage.txt $packages
 
       - name: Upload coverage file
         uses: codecov/codecov-action@v5
