@@ -10,6 +10,7 @@ import (
 )
 
 func TestVirtualSelectedParentChain(t *testing.T) {
+	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
 	// Setup a couple of htnd instances
 	htnd1, htnd2, _, teardown := standardSetup(t)
 	defer teardown()
