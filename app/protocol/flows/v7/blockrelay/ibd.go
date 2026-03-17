@@ -37,6 +37,10 @@ type handleIBDFlow struct {
 	IBDContext
 	incomingRoute, outgoingRoute *router.Route
 	peer                         *peerpkg.Peer
+	lastRateCheckTime           time.Time
+	consecutiveLowRateCount     int
+	minHeadersPerSecond         float64
+	minBlocksPerSecond          float64
 }
 
 // HandleIBD handles IBD
@@ -87,6 +91,12 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 		log.Debugf("IBD is already running")
 		return nil
 	}
+
+	flow.lastRateCheckTime = time.Now()
+	flow.consecutiveLowRateCount = 0
+	flow.minHeadersPerSecond = float64(flow.Config().MinHeadersPerSecond) 
+	flow.minBlocksPerSecond = float64(flow.Config().MinBlocksPerSecond)   
+
 	flow.updateBlockVersionFromDAAScore(block.Header.DAAScore())
 	isFinishedSuccessfully := false
 	var err error = nil
@@ -462,6 +472,11 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		lastReceivedHeader := blockHeadersMessage.BlockHeaders[len(blockHeadersMessage.BlockHeaders)-1]
 		progressReporter.reportProgress(len(blockHeadersMessage.BlockHeaders), lastReceivedHeader.DAAScore)
 
+		// Check header rate after processing batch
+		if err := flow.checkRateAndDisconnectIfNeeded(len(blockHeadersMessage.BlockHeaders), flow.minHeadersPerSecond, "headers"); err != nil {
+			return err
+		}
+
 		// Ask for the next batch
 		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestNextHeaders())
 		if err != nil {
@@ -795,6 +810,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		}
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
+		// Check block rate after processing batch
+		if err := flow.checkRateAndDisconnectIfNeeded(len(hashesToRequest), flow.minBlocksPerSecond, "blocks"); err != nil {
+			return err
+		}
 	}
 
 	if !updateVirtual {
@@ -832,4 +851,38 @@ func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64)
 
 	log.Infof("Resolved virtual")
 	return nil
+}
+
+// Helper function to check rate and disconnect if consistently low
+func (flow *handleIBDFlow) checkRateAndDisconnectIfNeeded(itemsProcessed int, minRate float64, itemType string) error {
+	now := time.Now()
+	elapsed := now.Sub(flow.lastRateCheckTime).Seconds()
+	if elapsed <= 0 {
+		elapsed = 0.001 // Avoid division by zero
+	}
+	rate := float64(itemsProcessed) / elapsed
+
+	if rate < minRate {
+		flow.consecutiveLowRateCount++
+		log.Warnf("Peer %s sent %.2f %s/sec (below %.2f threshold), low rate count: %d", flow.peer, rate, itemType, minRate, flow.consecutiveLowRateCount)
+		if flow.consecutiveLowRateCount >= 3 {
+			log.Warnf("Peer %s consistently sent low %s rate for 3 ticks, disconnecting", flow.peer, itemType)
+			return flow.disconnectPeerDueToLowRate()
+		}
+	} else {
+		flow.consecutiveLowRateCount = 0 // Reset on good rate
+	}
+
+	flow.lastRateCheckTime = now
+	return nil
+}
+
+// Helper to disconnect peer (similar to timeout logic)
+func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
+	netAddress := flow.peer.Connection().NetAddress()
+	if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
+		log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
+	}
+	flow.peer.Connection().Disconnect()
+	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
 }
