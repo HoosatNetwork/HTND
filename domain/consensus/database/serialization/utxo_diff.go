@@ -3,16 +3,18 @@ package serialization
 import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
 // UTXODiffToDBUTXODiff converts UTXODiff to DbUtxoDiff
-func UTXODiffToDBUTXODiff(diff externalapi.UTXODiff) (*DbUtxoDiff, error) {
-	toAdd, err := utxoCollectionToDBUTXOCollection(diff.ToAdd())
+func UTXODiffToDBUTXODiff(diff externalapi.UTXODiff, toAddBuffer *memory.Block[*DbUtxoCollectionItem], toRemoveBuffer *memory.Block[*DbUtxoCollectionItem]) (*DbUtxoDiff, error) {
+
+	toAdd, err := utxoCollectionToDBUTXOCollection(diff.ToAdd(), toAddBuffer)
 	if err != nil {
 		return nil, err
 	}
 
-	toRemove, err := utxoCollectionToDBUTXOCollection(diff.ToRemove())
+	toRemove, err := utxoCollectionToDBUTXOCollection(diff.ToRemove(), toRemoveBuffer)
 	if err != nil {
 		return nil, err
 	}

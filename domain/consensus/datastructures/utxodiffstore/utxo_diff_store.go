@@ -6,6 +6,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
 )
@@ -163,7 +164,9 @@ func (uds *utxoDiffStore) utxoDiffChildHashAsKey(hash *externalapi.DomainHash) m
 }
 
 func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]byte, error) {
-	dbUtxoDiff, err := serialization.UTXODiffToDBUTXODiff(utxoDiff)
+	toAddBuffer := memory.Malloc[*serialization.DbUtxoCollectionItem](utxoDiff.ToAdd().Len())
+	toRemoveBuffer := memory.Malloc[*serialization.DbUtxoCollectionItem](utxoDiff.ToRemove().Len())
+	dbUtxoDiff, err := serialization.UTXODiffToDBUTXODiff(utxoDiff, toAddBuffer, toRemoveBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +174,8 @@ func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]by
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	memory.Free(toAddBuffer)
+	memory.Free(toRemoveBuffer)
 
 	return bytes, nil
 }

@@ -3,11 +3,15 @@ package serialization
 import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
-func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection) ([]*DbUtxoCollectionItem, error) {
-	items := make([]*DbUtxoCollectionItem, utxoCollection.Len())
-	i := 0
+func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection, buffer *memory.Block[*DbUtxoCollectionItem]) ([]*DbUtxoCollectionItem, error) {
+	count := utxoCollection.Len()
+	if buffer == nil || cap(buffer.Slice()) < count {
+		buffer = memory.Realloc(buffer, count)
+	}
+	items := buffer.Slice()[:0]
 	utxoIterator := utxoCollection.Iterator()
 	defer utxoIterator.Close()
 	for ok := utxoIterator.First(); ok; ok = utxoIterator.Next() {
@@ -16,11 +20,10 @@ func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection)
 			return nil, err
 		}
 
-		items[i] = &DbUtxoCollectionItem{
+		items = append(items, &DbUtxoCollectionItem{
 			Outpoint:  DomainOutpointToDbOutpoint(outpoint),
 			UtxoEntry: UTXOEntryToDBUTXOEntry(entry),
-		}
-		i++
+		})
 	}
 
 	return items, nil
