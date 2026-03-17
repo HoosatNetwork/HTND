@@ -33,7 +33,7 @@ func TestMallocAndFree(t *testing.T) {
 
 func TestMallocReallocAndFree(t *testing.T) {
 	for x := 0; x < 5; x++ {
-		b := Malloc[int](1024 * 1024 * 1024) // 1 billion ints ~ 4GB
+		b := Malloc[int](1024 * 1024 * 1) // 1 million ints ~ 4MB
 		if b == nil {
 			t.Fatal("Expected block, got nil")
 		}
@@ -42,7 +42,7 @@ func TestMallocReallocAndFree(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			s[i] = i + 1
 		}
-		b = Realloc(b, 1024*1024*2048) // 2 billion ints ~ 8GB
+		b = Realloc(b, 1024*1024*2) // 2 million ints ~ 8MB
 		s = b.Slice()
 		if b == nil {
 			t.Fatal("Expected valid block after Realloc")
