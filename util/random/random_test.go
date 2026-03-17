@@ -1,6 +1,7 @@
 package random
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -41,11 +42,21 @@ func TestRandomUint64(t *testing.T) {
 // TestRandomUint64Errors uses a fake reader to force error paths to be executed
 // and checks the results accordingly.
 func TestRandomUint64Errors(t *testing.T) {
-	// On modern Go (notably on Windows), crypto/rand.Read failures can terminate
-	// the process via an unrecoverable runtime throw (see https://go.dev/issue/66821),
-	// so we can't safely induce the error path in a unit test.
-	//
-	// Uint64 still returns (uint64, error) for API compatibility, but the error
-	// path isn't reliably testable without changing the production implementation.
-	t.Skip("cannot safely force crypto/rand.Read failure in a unit test")
+	originalReadRandom := readRandom
+	defer func() {
+		readRandom = originalReadRandom
+	}()
+
+	expectedErr := errors.New("forced random read failure")
+	readRandom = func(_ []byte) (int, error) {
+		return 0, expectedErr
+	}
+
+	value, err := Uint64()
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if value != 0 {
+		t.Fatalf("expected zero value on error, got %d", value)
+	}
 }

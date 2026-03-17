@@ -5,10 +5,12 @@ import (
 	"encoding/binary"
 )
 
+var readRandom = rand.Read
+
 // Uint64 returns a cryptographically random uint64 value.
 func Uint64() (uint64, error) {
 	var buf [8]byte
-	_, err := rand.Read(buf[:])
+	_, err := readRandom(buf[:])
 	if err != nil {
 		return 0, err
 	}
