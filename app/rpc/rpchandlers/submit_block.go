@@ -111,7 +111,7 @@ func checkNodeSyncStatus(context *rpccontext.Context) error {
 	// It suffices to rely on IsNearlySynced()
 	// This logic is overly cautious and from a linear chain thought process
 	// if context.ProtocolManager.Context().IsIBDRunning() {
-		// return fmt.Errorf("node is not synced - IBD running")
+	// return fmt.Errorf("node is not synced - IBD running")
 	// }
 
 	isSynced, err := context.ProtocolManager.Context().IsNearlySynced()

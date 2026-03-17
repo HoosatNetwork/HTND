@@ -706,8 +706,7 @@ func AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
 	return buffer
 }
 
-
-// The sending version of  AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs() 
+// The sending version of  AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs()
 func AppendDomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
 	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair,
 	buffer []*OutpointAndUTXOEntryPair) []*OutpointAndUTXOEntryPair {

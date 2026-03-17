@@ -1,10 +1,10 @@
 package flowcontext
 
 import (
-	"time"
 	"os"
 	"runtime/debug"
 	"strconv"
+	"time"
 
 	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
 	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"

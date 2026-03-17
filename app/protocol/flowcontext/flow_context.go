@@ -49,8 +49,8 @@ type FlowContext struct {
 
 	sharedRequestedBlocks *SharedRequestedBlocks
 
-	ibdPeer      *peerpkg.Peer
-	ibdPeerMutex sync.RWMutex
+	ibdPeer         *peerpkg.Peer
+	ibdPeerMutex    sync.RWMutex
 	loweredGCForIBD bool // Tracks if we lowered the GC during TrySetIBDRunning
 
 	peers      map[id.ID]*peerpkg.Peer

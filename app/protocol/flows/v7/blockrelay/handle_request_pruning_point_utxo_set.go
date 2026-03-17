@@ -85,7 +85,7 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 	const step = 1000
 	var fromOutpoint *externalapi.DomainOutpoint
 	chunksSent := 0
-	
+
 	// Pre-allocate the wire-message buffer once
 	wirePairsBuffer := make([]*appmessage.OutpointAndUTXOEntryPair, 0, step)
 

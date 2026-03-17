@@ -24,7 +24,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
 	"github.com/Hoosat-Oy/HTND/util/difficulty"
-
 )
 
 var UseHoohashCLibrary bool
@@ -126,15 +125,19 @@ func (state *State) CalculateProofOfWorkValueHoohashV101() (*big.Int, *externala
 }
 
 func (state *State) CalculateProofOfWorkValueHoohashV110() (*big.Int, *externalapi.DomainHash) {
-	// Run the first pass safely in Go 
+	// Run the first pass safely in Go
 	writer := hashes.Blake3HashWriter()
 	writer.InfallibleWrite(state.PrevHeader.ByteSlice())
 	err := serialization.WriteElement(writer, state.Timestamp)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	zeroes := [32]byte{}
 	writer.InfallibleWrite(zeroes[:])
 	err = serialization.WriteElement(writer, state.Nonce)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 
 	firstPass := writer.Finalize()
 
@@ -151,7 +154,9 @@ func (state *State) CalculateProofOfWorkValueHoohashV110() (*big.Int, *externala
 		)
 
 		hash, err := externalapi.NewDomainHashFromByteSlice(result[:])
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		return toBig(hash), hash
 	}
 
@@ -181,7 +186,9 @@ func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip boo
 		return powNum.Cmp(&state.Target) <= 0
 	} else if state.BlockVersion >= constants.PoWIntegrityMinVersion {
 		powHash, err := externalapi.NewDomainHashFromString(block.PoWHash)
-		if err != nil { return false }
+		if err != nil {
+			return false
+		}
 		if !powHash.Equal(new(externalapi.DomainHash)) {
 			submittedPowNum := toBig(powHash)
 			if submittedPowNum.Cmp(powNum) == 0 {
@@ -212,59 +219,59 @@ func BlockLevel(header externalapi.BlockHeader, maxBlockLevel int) int {
 
 	state := NewState(header.ToMutable())
 
-/*
-	//  DEBUGGING FOR THE FAILING BLOCK ---
-	blockHash := consensushashing.HeaderHash(header)
-	if blockHash.String() == "9d0c2b145952b2476530d8faf456025c93358bb9bce775236872c960a5fc0cbe" {
-		fmt.Printf("\n======================================================\n")
-		fmt.Printf("[DEBUG] INTERCEPTED FAILING BLOCK: %s\n", blockHash.String())
-		fmt.Printf("[DEBUG] Version: %d\n", state.BlockVersion)
-		fmt.Printf("[DEBUG] Timestamp: %d\n", state.Timestamp)
-		fmt.Printf("[DEBUG] Nonce: %d\n", state.Nonce)
-		fmt.Printf("[DEBUG] Pre-PoW Hash: %s\n", state.PrevHeader.String())
+	/*
+		//  DEBUGGING FOR THE FAILING BLOCK ---
+		blockHash := consensushashing.HeaderHash(header)
+		if blockHash.String() == "9d0c2b145952b2476530d8faf456025c93358bb9bce775236872c960a5fc0cbe" {
+			fmt.Printf("\n======================================================\n")
+			fmt.Printf("[DEBUG] INTERCEPTED FAILING BLOCK: %s\n", blockHash.String())
+			fmt.Printf("[DEBUG] Version: %d\n", state.BlockVersion)
+			fmt.Printf("[DEBUG] Timestamp: %d\n", state.Timestamp)
+			fmt.Printf("[DEBUG] Nonce: %d\n", state.Nonce)
+			fmt.Printf("[DEBUG] Pre-PoW Hash: %s\n", state.PrevHeader.String())
 
-		if state.BlockVersion >= 5 {
-			fmt.Printf("[DEBUG] Go Matrix [0][0]: %f\n", state.floatMat[0][0])
+			if state.BlockVersion >= 5 {
+				fmt.Printf("[DEBUG] Go Matrix [0][0]: %f\n", state.floatMat[0][0])
 
-			// 1. ManuallyGo Blake3
-			writer := hashes.Blake3HashWriter()
-			writer.InfallibleWrite(state.PrevHeader.ByteSlice())
-			serialization.WriteElement(writer, state.Timestamp)
-			zeroes := [32]byte{}
-			writer.InfallibleWrite(zeroes[:])
-			serialization.WriteElement(writer, state.Nonce)
-			firstPassGo := writer.Finalize()
-			fmt.Printf("[DEBUG] Blake3 First-Pass: %s\n", firstPassGo.String())
+				// 1. ManuallyGo Blake3
+				writer := hashes.Blake3HashWriter()
+				writer.InfallibleWrite(state.PrevHeader.ByteSlice())
+				serialization.WriteElement(writer, state.Timestamp)
+				zeroes := [32]byte{}
+				writer.InfallibleWrite(zeroes[:])
+				serialization.WriteElement(writer, state.Nonce)
+				firstPassGo := writer.Finalize()
+				fmt.Printf("[DEBUG] Blake3 First-Pass: %s\n", firstPassGo.String())
 
-			// 2. Go Final Hash
-			finalGoHash := state.floatMat.HoohashMatrixMultiplicationV110(firstPassGo, state.Nonce)
-			fmt.Printf("[DEBUG] Pure Go Final Hash: %s (BitLen: %d)\n", finalGoHash.String(), toBig(finalGoHash).BitLen())
+				// 2. Go Final Hash
+				finalGoHash := state.floatMat.HoohashMatrixMultiplicationV110(firstPassGo, state.Nonce)
+				fmt.Printf("[DEBUG] Pure Go Final Hash: %s (BitLen: %d)\n", finalGoHash.String(), toBig(finalGoHash).BitLen())
 
-			// 3.  C Final Hash
-			var resultC [32]byte
-			firstPassBytes := firstPassGo.ByteSlice()
-			
-			// Copy the Go matrix into a temporary C matrix just for this debug call
-			var tempCMat [64][64]C.double
-			for i := 0; i < 64; i++ {
-				for j := 0; j < 64; j++ {
-					tempCMat[i][j] = C.double(state.floatMat[i][j])
+				// 3.  C Final Hash
+				var resultC [32]byte
+				firstPassBytes := firstPassGo.ByteSlice()
+
+				// Copy the Go matrix into a temporary C matrix just for this debug call
+				var tempCMat [64][64]C.double
+				for i := 0; i < 64; i++ {
+					for j := 0; j < 64; j++ {
+						tempCMat[i][j] = C.double(state.floatMat[i][j])
+					}
 				}
-			}
 
-			C.HoohashMatrixMultiplication(
-				&tempCMat[0],
-				(*C.uint8_t)(unsafe.Pointer(&firstPassBytes[0])),
-				(*C.uint8_t)(unsafe.Pointer(&resultC[0])),
-				C.uint64_t(state.Nonce),
-			)
-			finalCHash, _ := externalapi.NewDomainHashFromByteSlice(resultC[:])
-			fmt.Printf("[DEBUG] Pure C Final Hash : %s (BitLen: %d)\n", finalCHash.String(), toBig(finalCHash).BitLen())
+				C.HoohashMatrixMultiplication(
+					&tempCMat[0],
+					(*C.uint8_t)(unsafe.Pointer(&firstPassBytes[0])),
+					(*C.uint8_t)(unsafe.Pointer(&resultC[0])),
+					C.uint64_t(state.Nonce),
+				)
+				finalCHash, _ := externalapi.NewDomainHashFromByteSlice(resultC[:])
+				fmt.Printf("[DEBUG] Pure C Final Hash : %s (BitLen: %d)\n", finalCHash.String(), toBig(finalCHash).BitLen())
+			}
+			fmt.Printf("======================================================\n\n")
 		}
-		fmt.Printf("======================================================\n\n")
-	}
-	// --- END DEBUGGING ---
-*/
+		// --- END DEBUGGING ---
+	*/
 
 	proofOfWorkValue, _ := state.CalculateProofOfWorkValue()
 	level := max(maxBlockLevel-proofOfWorkValue.BitLen(), 0)

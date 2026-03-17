@@ -651,12 +651,12 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 		}
 
 		switch message := message.(type) {
-                case *appmessage.MsgPruningPointUTXOSetChunk:
+		case *appmessage.MsgPruningPointUTXOSetChunk:
 			receivedUTXOCount += len(message.OutpointAndUTXOEntryPairs)
-			
+
 			// Clear the buffer, but keep the backing array allocation
 			domainPairsBuffer = domainPairsBuffer[:0]
-			
+
 			// Use the new helper to populate the buffer
 			domainPairsBuffer = appmessage.AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
 				message.OutpointAndUTXOEntryPairs, domainPairsBuffer)
@@ -724,8 +724,8 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 	ibdBatchSize := getIBDBatchSize()
 	// Allocate the map once with the maximum capacity needed.
-        // This prevents the map from having to dynamically grow and wait for the damn GC to arrive
-        receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
+	// This prevents the map from having to dynamically grow and wait for the damn GC to arrive
+	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
 		var hashesToRequest []*externalapi.DomainHash
 		if offset+ibdBatchSize < len(hashes) {
@@ -735,7 +735,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		}
 
 		// Cache to store received blocks for this batch only
-                clear(receivedBlocks) // Re-use is better than re-allocation :)
+		clear(receivedBlocks) // Re-use is better than re-allocation :)
 
 		// Request blocks
 		err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(hashesToRequest))

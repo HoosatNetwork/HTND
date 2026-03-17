@@ -1,5 +1,5 @@
-//go:build !linux || !arm64 
-// +build !linux,!arm64 
+//go:build !linux || !arm64
+// +build !linux !arm64
 
 package pow
 
@@ -30,11 +30,9 @@ type State struct {
 var UseHoohashCLibrary bool
 
 func SetUseHoohashCLibrary(use bool) {
-        UseHoohashCLibrary = false // Not available on not aarch64 linux
+	UseHoohashCLibrary = false // Not available on not aarch64 linux
 	_ = use
 }
-
-
 
 // NewState creates a new state with pre-computed values to speed up mining
 // It takes the target from the Bits field
