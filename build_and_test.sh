@@ -4,11 +4,14 @@ FLAGS=$@
 
 go version
 
-go get $FLAGS -t -d ./...
-GO111MODULE=off go get $FLAGS golang.org/x/lint/golint
+export PATH="$(go env GOPATH)/bin:$PATH"
+
+go mod download
+go install $FLAGS golang.org/x/lint/golint@latest
 go install $FLAGS honnef.co/go/tools/cmd/staticcheck@latest
 
-test -z "$(go fmt ./...)"
+UNFORMATTED=$(find . -name '*.go' -not -path './vendor/*' | xargs gofmt -l)
+test -z "${UNFORMATTED}"
 
 golint -set_exit_status ./...
 
