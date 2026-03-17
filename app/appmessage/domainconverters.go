@@ -325,13 +325,12 @@ func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
 
 // DomainTransactionToRPCTransaction converts DomainTransactions to RPCTransactions
 func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransaction) *RPCTransaction {
-	var reusableHexBuffer []byte
 	var inputs []*RPCTransactionInput
 	if len(transaction.Inputs) > 0 {
 		inputs = make([]*RPCTransactionInput, len(transaction.Inputs))
 		for i, input := range transaction.Inputs {
 			var signatureScript string
-			reusableHexBuffer, signatureScript = encodeHexString(reusableHexBuffer, input.SignatureScript)
+			_, signatureScript = encodeHexString(nil, input.SignatureScript)
 			inputs[i] = &RPCTransactionInput{
 				PreviousOutpoint: &RPCOutpoint{
 					TransactionID: input.PreviousOutpoint.TransactionID.String(),
@@ -348,7 +347,7 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 		outputs = make([]*RPCTransactionOutput, len(transaction.Outputs))
 		for i, output := range transaction.Outputs {
 			var scriptPublicKey string
-			reusableHexBuffer, scriptPublicKey = encodeHexString(reusableHexBuffer, output.ScriptPublicKey.Script)
+			_, scriptPublicKey = encodeHexString(nil, output.ScriptPublicKey.Script)
 			outputs[i] = &RPCTransactionOutput{
 				Amount:          output.Value,
 				ScriptPublicKey: &RPCScriptPublicKey{Script: scriptPublicKey, Version: output.ScriptPublicKey.Version},
@@ -361,7 +360,7 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 	if len(transaction.Payload) == 0 {
 		payload = ""
 	} else {
-		reusableHexBuffer, payload = encodeHexString(reusableHexBuffer, transaction.Payload)
+		_, payload = encodeHexString(nil, transaction.Payload)
 	}
 
 	return &RPCTransaction{

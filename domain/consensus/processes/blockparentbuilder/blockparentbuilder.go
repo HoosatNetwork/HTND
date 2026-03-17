@@ -12,19 +12,22 @@ import (
 
 var hashSetPool = sync.Pool{
 	New: func() interface{} {
-		return make(map[externalapi.DomainHash]struct{}, 16)
+		hashSet := make(map[externalapi.DomainHash]struct{}, 16)
+		return &hashSet
 	},
 }
 
 var domainHashSlicePool = sync.Pool{
 	New: func() interface{} {
-		return make([]*externalapi.DomainHash, 0, 16)
+		slice := make([]*externalapi.DomainHash, 0, 16)
+		return &slice
 	},
 }
 
 var blockHeaderSlicePool = sync.Pool{
 	New: func() interface{} {
-		return make([]externalapi.BlockHeader, 0, 16)
+		slice := make([]externalapi.BlockHeader, 0, 16)
+		return &slice
 	},
 }
 
@@ -70,7 +73,8 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 	daaScore uint64, directParentHashes []*externalapi.DomainHash) ([]externalapi.BlockLevelParents, error) {
 
 	// Late on we'll mutate direct parent hashes, so we first clone it.
-	directParentHashesCopy := domainHashSlicePool.Get().([]*externalapi.DomainHash)
+	directParentHashesCopyPtr := domainHashSlicePool.Get().(*[]*externalapi.DomainHash)
+	directParentHashesCopy := *directParentHashesCopyPtr
 	if cap(directParentHashesCopy) < len(directParentHashes) {
 		directParentHashesCopy = make([]*externalapi.DomainHash, len(directParentHashes))
 	} else {
@@ -89,7 +93,8 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 	// considered as a valid candidate.
 	// This is why we sort the direct parent headers in a way that the first one will be
 	// in the future of the pruning point.
-	directParentHeaders := blockHeaderSlicePool.Get().([]externalapi.BlockHeader)
+	directParentHeadersPtr := blockHeaderSlicePool.Get().(*[]externalapi.BlockHeader)
+	directParentHeaders := *directParentHeadersPtr
 	if cap(directParentHeaders) < len(directParentHashesCopy) {
 		directParentHeaders = make([]externalapi.BlockHeader, len(directParentHashesCopy))
 	} else {
@@ -210,7 +215,8 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 					continue
 				}
 
-				toRemove := hashset.HashSet(hashSetPool.Get().(map[externalapi.DomainHash]struct{}))
+				toRemovePtr := hashSetPool.Get().(*map[externalapi.DomainHash]struct{})
+				toRemove := hashset.HashSet(*toRemovePtr)
 				isAncestorOfAnyCandidate := false
 				for candidate, candidateReferences := range candidatesByLevelToReferenceBlocksMap[blockLevel] {
 					isInFutureOfCurrentCandidate, err := bpb.dagTopologyManager.IsAnyAncestorOf(stagingArea, candidateReferences, parent)
@@ -250,15 +256,17 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 				}
 
 				clear(toRemove)
-				hashSetPool.Put((map[externalapi.DomainHash]struct{})(toRemove))
+				hashSetPool.Put(toRemovePtr)
 			}
 		}
 	}
 
 	clear(directParentHashesCopy[:cap(directParentHashesCopy)])
 	clear(directParentHeaders[:cap(directParentHeaders)])
-	domainHashSlicePool.Put(directParentHashesCopy[:0])
-	blockHeaderSlicePool.Put(directParentHeaders[:0])
+	*directParentHashesCopyPtr = directParentHashesCopy[:0]
+	*directParentHeadersPtr = directParentHeaders[:0]
+	domainHashSlicePool.Put(directParentHashesCopyPtr)
+	blockHeaderSlicePool.Put(directParentHeadersPtr)
 
 	parents := make([]externalapi.BlockLevelParents, 0, len(candidatesByLevelToReferenceBlocksMap))
 	for blockLevel := 0; blockLevel < len(candidatesByLevelToReferenceBlocksMap); blockLevel++ {

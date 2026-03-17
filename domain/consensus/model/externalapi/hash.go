@@ -14,7 +14,8 @@ const DomainHashSize = 32
 
 var domainHashStringPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 0, 64) // 32*2 for hex
+		buffer := make([]byte, 0, 64) // 32*2 for hex
+		return &buffer
 	},
 }
 
@@ -70,7 +71,7 @@ func NewDomainHashFromString(hashString string) (*DomainHash, error) {
 // String returns the Hash as the hexadecimal string of the hash.
 func (hash DomainHash) String() string {
 	hexLen := hex.EncodedLen(len(hash.hashArray[:]))
-	dst := domainHashStringPool.Get().([]byte)
+	dst := *domainHashStringPool.Get().(*[]byte)
 	if cap(dst) < hexLen {
 		dst = make([]byte, hexLen)
 	} else {
@@ -78,7 +79,8 @@ func (hash DomainHash) String() string {
 	}
 	hex.Encode(dst, hash.hashArray[:])
 	s := string(dst)
-	domainHashStringPool.Put(dst[:0])
+	dst = dst[:0]
+	domainHashStringPool.Put(&dst)
 	return s
 }
 

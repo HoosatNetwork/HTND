@@ -25,7 +25,8 @@ const getBlocksCacheTTL = time.Second
 
 var blocksPool = sync.Pool{
 	New: func() interface{} {
-		return make([]*appmessage.RPCBlock, 0, 2)
+		slice := make([]*appmessage.RPCBlock, 0, 2)
+		return &slice
 	},
 }
 
@@ -40,7 +41,8 @@ func cloneRPCBlocks(blocks []*appmessage.RPCBlock) []*appmessage.RPCBlock {
 
 func releaseRPCBlocks(blocks []*appmessage.RPCBlock) {
 	clear(blocks[:cap(blocks)])
-	blocksPool.Put(blocks[:0])
+	blocks = blocks[:0]
+	blocksPool.Put(&blocks)
 }
 
 func purgeExpiredGetBlocksCache(now time.Time) {
@@ -143,7 +145,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	response := appmessage.NewGetBlocksResponseMessage()
 	response.BlockHashes = hashes.ToStrings(blockHashes)
 	if getBlocksRequest.IncludeBlocks {
-		rpcBlocks := blocksPool.Get().([]*appmessage.RPCBlock)[:0]
+		rpcBlocks := (*blocksPool.Get().(*[]*appmessage.RPCBlock))[:0]
 		if cap(rpcBlocks) < len(blockHashes) {
 			rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
 		}

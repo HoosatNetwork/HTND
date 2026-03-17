@@ -1,7 +1,6 @@
 package blockrelay
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -379,9 +378,6 @@ func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error
 	successString := "successfully"
 	if !isFinishedSuccessfully {
 		if err != nil {
-			successString = fmt.Sprintf("(interrupted: %s)", err)
-		} else {
-			successString = "(interrupted)"
 		}
 		return err
 	}

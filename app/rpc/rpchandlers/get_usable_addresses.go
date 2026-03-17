@@ -36,13 +36,15 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 
 var usableAddressesPool = sync.Pool{
 	New: func() interface{} {
-		return make([]string, 0, 2)
+		slice := make([]string, 0, 2)
+		return &slice
 	},
 }
 
 func releaseUsableAddresses(addresses []string) {
 	clear(addresses[:cap(addresses)])
-	usableAddressesPool.Put(addresses[:0])
+	addresses = addresses[:0]
+	usableAddressesPool.Put(&addresses)
 }
 
 // HandleGetUsableAddresses handles the respectively named RPC command
@@ -60,7 +62,7 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 
 	getUsableAddressesRequest := request.(*appmessage.GetUsableAddressesRequestMessage)
 
-	UsableAddresses := usableAddressesPool.Get().([]string)[:0]
+	UsableAddresses := (*usableAddressesPool.Get().(*[]string))[:0]
 	if cap(UsableAddresses) < len(getUsableAddressesRequest.Addresses) {
 		UsableAddresses = make([]string, 0, len(getUsableAddressesRequest.Addresses))
 	}

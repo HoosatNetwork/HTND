@@ -23,13 +23,15 @@ const balancesByAddressesCacheTTL = time.Second
 
 var balancesByAddressesPool = sync.Pool{
 	New: func() interface{} {
-		return make([]*appmessage.BalancesByAddressesEntry, 0, 2)
+		slice := make([]*appmessage.BalancesByAddressesEntry, 0, 2)
+		return &slice
 	},
 }
 
 func releaseBalancesByAddressesEntries(entries []*appmessage.BalancesByAddressesEntry) {
 	clear(entries[:cap(entries)])
-	balancesByAddressesPool.Put(entries[:0])
+	entries = entries[:0]
+	balancesByAddressesPool.Put(&entries)
 }
 
 func purgeExpiredBalancesByAddressesCache(now time.Time) {
@@ -74,7 +76,7 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	}
 	balancesByAddressesCacheMutex.Unlock()
 
-	allEntries := balancesByAddressesPool.Get().([]*appmessage.BalancesByAddressesEntry)[:0]
+	allEntries := (*balancesByAddressesPool.Get().(*[]*appmessage.BalancesByAddressesEntry))[:0]
 	if cap(allEntries) < len(getBalancesByAddressesRequest.Addresses) {
 		allEntries = make([]*appmessage.BalancesByAddressesEntry, 0, len(getBalancesByAddressesRequest.Addresses))
 	}
