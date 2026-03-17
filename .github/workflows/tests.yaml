@@ -96,8 +96,14 @@ jobs:
           coverpkg=$(printf '%s\n' "$packages" | paste -sd, -)
           go test -v -covermode=atomic -coverpkg "$coverpkg" -coverprofile coverage.txt $packages
 
+      - name: Skip Codecov upload when token is unavailable
+        if: ${{ secrets.CODECOV_TOKEN == '' }}
+        run: echo "CODECOV_TOKEN is not configured; skipping coverage upload."
+
       - name: Upload coverage file
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.txt
           fail_ci_if_error: true
