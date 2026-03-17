@@ -44,9 +44,9 @@ func ForAllNets(t *testing.T, skipPow bool, testFunc func(*testing.T, *consensus
 			// The consensus code mutates the global block version via constants.SetBlockVersion
 			// during validation/building, so parallel subtests will interfere with each other.
 			previousBlockVersion := constants.GetBlockVersion()
-			constants.SetBlockVersion(1)
+			constants.ForceSetBlockVersion(1)
 			t.Cleanup(func() {
-				constants.SetBlockVersion(previousBlockVersion)
+				constants.ForceSetBlockVersion(uint(previousBlockVersion))
 			})
 			consensusConfig.SkipProofOfWork = skipPow
 			t.Logf("Running test for %s", consensusConfig.Name)

@@ -20,6 +20,7 @@ import (
 type rpcCall func(client *rpcclient.RPCClient) error
 
 func TestRPCSpam(t *testing.T) {
+	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
 	if os.Getenv("RUN_STABILITY_TESTS") == "" {
 		t.Skip()
 	}

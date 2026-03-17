@@ -26,6 +26,7 @@ type Stats struct {
 	totalRequests    uint64
 	startTime        time.Time
 	stopChan         chan struct{}
+	running          bool
 }
 
 // IPRequestCount represents a request count for a specific IP
@@ -47,6 +48,16 @@ func NewStats() *Stats {
 
 // Start begins the periodic logging of RPC statistics
 func (s *Stats) Start() {
+	s.Lock()
+	if s.running {
+		s.Unlock()
+		return
+	}
+	s.stopChan = make(chan struct{})
+	s.running = true
+	stopChan := s.stopChan
+	s.Unlock()
+
 	spawn("rpcstats-logging", func() {
 		ticker := time.NewTicker(statsLoggingInterval)
 		defer ticker.Stop()
@@ -55,7 +66,7 @@ func (s *Stats) Start() {
 			select {
 			case <-ticker.C:
 				s.logAndReset()
-			case <-s.stopChan:
+			case <-stopChan:
 				return
 			}
 		}
@@ -65,7 +76,16 @@ func (s *Stats) Start() {
 
 // Stop stops the statistics tracker
 func (s *Stats) Stop() {
+	s.Lock()
+	if !s.running {
+		s.Unlock()
+		return
+	}
 	close(s.stopChan)
+	s.stopChan = nil
+	s.running = false
+	s.Unlock()
+
 	log.Infof("RPC statistics tracking stopped")
 }
 

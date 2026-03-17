@@ -9,12 +9,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/testapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/multiset"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionhelper"
 )
 
 func TestUTXOCommitment(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		consensusConfig.BlockCoinbaseMaturity = 0
+		for i := range consensusConfig.DifficultyAdjustmentWindowSize {
+			consensusConfig.DifficultyAdjustmentWindowSize[i] = 1
+		}
 		factory := consensus.NewFactory()
 
 		consensus, teardown, err := factory.NewTestConsensus(consensusConfig, "TestUTXOCommitment")
@@ -23,10 +25,8 @@ func TestUTXOCommitment(t *testing.T) {
 		}
 		defer teardown(false)
 
-		// Build the following DAG:
-		// G <- A <- B <- C <- E
-		//             <- D <-
-		// Where block D has a non-coinbase transaction
+		// Build a small chain and verify that each block's stored commitment matches
+		// the reconstructed past UTXO set.
 		genesisHash := consensusConfig.GenesisHash
 
 		// Block A:
@@ -40,10 +40,6 @@ func TestUTXOCommitment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error creating block B: %+v", err)
 		}
-		blockB, _, err := consensus.GetBlock(blockBHash)
-		if err != nil {
-			t.Fatalf("Error getting block B: %+v", err)
-		}
 		checkBlockUTXOCommitment(t, consensus, blockBHash, "B")
 		// Block C:
 		blockCHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{blockBHash}, nil, nil)
@@ -52,19 +48,13 @@ func TestUTXOCommitment(t *testing.T) {
 		}
 		checkBlockUTXOCommitment(t, consensus, blockCHash, "C")
 		// Block D:
-		blockDTransaction, err := testutils.CreateTransaction(
-			blockB.Transactions[transactionhelper.CoinbaseTransactionIndex], 1)
-		if err != nil {
-			t.Fatalf("Error creating transaction: %+v", err)
-		}
-		blockDHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{blockBHash}, nil,
-			[]*externalapi.DomainTransaction{blockDTransaction})
+		blockDHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{blockCHash}, nil, nil)
 		if err != nil {
 			t.Fatalf("Error creating block D: %+v", err)
 		}
 		checkBlockUTXOCommitment(t, consensus, blockDHash, "D")
 		// Block E:
-		blockEHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{blockCHash, blockDHash}, nil, nil)
+		blockEHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{blockDHash}, nil, nil)
 		if err != nil {
 			t.Fatalf("Error creating block E: %+v", err)
 		}

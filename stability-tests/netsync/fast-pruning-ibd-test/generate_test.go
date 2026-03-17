@@ -15,7 +15,7 @@ import (
 
 // TestGenerateFastPruningIBDTest generates the json needed for dag-for-fast-pruning-ibd-test.json.gz
 func TestGenerateFastPruningIBDTest(t *testing.T) {
-	t.Skip()
+	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		if consensusConfig.Name != dagconfig.DevnetParams.Name {
 			return

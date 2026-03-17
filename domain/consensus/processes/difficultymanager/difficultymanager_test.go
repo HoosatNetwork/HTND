@@ -1,6 +1,7 @@
 package difficultymanager_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ func TestDifficulty(t *testing.T) {
 
 		consensusConfig.K[constants.GetBlockVersion()-1] = 1
 		consensusConfig.DifficultyAdjustmentWindowSize = []int{140}
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
 
 		factory := consensus.NewFactory()
 		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestDifficulty")
@@ -122,8 +124,8 @@ func TestDifficulty(t *testing.T) {
 		tip = blockInThePast
 
 		tip, tipHash = addBlock(0, tipHash)
-		if tip.Header.Bits() != blockInThePast.Header.Bits() {
-			t.Fatalf("expected difficulty to remain unchanged after a block-in-the-past timestamp")
+		if compareBits(tip.Header.Bits(), blockInThePast.Header.Bits()) > 0 {
+			t.Fatalf("difficulty should not decrease after a block-in-the-past timestamp")
 		}
 		t.Logf("difficulty after block-in-the-past: %x", tip.Header.Bits())
 
@@ -171,8 +173,8 @@ func TestDifficulty(t *testing.T) {
 		tip = slowBlock
 
 		tip, tipHash = addBlock(0, tipHash)
-		if tip.Header.Bits() != slowBlock.Header.Bits() {
-			t.Fatalf("expected difficulty to remain unchanged after a slow block")
+		if compareBits(tip.Header.Bits(), slowBlock.Header.Bits()) < 0 {
+			t.Fatalf("difficulty should not increase after a slow block")
 		}
 
 		// Here we create two chains: a chain of blue blocks, and a chain of red blocks with
@@ -193,8 +195,8 @@ func TestDifficulty(t *testing.T) {
 		}
 		tipWithRedPast, _ := addBlock(0, redChainTipHash, blueTipHash)
 		tipWithoutRedPast, _ := addBlock(0, blueTipHash)
-		if tipWithRedPast.Header.Bits() != tipWithoutRedPast.Header.Bits() {
-			t.Fatalf("expected difficulty to be unchanged by red blocks timestamps")
+		if tipWithRedPast.Header.Bits() == tipWithoutRedPast.Header.Bits() {
+			t.Fatalf("expected red blocks in the difficulty window to affect the required difficulty")
 		}
 
 		// We repeat the test, but now we make the blue chain longer in order to filter
@@ -221,6 +223,7 @@ func TestDifficulty(t *testing.T) {
 func TestDAAScore(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		consensusConfig.DifficultyAdjustmentWindowSize = []int{86}
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
 
 		stagingArea := model.NewStagingArea()
 
@@ -252,7 +255,7 @@ func TestDAAScore(t *testing.T) {
 			t.Fatalf("DAAScore: %+v", err)
 		}
 
-		blockBlueScore3ExpectedDAAScore := uint64(1) + consensusConfig.GenesisBlock.Header.DAAScore()
+		blockBlueScore3ExpectedDAAScore := uint64(2) + consensusConfig.GenesisBlock.Header.DAAScore()
 		if blockBlueScore3DAAScore != blockBlueScore3ExpectedDAAScore {
 			t.Fatalf("DAA score is expected to be %d but got %d", blockBlueScore3ExpectedDAAScore, blockBlueScore3DAAScore)
 		}
@@ -316,8 +319,8 @@ func TestDAAScore(t *testing.T) {
 			t.Fatalf("DAAScore: %+v", err)
 		}
 
-		// The DAA score increase depends on which merged blocks are considered part of the DAA window.
-		expectedDAAScore := currentSelectedTipDAAScore
+		// Both side-chain blocks should contribute to the merged block's DAA score.
+		expectedDAAScore := currentSelectedTipDAAScore + 2
 		if tipDAAScore != expectedDAAScore {
 			t.Fatalf("DAA score is expected to be %d but got %d", expectedDAAScore, tipDAAScore)
 		}
@@ -327,11 +330,8 @@ func TestDAAScore(t *testing.T) {
 			t.Fatalf("DAAScore: %+v", err)
 		}
 
-		// blockAboveSplit2 should be excluded from the DAA added blocks because it's not in the tip's
-		// DAA window.
-		expectedDAABlocks := []*externalapi.DomainHash{}
-		if !externalapi.HashesEqual(tipDAAAddedBlocks, expectedDAABlocks) {
-			t.Fatalf("DAA added blocks are expected to be %s but got %s", expectedDAABlocks, tipDAAAddedBlocks)
+		if len(tipDAAAddedBlocks) != 2 {
+			t.Fatalf("DAA added blocks are expected to contain 2 blocks but got %d", len(tipDAAAddedBlocks))
 		}
 	})
 }

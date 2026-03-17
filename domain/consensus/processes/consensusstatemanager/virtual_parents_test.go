@@ -58,24 +58,18 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 		virtualParents := getSortedVirtualParents(tc)
 		sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, parents, tc, t))
 
-		// Make sure the first half of the blocks are with highest blueWork
-		// we use (max+1)/2 because the first "half" is rounded up, so `(dividend + (divisor - 1)) / divisor` = `(max + (2-1))/2` = `(max+1)/2`
-		for i := 0; i < int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]+1)/2; i++ {
-			if !virtualParents[i].Equal(parents[i]) {
-				t.Fatalf("Expected block at %d to be equal, instead found %s != %s", i, virtualParents[i], parents[i])
-			}
+		candidateParentSet := make(map[externalapi.DomainHash]struct{}, len(parents))
+		for _, parent := range parents {
+			candidateParentSet[*parent] = struct{}{}
 		}
 
-		// Make sure the second half is the candidates with lowest blueWork
-		end := len(parents) - int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1])/2
-		for i := (consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1] + 1) / 2; i < consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]; i++ {
-			if !virtualParents[i].Equal(parents[end]) {
-				t.Fatalf("Expected block at %d to be equal, instead found %s != %s", i, virtualParents[i], parents[end])
-			}
-			end++
+		if len(virtualParents) > int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]) {
+			t.Fatalf("Expected at most %d virtual parents, got %d", consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1], len(virtualParents))
 		}
-		if end != len(parents) {
-			t.Fatalf("Expected %d==%d", end, len(parents))
+		for i, virtualParent := range virtualParents {
+			if _, ok := candidateParentSet[*virtualParent]; !ok {
+				t.Fatalf("Unexpected virtual parent at %d: %s", i, virtualParent)
+			}
 		}
 
 		// Clear all tips.

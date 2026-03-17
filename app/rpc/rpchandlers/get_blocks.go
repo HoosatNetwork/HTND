@@ -1,6 +1,7 @@
 package rpchandlers
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -50,6 +51,11 @@ func purgeExpiredGetBlocksCache(now time.Time) {
 	}
 }
 
+func getBlocksCacheKey(lowHash, virtualSelectedParent *externalapi.DomainHash, networkName string,
+	includeBlocks, includeTransactions bool) string {
+	return fmt.Sprintf("%s|%s|%s|%t|%t", networkName, lowHash, virtualSelectedParent, includeBlocks, includeTransactions)
+}
+
 // HandleGetBlocks handles the respectively named RPC command
 func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getBlocksRequest := request.(*appmessage.GetBlocksRequestMessage)
@@ -87,7 +93,16 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			}, nil
 		}
 	}
-	cacheKey := lowHash.String()
+	virtualSelectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
+	if err != nil {
+		return &appmessage.GetBlocksResponseMessage{
+			Error: appmessage.RPCErrorf(
+				"Couldn't get virtual selected parent: %s", err),
+		}, nil
+	}
+
+	cacheKey := getBlocksCacheKey(lowHash, virtualSelectedParent, context.Config.NetParams().Name,
+		getBlocksRequest.IncludeBlocks, getBlocksRequest.IncludeTransactions)
 
 	getBlocksCacheMutex.Lock()
 	now := time.Now()
@@ -102,19 +117,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	}
 	getBlocksCacheMutex.Unlock()
 
-	// Get hashes between lowHash and virtualSelectedParent
-	virtualSelectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
-	if err != nil {
-		return &appmessage.GetBlocksResponseMessage{
-			Error: appmessage.RPCErrorf(
-				"Couldn't get virtual selected parent: %s", err),
-		}, nil
-	}
-
-	// We use +1 because lowHash is also returned
-	// maxBlocks MUST be >= MergeSetSizeLimit + 1
-	maxBlocks := context.Config.NetParams().MergeSetSizeLimit + 1
-	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, maxBlocks)
+	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, 0)
 	if err != nil {
 		return &appmessage.GetBlocksResponseMessage{
 			Error: appmessage.RPCErrorf(

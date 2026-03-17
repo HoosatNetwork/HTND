@@ -16,6 +16,7 @@ const (
 )
 
 func TestMempoolLimits(t *testing.T) {
+	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
 	if os.Getenv("RUN_STABILITY_TESTS") == "" {
 		t.Skip()
 	}

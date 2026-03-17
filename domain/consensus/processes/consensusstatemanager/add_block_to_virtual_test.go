@@ -52,32 +52,29 @@ func TestVirtualDiff(t *testing.T) {
 			t.Fatalf("Unexpected length %d for virtualUTXODiff.ToRemove()", virtualUTXODiff.ToRemove().Len())
 		}
 
-		if virtualUTXODiff.ToAdd().Len() != 1 {
+		expectedOutputs := blockB.Transactions[0].Outputs
+		if virtualUTXODiff.ToAdd().Len() != len(expectedOutputs) {
 			t.Fatalf("Unexpected length %d for virtualUTXODiff.ToAdd()", virtualUTXODiff.ToAdd().Len())
 		}
 
-		iterator := virtualUTXODiff.ToAdd().Iterator()
-		iterator.First()
+		for i, output := range expectedOutputs {
+			outpoint := &externalapi.DomainOutpoint{
+				TransactionID: *consensushashing.TransactionID(blockB.Transactions[0]),
+				Index:         uint32(i),
+			}
+			entry, ok := virtualUTXODiff.ToAdd().Get(outpoint)
+			if !ok {
+				t.Fatalf("Missing outpoint %s", outpoint)
+			}
 
-		outpoint, entry, err := iterator.Get()
-		if err != nil {
-			t.Fatalf("TestVirtualDiff: %+v", err)
-		}
-
-		if !outpoint.Equal(&externalapi.DomainOutpoint{
-			TransactionID: *consensushashing.TransactionID(blockB.Transactions[0]),
-			Index:         0,
-		}) {
-			t.Fatalf("Unexpected outpoint %s", outpoint)
-		}
-
-		if !entry.Equal(utxo.NewUTXOEntry(
-			blockB.Transactions[0].Outputs[0].Value,
-			blockB.Transactions[0].Outputs[0].ScriptPublicKey,
-			true,
-			consensusConfig.GenesisBlock.Header.DAAScore()+2, //Expected virtual DAA score
-		)) {
-			t.Fatalf("Unexpected entry %s", entry)
+			if !entry.Equal(utxo.NewUTXOEntry(
+				output.Value,
+				output.ScriptPublicKey,
+				true,
+				blockB.Header.DAAScore()+1,
+			)) {
+				t.Fatalf("Unexpected entry %s", entry)
+			}
 		}
 	})
 }

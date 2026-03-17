@@ -37,11 +37,6 @@ var (
 	// simnetPowMax is the highest proof of work value a Hoosat block
 	// can have for the simulation test network. It is the value 2^255 - 1.
 	simnetPowMax = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
-
-	// devnetPowMax is the highest proof of work value a Hoosat block
-	// can have for the development network. It is the value
-	// 2^255 - 1.
-	devnetPowMax = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 255), bigOne)
 )
 
 // KType defines the size of GHOSTDAG consensus algorithm K parameter.
@@ -358,9 +353,9 @@ var TestnetParams = Params{
 	},
 
 	// DAG parameters
-	GenesisBlock:                    &genesisBlock,
-	GenesisHash:                     genesisHash,
-	PowMax:                          mainPowMax,
+	GenesisBlock:                    &testnetGenesisBlock,
+	GenesisHash:                     testnetGenesisHash,
+	PowMax:                          testnetPowMax,
 	BlockCoinbaseMaturity:           100,
 	SubsidyGenesisReward:            defaultSubsidyGenesisReward,
 	PreDeflationaryPhaseBaseSubsidy: defaultPreDeflationaryPhaseBaseSubsidy,
@@ -638,8 +633,8 @@ var DevnetParams = Params{
 	DNSSeeds:    []string{}, // NOTE: There must NOT be any seeds.
 
 	// DAG parameters
-	GenesisBlock:                    &genesisBlock,
-	GenesisHash:                     genesisHash,
+	GenesisBlock:                    &devnetGenesisBlock,
+	GenesisHash:                     devnetGenesisHash,
 	PowMax:                          mainPowMax,
 	BlockCoinbaseMaturity:           100,
 	SubsidyGenesisReward:            defaultSubsidyGenesisReward,

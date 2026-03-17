@@ -97,6 +97,10 @@ func TestReverseUTXODiffs(t *testing.T) {
 }
 
 func checkIsUTXODiffOnlyRemoveCoinbase(t *testing.T, utxoDiff externalapi.UTXODiff, currentBlock *externalapi.DomainBlock) bool {
+	if len(currentBlock.Transactions[0].Outputs) == 0 {
+		return utxoDiff.ToAdd().Len() == 0 && utxoDiff.ToRemove().Len() == 0
+	}
+
 	if utxoDiff.ToAdd().Len() > 0 || utxoDiff.ToRemove().Len() > 1 {
 		return false
 	}

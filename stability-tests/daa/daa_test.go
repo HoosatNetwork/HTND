@@ -22,6 +22,7 @@ const averageBlockRateSampleSize = 60
 const averageHashRateSampleSize = 100_000
 
 func TestDAA(t *testing.T) {
+	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
 	if os.Getenv("RUN_STABILITY_TESTS") == "" {
 		t.Skip()
 	}

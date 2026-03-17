@@ -1,6 +1,8 @@
 package testutils
 
 import (
+	"errors"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
@@ -11,6 +13,10 @@ import (
 // Assumes that the output being spent has opTrueScript as it's scriptPublicKey
 // Creates the value of the spent output minus 1 sompi
 func CreateTransaction(txToSpend *externalapi.DomainTransaction, fee uint64) (*externalapi.DomainTransaction, error) {
+	if len(txToSpend.Outputs) == 0 {
+		return nil, errors.New("cannot create transaction from transaction with no outputs")
+	}
+
 	scriptPublicKey, redeemScript := OpTrueScript()
 
 	signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)

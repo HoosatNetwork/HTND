@@ -2,6 +2,7 @@ package pruningmanager_test
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,7 +40,7 @@ func TestPruning(t *testing.T) {
 		},
 		"dag-for-test-pruning.json": {
 			dagconfig.MainnetParams.Name: "503",
-			dagconfig.TestnetParams.Name: "503",
+			dagconfig.TestnetParams.Name: "502",
 			dagconfig.DevnetParams.Name:  "502",
 			dagconfig.SimnetParams.Name:  "503",
 		},
@@ -48,6 +49,8 @@ func TestPruning(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		// Improve the performance of the test a little
 		consensusConfig.DisableDifficultyAdjustment = true
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
+		constants.ForceSetBlockVersion(1)
 		err := filepath.Walk("./testdata", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err

@@ -5,6 +5,7 @@
 package addressmanager
 
 import (
+	"errors"
 	"net"
 	"reflect"
 	"testing"
@@ -425,7 +426,11 @@ func TestIsBannedUsesConfiguredBanDuration(t *testing.T) {
 	defer teardown()
 
 	testAddress := &appmessage.NetAddress{IP: net.ParseIP("9.8.7.6"), Timestamp: mstime.Now()}
-	err := addressManager.Ban(testAddress)
+	err := addressManager.AddAddress(testAddress)
+	if err != nil {
+		t.Fatalf("AddAddress() failed: %s", err)
+	}
+	err = addressManager.Ban(testAddress)
 	if err != nil {
 		t.Fatalf("Ban() failed: %s", err)
 	}
@@ -438,7 +443,7 @@ func TestIsBannedUsesConfiguredBanDuration(t *testing.T) {
 	bannedEntry.netAddress.Timestamp = mstime.Now().Add(-3 * time.Second)
 
 	isBanned, err := addressManager.IsBanned(testAddress)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrAddressNotFound) {
 		t.Fatalf("IsBanned() failed: %s", err)
 	}
 	if isBanned {

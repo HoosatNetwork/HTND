@@ -201,14 +201,14 @@ func TestHandleNewBlockTransactions(t *testing.T) {
 		}
 
 		const partialLength = 3
-		blockWithFirstPartOfTheTransactions := slices.Clone(transactionsToInsert[0:partialLength])
-		blockWithRestOfTheTransactions := slices.Clone(transactionsToInsert[partialLength:])
+		blockWithFirstPartOfTheTransactions := append([]*externalapi.DomainTransaction{{}}, slices.Clone(transactionsToInsert[0:partialLength])...)
+		blockWithRestOfTheTransactions := append([]*externalapi.DomainTransaction{{}}, slices.Clone(transactionsToInsert[partialLength:])...)
 		_, err = miningManager.HandleNewBlockTransactions(blockWithFirstPartOfTheTransactions)
 		if err != nil {
 			t.Fatalf("HandleNewBlockTransactions: %v", err)
 		}
 		mempoolTransactions, _ := miningManager.AllTransactions(true, false)
-		for _, removedTransaction := range blockWithFirstPartOfTheTransactions {
+		for _, removedTransaction := range blockWithFirstPartOfTheTransactions[transactionhelper.CoinbaseTransactionIndex+1:] {
 			if contains(removedTransaction, mempoolTransactions) {
 				t.Fatalf("This transaction shouldnt be in mempool: %s", consensushashing.TransactionID(removedTransaction))
 			}
