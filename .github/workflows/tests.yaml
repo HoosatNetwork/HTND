@@ -77,6 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOFLAGS: -tags=ci
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     name: Produce code coverage
     steps:
       - name: Check out code into the Go module directory
@@ -97,13 +98,13 @@ jobs:
           go test -v -covermode=atomic -coverpkg "$coverpkg" -coverprofile coverage.txt $packages
 
       - name: Skip Codecov upload when token is unavailable
-        if: ${{ secrets.CODECOV_TOKEN == '' }}
+        if: ${{ env.CODECOV_TOKEN == '' }}
         run: echo "CODECOV_TOKEN is not configured; skipping coverage upload."
 
       - name: Upload coverage file
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           files: coverage.txt
           fail_ci_if_error: true
