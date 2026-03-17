@@ -375,13 +375,10 @@ func (flow *handleIBDFlow) isGenesisVirtualSelectedParent() (bool, error) {
 }
 
 func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error) error {
-	successString := "successfully"
 	if !isFinishedSuccessfully {
-		if err != nil {
-		}
 		return err
 	}
-	log.Infof("IBD with peer %s finished %s", flow.peer, successString)
+	log.Infof("IBD with peer %s finished successfully", flow.peer)
 	return nil
 }
 
