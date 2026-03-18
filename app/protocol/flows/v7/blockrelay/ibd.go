@@ -868,8 +868,8 @@ func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64)
 func (flow *handleIBDFlow) checkPeriodicRate(itemType string) error {
 	now := time.Now()
 	elapsed := now.Sub(flow.lastRateCheckTime).Seconds()
-	if elapsed <= 0 {
-		return nil // Avoid division by zero
+	if elapsed <= 9 {
+		return nil // Avoid division by zero and low artifical first count too....
 	}
 
 	var rate float64
