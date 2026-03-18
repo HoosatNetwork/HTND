@@ -60,6 +60,8 @@ const (
 	defaultUTXODefaultMaxLimit    = 0
 	defaultMinHeadersPerSecond    = 10
 	defaultMinBlocksPerSecond     = 10
+	defaultMinHeadersPerSecond    = 50
+	defaultMinBlocksPerSecond     = 50
 	defaultUTXODefaultMaxLimit    = 10000
 )
 
