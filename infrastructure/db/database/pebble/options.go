@@ -78,7 +78,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Block cache – aim higher in 2026 (8–16 GiB realistic)
 	// ────────────────────────────────────────────────
-	cacheBytes := int64(2048) << 20 // 2 GiB default – increase for better hit rate
+	cacheBytes := int64(4096) << 20 // 2 GiB default – increase for better hit rate
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
 	}
@@ -101,9 +101,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		FlushSplitBytes: baseFileSize,
 
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 16),
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 48),
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16),
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 64),      // was 16 → start here, try up to 128–256 if still building up
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 200),    // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 64), // was 16 → align with compaction trigger
 
 		TargetFileSizes: [7]int64{
 			baseFileSize,       // L0
@@ -122,7 +122,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		// WALBytesPerSync: 4 << 20,
 		// BytesPerSync:    4 << 20,
 
-		CompactionConcurrencyRange: func() (int, int) { return 4, 8 },
+		CompactionConcurrencyRange: func() (int, int) { return 4, 8 }, // was 4,8 → more workers help during backlog
 
 		Levels: [7]pebble.LevelOptions{
 			{ // L0
@@ -180,15 +180,15 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 
 	// How many L0 compactions can run concurrently
-	// opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 6) // Increased from 4 to handle more L0 files
+	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 12)
 
 	// Trigger extra compaction workers when debt (pending bytes) is high
 	// opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
 
 	// Read-triggered compactions: compact hot-read data more aggressively
 	// Helpful during long IBD phases with repeated ancestor / window lookups
-	// opts.Experimental.ReadCompactionRate = 64 << 20 // 32 MiB/s – moderate aggressiveness
-	// opts.Experimental.ReadSamplingMultiplier = 4    // sample 1/4 reads for triggering
+	opts.Experimental.ReadCompactionRate = 256 << 20
+	opts.Experimental.ReadSamplingMultiplier = 2
 
 	// if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
 	// 	if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
