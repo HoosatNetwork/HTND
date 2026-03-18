@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -84,6 +85,11 @@ func (flow *receiveVersionFlow) start() (*appmessage.NetAddress, error) {
 			minAcceptableProtocolVersion)
 	}
 
+	err = validatePeerVersion(flow.Config().ForceSameVersion, msgVersion.UserAgent)
+	if err != nil {
+		return nil, err
+	}
+
 	// Disconnect from partial nodes in networks that don't allow them
 	if !flow.Config().ActiveNetParams.EnableNonNativeSubnetworks && msgVersion.SubnetworkID != nil {
 		return nil, protocolerrors.New(true, "partial nodes are not allowed")
@@ -116,4 +122,42 @@ func (flow *receiveVersionFlow) start() (*appmessage.NetAddress, error) {
 	flow.peer.Connection().SetID(msgVersion.ID)
 
 	return msgVersion.Address, nil
+}
+
+func validatePeerVersion(forceSameVersion bool, remoteUserAgent string) error {
+	if !forceSameVersion {
+		return nil
+	}
+
+	remoteVersion, ok := extractUserAgentVersion(remoteUserAgent, userAgentName)
+	if !ok {
+		return protocolerrors.New(false, "peer is not advertising an htnd version")
+	}
+
+	if remoteVersion != userAgentVersion {
+		return protocolerrors.Errorf(false, "peer version %s does not match local version %s",
+			remoteVersion, userAgentVersion)
+	}
+
+	return nil
+}
+
+func extractUserAgentVersion(userAgent string, agentName string) (string, bool) {
+	for _, agent := range strings.Split(userAgent, "/") {
+		if !strings.HasPrefix(agent, agentName+":") {
+			continue
+		}
+
+		version := strings.TrimPrefix(agent, agentName+":")
+		if commentIndex := strings.Index(version, "("); commentIndex >= 0 {
+			version = version[:commentIndex]
+		}
+		if version == "" {
+			continue
+		}
+
+		return version, true
+	}
+
+	return "", false
 }

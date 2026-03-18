@@ -122,6 +122,7 @@ type Flags struct {
 	MaxOrphanTxs                    uint64        `long:"maxorphantx" description:"Max number of orphan transactions to keep in memory"`
 	BlockMaxMass                    uint64        `long:"blockmaxmass" description:"Maximum transaction mass to be used when creating a block"`
 	UserAgentComments               []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
+	ForceSameVersion                bool          `long:"force-same-version" description:"Disconnect peers whose advertised HTND version does not exactly match this node's version"`
 	NoPeerBloomFilters              bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
 	SigCacheMaxSize                 uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
 	BlocksOnly                      bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
