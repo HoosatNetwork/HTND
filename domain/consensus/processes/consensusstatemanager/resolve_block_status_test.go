@@ -1,10 +1,13 @@
 package consensusstatemanager_test
 
 import (
+	"encoding/binary"
 	"errors"
 	"testing"
 
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/blockheader"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/merkle"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -165,6 +168,123 @@ func TestDoubleSpends(t *testing.T) {
 		}
 		if goodBlock2Status != externalapi.StatusUTXOValid {
 			t.Fatalf("GoodBlock2 status expected to be '%s', but is '%s'", externalapi.StatusUTXOValid, goodBlock2Status)
+		}
+	})
+}
+
+func TestDisqualifiedChainStagesUTXODiff(t *testing.T) {
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		stagingArea := model.NewStagingArea()
+
+		consensusConfig.BlockCoinbaseMaturity = 0
+		for i := range consensusConfig.DifficultyAdjustmentWindowSize {
+			consensusConfig.DifficultyAdjustmentWindowSize[i] = 1
+		}
+
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestDisqualifiedChainStagesUTXODiff")
+		if err != nil {
+			t.Fatalf("Error setting up consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		tipHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+		if err != nil {
+			t.Fatalf("AddBlock: %+v", err)
+		}
+
+		disqualifiedBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{tipHash}, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildBlockWithParents: %+v", err)
+		}
+		disqualifiedBlock.Header = blockheader.NewImmutableBlockHeader(
+			disqualifiedBlock.Header.Version(),
+			disqualifiedBlock.Header.Parents(),
+			disqualifiedBlock.Header.HashMerkleRoot(),
+			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{}),
+			disqualifiedBlock.Header.UTXOCommitment(),
+			disqualifiedBlock.Header.TimeInMilliseconds(),
+			disqualifiedBlock.Header.Bits(),
+			disqualifiedBlock.Header.Nonce(),
+			disqualifiedBlock.Header.DAAScore(),
+			disqualifiedBlock.Header.BlueScore(),
+			disqualifiedBlock.Header.BlueWork(),
+			disqualifiedBlock.Header.PruningPoint(),
+		)
+
+		err = tc.ValidateAndInsertBlock(disqualifiedBlock, true, true)
+		if err != nil {
+			t.Fatalf("ValidateAndInsertBlock: %+v", err)
+		}
+
+		disqualifiedBlockHash := consensushashing.BlockHash(disqualifiedBlock)
+		status, err := tc.BlockStatusStore().Get(tc.DatabaseContext(), stagingArea, disqualifiedBlockHash)
+		if err != nil {
+			t.Fatalf("BlockStatusStore().Get: %+v", err)
+		}
+		if status != externalapi.StatusDisqualifiedFromChain {
+			t.Fatalf("Expected %s but got %s", externalapi.StatusDisqualifiedFromChain, status)
+		}
+
+		disqualifiedChild, err := tc.BuildUTXOInvalidBlock([]*externalapi.DomainHash{disqualifiedBlockHash})
+		if err != nil {
+			t.Fatalf("BuildUTXOInvalidBlock: %+v", err)
+		}
+
+		expectedSubsidy, err := tc.CoinbaseManager().CalcBlockSubsidy(stagingArea, tipHash, disqualifiedChild.Header.Version())
+		if err != nil {
+			t.Fatalf("CalcBlockSubsidy: %+v", err)
+		}
+		binary.LittleEndian.PutUint64(disqualifiedChild.Transactions[0].Payload[8:16], expectedSubsidy)
+		disqualifiedChild.Header = blockheader.NewImmutableBlockHeader(
+			disqualifiedChild.Header.Version(),
+			disqualifiedChild.Header.Parents(),
+			merkle.CalculateHashMerkleRoot(disqualifiedChild.Transactions),
+			disqualifiedChild.Header.AcceptedIDMerkleRoot(),
+			disqualifiedChild.Header.UTXOCommitment(),
+			disqualifiedChild.Header.TimeInMilliseconds(),
+			disqualifiedChild.Header.Bits(),
+			disqualifiedChild.Header.Nonce(),
+			disqualifiedChild.Header.DAAScore(),
+			disqualifiedChild.Header.BlueScore(),
+			disqualifiedChild.Header.BlueWork(),
+			disqualifiedChild.Header.PruningPoint(),
+		)
+
+		err = tc.ValidateAndInsertBlock(disqualifiedChild, true, true)
+		if err != nil {
+			t.Fatalf("ValidateAndInsertBlock child of disqualified parent: %+v", err)
+		}
+
+		disqualifiedChildHash := consensushashing.BlockHash(disqualifiedChild)
+
+		childStatus, err := tc.BlockStatusStore().Get(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
+		if err != nil {
+			t.Fatalf("BlockStatusStore().Get: %+v", err)
+		}
+		if childStatus != externalapi.StatusDisqualifiedFromChain {
+			t.Fatalf("Expected child status %s but got %s", externalapi.StatusDisqualifiedFromChain, childStatus)
+		}
+
+		_, err = tc.UTXODiffStore().UTXODiff(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
+		if err != nil {
+			t.Fatalf("Expected disqualified child to have a staged UTXO diff: %+v", err)
+		}
+
+		hasChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
+		if err != nil {
+			t.Fatalf("HasUTXODiffChild: %+v", err)
+		}
+		if !hasChild {
+			t.Fatalf("Expected disqualified child to have a UTXO diff child")
+		}
+
+		utxoDiffChild, err := tc.UTXODiffStore().UTXODiffChild(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
+		if err != nil {
+			t.Fatalf("UTXODiffChild: %+v", err)
+		}
+		if !utxoDiffChild.Equal(disqualifiedBlockHash) {
+			t.Fatalf("Expected disqualified child diff child to be %s but got %s", disqualifiedBlockHash, utxoDiffChild)
 		}
 	})
 }
