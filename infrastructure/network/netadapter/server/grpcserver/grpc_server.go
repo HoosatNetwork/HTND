@@ -12,8 +12,16 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/experimental"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
 	"google.golang.org/grpc/peer"
+)
+
+const (
+	grpcKeepaliveTime     = 2 * time.Minute
+	grpcKeepaliveTimeout  = 20 * time.Second
+	grpcMaxConnectionIdle = 5 * time.Minute
+	grpcMinPingInterval   = 30 * time.Second
 )
 
 type gRPCServer struct {
@@ -42,7 +50,19 @@ func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundCo
 	)
 	experimental.SetDefaultBufferPool(tieredPool)
 	return &gRPCServer{
-		server:                     grpc.NewServer(grpc.MaxRecvMsgSize(maxMessageSize), grpc.MaxSendMsgSize(maxMessageSize)),
+		server: grpc.NewServer(
+			grpc.MaxRecvMsgSize(maxMessageSize),
+			grpc.MaxSendMsgSize(maxMessageSize),
+			grpc.KeepaliveParams(keepalive.ServerParameters{
+				Time:              grpcKeepaliveTime,
+				Timeout:           grpcKeepaliveTimeout,
+				MaxConnectionIdle: grpcMaxConnectionIdle,
+			}),
+			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+				MinTime:             grpcMinPingInterval,
+				PermitWithoutStream: true,
+			}),
+		),
 		listeningAddresses:         listeningAddresses,
 		name:                       name,
 		maxInboundConnections:      maxInboundConnections,

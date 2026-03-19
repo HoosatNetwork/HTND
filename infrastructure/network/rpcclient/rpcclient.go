@@ -14,6 +14,7 @@ import (
 )
 
 const defaultTimeout = 10 * time.Minute
+const initialVersionCheckTimeout = 5 * time.Second
 
 // RPCClient is an RPC client
 type RPCClient struct {
@@ -63,9 +64,13 @@ func (c *RPCClient) connect() error {
 
 	log.Debugf("Connected to %s", c.rpcAddress)
 
+	originalTimeout := c.timeout
+	c.timeout = initialVersionCheckTimeout
 	getInfoResponse, err := c.GetInfo()
+	c.timeout = originalTimeout
 	if err != nil {
-		return errors.Wrapf(err, "error making GetInfo request")
+		log.Warnf("Skipping initial RPC version check for %s: %s", c.rpcAddress, err)
+		return nil
 	}
 
 	localVersion := version.Version()

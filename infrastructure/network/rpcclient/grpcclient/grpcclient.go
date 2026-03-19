@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
@@ -12,6 +13,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+const defaultStreamSetupTimeout = 30 * time.Second
 
 // OnErrorHandler defines a handler function for when errors occur
 type OnErrorHandler func(err error)
@@ -35,7 +38,9 @@ func Connect(address string) (*GRPCClient, error) {
 	}
 
 	grpcClient := protowire.NewRPCClient(gRPCConnection)
-	stream, err := grpcClient.MessageStream(context.Background(),
+	ctx, cancel := context.WithTimeout(context.Background(), defaultStreamSetupTimeout)
+	defer cancel()
+	stream, err := grpcClient.MessageStream(ctx,
 		grpc.MaxCallRecvMsgSize(grpcserver.RPCMaxMessageSize), grpc.MaxCallSendMsgSize(grpcserver.RPCMaxMessageSize))
 	if err != nil {
 		return nil, errors.Wrapf(err, "error getting client stream for %s", address)

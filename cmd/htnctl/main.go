@@ -35,8 +35,12 @@ func main() {
 	}
 	defer func() { _ = client.Disconnect() }()
 
+	timeout := time.Duration(cfg.Timeout) * time.Second
+
 	if !cfg.AllowConnectionToDifferentVersions {
-		htndMessage, err := client.Post(&protowire.HoosatdMessage{Payload: &protowire.HoosatdMessage_GetInfoRequest{GetInfoRequest: &protowire.GetInfoRequestMessage{}}})
+		htndMessage, err := postWithTimeout(client,
+			&protowire.HoosatdMessage{Payload: &protowire.HoosatdMessage_GetInfoRequest{GetInfoRequest: &protowire.GetInfoRequestMessage{}}},
+			timeout)
 		if err != nil {
 			printErrorAndExit(fmt.Sprintf("Cannot post GetInfo message: %s", err))
 		}
@@ -57,13 +61,33 @@ func main() {
 		go postCommand(cfg, client, responseChan)
 	}
 
-	timeout := time.Duration(cfg.Timeout) * time.Second
 	select {
 	case responseString := <-responseChan:
 		prettyResponseString := prettifyResponse(responseString)
 		fmt.Println(prettyResponseString)
 	case <-time.After(timeout):
 		printErrorAndExit(fmt.Sprintf("timeout of %s has been exceeded", timeout))
+	}
+}
+
+func postWithTimeout(client *grpcclient.GRPCClient, message *protowire.HoosatdMessage,
+	timeout time.Duration) (*protowire.HoosatdMessage, error) {
+	type result struct {
+		message *protowire.HoosatdMessage
+		err     error
+	}
+
+	resultChan := make(chan result, 1)
+	go func() {
+		response, err := client.Post(message)
+		resultChan <- result{message: response, err: err}
+	}()
+
+	select {
+	case res := <-resultChan:
+		return res.message, res.err
+	case <-time.After(timeout):
+		return nil, errors.Errorf("timeout of %s has been exceeded", timeout)
 	}
 }
 
