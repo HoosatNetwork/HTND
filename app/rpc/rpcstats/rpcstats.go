@@ -2,6 +2,7 @@ package rpcstats
 
 import (
 	"net"
+	"net/netip"
 	"sort"
 	"sync"
 	"time"
@@ -33,6 +34,12 @@ type Stats struct {
 type IPRequestCount struct {
 	IP    string
 	Count uint64
+}
+
+// MethodRequestCount represents a request count for a specific RPC method
+type MethodRequestCount struct {
+	Method string
+	Count  uint64
 }
 
 // NewStats creates a new RPC statistics tracker
@@ -98,17 +105,42 @@ func (s *Stats) RecordRequest(address string, method string) {
 	defer s.Unlock()
 
 	s.requestsByIP[ip]++
+	s.requestsByMethod[method]++
 	s.totalRequests++
 }
 
 // extractIP extracts just the IP address from an address that may include a port
 func extractIP(address string) string {
+	if address == "" {
+		return "unknown"
+	}
+
+	if addrPort, err := netip.ParseAddrPort(address); err == nil {
+		return normalizeIP(addrPort.Addr())
+	}
+
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
-		// If there's no port, return the address as-is
+		if addr, parseErr := netip.ParseAddr(address); parseErr == nil {
+			return normalizeIP(addr)
+		}
+
+		// If there's no port and it's not a raw IP, return the address as-is
 		return address
 	}
+
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return normalizeIP(addr)
+	}
+
 	return host
+}
+
+func normalizeIP(addr netip.Addr) string {
+	if addr.Is4In6() {
+		addr = addr.Unmap()
+	}
+	return addr.String()
 }
 
 // logAndReset logs the current statistics and resets the counters
@@ -144,8 +176,18 @@ func (s *Stats) logAndReset() {
 		}
 	}
 
+	topMethods := s.getTopMethods(10)
+	if len(topMethods) > 0 {
+		log.Infof("RPC Stats: Top requested methods:")
+		for i, methodCount := range topMethods {
+			percentage := float64(methodCount.Count) / float64(s.totalRequests) * 100
+			log.Infof("  %d. %s: %d requests (%.1f%%)", i+1, methodCount.Method, methodCount.Count, percentage)
+		}
+	}
+
 	// Reset counters
 	s.requestsByIP = make(map[string]uint64)
+	s.requestsByMethod = make(map[string]uint64)
 	s.totalRequests = 0
 	s.startTime = time.Now()
 }
@@ -167,4 +209,22 @@ func (s *Stats) getTopIPs(n int) []IPRequestCount {
 	}
 
 	return ipCounts
+}
+
+// getTopMethods returns the top N RPC methods by request count
+func (s *Stats) getTopMethods(n int) []MethodRequestCount {
+	methodCounts := make([]MethodRequestCount, 0, len(s.requestsByMethod))
+	for method, count := range s.requestsByMethod {
+		methodCounts = append(methodCounts, MethodRequestCount{Method: method, Count: count})
+	}
+
+	sort.Slice(methodCounts, func(i, j int) bool {
+		return methodCounts[i].Count > methodCounts[j].Count
+	})
+
+	if len(methodCounts) > n {
+		methodCounts = methodCounts[:n]
+	}
+
+	return methodCounts
 }

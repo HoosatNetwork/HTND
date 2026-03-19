@@ -1,7 +1,6 @@
 package rpchandlers
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -25,8 +24,7 @@ const getBlocksCacheTTL = time.Second
 
 var blocksPool = sync.Pool{
 	New: func() interface{} {
-		slice := make([]*appmessage.RPCBlock, 0, 2)
-		return &slice
+		return make([]*appmessage.RPCBlock, 0, 2)
 	},
 }
 
@@ -41,8 +39,7 @@ func cloneRPCBlocks(blocks []*appmessage.RPCBlock) []*appmessage.RPCBlock {
 
 func releaseRPCBlocks(blocks []*appmessage.RPCBlock) {
 	clear(blocks[:cap(blocks)])
-	blocks = blocks[:0]
-	blocksPool.Put(&blocks)
+	blocksPool.Put(blocks[:0])
 }
 
 func purgeExpiredGetBlocksCache(now time.Time) {
@@ -51,11 +48,6 @@ func purgeExpiredGetBlocksCache(now time.Time) {
 			delete(getBlocksCache, key)
 		}
 	}
-}
-
-func getBlocksCacheKey(lowHash, virtualSelectedParent *externalapi.DomainHash, networkName string,
-	includeBlocks, includeTransactions bool) string {
-	return fmt.Sprintf("%s|%s|%s|%t|%t", networkName, lowHash, virtualSelectedParent, includeBlocks, includeTransactions)
 }
 
 // HandleGetBlocks handles the respectively named RPC command
@@ -95,16 +87,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			}, nil
 		}
 	}
-	virtualSelectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
-	if err != nil {
-		return &appmessage.GetBlocksResponseMessage{
-			Error: appmessage.RPCErrorf(
-				"Couldn't get virtual selected parent: %s", err),
-		}, nil
-	}
-
-	cacheKey := getBlocksCacheKey(lowHash, virtualSelectedParent, context.Config.NetParams().Name,
-		getBlocksRequest.IncludeBlocks, getBlocksRequest.IncludeTransactions)
+	cacheKey := lowHash.String()
 
 	getBlocksCacheMutex.Lock()
 	now := time.Now()
@@ -119,7 +102,19 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	}
 	getBlocksCacheMutex.Unlock()
 
-	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, 0)
+	// Get hashes between lowHash and virtualSelectedParent
+	virtualSelectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
+	if err != nil {
+		return &appmessage.GetBlocksResponseMessage{
+			Error: appmessage.RPCErrorf(
+				"Couldn't get virtual selected parent: %s", err),
+		}, nil
+	}
+
+	// We use +1 because lowHash is also returned
+	// maxBlocks MUST be >= MergeSetSizeLimit + 1
+	maxBlocks := context.Config.NetParams().MergeSetSizeLimit + 1
+	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, maxBlocks)
 	if err != nil {
 		return &appmessage.GetBlocksResponseMessage{
 			Error: appmessage.RPCErrorf(
@@ -145,7 +140,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	response := appmessage.NewGetBlocksResponseMessage()
 	response.BlockHashes = hashes.ToStrings(blockHashes)
 	if getBlocksRequest.IncludeBlocks {
-		rpcBlocks := (*blocksPool.Get().(*[]*appmessage.RPCBlock))[:0]
+		rpcBlocks := blocksPool.Get().([]*appmessage.RPCBlock)[:0]
 		if cap(rpcBlocks) < len(blockHashes) {
 			rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
 		}
