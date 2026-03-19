@@ -51,14 +51,13 @@ const (
 	//DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
-	sampleConfigFilename          = "sample-htnd.conf"
 	defaultMaxUTXOCacheSize       = 5_000_000_000
 	defaultProtocolVersion        = 7
 	defaultIBDTimeout             = 120 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
-	defaultUTXODefaultMaxLimit    = 10000
+	defaultUTXODefaultMaxLimit    = 0
 )
 
 var (
