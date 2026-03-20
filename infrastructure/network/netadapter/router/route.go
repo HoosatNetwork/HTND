@@ -143,6 +143,10 @@ func (r *Route) Close() {
 	r.closeLock.Lock()
 	defer r.closeLock.Unlock()
 
+	if r.closed {
+		return
+	}
+
 	r.closed = true
 	close(r.channel)
 }

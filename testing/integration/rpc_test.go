@@ -1,13 +1,17 @@
 package integration
 
 import (
+	"errors"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/config"
+	routerpkg "github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const rpcTimeout = 10 * time.Second
@@ -35,6 +39,19 @@ func connectAndClose(rpcAddress string) error {
 	}
 	defer client.Close()
 	return nil
+}
+
+func closeRPCClients(t *testing.T, clients []*testRPCClient) {
+	t.Helper()
+	for _, client := range clients {
+		if client == nil {
+			continue
+		}
+		err := client.Close()
+		if err != nil && err.Error() != "Cannot close a client that had already been closed" {
+			t.Fatalf("Failed to close RPC client: %s", err)
+		}
+	}
 }
 
 func TestRPCClientGoroutineLeak(t *testing.T) {
@@ -74,43 +91,54 @@ func TestRPCMaxInboundConnections(t *testing.T) {
 		t.Fatalf("Failed to close the default harness RPCClient: %s", err)
 	}
 
-	// Connect `RPCMaxInboundConnections` clients. We expect this to succeed immediately
-	rpcClients := []*testRPCClient{}
-	doneChan := make(chan error)
-	go func() {
-		for range config.DefaultMaxRPCClients {
-			rpcClient, err := newTestRPCClient(harness.rpcAddress)
-			if err != nil {
-				doneChan <- err
-			}
-			rpcClients = append(rpcClients, rpcClient)
-		}
-		doneChan <- nil
-	}()
-	select {
-	case err = <-doneChan:
-		if err != nil {
-			t.Fatalf("newTestRPCClient: %s", err)
-		}
-	case <-time.After(time.Second * 5):
-		t.Fatalf("Timeout for connecting %d RPC connections elapsed", config.DefaultMaxRPCClients)
+	if harness.config.RPCMaxClients != config.DefaultMaxRPCClients {
+		t.Fatalf("Unexpected RPC max clients mismatch: harness=%d default=%d", harness.config.RPCMaxClients, config.DefaultMaxRPCClients)
 	}
 
-	// Try to connect another client. We expect this to fail
-	// We set a timeout to account for reconnection mechanisms
-	go func() {
+	rpcClients := make([]*testRPCClient, 0, harness.config.RPCMaxClients)
+	defer closeRPCClients(t, rpcClients)
+
+	for i := 0; i < harness.config.RPCMaxClients; i++ {
 		rpcClient, err := newTestRPCClient(harness.rpcAddress)
 		if err != nil {
-			doneChan <- err
+			t.Fatalf("newTestRPCClient #%d: %s", i+1, err)
 		}
 		rpcClients = append(rpcClients, rpcClient)
-		doneChan <- nil
-	}()
-	select {
-	case err = <-doneChan:
-		if err == nil {
-			t.Fatalf("newTestRPCClient unexpectedly succeeded")
-		}
-	case <-time.After(time.Second * 15):
 	}
+
+	_, err = newTestRPCClient(harness.rpcAddress)
+	if err == nil {
+		t.Fatalf("newTestRPCClient unexpectedly succeeded after reaching the max inbound RPC client limit")
+	}
+	if errors.Is(err, routerpkg.ErrTimeout) {
+		t.Fatalf("Rejected RPC client was misattributed to timeout instead of immediate rejection: %v", err)
+	}
+
+	var statusErr interface{ GRPCStatus() *grpcstatus.Status }
+	if errors.As(err, &statusErr) {
+		if statusErr.GRPCStatus().Code() != codes.ResourceExhausted {
+			t.Fatalf("Expected ResourceExhausted for rejected RPC client, got: %s (%v)", statusErr.GRPCStatus().Code(), err)
+		}
+	} else if !errors.Is(err, routerpkg.ErrRouteClosed) {
+		t.Fatalf("Expected rejected RPC client to fail with ResourceExhausted or closed route, got: %v", err)
+	}
+
+	err = rpcClients[0].Close()
+	if err != nil {
+		t.Fatalf("Failed to close one of the accepted RPC clients: %s", err)
+	}
+	rpcClients[0] = nil
+
+	var replacementClient *testRPCClient
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		replacementClient, err = newTestRPCClient(harness.rpcAddress)
+		if err == nil {
+			rpcClients[0] = replacementClient
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	t.Fatalf("Timed out waiting for RPC slot cleanup after disconnect; last connect error: %v", err)
 }

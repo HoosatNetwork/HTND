@@ -46,6 +46,10 @@ var (
 	miningAddress3 = mustSchnorrAddressFromPrivateKeyHex(miningAddress3PrivateKey)
 )
 
+func init() {
+	initTestAddresses()
+}
+
 func initTestAddresses() {
 	addressInitOnce.Do(func() {
 		p2pAddress1 = reserveLoopbackAddress()

@@ -11,10 +11,12 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/panics"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/experimental"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -162,7 +164,8 @@ func (s *gRPCServer) incrementInboundConnectionCountAndLimitIfRequired() (int, e
 
 	if s.maxInboundConnections > 0 && s.inboundConnectionCount == s.maxInboundConnections {
 		log.Warnf("Limit of %d %s inbound connections has been exceeded", s.maxInboundConnections, s.name)
-		return s.inboundConnectionCount, errors.Errorf("limit of %d %s inbound connections has been exceeded", s.maxInboundConnections, s.name)
+		return s.inboundConnectionCount, status.Errorf(codes.ResourceExhausted,
+			"limit of %d %s inbound connections has been exceeded", s.maxInboundConnections, s.name)
 	}
 
 	s.inboundConnectionCount++

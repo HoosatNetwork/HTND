@@ -26,6 +26,7 @@ type RPCClient struct {
 	isClosed             uint32
 	isReconnecting       uint32
 	lastDisconnectedTime time.Time
+	isConnecting         uint32
 
 	timeout time.Duration
 }
@@ -45,6 +46,9 @@ func NewRPCClient(rpcAddress string) (*RPCClient, error) {
 }
 
 func (c *RPCClient) connect() error {
+	atomic.StoreUint32(&c.isConnecting, 1)
+	defer atomic.StoreUint32(&c.isConnecting, 0)
+
 	rpcClient, err := grpcclient.Connect(c.rpcAddress)
 	if err != nil {
 		return errors.Wrapf(err, "error connecting to address %s", c.rpcAddress)
@@ -69,8 +73,15 @@ func (c *RPCClient) connect() error {
 	getInfoResponse, err := c.GetInfo()
 	c.timeout = originalTimeout
 	if err != nil {
-		log.Warnf("Skipping initial RPC version check for %s: %s", c.rpcAddress, err)
-		return nil
+		if c.rpcRouter != nil {
+			c.rpcRouter.router.Close()
+		}
+		closeErr := c.GRPCClient.Close()
+		if closeErr != nil {
+			log.Warnf("Error closing failed RPC connection to %s: %s", c.rpcAddress, closeErr)
+		}
+		atomic.StoreUint32(&c.isConnected, 0)
+		return errors.Wrapf(err, "error validating initial RPC connection to %s", c.rpcAddress)
 	}
 
 	localVersion := version.Version()
@@ -134,6 +145,12 @@ func (c *RPCClient) Reconnect() error {
 
 func (c *RPCClient) handleClientDisconnected() {
 	atomic.StoreUint32(&c.isConnected, 0)
+	if c.rpcRouter != nil {
+		c.rpcRouter.router.Close()
+	}
+	if atomic.LoadUint32(&c.isConnecting) == 1 {
+		return
+	}
 	if atomic.LoadUint32(&c.isClosed) == 0 {
 		err := c.disconnect()
 		if err != nil {
