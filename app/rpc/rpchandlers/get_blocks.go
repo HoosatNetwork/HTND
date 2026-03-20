@@ -24,7 +24,8 @@ const getBlocksCacheTTL = time.Second
 
 var blocksPool = sync.Pool{
 	New: func() interface{} {
-		return make([]*appmessage.RPCBlock, 0, 2)
+		blocks := make([]*appmessage.RPCBlock, 0, 2)
+		return &blocks
 	},
 }
 
@@ -37,9 +38,10 @@ func cloneRPCBlocks(blocks []*appmessage.RPCBlock) []*appmessage.RPCBlock {
 	return clone
 }
 
-func releaseRPCBlocks(blocks []*appmessage.RPCBlock) {
-	clear(blocks[:cap(blocks)])
-	blocksPool.Put(blocks[:0])
+func releaseRPCBlocks(blocks *[]*appmessage.RPCBlock) {
+	clear((*blocks)[:cap(*blocks)])
+	*blocks = (*blocks)[:0]
+	blocksPool.Put(blocks)
 }
 
 func purgeExpiredGetBlocksCache(now time.Time) {
@@ -140,12 +142,13 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	response := appmessage.NewGetBlocksResponseMessage()
 	response.BlockHashes = hashes.ToStrings(blockHashes)
 	if getBlocksRequest.IncludeBlocks {
-		rpcBlocks := blocksPool.Get().([]*appmessage.RPCBlock)[:0]
-		if cap(rpcBlocks) < len(blockHashes) {
-			rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
+		rpcBlocks := blocksPool.Get().(*[]*appmessage.RPCBlock)
+		*rpcBlocks = (*rpcBlocks)[:0]
+		if cap(*rpcBlocks) < len(blockHashes) {
+			*rpcBlocks = make([]*appmessage.RPCBlock, 0, len(blockHashes))
 		}
 		defer releaseRPCBlocks(rpcBlocks)
-		rpcBlocks = rpcBlocks[:len(blockHashes)]
+		*rpcBlocks = (*rpcBlocks)[:len(blockHashes)]
 		for i, blockHash := range blockHashes {
 			block, err := context.Domain.Consensus().GetBlockEvenIfHeaderOnly(blockHash)
 			if err != nil {
@@ -153,16 +156,16 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			}
 
 			if getBlocksRequest.IncludeTransactions {
-				rpcBlocks[i] = appmessage.DomainBlockToRPCBlock(block)
+				(*rpcBlocks)[i] = appmessage.DomainBlockToRPCBlock(block)
 			} else {
-				rpcBlocks[i] = appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
+				(*rpcBlocks)[i] = appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
 			}
-			err = context.PopulateBlockWithVerboseData(rpcBlocks[i], block.Header, block, getBlocksRequest.IncludeTransactions)
+			err = context.PopulateBlockWithVerboseData((*rpcBlocks)[i], block.Header, block, getBlocksRequest.IncludeTransactions)
 			if err != nil {
 				return nil, err
 			}
 		}
-		response.Blocks = cloneRPCBlocks(rpcBlocks)
+		response.Blocks = cloneRPCBlocks(*rpcBlocks)
 	}
 
 	getBlocksCacheMutex.Lock()
