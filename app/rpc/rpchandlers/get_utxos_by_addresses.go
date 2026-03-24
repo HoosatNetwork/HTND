@@ -13,6 +13,9 @@ import (
 )
 
 func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	if value == nil {
+		return buffer[:0], ""
+	}
 	needed := hex.EncodedLen(len(value))
 	if needed == 0 {
 		return buffer[:0], ""
@@ -79,12 +82,15 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}
-		if utxoOutpointEntryPairs[0].Entry.ScriptPublicKey() == nil {
-			memory.Free(utxoOutpointEntryPairsBuffer)
-			continue
+		var script []byte
+		for _, pair := range utxoOutpointEntryPairs {
+			if pair.Entry.ScriptPublicKey().Script != nil {
+				script = pair.Entry.ScriptPublicKey().Script
+				break
+			}
 		}
 		var scriptHex string
-		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script)
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, script)
 		sharedScript := &appmessage.RPCScriptPublicKey{
 			Script:  scriptHex,
 			Version: utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Version,
