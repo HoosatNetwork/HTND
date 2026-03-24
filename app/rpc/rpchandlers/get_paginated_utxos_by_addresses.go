@@ -20,6 +20,12 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 
 	getPaginatedUTXOsByAddressesRequest := request.(*appmessage.GetPaginatedUTXOsByAddressesRequestMessage)
 
+	if getPaginatedUTXOsByAddressesRequest.Limit < 0 || getPaginatedUTXOsByAddressesRequest.Limit > 10_000_000 {
+		errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
+		errorMessage.Error = appmessage.RPCErrorf("Invalid limit: %d. Limit must be between 0 and 10,000,000", getPaginatedUTXOsByAddressesRequest.Limit)
+		return errorMessage, nil
+	}
+
 	if getPaginatedUTXOsByAddressesRequest.Limit == 0 || (getPaginatedUTXOsByAddressesRequest.Limit > context.Config.UTXODefaultMaxLimit && context.Config.UTXODefaultMaxLimit != 0) {
 		getPaginatedUTXOsByAddressesRequest.Limit = context.Config.UTXODefaultMaxLimit
 	}
