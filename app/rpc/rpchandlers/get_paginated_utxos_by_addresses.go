@@ -60,6 +60,10 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}
+		if utxoOutpointEntryPairs[0].Entry.ScriptPublicKey() == nil {
+			memory.Free(utxoOutpointEntryPairsBuffer)
+			continue
+		}
 		var scriptHex string
 		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Script)
 		sharedScript := &appmessage.RPCScriptPublicKey{
