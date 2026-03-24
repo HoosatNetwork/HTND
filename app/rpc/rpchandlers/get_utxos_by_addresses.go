@@ -2,6 +2,7 @@ package rpchandlers
 
 import (
 	"encoding/hex"
+	"math"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
@@ -14,6 +15,9 @@ import (
 
 func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
 	if value == nil {
+		return buffer[:0], ""
+	}
+	if len(value) > math.MaxInt/2 {
 		return buffer[:0], ""
 	}
 	needed := hex.EncodedLen(len(value))
@@ -82,21 +86,21 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}
-		var script []byte
-		for _, pair := range utxoOutpointEntryPairs {
-			if pair.Entry.ScriptPublicKey().Script != nil {
-				script = pair.Entry.ScriptPublicKey().Script
-				break
-			}
-		}
 		var scriptHex string
-		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, script)
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
+		if scriptHex == "" {
+			memory.Free(utxoOutpointEntryPairsBuffer)
+			continue
+		}
 		sharedScript := &appmessage.RPCScriptPublicKey{
 			Script:  scriptHex,
-			Version: utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Version,
+			Version: scriptPublicKey.Version,
 		}
 		for _, pair := range utxoOutpointEntryPairs {
-			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair))
+			entry := rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair)
+			if entry != nil {
+				allEntries = append(allEntries, entry)
+			}
 		}
 		memory.Free(utxoOutpointEntryPairsBuffer)
 	}

@@ -60,21 +60,21 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}
-		var script []byte
-		for _, pair := range utxoOutpointEntryPairs {
-			if pair.Entry.ScriptPublicKey().Script != nil {
-				script = pair.Entry.ScriptPublicKey().Script
-				break
-			}
-		}
 		var scriptHex string
-		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, script)
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
+		if scriptHex == "" {
+			memory.Free(utxoOutpointEntryPairsBuffer)
+			continue
+		}
 		sharedScript := &appmessage.RPCScriptPublicKey{
 			Script:  scriptHex,
-			Version: utxoOutpointEntryPairs[0].Entry.ScriptPublicKey().Version,
+			Version: scriptPublicKey.Version,
 		}
 		for _, pair := range utxoOutpointEntryPairs {
-			allEntries = append(allEntries, rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair))
+			entry := rpccontext.ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(addressString, sharedScript, pair)
+			if entry != nil {
+				allEntries = append(allEntries, entry)
+			}
 		}
 		memory.Free(utxoOutpointEntryPairsBuffer)
 	}

@@ -2,6 +2,7 @@ package rpccontext
 
 import (
 	"encoding/hex"
+	"math"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/util"
@@ -33,6 +34,12 @@ func ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(address string, script 
 }
 
 func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	if value == nil {
+		return buffer[:0], ""
+	}
+	if len(value) > math.MaxInt/2 {
+		return buffer[:0], ""
+	}
 	needed := hex.EncodedLen(len(value))
 	if needed == 0 {
 		return buffer[:0], ""
