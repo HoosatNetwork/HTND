@@ -2,6 +2,7 @@ package version
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 )
 
@@ -17,11 +18,16 @@ const (
 // appBuild is defined as a variable so it can be overridden during the build
 // process with '-ldflags "-X github.com/Hoosat-Oy/HTND/version.appBuild=foo"' if needed.
 // It MUST only contain characters from validCharacters.
-var appBuild string = "RC1"
+var appBuild string = ""
 
 var version = "" // string used for memoization of version
 
 func init() {
+	// Try to get the current git commit hash
+	if commit, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output(); err == nil {
+		appBuild = strings.TrimSpace(string(commit))
+	}
+
 	if version == "" {
 		// Start with the major, minor, and patch versions.
 		version = fmt.Sprintf("%d.%d.%d", appMajor, appMinor, appPatch)
