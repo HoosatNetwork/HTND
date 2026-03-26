@@ -187,9 +187,7 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 			break
 		}
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
-			utxo.UTXOEntry.BlockDAAScore() == 0 ||
-			utxo.UTXOEntry.BlockDAAScore()+1 > dagInfo.VirtualDAAScore {
+			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
 			continue
 		}
 
@@ -331,9 +329,7 @@ func (s *server) selectUTXOs(spendAmount uint64, isSendAll bool, feePerInput uin
 
 	for _, utxo := range s.utxosSortedByAmount {
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) ||
-			utxo.UTXOEntry.BlockDAAScore() == 0 ||
-			utxo.UTXOEntry.BlockDAAScore()+1 > dagInfo.VirtualDAAScore {
+			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
 			continue
 		}
 
