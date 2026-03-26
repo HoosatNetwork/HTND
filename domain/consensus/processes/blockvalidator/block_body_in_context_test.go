@@ -156,6 +156,9 @@ func TestIsFinalizedTransaction(t *testing.T) {
 		stagingArea := model.NewStagingArea()
 
 		consensusConfig.BlockCoinbaseMaturity = 0
+		for i := range consensusConfig.DifficultyAdjustmentWindowSize {
+			consensusConfig.DifficultyAdjustmentWindowSize[i] = 1
+		}
 		factory := consensus.NewFactory()
 
 		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestIsFinalizedTransaction")
@@ -164,49 +167,56 @@ func TestIsFinalizedTransaction(t *testing.T) {
 		}
 		defer teardown(false)
 
-		// Build a small DAG
-		outerParents := []*externalapi.DomainHash{consensusConfig.GenesisHash}
-		for range 5 {
-			var innerParents []*externalapi.DomainHash
-			for range 4 {
-				blockHash, _, err := tc.AddBlock(outerParents, nil, nil)
-				if err != nil {
-					t.Fatalf("AddBlock: %+v", err)
-				}
-				innerParents = append(innerParents, blockHash)
-			}
-			outerParents = []*externalapi.DomainHash{}
-			for range 3 {
-				blockHash, _, err := tc.AddBlock(innerParents, nil, nil)
-				if err != nil {
-					t.Fatalf("AddBlock: %+v", err)
-				}
-				outerParents = append(outerParents, blockHash)
-			}
+		fundingParentHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+		if err != nil {
+			t.Fatalf("AddBlock: %+v", err)
 		}
 
-		block, err := tc.BuildBlock(
-			&externalapi.DomainCoinbaseData{ScriptPublicKey: &externalapi.ScriptPublicKey{}, ExtraData: nil}, nil)
+		bootstrapTransaction := testutils.CreateTransactionWithOutput(10)
+		err = testutils.StageTransactionOutputsToVirtual(tc, bootstrapTransaction, 0)
 		if err != nil {
-			t.Fatalf("Error getting block: %+v", err)
+			t.Fatalf("StageTransactionOutputsToVirtual: %+v", err)
 		}
-		err = tc.ValidateAndInsertBlock(block, true, true)
+
+		fundingTransaction, err := testutils.CreateTransaction(bootstrapTransaction, 1)
 		if err != nil {
-			t.Fatalf("Error Inserting block: %+v", err)
+			t.Fatalf("Error creating funding transaction: %+v", err)
 		}
-		blockHash := consensushashing.BlockHash(block)
-		blockDAAScore, err := tc.DAABlocksStore().DAAScore(tc.DatabaseContext(), stagingArea, blockHash)
+
+		fundingBlockHash, _, err := tc.AddBlock([]*externalapi.DomainHash{fundingParentHash}, nil, []*externalapi.DomainTransaction{fundingTransaction})
 		if err != nil {
-			t.Fatalf("Error getting block DAA score : %+v", err)
+			t.Fatalf("AddBlock: %+v", err)
 		}
-		blockParents := block.Header.DirectParents()
-		parentToSpend, _, err := tc.GetBlock(blockParents[0])
+
+		fundingBlock, _, err := tc.GetBlock(fundingBlockHash)
 		if err != nil {
-			t.Fatalf("Error getting block1: %+v", err)
+			t.Fatalf("Error getting funding block: %+v", err)
+		}
+		fundingTransaction = fundingBlock.Transactions[1]
+
+		candidateBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{fundingBlockHash}, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildBlockWithParents: %+v", err)
+		}
+		candidateBlockDAAScore := candidateBlock.Header.DAAScore()
+
+		var tempHash externalapi.DomainHash
+		tc.BlockRelationStore().StageBlockRelation(stagingArea, &tempHash, &model.BlockRelations{
+			Parents:  []*externalapi.DomainHash{fundingBlockHash},
+			Children: nil,
+		})
+
+		err = tc.GHOSTDAGManager().GHOSTDAG(stagingArea, &tempHash)
+		if err != nil {
+			t.Fatalf("GHOSTDAG: %+v", err)
+		}
+		candidatePastMedianTime, err := tc.PastMedianTimeManager().PastMedianTime(stagingArea, &tempHash)
+		if err != nil {
+			t.Fatalf("PastMedianTime: %+v", err)
 		}
 
 		checkForLockTimeAndSequence := func(lockTime, sequence uint64, shouldPass bool) {
-			tx, err := testutils.CreateTransaction(parentToSpend.Transactions[0], 1)
+			tx, err := testutils.CreateTransaction(fundingTransaction, 1)
 			if err != nil {
 				t.Fatalf("Error creating tx: %+v", err)
 			}
@@ -214,28 +224,24 @@ func TestIsFinalizedTransaction(t *testing.T) {
 			tx.LockTime = lockTime
 			tx.Inputs[0].Sequence = sequence
 
-			_, _, err = tc.AddBlock(blockParents, nil, []*externalapi.DomainTransaction{tx})
+			_, _, err = tc.AddBlock([]*externalapi.DomainHash{fundingBlockHash}, nil, []*externalapi.DomainTransaction{tx})
 			if (shouldPass && err != nil) || (!shouldPass && !errors.Is(err, ruleerrors.ErrUnfinalizedTx)) {
 				t.Fatalf("shouldPass: %t Unexpected error: %+v", shouldPass, err)
 			}
 		}
 
 		// Check that the same DAAScore or higher fails, but lower passes.
-		checkForLockTimeAndSequence(blockDAAScore+1, 0, false)
-		checkForLockTimeAndSequence(blockDAAScore, 0, false)
-		checkForLockTimeAndSequence(blockDAAScore-1, 0, true)
+		checkForLockTimeAndSequence(candidateBlockDAAScore+1, 0, false)
+		checkForLockTimeAndSequence(candidateBlockDAAScore, 0, false)
+		checkForLockTimeAndSequence(candidateBlockDAAScore-1, 0, true)
 
-		pastMedianTime, err := tc.PastMedianTimeManager().PastMedianTime(stagingArea, consensushashing.BlockHash(block))
-		if err != nil {
-			t.Fatalf("PastMedianTime: %+v", err)
-		}
 		// Check that the same pastMedianTime or higher fails, but lower passes.
-		checkForLockTimeAndSequence(uint64(pastMedianTime)+1, 0, false)
-		checkForLockTimeAndSequence(uint64(pastMedianTime), 0, false)
-		checkForLockTimeAndSequence(uint64(pastMedianTime)-1, 0, true)
+		checkForLockTimeAndSequence(uint64(candidatePastMedianTime)+1, 0, false)
+		checkForLockTimeAndSequence(uint64(candidatePastMedianTime), 0, false)
+		checkForLockTimeAndSequence(uint64(candidatePastMedianTime)-1, 0, true)
 
 		// We check that if the transaction is marked as finalized it'll pass for any lock time.
-		checkForLockTimeAndSequence(uint64(pastMedianTime), constants.MaxTxInSequenceNum, true)
+		checkForLockTimeAndSequence(uint64(candidatePastMedianTime), constants.MaxTxInSequenceNum, true)
 		checkForLockTimeAndSequence(2, constants.MaxTxInSequenceNum, true)
 	})
 }

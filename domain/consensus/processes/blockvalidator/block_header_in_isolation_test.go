@@ -39,19 +39,36 @@ func TestBlockValidator_ValidateHeaderInIsolation(t *testing.T) {
 }
 
 func CheckParentsLimit(t *testing.T, tc testapi.TestConsensus, consensusConfig *consensus.Config) {
+	parents := make([]*externalapi.DomainHash, 0, consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]+1)
 	for i := externalapi.KType(0); i < consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]+1; i++ {
-		_, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+		blockHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
 		if err != nil {
 			t.Fatalf("AddBlock: %+v", err)
 		}
+		parents = append(parents, blockHash)
 	}
 
-	tips, err := tc.Tips()
+	block, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
 	if err != nil {
-		t.Fatalf("Tips: %+v", err)
+		t.Fatalf("BuildBlockWithParents: %+v", err)
 	}
 
-	_, _, err = tc.AddBlock(tips, nil, nil)
+	block.Header = blockheader.NewImmutableBlockHeader(
+		block.Header.Version(),
+		[]externalapi.BlockLevelParents{parents},
+		block.Header.HashMerkleRoot(),
+		block.Header.AcceptedIDMerkleRoot(),
+		block.Header.UTXOCommitment(),
+		block.Header.TimeInMilliseconds(),
+		block.Header.Bits(),
+		block.Header.Nonce(),
+		block.Header.DAAScore(),
+		block.Header.BlueScore(),
+		block.Header.BlueWork(),
+		block.Header.PruningPoint(),
+	)
+
+	err = tc.ValidateAndInsertBlock(block, true, true)
 	if !errors.Is(err, ruleerrors.ErrTooManyParents) {
 		t.Fatalf("Unexpected error: %+v", err)
 	}

@@ -12,7 +12,8 @@ import (
 
 var scriptPublicKeyStringPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 0, 1024)
+		buffer := make([]byte, 0, 1024)
+		return &buffer
 	},
 }
 
@@ -253,7 +254,7 @@ func (spk *ScriptPublicKey) Equal(other *ScriptPublicKey) bool {
 // String stringifies a ScriptPublicKey.
 func (spk *ScriptPublicKey) String() string {
 	needed := 2 + len(spk.Script)
-	b := scriptPublicKeyStringPool.Get().([]byte)
+	b := *scriptPublicKeyStringPool.Get().(*[]byte)
 	if cap(b) < needed {
 		b = make([]byte, needed)
 	} else {
@@ -262,7 +263,8 @@ func (spk *ScriptPublicKey) String() string {
 	binary.LittleEndian.PutUint16(b, spk.Version)
 	copy(b[2:], spk.Script)
 	s := string(b)
-	scriptPublicKeyStringPool.Put(b[:0])
+	b = b[:0]
+	scriptPublicKeyStringPool.Put(&b)
 	return s
 }
 

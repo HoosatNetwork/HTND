@@ -7,6 +7,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
 // UTXOIndex maintains an index between transaction scriptPublicKeys
@@ -290,7 +291,7 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
+func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
@@ -304,12 +305,35 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit u
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
+func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+	ui.mutex.Lock()
+	defer ui.mutex.Unlock()
+
+	// if pair, ok := ui.utxoIndexCache.Get(scriptPublicKey.String()); ok {
+	// 	return pair, nil
+	// }
+
+	pair, err := ui.store.PaginatedUTXOs(scriptPublicKey, offset, limit, buffer)
+	// ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
+	return pair, err
+}
+
+// UTXOs returns all the UTXOs for the given scriptPublicKey
 func (ui *UTXOIndex) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (bool, error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
 	usable, err := ui.store.HasUTXOs(scriptPublicKey)
 	return usable, err
+}
+
+// GetBalance returns the total balance for the given scriptPublicKey
+func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (uint64, error) {
+	ui.mutex.Lock()
+	defer ui.mutex.Unlock()
+
+	balance, err := ui.store.GetBalance(scriptPublicKey)
+	return balance, err
 }
 
 // GetCirculatingSompiSupply returns the current circulating supply of sompis in the network

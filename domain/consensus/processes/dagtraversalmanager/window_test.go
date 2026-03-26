@@ -1,6 +1,7 @@
 package dagtraversalmanager_test
 
 import (
+	"math"
 	"reflect"
 	"sort"
 	"testing"
@@ -134,32 +135,32 @@ func TestBlockWindow(t *testing.T) {
 			{
 				parents:        []string{"H", "F"},
 				id:             "I",
-				expectedWindow: []string{"F", "H", "D", "C", "G", "B"},
+				expectedWindow: []string{"F", "D", "C", "H", "B", "G"},
 			},
 			{
 				parents:        []string{"I"},
 				id:             "J",
-				expectedWindow: []string{"I", "F", "H", "D", "C", "G", "B"},
+				expectedWindow: []string{"I", "F", "D", "C", "H", "G", "B"},
 			},
 			{
 				parents:        []string{"J"},
 				id:             "K",
-				expectedWindow: []string{"J", "I", "F", "H", "D", "C", "G", "B"},
+				expectedWindow: []string{"J", "I", "F", "D", "C", "H", "G", "B"},
 			},
 			{
 				parents:        []string{"K"},
 				id:             "L",
-				expectedWindow: []string{"K", "J", "I", "F", "H", "D", "C", "G", "B"},
+				expectedWindow: []string{"K", "J", "I", "F", "D", "C", "H", "G", "B"},
 			},
 			{
 				parents:        []string{"L"},
 				id:             "M",
-				expectedWindow: []string{"L", "K", "J", "I", "F", "H", "D", "C", "G", "B"},
+				expectedWindow: []string{"L", "K", "J", "I", "F", "D", "C", "H", "G", "B"},
 			},
 			{
 				parents:        []string{"M"},
 				id:             "N",
-				expectedWindow: []string{"M", "L", "K", "J", "I", "F", "H", "D", "C", "G"},
+				expectedWindow: []string{"M", "L", "K", "J", "I", "F", "D", "C", "H", "G"},
 			},
 			{
 				parents:        []string{"N"},
@@ -314,6 +315,7 @@ func TestBlockWindow(t *testing.T) {
 	}
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		consensusConfig.K[constants.GetBlockVersion()-1] = 1
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
 		factory := consensus.NewFactory()
 		tc, tearDown, err := factory.NewTestConsensus(consensusConfig, "TestBlockWindow")
 		if err != nil {

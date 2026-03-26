@@ -1,7 +1,6 @@
 package blockrelay
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -28,7 +27,7 @@ type IBDContext interface {
 	OnNewBlockTemplate() error
 	OnPruningPointUTXOSetOverride() error
 	IsIBDRunning() bool
-	TrySetIBDRunning(ibdPeer *peerpkg.Peer) bool
+	TrySetIBDRunning(ibdPeer *peerpkg.Peer, isNearlySynced bool) bool
 	UnsetIBDRunning()
 	IsRecoverableError(err error) bool
 	AddressManager() *addressmanager.AddressManager
@@ -38,6 +37,13 @@ type handleIBDFlow struct {
 	IBDContext
 	incomingRoute, outgoingRoute *router.Route
 	peer                         *peerpkg.Peer
+	lastRateCheckTime            time.Time
+	consecutiveLowRateCount      int
+	minHeadersPerSecond          float64
+	minBlocksPerSecond           float64
+	slowIBDTicks                 int
+	headersProcessedSinceLast    int64 // Track since last check
+	blocksProcessedSinceLast     int64
 }
 
 // HandleIBD handles IBD
@@ -78,11 +84,25 @@ func (flow *handleIBDFlow) updateBlockVersionFromDAAScore(daaScore uint64) {
 }
 
 func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) error {
-	wasIBDNotRunning := flow.TrySetIBDRunning(flow.peer)
+	isNearlySynced, errNs := flow.Domain().Consensus().IsNearlySynced()
+	if errNs != nil {
+		isNearlySynced = false // If we can't tell, err on the side of caution
+	}
+
+	wasIBDNotRunning := flow.TrySetIBDRunning(flow.peer, isNearlySynced)
 	if !wasIBDNotRunning {
 		log.Debugf("IBD is already running")
 		return nil
 	}
+
+	flow.lastRateCheckTime = time.Now()
+	flow.consecutiveLowRateCount = 0
+	flow.minHeadersPerSecond = float64(flow.Config().MinHeadersPerSecond)
+	flow.minBlocksPerSecond = float64(flow.Config().MinBlocksPerSecond)
+	flow.slowIBDTicks = 3 // 30 seconds when done in 10 second slices
+	flow.headersProcessedSinceLast = 0
+	flow.blocksProcessedSinceLast = 0
+
 	flow.updateBlockVersionFromDAAScore(block.Header.DAAScore())
 	isFinishedSuccessfully := false
 	var err error = nil
@@ -371,16 +391,10 @@ func (flow *handleIBDFlow) isGenesisVirtualSelectedParent() (bool, error) {
 }
 
 func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error) error {
-	successString := "successfully"
 	if !isFinishedSuccessfully {
-		if err != nil {
-			successString = fmt.Sprintf("(interrupted: %s)", err)
-		} else {
-			successString = "(interrupted)"
-		}
 		return err
 	}
-	log.Infof("IBD with peer %s finished %s", flow.peer, successString)
+	log.Infof("IBD with peer %s finished successfully", flow.peer)
 	return nil
 }
 
@@ -457,6 +471,13 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 			err = flow.processHeader(consensus, header)
 			if err != nil {
 				return err
+			}
+			flow.headersProcessedSinceLast++
+			// Periodic rate check (e.g., every 10 seconds) inside loop
+			if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
+				if err := flow.checkPeriodicRate("headers"); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -634,6 +655,11 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 
 	receivedChunkCount := 0
 	receivedUTXOCount := 0
+	// Pre-allocate a buffer to hold the domain pairs.
+	// 1000 is the standard chunk size defined in sendPruningPointUTXOSet.
+	// Instead of leaving a mess for the GC to tidy up afterwards
+	domainPairsBuffer := make([]*externalapi.OutpointAndUTXOEntryPair, 0, 1000)
+
 	for {
 		message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
 		if err != nil {
@@ -643,10 +669,15 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 		switch message := message.(type) {
 		case *appmessage.MsgPruningPointUTXOSetChunk:
 			receivedUTXOCount += len(message.OutpointAndUTXOEntryPairs)
-			domainOutpointAndUTXOEntryPairs :=
-				appmessage.OutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(message.OutpointAndUTXOEntryPairs)
 
-			err := consensus.AppendImportedPruningPointUTXOs(domainOutpointAndUTXOEntryPairs)
+			// Clear the buffer, but keep the backing array allocation
+			domainPairsBuffer = domainPairsBuffer[:0]
+
+			// Use the new helper to populate the buffer
+			domainPairsBuffer = appmessage.AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
+				message.OutpointAndUTXOEntryPairs, domainPairsBuffer)
+
+			err := consensus.AppendImportedPruningPointUTXOs(domainPairsBuffer)
 			if err != nil {
 				return false, err
 			}
@@ -708,6 +739,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	}
 
 	ibdBatchSize := getIBDBatchSize()
+	// Allocate the map once with the maximum capacity needed.
+	// This prevents the map from having to dynamically grow and wait for the damn GC to arrive
+	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
 		var hashesToRequest []*externalapi.DomainHash
 		if offset+ibdBatchSize < len(hashes) {
@@ -717,7 +751,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		}
 
 		// Cache to store received blocks for this batch only
-		receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, len(hashesToRequest))
+		clear(receivedBlocks) // Re-use is better than re-allocation :)
 
 		// Request blocks
 		err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(hashesToRequest))
@@ -781,6 +815,13 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			}
 
 			highestProcessedDAAScore = block.Header.DAAScore()
+			flow.blocksProcessedSinceLast++
+			// Periodic rate check (e.g., every 10 seconds) inside loop
+			if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
+				if err := flow.checkPeriodicRate("blocks"); err != nil {
+					return err
+				}
+			}
 		}
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
@@ -821,4 +862,52 @@ func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64)
 
 	log.Infof("Resolved virtual")
 	return nil
+}
+
+// NEW: Helper for periodic rate check
+func (flow *handleIBDFlow) checkPeriodicRate(itemType string) error {
+	now := time.Now()
+	elapsed := now.Sub(flow.lastRateCheckTime).Seconds()
+	if elapsed <= 9 {
+		return nil // Avoid division by zero and low artifical first count too....
+	}
+
+	var rate float64
+	var minRate float64
+	if itemType == "headers" {
+		rate = float64(flow.headersProcessedSinceLast) / elapsed
+		minRate = flow.minHeadersPerSecond
+	} else {
+		rate = float64(flow.blocksProcessedSinceLast) / elapsed
+		minRate = flow.minBlocksPerSecond
+	}
+
+	// Only for debug purposes
+	// log.Infof("IBD peer sent %.2f %s/sec , low rate count: %d", rate, itemType, flow.consecutiveLowRateCount)
+	if rate < minRate {
+		flow.consecutiveLowRateCount++
+		log.Warnf("IBD peer sent %.2f %s/sec (below %.2f), low rate count: %d", rate, itemType, minRate, flow.consecutiveLowRateCount)
+		if flow.consecutiveLowRateCount >= flow.slowIBDTicks {
+			log.Warnf("IBD PEER STUCK -  sent low %s rate for %d ticks, DISCONNECTING", itemType, flow.slowIBDTicks)
+			return flow.disconnectPeerDueToLowRate()
+		}
+	} else {
+		flow.consecutiveLowRateCount = 0 // Reset on good rate
+	}
+
+	// Reset for next interval
+	flow.lastRateCheckTime = now
+	flow.headersProcessedSinceLast = 0
+	flow.blocksProcessedSinceLast = 0
+	return nil
+}
+
+// NEW: Helper to disconnect peer (same as before)
+func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
+	netAddress := flow.peer.Connection().NetAddress()
+	if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
+		log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
+	}
+	flow.peer.Connection().Disconnect()
+	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
 }

@@ -119,7 +119,6 @@ func BenchmarkKHeavyHashWriterBig(b *testing.B) {
 	}
 }
 
-
 func BenchmarkBHeavyHashWriterSmall(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
 	var someBytes [32]byte

@@ -1,7 +1,7 @@
 #!/bin/bash
 rm -rf /tmp/htnd-temp
 
-htnd --devnet --appdir=/tmp/htnd-temp --profile=6061 --loglevel=debug &
+HTND --devnet --appdir=/tmp/htnd-temp --profile=6061 --loglevel=debug &
 HOOSATD_PID=$!
 HOOSATD_KILLED=0
 function killHoosatdIfNotKilled() {
@@ -13,7 +13,7 @@ trap "killHoosatdIfNotKilled" EXIT
 
 sleep 1
 
-application-level-garbage --devnet -alocalhost:16611 -b blocks.dat --profile=7000
+application-level-garbage --devnet -alocalhost:42421 -b blocks.dat --profile=7000
 TEST_EXIT_CODE=$?
 
 kill $HOOSATD_PID

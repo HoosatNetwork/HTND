@@ -101,8 +101,13 @@ func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, dom
 	block.VerboseData.TransactionIDs = transactionIDs
 
 	if includeTransactionVerboseData {
-		for _, transaction := range block.Transactions {
-			err := ctx.PopulateTransactionWithVerboseData(transaction, domainBlockHeader)
+		for i, transaction := range block.Transactions {
+			var domainTransaction *externalapi.DomainTransaction
+			if i < len(domainBlock.Transactions) {
+				domainTransaction = domainBlock.Transactions[i]
+			}
+
+			err := ctx.PopulateTransactionWithVerboseData(transaction, domainTransaction, domainBlockHeader)
 			if err != nil {
 				return err
 			}
@@ -113,15 +118,22 @@ func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, dom
 }
 
 // PopulateTransactionWithVerboseData populates the given `transaction` with
-// verbose data from `domainTransaction`
+// verbose data. When domainTransaction is provided, it is used directly to
+// avoid rebuilding the domain transaction from the RPC representation.
 func (ctx *Context) PopulateTransactionWithVerboseData(
-	transaction *appmessage.RPCTransaction, domainBlockHeader externalapi.BlockHeader) error {
+	transaction *appmessage.RPCTransaction, domainTransaction *externalapi.DomainTransaction,
+	domainBlockHeader externalapi.BlockHeader) error {
 
-	domainTransaction, err := appmessage.RPCTransactionToDomainTransaction(transaction)
-	if err != nil {
-		return err
+	if domainTransaction == nil {
+		var err error
+		domainTransaction, err = appmessage.RPCTransactionToDomainTransaction(transaction)
+		if err != nil {
+			return err
+		}
 	}
-	ctx.Domain.Consensus().PopulateMass(domainTransaction)
+	if domainTransaction.Mass == 0 {
+		ctx.Domain.Consensus().PopulateMass(domainTransaction)
+	}
 
 	transaction.VerboseData = &appmessage.RPCTransactionVerboseData{
 		TransactionID: consensushashing.TransactionID(domainTransaction).String(),
@@ -135,7 +147,12 @@ func (ctx *Context) PopulateTransactionWithVerboseData(
 	for _, input := range transaction.Inputs {
 		ctx.populateTransactionInputWithVerboseData(input)
 	}
-	for _, output := range transaction.Outputs {
+	for i, output := range transaction.Outputs {
+		if i < len(domainTransaction.Outputs) {
+			ctx.populateTransactionOutputWithDomainOutput(output, domainTransaction.Outputs[i])
+			continue
+		}
+
 		err := ctx.populateTransactionOutputWithVerboseData(output)
 		if err != nil {
 			return err
@@ -146,6 +163,25 @@ func (ctx *Context) PopulateTransactionWithVerboseData(
 
 func (ctx *Context) populateTransactionInputWithVerboseData(transactionInput *appmessage.RPCTransactionInput) {
 	transactionInput.VerboseData = &appmessage.RPCTransactionInputVerboseData{}
+}
+
+func (ctx *Context) populateTransactionOutputWithDomainOutput(
+	transactionOutput *appmessage.RPCTransactionOutput,
+	domainOutput *externalapi.DomainTransactionOutput,
+) {
+	// Ignore the error here since an error means the script couldn't be parsed and
+	// there's no additional information about it anyways.
+	scriptPublicKeyType, scriptPublicKeyAddress, _ := txscript.ExtractScriptPubKeyAddress(
+		domainOutput.ScriptPublicKey, ctx.Config.ActiveNetParams)
+
+	var encodedScriptPublicKeyAddress string
+	if scriptPublicKeyAddress != nil {
+		encodedScriptPublicKeyAddress = scriptPublicKeyAddress.EncodeAddress()
+	}
+	transactionOutput.VerboseData = &appmessage.RPCTransactionOutputVerboseData{
+		ScriptPublicKeyType:    scriptPublicKeyType.String(),
+		ScriptPublicKeyAddress: encodedScriptPublicKeyAddress,
+	}
 }
 
 func (ctx *Context) populateTransactionOutputWithVerboseData(transactionOutput *appmessage.RPCTransactionOutput) error {

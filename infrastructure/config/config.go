@@ -51,7 +51,6 @@ const (
 	//DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
-	sampleConfigFilename          = "sample-htnd.conf"
 	defaultMaxUTXOCacheSize       = 5_000_000_000
 	defaultProtocolVersion        = 7
 	defaultIBDTimeout             = 120 * time.Minute
@@ -59,6 +58,8 @@ const (
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
 	defaultUTXODefaultMaxLimit    = 0
+	defaultMinHeadersPerSecond    = 10
+	defaultMinBlocksPerSecond     = 10
 )
 
 var (
@@ -120,6 +121,7 @@ type Flags struct {
 	MaxOrphanTxs                    uint64        `long:"maxorphantx" description:"Max number of orphan transactions to keep in memory"`
 	BlockMaxMass                    uint64        `long:"blockmaxmass" description:"Maximum transaction mass to be used when creating a block"`
 	UserAgentComments               []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
+	ForceSameVersion                bool          `long:"force-same-version" description:"Disconnect peers whose advertised HTND version does not exactly match this node's version"`
 	NoPeerBloomFilters              bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
 	SigCacheMaxSize                 uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
 	BlocksOnly                      bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
@@ -148,6 +150,10 @@ type Flags struct {
 	NearlySyncedIBDTimeout time.Duration `long:"nearly-synced-ibd-timeout" description:"Maximum time to allow IBD to run when the node is nearly synced before disconnecting the peer and trying another"`
 	IBDTimeout             time.Duration `long:"ibd-timeout" description:"Maximum time to allow IBD to run before disconnecting the peer and trying another"`
 	IBDDequeueTimeout      time.Duration `long:"ibd-dequeue-timeout" description:"Maximum time to wait for a block to be dequeued during IBD before disconnecting the peer and trying another"`
+	MinHeadersPerSecond    int           `long:"min-headers-per-second" description:"Minimum headers per second required from IBD peer before disconnecting"`
+	MinBlocksPerSecond     int           `long:"min-blocks-per-second" description:"Minimum blocks per second required from IBD peer before disconnecting"`
+
+	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -220,8 +226,11 @@ func defaultFlags() *Flags {
 		NearlySyncedIBDTimeout:         defaultNearlySyncedIBDTimeout,
 		IBDTimeout:                     defaultIBDTimeout,
 		IBDDequeueTimeout:              defaultIBDDequeueTimeout,
+		MinHeadersPerSecond:            defaultMinHeadersPerSecond,
+		MinBlocksPerSecond:             defaultMinBlocksPerSecond,
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
+		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
 	}
 }
 

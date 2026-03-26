@@ -6,11 +6,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
 )
 
 type balancesType struct{ available, pending uint64 }
-type balancesMapType map[*walletAddress]*balancesType
+type balancesMapType map[string]*balancesType
 
 func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.GetBalanceResponse, error) {
 	s.lock.RLock()
@@ -20,42 +19,29 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs(0)
+	getBalancesByAddressesResponse, err := s.backgroundRPCClient.GetBalancesByAddresses(s.addressSet.strings())
 	if err != nil {
 		return nil, err
 	}
 
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
-	if err != nil {
-		return nil, err
-	}
-	daaScore := dagInfo.VirtualDAAScore
 	balancesMap := make(balancesMapType, 0)
-	for _, entry := range s.utxosSortedByAmount {
-		amount := entry.UTXOEntry.Amount()
-		address := entry.address
+	for _, entry := range getBalancesByAddressesResponse.Entries {
+		amount := entry.Balance
+		address := entry.Address
 		balances, ok := balancesMap[address]
 		if !ok {
 			balances = new(balancesType)
 			balancesMap[address] = balances
 		}
-		if s.isUTXOSpendable(entry, daaScore) {
-			balances.available += amount
-		} else {
-			balances.pending += amount
-		}
+		balances.available += amount
 	}
 
 	addressBalances := make([]*pb.AddressBalances, len(balancesMap))
 	i := 0
 	var available, pending uint64
 	for walletAddress, balances := range balancesMap {
-		address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, s.walletAddressPath(walletAddress), s.keysFile.ECDSA)
-		if err != nil {
-			return nil, err
-		}
 		addressBalances[i] = &pb.AddressBalances{
-			Address:   address.String(),
+			Address:   walletAddress,
 			Available: balances.available,
 			Pending:   balances.pending,
 		}
@@ -64,7 +50,7 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 		pending += balances.pending
 	}
 
-	log.Infof("GetBalance request scanned %d UTXOs overall over %d addresses", len(s.utxosSortedByAmount), len(balancesMap))
+	log.Infof("GetBalance request scanned over %d addresses", len(balancesMap))
 
 	return &pb.GetBalanceResponse{
 		Available:       available,

@@ -13,9 +13,9 @@ import (
 func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getMempoolEntriesByAddressesRequest := request.(*appmessage.GetMempoolEntriesByAddressesRequestMessage)
 
-	mempoolEntriesByAddresses := make([]*appmessage.MempoolEntryByAddress, 0)
+	mempoolEntriesByAddresses := make([]*appmessage.MempoolEntryByAddress, 0, len(getMempoolEntriesByAddressesRequest.Addresses))
 
-	sendingInTransactionPool, receivingInTransactionPool, sendingInOrphanPool, receivingInOrphanPool, err := context.Domain.MiningManager().GetTransactionsByAddresses(!getMempoolEntriesByAddressesRequest.FilterTransactionPool, getMempoolEntriesByAddressesRequest.IncludeOrphanPool)
+	sendingInTransactionPool, receivingInTransactionPool, sendingInOrphanPool, receivingInOrphanPool, err := context.Domain.MiningManager().GetTransactionsByAddressesNoClone(!getMempoolEntriesByAddressesRequest.FilterTransactionPool, getMempoolEntriesByAddressesRequest.IncludeOrphanPool)
 	if err != nil {
 		return nil, err
 	}
@@ -28,8 +28,8 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 			return errorMessage, nil
 		}
 
-		sending := make([]*appmessage.MempoolEntry, 0)
-		receiving := make([]*appmessage.MempoolEntry, 0)
+		sending := make([]*appmessage.MempoolEntry, 0, 2)
+		receiving := make([]*appmessage.MempoolEntry, 0, 2)
 
 		scriptPublicKey, err := txscript.PayToAddrScript(address)
 		if err != nil {
@@ -37,12 +37,13 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 			errorMessage.Error = appmessage.RPCErrorf("Could not extract scriptPublicKey from address '%s': %s", addressString, err)
 			return errorMessage, nil
 		}
+		scriptPublicKeyString := scriptPublicKey.String()
 
 		if !getMempoolEntriesByAddressesRequest.FilterTransactionPool {
 
-			if transaction, found := sendingInTransactionPool[scriptPublicKey.String()]; found {
+			if transaction, found := sendingInTransactionPool[scriptPublicKeyString]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -55,9 +56,9 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				)
 			}
 
-			if transaction, found := receivingInTransactionPool[scriptPublicKey.String()]; found {
+			if transaction, found := receivingInTransactionPool[scriptPublicKeyString]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -72,9 +73,9 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 		}
 		if getMempoolEntriesByAddressesRequest.IncludeOrphanPool {
 
-			if transaction, found := sendingInOrphanPool[scriptPublicKey.String()]; found {
+			if transaction, found := sendingInOrphanPool[scriptPublicKeyString]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -87,9 +88,9 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				)
 			}
 
-			if transaction, found := receivingInOrphanPool[scriptPublicKey.String()]; found {
+			if transaction, found := receivingInOrphanPool[scriptPublicKeyString]; found {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
-				err := context.PopulateTransactionWithVerboseData(rpcTransaction, nil)
+				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -108,7 +109,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 			mempoolEntriesByAddresses = append(
 				mempoolEntriesByAddresses,
 				&appmessage.MempoolEntryByAddress{
-					Address:   address.String(),
+					Address:   addressString,
 					Sending:   sending,
 					Receiving: receiving,
 				},

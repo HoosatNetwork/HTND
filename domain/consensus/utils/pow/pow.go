@@ -1,3 +1,6 @@
+//go:build !linux || !arm64
+// +build !linux !arm64
+
 package pow
 
 import (
@@ -22,6 +25,13 @@ type State struct {
 	Target       big.Int
 	PrevHeader   externalapi.DomainHash
 	BlockVersion uint16
+}
+
+var UseHoohashCLibrary bool
+
+func SetUseHoohashCLibrary(use bool) {
+	UseHoohashCLibrary = false // Not available on not aarch64 linux
+	_ = use
 }
 
 // NewState creates a new state with pre-computed values to speed up mining

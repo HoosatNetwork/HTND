@@ -72,6 +72,28 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 
 		if selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
 			blockStatus = externalapi.StatusDisqualifiedFromChain
+
+			blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingAreaForCurrentBlock, unverifiedBlockHash, false)
+			if err != nil {
+				return 0, nil, err
+			}
+
+			pastUTXOSet, acceptanceData, multiset, err := csm.calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(
+				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockUTXOSet, blockGHOSTDAGData)
+			if err != nil {
+				return 0, nil, err
+			}
+
+			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
+			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
+
+			utxoDiff, err := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
+			if err != nil {
+				return 0, nil, err
+			}
+			csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
+
+			previousBlockUTXOSet = pastUTXOSet
 		} else {
 			oneBeforeLastResolvedBlockUTXOSet = previousBlockUTXOSet
 			oneBeforeLastResolvedBlockHash = previousBlockHash
@@ -155,7 +177,7 @@ func (csm *consensusStateManager) selectedParentInfo(
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	if selectedParentStatus != externalapi.StatusUTXOValid {
+	if selectedParentStatus != externalapi.StatusUTXOValid && selectedParentStatus != externalapi.StatusDisqualifiedFromChain {
 		return selectedParent, selectedParentStatus, nil, nil
 	}
 
@@ -253,6 +275,14 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 	if err != nil {
 		if errors.As(err, &ruleerrors.RuleError{}) {
 			log.Debugf("UTXO verification for block %s failed: %s", blockHash, err)
+			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
+			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
+
+			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
+			if diffErr != nil {
+				return 0, nil, diffErr
+			}
+			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 			return externalapi.StatusDisqualifiedFromChain, nil, nil
 		}
 		return 0, nil, err

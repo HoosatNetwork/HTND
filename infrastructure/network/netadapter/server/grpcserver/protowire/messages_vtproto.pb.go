@@ -1250,6 +1250,24 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) CloneVT() isHoosatdMessage_P
 	return r
 }
 
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetPaginatedUtxosByAddressesRequest)(nil)
+	}
+	r := new(HoosatdMessage_GetPaginatedUtxosByAddressesRequest)
+	r.GetPaginatedUtxosByAddressesRequest = m.GetPaginatedUtxosByAddressesRequest.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetPaginatedUtxosByAddressesResponse)(nil)
+	}
+	r := new(HoosatdMessage_GetPaginatedUtxosByAddressesResponse)
+	r.GetPaginatedUtxosByAddressesResponse = m.GetPaginatedUtxosByAddressesResponse.CloneVT()
+	return r
+}
+
 func (this *HoosatdMessage) EqualVT(that *HoosatdMessage) bool {
 	if this == that {
 		return true
@@ -4628,6 +4646,56 @@ func (this *HoosatdMessage_GetUsableAddressesResponse) EqualVT(thatIface isHoosa
 	return true
 }
 
+func (this *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetPaginatedUtxosByAddressesRequest)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetPaginatedUtxosByAddressesRequest, that.GetPaginatedUtxosByAddressesRequest; p != q {
+		if p == nil {
+			p = &GetPaginatedUtxosByAddressesRequestMessage{}
+		}
+		if q == nil {
+			q = &GetPaginatedUtxosByAddressesRequestMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetPaginatedUtxosByAddressesResponse, that.GetPaginatedUtxosByAddressesResponse; p != q {
+		if p == nil {
+			p = &GetPaginatedUtxosByAddressesResponseMessage{}
+		}
+		if q == nil {
+			q = &GetPaginatedUtxosByAddressesResponseMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
 // Requires gRPC-Go v1.32.0 or later.
@@ -7705,6 +7773,48 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetPaginatedUtxosByAddressesRequest != nil {
+		size, err := m.GetPaginatedUtxosByAddressesRequest.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xa2
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetPaginatedUtxosByAddressesResponse != nil {
+		size, err := m.GetPaginatedUtxosByAddressesResponse.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xaa
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -7734,6 +7844,20 @@ func (m *HoosatdMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) 
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesRequest); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
 	}
 	if msg, ok := m.Payload.(*HoosatdMessage_GetUsableAddressesResponse); ok {
 		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
@@ -11470,6 +11594,48 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetPaginatedUtxosByAddressesRequest != nil {
+		size, err := m.GetPaginatedUtxosByAddressesRequest.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xa2
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetPaginatedUtxosByAddressesResponse != nil {
+		size, err := m.GetPaginatedUtxosByAddressesResponse.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xaa
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13087,6 +13253,30 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) SizeVT() (n int) {
 	_ = l
 	if m.GetUsableAddressesResponse != nil {
 		l = m.GetUsableAddressesResponse.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetPaginatedUtxosByAddressesRequest != nil {
+		l = m.GetPaginatedUtxosByAddressesRequest.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetPaginatedUtxosByAddressesResponse != nil {
+		l = m.GetPaginatedUtxosByAddressesResponse.SizeVT()
 		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	return n
@@ -18612,6 +18802,88 @@ func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetUsableAddressesResponse{GetUsableAddressesResponse: v}
+			}
+			iNdEx = postIndex
+		case 1092:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetPaginatedUtxosByAddressesRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesRequest); ok {
+				if err := oneof.GetPaginatedUtxosByAddressesRequest.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetPaginatedUtxosByAddressesRequestMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesRequest{GetPaginatedUtxosByAddressesRequest: v}
+			}
+			iNdEx = postIndex
+		case 1093:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetPaginatedUtxosByAddressesResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse); ok {
+				if err := oneof.GetPaginatedUtxosByAddressesResponse.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetPaginatedUtxosByAddressesResponseMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesResponse{GetPaginatedUtxosByAddressesResponse: v}
 			}
 			iNdEx = postIndex
 		default:
@@ -24157,6 +24429,88 @@ func (m *HoosatdMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetUsableAddressesResponse{GetUsableAddressesResponse: v}
+			}
+			iNdEx = postIndex
+		case 1092:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetPaginatedUtxosByAddressesRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesRequest); ok {
+				if err := oneof.GetPaginatedUtxosByAddressesRequest.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetPaginatedUtxosByAddressesRequestMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesRequest{GetPaginatedUtxosByAddressesRequest: v}
+			}
+			iNdEx = postIndex
+		case 1093:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetPaginatedUtxosByAddressesResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse); ok {
+				if err := oneof.GetPaginatedUtxosByAddressesResponse.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetPaginatedUtxosByAddressesResponseMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesResponse{GetPaginatedUtxosByAddressesResponse: v}
 			}
 			iNdEx = postIndex
 		default:

@@ -51,7 +51,7 @@ cd "${PROJECT_ROOT}/mempool-limits/run" && ./run.sh || failedTests+=("mempool-li
 echo "Done running mempool-limits"
 
 echo "Running netsync - slow"
-cd ${PROJECT_ROOT}/netsync/run"" && ./run.sh || failedTests+=("netsync")
+cd "${PROJECT_ROOT}/netsync/run" && ./run.sh || failedTests+=("netsync")
 echo "Done running netsync - slow"
 
 EXIT_CODE=0

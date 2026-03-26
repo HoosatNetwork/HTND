@@ -33,9 +33,13 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 	}
 
 	// Slow path: full computation (cache miss)
-	windowHeap, err := dtm.blockWindowHeap(stagingArea, highHash, windowSize)
+	windowHeap, err := dtm.calculateBlockWindowHeap(stagingArea, highHash, windowSize)
 	if err != nil {
 		return nil, err
+	}
+
+	if !highHash.Equal(model.VirtualBlockHash) {
+		dtm.windowHeapSliceStore.Stage(stagingArea, highHash, windowSize, windowHeap.impl.slice)
 	}
 
 	window := make([]*externalapi.DomainHash, len(windowHeap.impl.slice))
@@ -46,37 +50,14 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 	return window, nil
 }
 
-func (dtm *dagTraversalManager) blockWindowHeap(stagingArea *model.StagingArea,
-	highHash *externalapi.DomainHash, windowSize int) (*sizedUpBlockHeap, error) {
-	windowHeapSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, highHash, windowSize)
-	sliceNotCached := database.IsNotFoundError(err)
-	if !sliceNotCached && err != nil {
-		return nil, err
-	}
-	if !sliceNotCached {
-		return dtm.newSizedUpHeapFromSlice(stagingArea, windowHeapSlice), nil
-	}
-
-	heap, err := dtm.calculateBlockWindowHeap(stagingArea, highHash, windowSize)
-	if err != nil {
-		return nil, err
-	}
-
-	if !highHash.Equal(model.VirtualBlockHash) {
-		dtm.windowHeapSliceStore.Stage(stagingArea, highHash, windowSize, heap.impl.slice)
-	}
-	return heap, nil
-}
-
 func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.StagingArea,
 	highHash *externalapi.DomainHash, windowSize int) (*sizedUpBlockHeap, error) {
 
-	windowHeap := dtm.newSizedUpHeap(stagingArea, windowSize)
 	if highHash.Equal(dtm.genesisHash) {
-		return windowHeap, nil
+		return dtm.newSizedUpHeap(stagingArea, windowSize), nil
 	}
 	if windowSize == 0 {
-		return windowHeap, nil
+		return dtm.newSizedUpHeap(stagingArea, windowSize), nil
 	}
 
 	current := highHash
@@ -123,6 +104,7 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 		}
 	}
 
+	windowHeap := dtm.newSizedUpHeap(stagingArea, windowSize)
 	// Walk down the chain until you finish or find a trusted block and then take complete the rest
 	// of the window with the trusted window.
 	for {

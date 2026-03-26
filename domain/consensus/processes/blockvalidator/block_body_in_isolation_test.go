@@ -51,6 +51,9 @@ func TestBlockValidator_ValidateBodyInIsolation(t *testing.T) {
 func TestChainedTransactions(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		consensusConfig.BlockCoinbaseMaturity = 0
+		for i := range consensusConfig.DifficultyAdjustmentWindowSize {
+			consensusConfig.DifficultyAdjustmentWindowSize[i] = 1
+		}
 
 		factory := consensus.NewFactory()
 
@@ -65,7 +68,17 @@ func TestChainedTransactions(t *testing.T) {
 			t.Fatalf("AddBlock: %+v", err)
 		}
 
-		block1Hash, _, err := tc.AddBlock([]*externalapi.DomainHash{fundingBlockHash}, nil, nil)
+		bootstrapTransaction1 := testutils.CreateTransactionWithOutput(10)
+		err = testutils.StageTransactionOutputsToVirtual(tc, bootstrapTransaction1, 0)
+		if err != nil {
+			t.Fatalf("StageTransactionOutputsToVirtual: %+v", err)
+		}
+		fundingTransaction1, err := testutils.CreateTransaction(bootstrapTransaction1, 1)
+		if err != nil {
+			t.Fatalf("Error creating fundingTransaction1: %+v", err)
+		}
+
+		block1Hash, _, err := tc.AddBlock([]*externalapi.DomainHash{fundingBlockHash}, nil, []*externalapi.DomainTransaction{fundingTransaction1})
 		if err != nil {
 			t.Fatalf("AddBlock: %+v", err)
 		}
@@ -75,7 +88,7 @@ func TestChainedTransactions(t *testing.T) {
 			t.Fatalf("Error getting block1: %+v", err)
 		}
 
-		tx1, err := testutils.CreateTransaction(block1.Transactions[0], 1)
+		tx1, err := testutils.CreateTransaction(block1.Transactions[1], 1)
 		if err != nil {
 			t.Fatalf("Error creating tx1: %+v", err)
 		}
@@ -92,7 +105,17 @@ func TestChainedTransactions(t *testing.T) {
 			t.Fatalf("unexpected error %+v", err)
 		}
 
-		block2Hash, _, err := tc.AddBlock([]*externalapi.DomainHash{block1Hash}, nil, nil)
+		bootstrapTransaction2 := testutils.CreateTransactionWithOutput(11)
+		err = testutils.StageTransactionOutputsToVirtual(tc, bootstrapTransaction2, 0)
+		if err != nil {
+			t.Fatalf("StageTransactionOutputsToVirtual: %+v", err)
+		}
+		fundingTransaction2, err := testutils.CreateTransaction(bootstrapTransaction2, 1)
+		if err != nil {
+			t.Fatalf("Error creating fundingTransaction2: %+v", err)
+		}
+
+		block2Hash, _, err := tc.AddBlock([]*externalapi.DomainHash{block1Hash}, nil, []*externalapi.DomainTransaction{fundingTransaction2})
 		if err != nil {
 			t.Fatalf("unexpected error %+v", err)
 		}
@@ -102,7 +125,7 @@ func TestChainedTransactions(t *testing.T) {
 			t.Fatalf("Error getting block2: %+v", err)
 		}
 
-		tx2, err := testutils.CreateTransaction(block2.Transactions[0], 1)
+		tx2, err := testutils.CreateTransaction(block2.Transactions[1], 1)
 		if err != nil {
 			t.Fatalf("Error creating tx2: %+v", err)
 		}

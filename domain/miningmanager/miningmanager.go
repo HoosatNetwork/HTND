@@ -19,13 +19,26 @@ type MiningManager interface {
 		transactionPoolTransaction *externalapi.DomainTransaction,
 		isOrphan bool,
 		found bool)
+	GetTransactionNoClone(transactionID *externalapi.DomainTransactionID, includeTransactionPool bool, includeOrphanPool bool) (
+		transactionPoolTransaction *externalapi.DomainTransaction,
+		isOrphan bool,
+		found bool)
 	GetTransactionsByAddresses(includeTransactionPool bool, includeOrphanPool bool) (
 		sendingInTransactionPool map[string]*externalapi.DomainTransaction,
 		receivingInTransactionPool map[string]*externalapi.DomainTransaction,
 		sendingInOrphanPool map[string]*externalapi.DomainTransaction,
 		receivingInOrphanPool map[string]*externalapi.DomainTransaction,
 		err error)
+	GetTransactionsByAddressesNoClone(includeTransactionPool bool, includeOrphanPool bool) (
+		sendingInTransactionPool map[string]*externalapi.DomainTransaction,
+		receivingInTransactionPool map[string]*externalapi.DomainTransaction,
+		sendingInOrphanPool map[string]*externalapi.DomainTransaction,
+		receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+		err error)
 	AllTransactions(includeTransactionPool bool, includeOrphanPool bool) (
+		transactionPoolTransactions []*externalapi.DomainTransaction,
+		orphanPoolTransactions []*externalapi.DomainTransaction)
+	AllTransactionsNoClone(includeTransactionPool bool, includeOrphanPool bool) (
 		transactionPoolTransactions []*externalapi.DomainTransaction,
 		orphanPoolTransactions []*externalapi.DomainTransaction)
 	TransactionCount(includeTransactionPool bool, includeOrphanPool bool) int
@@ -129,11 +142,29 @@ func (mm *miningManager) GetTransaction(
 	return mm.mempool.GetTransaction(transactionID, includeTransactionPool, includeOrphanPool)
 }
 
+func (mm *miningManager) GetTransactionNoClone(
+	transactionID *externalapi.DomainTransactionID,
+	includeTransactionPool bool,
+	includeOrphanPool bool) (
+	transactionPoolTransaction *externalapi.DomainTransaction,
+	isOrphan bool,
+	found bool) {
+
+	return mm.mempool.GetTransactionNoClone(transactionID, includeTransactionPool, includeOrphanPool)
+}
+
 func (mm *miningManager) AllTransactions(includeTransactionPool bool, includeOrphanPool bool) (
 	transactionPoolTransactions []*externalapi.DomainTransaction,
 	orphanPoolTransactions []*externalapi.DomainTransaction) {
 
 	return mm.mempool.AllTransactions(includeTransactionPool, includeOrphanPool)
+}
+
+func (mm *miningManager) AllTransactionsNoClone(includeTransactionPool bool, includeOrphanPool bool) (
+	transactionPoolTransactions []*externalapi.DomainTransaction,
+	orphanPoolTransactions []*externalapi.DomainTransaction) {
+
+	return mm.mempool.AllTransactionsNoClone(includeTransactionPool, includeOrphanPool)
 }
 
 func (mm *miningManager) GetTransactionsByAddresses(includeTransactionPool bool, includeOrphanPool bool) (
@@ -144,6 +175,16 @@ func (mm *miningManager) GetTransactionsByAddresses(includeTransactionPool bool,
 	err error) {
 
 	return mm.mempool.GetTransactionsByAddresses(includeTransactionPool, includeOrphanPool)
+}
+
+func (mm *miningManager) GetTransactionsByAddressesNoClone(includeTransactionPool bool, includeOrphanPool bool) (
+	sendingInTransactionPool map[string]*externalapi.DomainTransaction,
+	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
+	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
+	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+	err error) {
+
+	return mm.mempool.GetTransactionsByAddressesNoClone(includeTransactionPool, includeOrphanPool)
 }
 
 func (mm *miningManager) TransactionCount(includeTransactionPool bool, includeOrphanPool bool) int {

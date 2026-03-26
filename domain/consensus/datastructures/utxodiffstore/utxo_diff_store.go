@@ -6,6 +6,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucache"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
 )
@@ -40,7 +41,6 @@ func (uds *utxoDiffStore) Stage(stagingArea *model.StagingArea, blockHash *exter
 	stagingShard := uds.stagingShard(stagingArea)
 
 	stagingShard.utxoDiffToAdd[*blockHash] = utxoDiff
-
 	if utxoDiffChild != nil {
 		stagingShard.utxoDiffChildToAdd[*blockHash] = utxoDiffChild
 	}
@@ -122,16 +122,16 @@ func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *m
 		return nil, err
 	}
 	uds.utxoDiffChildCache.Add(blockHash, utxoDiffChildDeserialized)
-	return utxoDiffChild, nil
+	return utxoDiffChildDeserialized, nil
 }
 
 // HasUTXODiffChild returns true if the given blockHash has a UTXODiffChild
 func (uds *utxoDiffStore) HasUTXODiffChild(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	stagingShard := uds.stagingShard(stagingArea)
 
-	utxoDiff, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
-	if ok && utxoDiff != nil {
-		return true, nil
+	utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
+	if ok {
+		return utxoDiffChild != nil, nil
 	}
 
 	if uds.utxoDiffChildCache.Has(blockHash) {
@@ -164,7 +164,9 @@ func (uds *utxoDiffStore) utxoDiffChildHashAsKey(hash *externalapi.DomainHash) m
 }
 
 func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]byte, error) {
-	dbUtxoDiff, err := serialization.UTXODiffToDBUTXODiff(utxoDiff)
+	toAddBuffer := memory.Malloc[*serialization.DbUtxoCollectionItem](utxoDiff.ToAdd().Len())
+	toRemoveBuffer := memory.Malloc[*serialization.DbUtxoCollectionItem](utxoDiff.ToRemove().Len())
+	dbUtxoDiff, err := serialization.UTXODiffToDBUTXODiff(utxoDiff, toAddBuffer, toRemoveBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +174,8 @@ func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]by
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	memory.Free(toAddBuffer)
+	memory.Free(toRemoveBuffer)
 
 	return bytes, nil
 }

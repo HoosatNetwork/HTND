@@ -4,12 +4,14 @@ import (
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/internal/ci"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 )
 
 func TestVirtualSelectedParentChain(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	// Setup a couple of htnd instances
 	htnd1, htnd2, _, teardown := standardSetup(t)
 	defer teardown()

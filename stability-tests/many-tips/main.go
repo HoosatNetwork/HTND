@@ -111,7 +111,7 @@ func startNode() (teardown func(), err error) {
 	log.Infof("htnd datadir: %s", dataDir)
 
 	htndCmd, err := common.StartCmd("HSATD",
-		"htnd",
+		"HTND",
 		common.NetworkCliArgumentFromNetParams(activeConfig().NetParams()),
 		"--appdir", dataDir,
 		"--logdir", dataDir,

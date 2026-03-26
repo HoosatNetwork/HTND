@@ -538,6 +538,21 @@ message GetUtxosByAddressesResponseMessage {
   RPCError error = 1000;
 }
 
+// GetPaginatedUtxosByAddressesRequestMessage requests all current UTXOs for the given htnd addresses
+//
+// This call is only available when this htnd was started with `--utxoindex`
+message GetPaginatedUtxosByAddressesRequestMessage {
+  repeated string addresses = 1;
+  uint32 offset             = 2;
+  uint32 limit              = 3;
+}
+
+message GetPaginatedUtxosByAddressesResponseMessage {
+  repeated UtxosByAddressesEntry entries = 1;
+
+  RPCError error = 1000;
+}
+
 // GetBalanceByAddressRequest returns the total balance in unspent transactions towards a given address
 // 
 // This call is only available when this htnd was started with `--utxoindex`

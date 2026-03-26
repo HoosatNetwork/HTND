@@ -12,6 +12,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient"
+	"github.com/Hoosat-Oy/HTND/internal/ci"
 	"github.com/Hoosat-Oy/HTND/stability-tests/common"
 )
 
@@ -22,6 +23,7 @@ const averageBlockRateSampleSize = 60
 const averageHashRateSampleSize = 100_000
 
 func TestDAA(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	if os.Getenv("RUN_STABILITY_TESTS") == "" {
 		t.Skip()
 	}

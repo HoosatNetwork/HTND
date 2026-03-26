@@ -1,12 +1,12 @@
 #!/bin/bash
 rm -rf /tmp/htnd-temp
 
-htnd --devnet --appdir=/tmp/htnd-temp --profile=6061 &
+HTND --devnet --appdir=/tmp/htnd-temp --rpclisten localhost:42420 --listen localhost:42421 --profile=6061 &
 HOOSATD_PID=$!
 
 sleep 1
 
-infra-level-garbage --devnet -alocalhost:16611 -m messages.dat --profile=7000
+infra-level-garbage --devnet -alocalhost:42421 -m messages.dat --profile=7000
 TEST_EXIT_CODE=$?
 
 kill $HOOSATD_PID

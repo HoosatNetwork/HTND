@@ -5,9 +5,11 @@
 package addressmanager
 
 import (
+	"errors"
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/infrastructure/config"
@@ -17,6 +19,11 @@ import (
 
 func newAddressManagerForTest(t *testing.T, testName string) (addressManager *AddressManager, teardown func()) {
 	cfg := config.DefaultConfig()
+	return newAddressManagerForConfig(t, testName, cfg)
+}
+
+func newAddressManagerForConfig(t *testing.T, testName string, cfg *config.Config) (addressManager *AddressManager, teardown func()) {
+	t.Helper()
 
 	datadir := t.TempDir()
 	database, err := ldb.NewLevelDB(datadir, 8)
@@ -370,5 +377,76 @@ func TestOverfillAddressManager(t *testing.T) {
 		if address.IP.Equal(testAddress.IP) {
 			t.Fatalf("Unexpectedly found testAddress returned addresses")
 		}
+	}
+}
+
+func TestMarkConnectionFailureResetsOldFailures(t *testing.T) {
+	addressManager, teardown := newAddressManagerForTest(t, "TestMarkConnectionFailureResetsOldFailures")
+	defer teardown()
+
+	testAddress := &appmessage.NetAddress{IP: net.ParseIP("5.6.7.8"), Timestamp: mstime.Now()}
+	err := addressManager.AddAddress(testAddress)
+	if err != nil {
+		t.Fatalf("AddAddress() failed: %s", err)
+	}
+
+	key := netAddressKey(testAddress)
+	entry, ok := addressManager.store.getNotBanned(key)
+	if !ok {
+		t.Fatalf("address %s was not added to the store", testAddress.IP)
+	}
+
+	entry.connectionFailedCount = connectionFailedCountForRemove - 1
+	entry.lastAttempt = time.Now().Add(-maxConnectionFailureAge - time.Hour)
+	err = addressManager.store.updateNotBanned(key, entry)
+	if err != nil {
+		t.Fatalf("updateNotBanned() failed: %s", err)
+	}
+
+	err = addressManager.MarkConnectionFailure(testAddress)
+	if err != nil {
+		t.Fatalf("MarkConnectionFailure() failed: %s", err)
+	}
+
+	entry, ok = addressManager.store.getNotBanned(key)
+	if !ok {
+		t.Fatalf("address %s was unexpectedly removed from the store", testAddress.IP)
+	}
+
+	if entry.connectionFailedCount != 1 {
+		t.Fatalf("unexpected connectionFailedCount. Want: %d, got: %d", 1, entry.connectionFailedCount)
+	}
+}
+
+func TestIsBannedUsesConfiguredBanDuration(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.BanDuration = 2 * time.Second
+
+	addressManager, teardown := newAddressManagerForConfig(t, "TestIsBannedUsesConfiguredBanDuration", cfg)
+	defer teardown()
+
+	testAddress := &appmessage.NetAddress{IP: net.ParseIP("9.8.7.6"), Timestamp: mstime.Now()}
+	err := addressManager.AddAddress(testAddress)
+	if err != nil {
+		t.Fatalf("AddAddress() failed: %s", err)
+	}
+	err = addressManager.Ban(testAddress)
+	if err != nil {
+		t.Fatalf("Ban() failed: %s", err)
+	}
+
+	key := netAddressKey(testAddress)
+	bannedEntry, ok := addressManager.store.getBanned(key)
+	if !ok {
+		t.Fatalf("address %s was not added to the banned store", testAddress.IP)
+	}
+	bannedEntry.netAddress.Timestamp = mstime.Now().Add(-3 * time.Second)
+
+	isBanned, err := addressManager.IsBanned(testAddress)
+	if err != nil && !errors.Is(err, ErrAddressNotFound) {
+		t.Fatalf("IsBanned() failed: %s", err)
+	}
+	if isBanned {
+		t.Fatalf("address %s is unexpectedly still banned", testAddress.IP)
 	}
 }

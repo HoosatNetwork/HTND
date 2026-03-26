@@ -11,6 +11,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/mining"
+	"github.com/Hoosat-Oy/HTND/internal/ci"
 
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 
@@ -18,7 +19,7 @@ import (
 )
 
 func TestIBD(t *testing.T) {
-	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	const numBlocks = 100
 
 	syncer, syncee, _, teardown := standardSetup(t)
@@ -74,7 +75,7 @@ func TestIBD(t *testing.T) {
 // TestIBDWithPruning checks the IBD from a node with
 // already pruned blocks.
 func TestIBDWithPruning(t *testing.T) {
-	t.Skip("Skipping IBD test (Takes way too long to execute in CI)")
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	testSync := func(syncer, syncee *appHarness) {
 		utxoSetOverriden := make(chan struct{})
 		err := syncee.rpcClient.RegisterPruningPointUTXOSetNotifications(func() {

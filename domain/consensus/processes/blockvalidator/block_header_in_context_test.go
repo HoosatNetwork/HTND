@@ -74,8 +74,8 @@ func TestValidateMedianTime(t *testing.T) {
 			_, tipHash = addBlock(blockTime, []*externalapi.DomainHash{tipHash}, nil)
 		}
 
-		// Checks that a block is invalid if it has timestamp equals to past median time
-		addBlock(pastMedianTime(tipHash), []*externalapi.DomainHash{tipHash}, ruleerrors.ErrTimeTooOld)
+		// Checks that a block is valid if it has timestamp equal to past median time.
+		addBlock(pastMedianTime(tipHash), []*externalapi.DomainHash{tipHash}, nil)
 
 		// Checks that a block is valid if its timestamp is after past median time
 		addBlock(pastMedianTime(tipHash)+1, []*externalapi.DomainHash{tipHash}, nil)

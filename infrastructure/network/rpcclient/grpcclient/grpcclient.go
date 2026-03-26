@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
@@ -10,8 +11,11 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+const defaultStreamSetupTimeout = 30 * time.Second
 
 // OnErrorHandler defines a handler function for when errors occur
 type OnErrorHandler func(err error)
@@ -33,14 +37,41 @@ func Connect(address string) (*GRPCClient, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "error connecting to %s", address)
 	}
+	err = waitForConnectionReady(gRPCConnection, defaultStreamSetupTimeout)
+	if err != nil {
+		_ = gRPCConnection.Close()
+		return nil, errors.Wrapf(err, "error waiting for connection to %s", address)
+	}
 
 	grpcClient := protowire.NewRPCClient(gRPCConnection)
 	stream, err := grpcClient.MessageStream(context.Background(),
 		grpc.MaxCallRecvMsgSize(grpcserver.RPCMaxMessageSize), grpc.MaxCallSendMsgSize(grpcserver.RPCMaxMessageSize))
 	if err != nil {
+		_ = gRPCConnection.Close()
 		return nil, errors.Wrapf(err, "error getting client stream for %s", address)
 	}
 	return &GRPCClient{stream: stream, connection: gRPCConnection}, nil
+}
+
+func waitForConnectionReady(connection *grpc.ClientConn, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		state := connection.GetState()
+		switch state {
+		case connectivity.Ready:
+			return nil
+		case connectivity.Shutdown:
+			return errors.New("gRPC connection shut down before becoming ready")
+		case connectivity.Idle:
+			connection.Connect()
+		}
+
+		if !connection.WaitForStateChange(ctx, state) {
+			return errors.Errorf("timed out waiting for gRPC connection readiness after %s", timeout)
+		}
+	}
 }
 
 // Close closes the underlying grpc connection

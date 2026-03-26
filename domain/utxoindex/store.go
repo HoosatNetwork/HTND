@@ -9,6 +9,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -44,7 +45,7 @@ func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 	}
 }
 
-// scriptLRUCache is a thread-safe LRU cache for ScriptPublicKeyString -> []UTXOPair
+// // scriptLRUCache is a thread-safe LRU cache for ScriptPublicKeyString -> []UTXOPair
 // type scriptLRUCache struct {
 // 	mu         sync.Mutex
 // 	maxSize    int
@@ -79,6 +80,10 @@ func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 // func (c *scriptLRUCache) Put(key string, value []UTXOPair) {
 // 	c.mu.Lock()
 // 	defer c.mu.Unlock()
+// 	// Don't cache large slices to avoid high allocations
+// 	if len(value) > 100 {
+// 		return
+// 	}
 // 	copiedValue := copyUTXOPairs(value)
 // 	if node, ok := c.items[key]; ok {
 // 		node.value = copiedValue
@@ -446,8 +451,68 @@ type UTXOPair struct {
 	Entry    externalapi.UTXOEntry
 }
 
+func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+	if uis.isAnythingStaged() {
+		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+	}
+
+	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
+	cursor, err := uis.database.Cursor(bucket)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	iterator := uint32(0)
+	count := 0
+	if limit == 0 {
+		for ok := cursor.First(); ok; ok = cursor.Next() {
+			if iterator > offset {
+				count++
+			}
+			iterator++
+		}
+	} else {
+		count = int(limit)
+	}
+
+	slice := buffer.Slice()[:0]
+	if cap(slice) < count {
+		buffer = memory.Realloc(buffer, count)
+	}
+	slice = buffer.Slice()[:0]
+
+	iterator = uint32(0) // reset iterator to reuse for filling buffer
+	for ok := cursor.First(); ok; ok = cursor.Next() {
+		if iterator > offset {
+			key, err := cursor.Key()
+			if err != nil {
+				return nil, err
+			}
+			outpoint, err := uis.convertKeyToOutpoint(key)
+			if err != nil {
+				return nil, err
+			}
+			serializedUTXOEntry, err := cursor.Value()
+			if err != nil {
+				return nil, err
+			}
+			utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+			if err != nil {
+				return nil, err
+			}
+			slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+			if limit > 0 && uint32(len(slice)) >= limit {
+				break
+			}
+		}
+		iterator++
+	}
+	return slice, nil
+}
+
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer []UTXOPair) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
@@ -466,14 +531,20 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 
 	// First pass: count entries
 	count := 0
-	for ok := cursor.First(); ok; ok = cursor.Next() {
-		count++
+	if limit == 0 {
+		for ok := cursor.First(); ok; ok = cursor.Next() {
+			count++
+		}
+	} else {
+		count = int(limit)
 	}
 
+	slice := buffer.Slice()[:0]
 	// Preallocate exactly to avoid reallocations during append
-	if cap(buffer) < count {
-		buffer = make([]UTXOPair, 0, count) // reallocate if existing capacity is insufficient
+	if cap(slice) < count {
+		buffer = memory.Realloc(buffer, count) // reallocate if existing capacity is insufficient
 	}
+	slice = buffer.Slice()[:0]
 
 	// Second pass: fill
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -493,13 +564,14 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		if err != nil {
 			return nil, err
 		}
-		buffer = append(buffer, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-		if limit > 0 && uint32(len(buffer)) >= limit {
+		slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
+		if limit > 0 && uint32(len(slice)) >= limit {
 			break
 		}
 	}
 
-	return buffer, nil
+	// uis.scriptCache.Put(scriptKeyString, buffer)
+	return slice, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
@@ -519,39 +591,32 @@ func (uis *utxoIndexStore) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 	return ok, nil
 }
 
-// ForEachUTXO provides an iterator-style API for advanced streaming
-func (uis *utxoIndexStore) ForEachUTXO(scriptPublicKey *externalapi.ScriptPublicKey, fn func(outpoint externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error) error {
+// GetBalance returns the total balance for a ScriptPublicKey without allocating full UTXO entries
+func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (uint64, error) {
 	if uis.isAnythingStaged() {
-		return errors.Errorf("cannot iterate UTXOs while staging isn't empty")
+		return 0, errors.Errorf("cannot get balance while staging isn't empty")
 	}
+
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer cursor.Close()
-	for cursor.Next() {
-		key, err := cursor.Key()
-		if err != nil {
-			return err
-		}
-		outpoint, err := uis.convertKeyToOutpoint(key)
-		if err != nil {
-			return err
-		}
+
+	var balance uint64
+	for ok := cursor.First(); ok; ok = cursor.Next() {
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
-			return err
+			return 0, err
 		}
-		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		amount, err := deserializeUTXOAmount(serializedUTXOEntry)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		if err := fn(*outpoint, utxoEntry); err != nil {
-			return err
-		}
+		balance += amount
 	}
-	return nil
+	return balance, nil
 }
 
 func (uis *utxoIndexStore) getVirtualParents() ([]*externalapi.DomainHash, error) {
@@ -621,12 +686,12 @@ func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
 		if err != nil {
 			return err
 		}
-		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		utxoAmount, err := deserializeUTXOAmount(serializedUTXOEntry)
 		if err != nil {
 			return err
 		}
 
-		circulatingSompiSupplyInDatabase = circulatingSompiSupplyInDatabase + utxoEntry.Amount()
+		circulatingSompiSupplyInDatabase = circulatingSompiSupplyInDatabase + utxoAmount
 	}
 
 	err = uis.database.Put(

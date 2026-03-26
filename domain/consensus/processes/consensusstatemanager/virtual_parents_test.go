@@ -60,18 +60,17 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 		// Sort parents by GHOSTDAG order
 		sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, parents, tc, t))
 
-		// Check that virtual parents are among the candidates
-		maxBlockParents := int(consensusConfig.K[constants.GetBlockVersion()-1])
-		if len(virtualParents) > maxBlockParents {
-			t.Fatalf("Expected at most %d virtual parents, got %d", maxBlockParents, len(virtualParents))
+		candidateParentSet := make(map[externalapi.DomainHash]struct{}, len(parents))
+		for _, parent := range parents {
+			candidateParentSet[*parent] = struct{}{}
 		}
-		if len(virtualParents) == 0 {
-			t.Fatalf("Expected at least 1 virtual parent, got 0")
+
+		if len(virtualParents) > int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]) {
+			t.Fatalf("Expected at most %d virtual parents, got %d", consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1], len(virtualParents))
 		}
-		for i := 0; i < len(virtualParents); i++ {
-			found := slices.ContainsFunc(parents, virtualParents[i].Equal)
-			if !found {
-				t.Fatalf("Virtual parent %s at position %d is not among the candidates", virtualParents[i], i)
+		for i, virtualParent := range virtualParents {
+			if _, ok := candidateParentSet[*virtualParent]; !ok {
+				t.Fatalf("Unexpected virtual parent at %d: %s", i, virtualParent)
 			}
 		}
 

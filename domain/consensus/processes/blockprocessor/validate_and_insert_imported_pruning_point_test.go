@@ -10,6 +10,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/Hoosat-Oy/HTND/internal/ci"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -39,6 +40,7 @@ func addBlock(tc testapi.TestConsensus, parentHashes []*externalapi.DomainHash, 
 }
 
 func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	if !infralogger.BackendLog.IsRunning() {
 		infralogger.InitLogStdout(infralogger.LevelDebug)
 		infralogger.SetLogLevels(infralogger.LevelOff)
@@ -516,20 +518,28 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 			t.Fatalf("Error validating and inserting block above genesis: %+v", err)
 		}
 
-		// Create a block whose coinbase we could spend
+		// Bootstrap a real spendable transaction output in the DAG.
 		scriptPublicKey, redeemScript := testutils.OpTrueScript()
-		coinbaseData := &externalapi.DomainCoinbaseData{ScriptPublicKey: scriptPublicKey}
-		blockWithSpendableCoinbase, err := testConsensus.BuildBlock(coinbaseData, nil)
+		bootstrapTransaction := testutils.CreateTransactionWithOutput(10000 * 901)
+		err = testutils.StageTransactionOutputsToVirtual(testConsensus, bootstrapTransaction, 0)
 		if err != nil {
-			t.Fatalf("Error building block with spendable coinbase: %+v", err)
+			t.Fatalf("StageTransactionOutputsToVirtual: %+v", err)
 		}
-		err = testConsensus.ValidateAndInsertBlock(blockWithSpendableCoinbase, true, true)
+		fundingSeedTransaction, err := testutils.CreateTransaction(bootstrapTransaction, 1)
 		if err != nil {
-			t.Fatalf("Error validating and inserting block with spendable coinbase: %+v", err)
+			t.Fatalf("Error creating funding seed transaction: %+v", err)
+		}
+		fundingBlock, err := testConsensus.BuildBlock(emptyCoinbase, []*externalapi.DomainTransaction{fundingSeedTransaction})
+		if err != nil {
+			t.Fatalf("Error building funding block: %+v", err)
+		}
+		err = testConsensus.ValidateAndInsertBlock(fundingBlock, true, true)
+		if err != nil {
+			t.Fatalf("Error validating and inserting funding block: %+v", err)
 		}
 
 		// Create a transaction that adds a lot of UTXOs to the UTXO set
-		transactionToSpend := blockWithSpendableCoinbase.Transactions[0]
+		transactionToSpend := fundingBlock.Transactions[1]
 		signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)
 		if err != nil {
 			t.Fatalf("Error creating signature script: %+v", err)
@@ -627,9 +637,9 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 			}
 		}
 
-		expected := len(outputs) + 1
-		// Make sure the length of the UTXOs is exactly spendingTransaction.Outputs + 1 coinbase
-		// output (includingBlock's coinbase)
+		expected := len(outputs) + len(includingBlock.Transactions[0].Outputs) + len(fundingBlock.Transactions[0].Outputs)
+		// Make sure the pruning point UTXO set contains all outputs from the spending transaction
+		// plus any outputs actually present on the including and funding blocks' coinbases.
 		if len(allOutpointAndUTXOEntryPairs) != expected {
 			t.Fatalf("Returned an unexpected amount of UTXOs. "+
 				"Want: %d, got: %d", expected, len(allOutpointAndUTXOEntryPairs))
@@ -671,17 +681,26 @@ func BenchmarkGetPruningPointUTXOs(b *testing.B) {
 	}
 	defer teardown(false)
 
-	// Create a block whose coinbase we could spend
+	// Bootstrap a real spendable transaction output in the DAG.
 	scriptPublicKey, redeemScript := testutils.OpTrueScript()
 	coinbaseData := &externalapi.DomainCoinbaseData{ScriptPublicKey: scriptPublicKey}
-	blockWithSpendableCoinbase, err := testConsensus.BuildBlock(coinbaseData, nil)
+	bootstrapTransaction := testutils.CreateTransactionWithOutput(10000 * 901)
+	err = testutils.StageTransactionOutputsToVirtual(testConsensus, bootstrapTransaction, 0)
 	if err != nil {
-		b.Fatalf("Error building block with spendable coinbase: %+v", err)
+		b.Fatalf("StageTransactionOutputsToVirtual: %+v", err)
+	}
+	fundingSeedTransaction, err := testutils.CreateTransaction(bootstrapTransaction, 1)
+	if err != nil {
+		b.Fatalf("Error creating funding seed transaction: %+v", err)
+	}
+	fundingBlock, err := testConsensus.BuildBlock(coinbaseData, []*externalapi.DomainTransaction{fundingSeedTransaction})
+	if err != nil {
+		b.Fatalf("Error building funding block: %+v", err)
 	}
 
-	err = testConsensus.ValidateAndInsertBlock(blockWithSpendableCoinbase, true, true)
+	err = testConsensus.ValidateAndInsertBlock(fundingBlock, true, true)
 	if err != nil {
-		b.Fatalf("Error validating and inserting block with spendable coinbase: %+v", err)
+		b.Fatalf("Error validating and inserting funding block: %+v", err)
 	}
 
 	addBlockWithLotsOfOutputs := func(b *testing.B, transactionToSpend *externalapi.DomainTransaction) *externalapi.DomainBlock {
@@ -726,9 +745,9 @@ func BenchmarkGetPruningPointUTXOs(b *testing.B) {
 	}
 
 	// Add finalityDepth blocks, each containing lots of outputs
-	tip := blockWithSpendableCoinbase
+	tip := fundingBlock
 	for range finalityDepth {
-		tip = addBlockWithLotsOfOutputs(b, tip.Transactions[0])
+		tip = addBlockWithLotsOfOutputs(b, tip.Transactions[1])
 	}
 
 	// Add enough blocks to move the pruning point

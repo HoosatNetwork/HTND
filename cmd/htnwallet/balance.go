@@ -29,12 +29,12 @@ func balance(conf *balanceConfig) error {
 	}
 	if conf.Verbose {
 		pendingSuffix = ""
-		println("Address                                                                       Available             Pending")
-		println("-----------------------------------------------------------------------------------------------------------")
+		println("Address                                                                       Available  ")
+		println("-----------------------------------------------------------------------------------------")
 		for _, addressBalance := range response.AddressBalances {
 			fmt.Printf("%s %s %s\n", addressBalance.Address, utils.FomatHSAT(addressBalance.Available), utils.FomatHSAT(addressBalance.Pending))
 		}
-		println("-----------------------------------------------------------------------------------------------------------")
+		println("-----------------------------------------------------------------------------------------")
 		print("                                                 ")
 	}
 	fmt.Printf("Total balance, HTN %s %s%s\n", utils.FomatHSAT(response.Available), utils.FomatHSAT(response.Pending), pendingSuffix)

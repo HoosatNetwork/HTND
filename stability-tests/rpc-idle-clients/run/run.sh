@@ -2,7 +2,7 @@
 rm -rf /tmp/htnd-temp
 
 NUM_CLIENTS=128
-htnd --devnet --appdir=/tmp/htnd-temp --profile=6061 --rpcmaxwebsockets=$NUM_CLIENTS &
+HTND --devnet --appdir=/tmp/htnd-temp --profile=6061 --rpcmaxwebsockets=$NUM_CLIENTS &
 HOOSATD_PID=$!
 HOOSATD_KILLED=0
 function killHoosatdIfNotKilled() {

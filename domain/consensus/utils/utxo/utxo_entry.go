@@ -1,8 +1,6 @@
 package utxo
 
 import (
-	"slices"
-
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
@@ -35,11 +33,10 @@ func (u *utxoEntry) Amount() uint64 {
 	return u.amount
 }
 
+// ScriptPublicKey returns the script public key of this UTXO entry.
+// The returned value MUST NOT be mutated by callers.
 func (u *utxoEntry) ScriptPublicKey() *externalapi.ScriptPublicKey {
-	return &externalapi.ScriptPublicKey{
-		Script:  slices.Clone(u.scriptPublicKey.Script),
-		Version: u.scriptPublicKey.Version,
-	}
+	return u.scriptPublicKey
 }
 
 func (u *utxoEntry) BlockDAAScore() uint64 {
@@ -64,19 +61,19 @@ func (u *utxoEntry) Equal(other externalapi.UTXOEntry) bool {
 		return u == downcastedOther
 	}
 
-	if u.Amount() != other.Amount() {
+	if u.amount != downcastedOther.amount {
 		return false
 	}
 
-	if !u.ScriptPublicKey().Equal(other.ScriptPublicKey()) {
+	if !u.scriptPublicKey.Equal(downcastedOther.scriptPublicKey) {
 		return false
 	}
 
-	if u.BlockDAAScore() != other.BlockDAAScore() {
+	if u.blockDAAScore != downcastedOther.blockDAAScore {
 		return false
 	}
 
-	if u.IsCoinbase() != other.IsCoinbase() {
+	if u.isCoinbase != downcastedOther.isCoinbase {
 		return false
 	}
 

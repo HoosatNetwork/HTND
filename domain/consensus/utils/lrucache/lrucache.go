@@ -21,24 +21,58 @@ type LRUCache[V any] struct {
 	tail     *entry[V]
 	capacity int
 	length   int
+
+	pool     []entry[V]
+	freeList *entry[V]
 }
 
 // New creates a new LRU cache
 func New[V any](capacity int, preallocate bool) *LRUCache[V] {
 	m := make(map[uint64]*entry[V])
+	var pool []entry[V]
+	var freeList *entry[V]
 	if preallocate {
 		m = make(map[uint64]*entry[V], capacity+(capacity>>2)) // ~25% headroom
+		pool = make([]entry[V], capacity)
+		for i := 0; i < capacity-1; i++ {
+			pool[i].next = &pool[i+1]
+		}
+		if capacity > 0 {
+			freeList = &pool[0]
+		}
 	}
 
 	return &LRUCache[V]{
 		cache:    m,
 		capacity: capacity,
+		pool:     pool,
+		freeList: freeList,
 	}
 }
 
 // hash computes a fast non-cryptographic hash of the key
 func hash(key externalapi.DomainHash) uint64 {
 	return xxhash.Sum64(key.ByteSlice())
+}
+
+// getEntry gets a new or recycled entry
+func (c *LRUCache[V]) getEntry() *entry[V] {
+	if c.freeList != nil {
+		e := c.freeList
+		c.freeList = e.next
+		e.next = nil
+		return e
+	}
+	return new(entry[V])
+}
+
+// putEntry recycles an entry
+func (c *LRUCache[V]) putEntry(e *entry[V]) {
+	var zero V
+	e.value = zero
+	e.next = c.freeList
+	e.prev = nil
+	c.freeList = e
 }
 
 // moveToFront promotes entry to most-recently-used position
@@ -85,19 +119,23 @@ func (c *LRUCache[V]) Add(key *externalapi.DomainHash, value V) {
 		// hash collision but different key → fall through (treat as new)
 	}
 
-	// new entry
-	e := &entry[V]{
-		key:   *key,
-		value: value,
+	var e *entry[V]
+	if c.length >= c.capacity && c.tail != nil {
+		// Evict and reuse the LRU item directly without reallocating
+		e = c.tail
+		c.unlink(e)
+		delete(c.cache, hash(e.key))
+		c.length--
+	} else {
+		e = c.getEntry()
 	}
+
+	e.key = *key
+	e.value = value
 
 	c.moveToFront(e) // also sets head/tail correctly for first item
 	c.cache[h] = e
 	c.length++
-
-	if c.length > c.capacity {
-		c.evict()
-	}
 }
 
 // Get returns the value if present and promotes it to MRU
@@ -135,6 +173,7 @@ func (c *LRUCache[V]) Remove(key *externalapi.DomainHash) {
 	c.unlink(e)
 	delete(c.cache, h)
 	c.length--
+	c.putEntry(e)
 }
 
 // evict removes the least recently used item
@@ -147,6 +186,7 @@ func (c *LRUCache[V]) evict() {
 	c.unlink(e)
 	delete(c.cache, hash(e.key))
 	c.length--
+	c.putEntry(e)
 }
 
 // unlink removes node from the linked list (does not free or delete from map)
@@ -169,7 +209,24 @@ func (c *LRUCache[V]) unlink(e *entry[V]) {
 
 // Clear empties the cache
 func (c *LRUCache[V]) Clear() {
-	// We let old entries be GC'd naturally
+	if len(c.pool) > 0 {
+		for i := 0; i < len(c.pool)-1; i++ {
+			c.pool[i].next = &c.pool[i+1]
+			c.pool[i].prev = nil
+			var zero V
+			c.pool[i].value = zero
+		}
+		if len(c.pool) > 0 {
+			c.pool[len(c.pool)-1].next = nil
+			c.pool[len(c.pool)-1].prev = nil
+			var zero V
+			c.pool[len(c.pool)-1].value = zero
+			c.freeList = &c.pool[0]
+		}
+	} else {
+		c.freeList = nil
+	}
+
 	c.cache = make(map[uint64]*entry[V], c.capacity>>1)
 	c.head = nil
 	c.tail = nil

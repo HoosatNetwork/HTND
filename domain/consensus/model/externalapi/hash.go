@@ -3,6 +3,7 @@ package externalapi
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -13,7 +14,8 @@ const DomainHashSize = 32
 
 var domainHashStringPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 0, 64) // 32*2 for hex
+		buffer := make([]byte, 0, 64) // 32*2 for hex
+		return &buffer
 	},
 }
 
@@ -38,8 +40,8 @@ func NewDomainHashFromByteArray(hashBytes *[DomainHashSize]byte) *DomainHash {
 // Returns an error if the length of the byte slice is not exactly `DomainHashSize`
 func NewDomainHashFromByteSlice(hashBytes []byte) (*DomainHash, error) {
 	if len(hashBytes) != DomainHashSize {
-		return nil, errors.Errorf("invalid hash size. Want: %d, got: %d",
-			DomainHashSize, len(hashBytes))
+		return nil, errors.WithStack(fmt.Errorf("invalid hash size. Want: %d, got: %d",
+			DomainHashSize, len(hashBytes)))
 	}
 	domainHash := DomainHash{
 		hashArray: [DomainHashSize]byte{},
@@ -69,7 +71,7 @@ func NewDomainHashFromString(hashString string) (*DomainHash, error) {
 // String returns the Hash as the hexadecimal string of the hash.
 func (hash DomainHash) String() string {
 	hexLen := hex.EncodedLen(len(hash.hashArray[:]))
-	dst := domainHashStringPool.Get().([]byte)
+	dst := *domainHashStringPool.Get().(*[]byte)
 	if cap(dst) < hexLen {
 		dst = make([]byte, hexLen)
 	} else {
@@ -77,7 +79,8 @@ func (hash DomainHash) String() string {
 	}
 	hex.Encode(dst, hash.hashArray[:])
 	s := string(dst)
-	domainHashStringPool.Put(dst[:0])
+	dst = dst[:0]
+	domainHashStringPool.Put(&dst)
 	return s
 }
 
