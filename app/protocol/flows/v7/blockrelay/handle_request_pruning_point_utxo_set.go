@@ -105,8 +105,9 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 		wirePairsBuffer = wirePairsBuffer[:0]
 		wirePairsBuffer = appmessage.AppendDomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
 			pruningPointUTXOs, wirePairsBuffer)
+		wirePairsSnapshot := append([]*appmessage.OutpointAndUTXOEntryPair(nil), wirePairsBuffer...)
 
-		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgPruningPointUTXOSetChunk(wirePairsBuffer))
+		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgPruningPointUTXOSetChunk(wirePairsSnapshot))
 		if err != nil {
 			return err
 		}
