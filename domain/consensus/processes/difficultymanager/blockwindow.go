@@ -7,16 +7,21 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/util/difficulty"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
 type difficultyBlock struct {
 	timeInMilliseconds int64
-	Bits               uint32
-	hash               *externalapi.DomainHash
-	blueWork           *big.Int
+	bits               uint32
 }
 
-type blockWindow []difficultyBlock
+type blockWindow struct {
+	buffer            *memory.Block[difficultyBlock]
+	blocks            []difficultyBlock
+	minTimestamp      int64
+	maxTimestamp      int64
+	minTimestampIndex int
+}
 
 // blockWindow returns a blockWindow of the given size that contains the
 // blocks in the past of startingBlock, the sorting is unspecified.
@@ -27,68 +32,85 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 
 	windowHashes, err := dm.dagTraversalManager.BlockWindow(stagingArea, startingBlock, windowSize)
 	if err != nil {
-		return nil, nil, err
+		return blockWindow{}, nil, err
 	}
 
-	window := make([]difficultyBlock, len(windowHashes))
+	buffer := memory.Malloc[difficultyBlock](len(windowHashes))
+	window := blockWindow{
+		buffer:            buffer,
+		minTimestamp:      math.MaxInt64,
+		maxTimestamp:      0,
+		minTimestampIndex: 0,
+	}
+	if buffer != nil {
+		window.blocks = buffer.Slice()
+	}
+
+	var minBlueWork *big.Int
+	var minHash *externalapi.DomainHash
 	for i, hash := range windowHashes {
 		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
 		if err != nil {
-			return nil, nil, err
-		}
-		window[i] = difficultyBlock{
-			timeInMilliseconds: header.TimeInMilliseconds(),
-			Bits:               header.Bits(),
-			hash:               hash,
-			blueWork:           header.BlueWork(),
+			window.free()
+			return blockWindow{}, nil, err
 		}
 
+		window.blocks[i] = difficultyBlock{
+			timeInMilliseconds: header.TimeInMilliseconds(),
+			bits:               header.Bits(),
+		}
+
+		if header.TimeInMilliseconds() < window.minTimestamp ||
+			(header.TimeInMilliseconds() == window.minTimestamp && ghostdagLess(header.BlueWork(), hash, minBlueWork, minHash)) {
+			window.minTimestamp = header.TimeInMilliseconds()
+			window.minTimestampIndex = i
+			minBlueWork = header.BlueWork()
+			minHash = hash
+		}
+		if header.TimeInMilliseconds() > window.maxTimestamp {
+			window.maxTimestamp = header.TimeInMilliseconds()
+		}
 	}
 	return window, windowHashes, nil
 }
 
-func ghostdagLess(blockA *difficultyBlock, blockB *difficultyBlock) bool {
-	switch blockA.blueWork.Cmp(blockB.blueWork) {
+func ghostdagLess(blueWorkA *big.Int, hashA *externalapi.DomainHash, blueWorkB *big.Int, hashB *externalapi.DomainHash) bool {
+	switch blueWorkA.Cmp(blueWorkB) {
 	case -1:
 		return true
 	case 1:
 		return false
 	case 0:
-		return blockA.hash.Less(blockB.hash)
+		return hashA.Less(hashB)
 	default:
 		panic("big.Int.Cmp is defined to always return -1/1/0 and nothing else")
 	}
 }
 
 func (window blockWindow) minMaxTimestamps() (min, max int64, minIndex int) {
-	min = math.MaxInt64
-	minIndex = 0
-	max = 0
-	for i, block := range window {
-		// If timestamps are equal we ghostdag compare in order to reach consensus on `minIndex`
-		if block.timeInMilliseconds < min ||
-			(block.timeInMilliseconds == min && ghostdagLess(&block, &window[minIndex])) {
-			min = block.timeInMilliseconds
-			minIndex = i
-		}
-		if block.timeInMilliseconds > max {
-			max = block.timeInMilliseconds
-		}
-	}
-	return
+	return window.minTimestamp, window.maxTimestamp, window.minTimestampIndex
 }
 
 func (window *blockWindow) remove(n int) {
-	(*window)[n] = (*window)[len(*window)-1]
-	*window = (*window)[:len(*window)-1]
+	window.blocks[n] = window.blocks[len(window.blocks)-1]
+	window.blocks = window.blocks[:len(window.blocks)-1]
 }
 
 func (window blockWindow) averageTarget() *big.Int {
 	averageTarget := new(big.Int)
 	targetTmp := new(big.Int)
-	for _, block := range window {
-		difficulty.CompactToBigWithDestination(block.Bits, targetTmp)
+	for _, block := range window.blocks {
+		difficulty.CompactToBigWithDestination(block.bits, targetTmp)
 		averageTarget.Add(averageTarget, targetTmp)
 	}
-	return averageTarget.Div(averageTarget, big.NewInt(int64(len(window))))
+	return averageTarget.Div(averageTarget, big.NewInt(int64(len(window.blocks))))
+}
+
+func (window blockWindow) len() int {
+	return len(window.blocks)
+}
+
+func (window *blockWindow) free() {
+	memory.Free(window.buffer)
+	*window = blockWindow{}
 }

@@ -84,6 +84,7 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 	if err != nil {
 		return 0, err
 	}
+	defer targetsWindow.free()
 
 	err = dm.stageDAAScoreAndAddedBlocks(stagingArea, blockHash, windowHashes, isBlockWithTrustedData)
 	if err != nil {
@@ -99,6 +100,7 @@ func (dm *difficultyManager) RequiredDifficulty(stagingArea *model.StagingArea, 
 	if err != nil {
 		return 0, err
 	}
+	defer targetsWindow.free()
 
 	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockHash)
 }
@@ -115,7 +117,7 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 	// We could instead clamp the timestamp difference to `targetTimePerBlock`,
 	// but then everything will cancel out and we'll get the target from the last block, which will be the same as genesis.
 	// We add 64 as a safety margin
-	if len(targetsWindow) < 2 || len(targetsWindow) < dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1] {
+	if targetsWindow.len() < 2 || targetsWindow.len() < dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1] {
 		return dm.genesisBits, nil
 	}
 
@@ -133,7 +135,7 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 		// We need to clamp the timestamp difference to 1 so that we'll never get a 0 target.
 		Mul(newTarget, div.SetInt64(math.MaxInt64(windowMaxTimeStamp-windowMinTimestamp, 1))).
 		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds())).
-		Div(newTarget, div.SetUint64(uint64(len(targetsWindow))))
+		Div(newTarget, div.SetUint64(uint64(targetsWindow.len())))
 	// Check that newTarget is not above maximums possible target.
 	if newTarget.Cmp(dm.powMax) > 0 {
 		return difficulty.BigToCompact(dm.powMax), nil
