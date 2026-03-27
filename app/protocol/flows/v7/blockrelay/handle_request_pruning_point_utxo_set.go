@@ -2,6 +2,7 @@ package blockrelay
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/protocol/common"
@@ -105,9 +106,8 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 		wirePairsBuffer = wirePairsBuffer[:0]
 		wirePairsBuffer = appmessage.AppendDomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
 			pruningPointUTXOs, wirePairsBuffer)
-		wirePairsSnapshot := append([]*appmessage.OutpointAndUTXOEntryPair(nil), wirePairsBuffer...)
 
-		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgPruningPointUTXOSetChunk(wirePairsSnapshot))
+		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgPruningPointUTXOSetChunk(slices.Clone(wirePairsBuffer)))
 		if err != nil {
 			return err
 		}
