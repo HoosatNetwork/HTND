@@ -11,22 +11,16 @@ func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, h
 	return dtm.BlockWindow(stagingArea, highHash, dtm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
 }
 
-// BlockWindow returns a blockWindow of the given size that contains the
-// blocks in the past of highHash, the sorting is unspecified.
-// If the number of blocks in the past of startingNode is less then windowSize,
-func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
-	windowSize int) ([]*externalapi.DomainHash, error) {
+// BlockWindowHeapSlice returns the cached or computed heap slice for the given
+// block window. The returned slice must be treated as read-only by callers.
+func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
+	windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
 
 	// Fast path: if the heap slice is already cached in the staging-area-aware
-	// store, extract hashes directly without allocating a heap wrapper or
-	// cloning the slice. This is the common case for already-committed blocks.
+	// store, return it directly without cloning or extracting a hash-only view.
 	cachedSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, highHash, windowSize)
 	if err == nil {
-		window := make([]*externalapi.DomainHash, len(cachedSlice))
-		for i, pair := range cachedSlice {
-			window[i] = pair.Hash
-		}
-		return window, nil
+		return cachedSlice, nil
 	}
 	if !database.IsNotFoundError(err) {
 		return nil, err
@@ -42,8 +36,21 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 		dtm.windowHeapSliceStore.Stage(stagingArea, highHash, windowSize, windowHeap.impl.slice)
 	}
 
-	window := make([]*externalapi.DomainHash, len(windowHeap.impl.slice))
-	for i, b := range windowHeap.impl.slice {
+	return windowHeap.impl.slice, nil
+}
+
+// BlockWindow returns a blockWindow of the given size that contains the
+// blocks in the past of highHash, the sorting is unspecified.
+// If the number of blocks in the past of startingNode is less then windowSize,
+func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
+	windowSize int) ([]*externalapi.DomainHash, error) {
+	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize)
+	if err != nil {
+		return nil, err
+	}
+
+	window := make([]*externalapi.DomainHash, len(windowHeapSlice))
+	for i, b := range windowHeapSlice {
 		window[i] = b.Hash
 	}
 

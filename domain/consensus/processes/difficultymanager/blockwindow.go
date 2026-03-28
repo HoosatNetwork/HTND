@@ -18,6 +18,7 @@ type difficultyBlock struct {
 type blockWindow struct {
 	buffer            *memory.Block[difficultyBlock]
 	blocks            []difficultyBlock
+	pairs             []*externalapi.BlockGHOSTDAGDataHashPair
 	minTimestamp      int64
 	maxTimestamp      int64
 	minTimestampIndex int
@@ -27,17 +28,17 @@ type blockWindow struct {
 // blocks in the past of startingBlock, the sorting is unspecified.
 // If the number of blocks in the past of startingBlock is less then windowSize,
 // the window will be padded by genesis blocks to achieve a size of windowSize.
-func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startingBlock *externalapi.DomainHash, windowSize int) (blockWindow,
-	[]*externalapi.DomainHash, error) {
+func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startingBlock *externalapi.DomainHash, windowSize int) (blockWindow, error) {
 
-	windowHashes, err := dm.dagTraversalManager.BlockWindow(stagingArea, startingBlock, windowSize)
+	windowPairs, err := dm.dagTraversalManager.BlockWindowHeapSlice(stagingArea, startingBlock, windowSize)
 	if err != nil {
-		return blockWindow{}, nil, err
+		return blockWindow{}, err
 	}
 
-	buffer := memory.Malloc[difficultyBlock](len(windowHashes))
+	buffer := memory.Malloc[difficultyBlock](len(windowPairs))
 	window := blockWindow{
 		buffer:            buffer,
+		pairs:             windowPairs,
 		minTimestamp:      math.MaxInt64,
 		maxTimestamp:      0,
 		minTimestampIndex: 0,
@@ -48,11 +49,12 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 
 	var minBlueWork *big.Int
 	var minHash *externalapi.DomainHash
-	for i, hash := range windowHashes {
+	for i, pair := range windowPairs {
+		hash := pair.Hash
 		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
 		if err != nil {
 			window.free()
-			return blockWindow{}, nil, err
+			return blockWindow{}, err
 		}
 
 		window.blocks[i] = difficultyBlock{
@@ -60,18 +62,19 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 			bits:               header.Bits(),
 		}
 
+		blueWork := pair.GHOSTDAGData.BlueWork()
 		if header.TimeInMilliseconds() < window.minTimestamp ||
-			(header.TimeInMilliseconds() == window.minTimestamp && ghostdagLess(header.BlueWork(), hash, minBlueWork, minHash)) {
+			(header.TimeInMilliseconds() == window.minTimestamp && ghostdagLess(blueWork, hash, minBlueWork, minHash)) {
 			window.minTimestamp = header.TimeInMilliseconds()
 			window.minTimestampIndex = i
-			minBlueWork = header.BlueWork()
+			minBlueWork = blueWork
 			minHash = hash
 		}
 		if header.TimeInMilliseconds() > window.maxTimestamp {
 			window.maxTimestamp = header.TimeInMilliseconds()
 		}
 	}
-	return window, windowHashes, nil
+	return window, nil
 }
 
 func ghostdagLess(blueWorkA *big.Int, hashA *externalapi.DomainHash, blueWorkB *big.Int, hashB *externalapi.DomainHash) bool {
