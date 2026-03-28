@@ -22,7 +22,11 @@ func HandleSubmitTransaction(context *rpccontext.Context, _ *router.Router, requ
 
 	transactionID := consensushashing.TransactionID(domainTransaction)
 	// log.Infof("Received submit transaction %s", transactionID)
-	err = context.ProtocolManager.AddTransaction(domainTransaction, submitTransactionRequest.AllowOrphan)
+	isHighPriority := true
+	if submitTransactionRequest.IsHighPriority != nil {
+		isHighPriority = *submitTransactionRequest.IsHighPriority
+	}
+	err = context.ProtocolManager.AddTransactionWithPriority(domainTransaction, submitTransactionRequest.AllowOrphan, isHighPriority)
 	if err != nil {
 		if !errors.As(err, &mempool.RuleError{}) {
 			return nil, err

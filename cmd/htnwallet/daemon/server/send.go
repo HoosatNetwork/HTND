@@ -33,7 +33,7 @@ func (s *server) Send(_ context.Context, request *pb.SendRequest) (*pb.SendRespo
 		return nil, err
 	}
 
-	txIDs, err := s.broadcast(signedTransactions, false, false)
+	txIDs, err := s.broadcast(signedTransactions, false, false, nil)
 	if err != nil {
 		return nil, err
 	}

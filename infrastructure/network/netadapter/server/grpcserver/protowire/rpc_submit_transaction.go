@@ -18,6 +18,7 @@ func (x *HoosatdMessage_SubmitTransactionRequest) fromAppMessage(message *appmes
 	x.SubmitTransactionRequest = &SubmitTransactionRequestMessage{
 		Transaction: &RpcTransaction{},
 		AllowOrphan: message.AllowOrphan,
+		IsHighPriority: message.IsHighPriority,
 	}
 	x.SubmitTransactionRequest.Transaction.fromAppMessage(message.Transaction)
 	return nil
@@ -34,6 +35,7 @@ func (x *SubmitTransactionRequestMessage) toAppMessage() (appmessage.Message, er
 	return &appmessage.SubmitTransactionRequestMessage{
 		Transaction: rpcTransaction,
 		AllowOrphan: x.AllowOrphan,
+		IsHighPriority: x.IsHighPriority,
 	}, nil
 }
 
