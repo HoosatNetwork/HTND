@@ -68,6 +68,11 @@ func (m *Manager) AddTransaction(tx *externalapi.DomainTransaction, allowOrphan 
 	return m.context.AddTransaction(tx, allowOrphan)
 }
 
+// AddTransactionWithPriority adds transaction to the mempool and propagates it.
+func (m *Manager) AddTransactionWithPriority(tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority bool) error {
+	return m.context.AddTransactionWithPriority(tx, allowOrphan, isHighPriority)
+}
+
 // AddBlock adds the given block to the DAG and propagates it.
 func (m *Manager) AddBlock(block *externalapi.DomainBlock) error {
 	return m.context.AddBlock(block)

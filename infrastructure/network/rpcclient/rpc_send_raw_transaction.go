@@ -8,7 +8,13 @@ import (
 
 // SubmitTransaction sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) SubmitTransaction(transaction *appmessage.RPCTransaction, transactionID string, allowOrphan bool) (*appmessage.SubmitTransactionResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionRequestMessage(transaction, allowOrphan))
+	return c.SubmitTransactionWithPriority(transaction, transactionID, allowOrphan, nil)
+}
+
+// SubmitTransactionWithPriority sends an RPC request respective to the function's name and returns the RPC server's response.
+func (c *RPCClient) SubmitTransactionWithPriority(transaction *appmessage.RPCTransaction, transactionID string, allowOrphan bool,
+	isHighPriority *bool) (*appmessage.SubmitTransactionResponseMessage, error) {
+	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionRequestMessageWithPriority(transaction, allowOrphan, isHighPriority))
 	if err != nil {
 		return nil, err
 	}

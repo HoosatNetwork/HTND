@@ -294,6 +294,7 @@ message AddPeerResponseMessage{
 message SubmitTransactionRequestMessage{
   RpcTransaction transaction = 1;
   bool allowOrphan = 2;
+  optional bool isHighPriority = 3;
 }
 
 message SubmitTransactionResponseMessage{

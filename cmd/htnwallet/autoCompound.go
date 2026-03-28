@@ -103,10 +103,12 @@ func compoundOnce(
 	// 3. Broadcast
 	bctx, bcancel := context.WithTimeout(context.Background(), daemonTimeout)
 	defer bcancel()
+	isHighPriority := false
 
 	bresp, err := client.Broadcast(bctx, &pb.BroadcastRequest{
-		Transactions: [][]byte{signedTx},
-		AllowOrphan:  false,
+		Transactions:   [][]byte{signedTx},
+		AllowOrphan:    false,
+		IsHighPriority: &isHighPriority,
 	})
 	if err != nil {
 		// Handle rate limit gracefully

@@ -13,7 +13,12 @@ const TransactionIDPropagationInterval = 500 * time.Millisecond
 
 // AddTransaction adds transaction to the mempool and propagates it.
 func (f *FlowContext) AddTransaction(tx *externalapi.DomainTransaction, allowOrphan bool) error {
-	acceptedTransactions, err := f.Domain().MiningManager().ValidateAndInsertTransaction(tx, true, allowOrphan)
+	return f.AddTransactionWithPriority(tx, allowOrphan, true)
+}
+
+// AddTransactionWithPriority adds transaction to the mempool and propagates it.
+func (f *FlowContext) AddTransactionWithPriority(tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority bool) error {
+	acceptedTransactions, err := f.Domain().MiningManager().ValidateAndInsertTransaction(tx, isHighPriority, allowOrphan)
 	if err != nil {
 		return err
 	}

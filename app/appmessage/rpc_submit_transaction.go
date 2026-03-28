@@ -4,8 +4,9 @@ package appmessage
 // its respective RPC message
 type SubmitTransactionRequestMessage struct {
 	baseMessage
-	Transaction *RPCTransaction
-	AllowOrphan bool
+	Transaction    *RPCTransaction
+	AllowOrphan    bool
+	IsHighPriority *bool
 }
 
 // Command returns the protocol command string for the message
@@ -18,6 +19,16 @@ func NewSubmitTransactionRequestMessage(transaction *RPCTransaction, allowOrphan
 	return &SubmitTransactionRequestMessage{
 		Transaction: transaction,
 		AllowOrphan: allowOrphan,
+	}
+}
+
+// NewSubmitTransactionRequestMessageWithPriority returns an instance of the message
+// with an explicit high-priority preference.
+func NewSubmitTransactionRequestMessageWithPriority(transaction *RPCTransaction, allowOrphan bool, isHighPriority *bool) *SubmitTransactionRequestMessage {
+	return &SubmitTransactionRequestMessage{
+		Transaction:    transaction,
+		AllowOrphan:    allowOrphan,
+		IsHighPriority: isHighPriority,
 	}
 }
 

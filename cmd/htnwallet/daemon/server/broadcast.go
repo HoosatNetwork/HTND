@@ -18,7 +18,7 @@ func (s *server) Broadcast(_ context.Context, request *pb.BroadcastRequest) (*pb
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	txIDs, err := s.broadcast(request.Transactions, request.IsDomain, request.AllowOrphan)
+	txIDs, err := s.broadcast(request.Transactions, request.IsDomain, request.AllowOrphan, request.IsHighPriority)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func (s *server) Broadcast(_ context.Context, request *pb.BroadcastRequest) (*pb
 	return &pb.BroadcastResponse{TxIDs: txIDs}, nil
 }
 
-func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan bool) ([]string, error) {
+func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan bool, isHighPriority *bool) ([]string, error) {
 
 	txIDs := make([]string, len(transactions))
 	var tx *externalapi.DomainTransaction
@@ -46,7 +46,7 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			}
 		}
 
-		txIDs[i], err = sendTransaction(s.rpcClient, tx, allowOrphan)
+		txIDs[i], err = sendTransaction(s.rpcClient, tx, allowOrphan, isHighPriority)
 		if err != nil {
 			return nil, err
 		}
@@ -60,8 +60,8 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 	return txIDs, nil
 }
 
-func sendTransaction(client *rpcclient.RPCClient, tx *externalapi.DomainTransaction, allowOrphan bool) (string, error) {
-	submitTransactionResponse, err := client.SubmitTransaction(appmessage.DomainTransactionToRPCTransaction(tx), consensushashing.TransactionID(tx).String(), allowOrphan)
+func sendTransaction(client *rpcclient.RPCClient, tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
+	submitTransactionResponse, err := client.SubmitTransactionWithPriority(appmessage.DomainTransactionToRPCTransaction(tx), consensushashing.TransactionID(tx).String(), allowOrphan, isHighPriority)
 	if err != nil {
 		return "", errors.Wrapf(err, "error submitting transaction")
 	}
