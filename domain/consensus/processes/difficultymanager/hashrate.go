@@ -3,7 +3,6 @@ package difficultymanager
 import (
 	"math/big"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
@@ -26,14 +25,14 @@ func (dm *difficultyManager) estimateNetworkHashesPerSecond(stagingArea *model.S
 		return 0, errors.Errorf("windowSize must be equal to or greater than %d", minWindowSize)
 	}
 
-	blockWindow, windowHashes, err := dm.blockWindow(stagingArea, startHash, windowSize)
+	blockWindow, err := dm.blockWindow(stagingArea, startHash, windowSize)
 	if err != nil {
 		return 0, err
 	}
 	defer blockWindow.free()
 
 	// return 0 if no blocks had been mined yet
-	if len(windowHashes) == 0 {
+	if len(blockWindow.pairs) == 0 {
 		return 0, nil
 	}
 
@@ -42,28 +41,11 @@ func (dm *difficultyManager) estimateNetworkHashesPerSecond(stagingArea *model.S
 		return 0, errors.Errorf("min window timestamp is equal to the max window timestamp")
 	}
 
-	firstHash := windowHashes[0]
-	firstBlockGHOSTDAGData, err := dm.ghostdagStore.Get(dm.databaseContext, stagingArea, firstHash, false)
-	if database.IsNotFoundError(err) {
-		log.Infof("calculateBlockWindowHeap failed to retrieve with %s\n", firstHash)
-		return 0, err
-	}
-	if err != nil {
-		return 0, err
-	}
-	firstBlockBlueWork := firstBlockGHOSTDAGData.BlueWork()
+	firstBlockBlueWork := blockWindow.pairs[0].GHOSTDAGData.BlueWork()
 	minWindowBlueWork := firstBlockBlueWork
 	maxWindowBlueWork := firstBlockBlueWork
-	for _, hash := range windowHashes[1:] {
-		blockGHOSTDAGData, err := dm.ghostdagStore.Get(dm.databaseContext, stagingArea, hash, false)
-		if database.IsNotFoundError(err) {
-			log.Infof("calculateBlockWindowHeap failed to retrieve with %s\n", hash)
-			return 0, err
-		}
-		if err != nil {
-			return 0, err
-		}
-		blockBlueWork := blockGHOSTDAGData.BlueWork()
+	for _, pair := range blockWindow.pairs[1:] {
+		blockBlueWork := pair.GHOSTDAGData.BlueWork()
 		if blockBlueWork.Cmp(minWindowBlueWork) < 0 {
 			minWindowBlueWork = blockBlueWork
 		}

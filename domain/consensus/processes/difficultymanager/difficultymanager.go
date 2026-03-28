@@ -80,13 +80,13 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 	onEnd := logger.LogAndMeasureExecutionTime(log, "StageDAADataAndReturnRequiredDifficulty")
 	defer onEnd()
 
-	targetsWindow, windowHashes, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
 	if err != nil {
 		return 0, err
 	}
 	defer targetsWindow.free()
 
-	err = dm.stageDAAScoreAndAddedBlocks(stagingArea, blockHash, windowHashes, isBlockWithTrustedData)
+	err = dm.stageDAAScoreAndAddedBlocks(stagingArea, blockHash, targetsWindow.pairs, isBlockWithTrustedData)
 	if err != nil {
 		return 0, err
 	}
@@ -96,7 +96,7 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 
 // RequiredDifficulty returns the difficulty required for some block
 func (dm *difficultyManager) RequiredDifficulty(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint32, error) {
-	targetsWindow, _, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
 	if err != nil {
 		return 0, err
 	}
@@ -155,13 +155,13 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 
 func (dm *difficultyManager) stageDAAScoreAndAddedBlocks(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
-	windowHashes []*externalapi.DomainHash,
+	windowPairs []*externalapi.BlockGHOSTDAGDataHashPair,
 	isBlockWithTrustedData bool) error {
 
 	onEnd := logger.LogAndMeasureExecutionTime(log, "stageDAAScoreAndAddedBlocks")
 	defer onEnd()
 
-	daaScore, addedBlocks, err := dm.calculateDaaScoreAndAddedBlocks(stagingArea, blockHash, windowHashes, isBlockWithTrustedData)
+	daaScore, addedBlocks, err := dm.calculateDaaScoreAndAddedBlocks(stagingArea, blockHash, windowPairs, isBlockWithTrustedData)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (dm *difficultyManager) stageDAAScoreAndAddedBlocks(stagingArea *model.Stag
 
 func (dm *difficultyManager) calculateDaaScoreAndAddedBlocks(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
-	windowHashes []*externalapi.DomainHash,
+	windowPairs []*externalapi.BlockGHOSTDAGDataHashPair,
 	isBlockWithTrustedData bool) (uint64, []*externalapi.DomainHash, error) {
 
 	if blockHash.Equal(dm.genesisHash) {
@@ -205,7 +205,8 @@ func (dm *difficultyManager) calculateDaaScoreAndAddedBlocks(stagingArea *model.
 	// TODO: Consider optimizing by breaking the loop once you arrive to the
 	// window block with blue work higher than all non-added merge set blocks.
 	daaAddedBlocks := make([]*externalapi.DomainHash, 0, len(mergeSet))
-	for _, hash := range windowHashes {
+	for _, pair := range windowPairs {
+		hash := pair.Hash
 		if _, exists := mergeSet[*hash]; exists {
 			daaAddedBlocks = append(daaAddedBlocks, hash)
 			if len(daaAddedBlocks) == len(mergeSet) {

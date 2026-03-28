@@ -12,6 +12,7 @@ type DAGTraversalManager interface {
 	SelectedChild(stagingArea *StagingArea, highHash, lowHash *externalapi.DomainHash) (*externalapi.DomainHash, error)
 	AnticoneFromBlocks(stagingArea *StagingArea, tips []*externalapi.DomainHash, blockHash *externalapi.DomainHash, maxTraversalAllowed uint64) ([]*externalapi.DomainHash, error)
 	AnticoneFromVirtualPOV(stagingArea *StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
+	BlockWindowHeapSlice(stagingArea *StagingArea, highHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error)
 	BlockWindow(stagingArea *StagingArea, highHash *externalapi.DomainHash, windowSize int) ([]*externalapi.DomainHash, error)
 	DAABlockWindow(stagingArea *StagingArea, highHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	NewDownHeap(stagingArea *StagingArea) BlockHeap
