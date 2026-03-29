@@ -14,8 +14,10 @@ import (
 )
 
 var utxoIndexBucket = database.MakeBucket([]byte("utxo-index"))
+var utxoIndexCountsBucket = database.MakeBucket([]byte("utxo-index-counts"))
 var virtualParentsKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
 var circulatingSupplyKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
+var utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
 
 var utxoPairPool = sync.Pool{
 	New: func() interface{} {
@@ -269,9 +271,12 @@ func (uis *utxoIndexStore) commit() error {
 	}
 	defer func() { _ = dbTransaction.RollbackUnlessClosed() }()
 
+	countDeltas := make(map[ScriptPublicKeyString]int64, len(uis.toAdd)+len(uis.toRemove))
+
 	toRemoveSompiSupply := uint64(0)
 
 	for scriptPublicKeyString, toRemoveUTXOOutpointEntryPairs := range uis.toRemove {
+		countDeltas[scriptPublicKeyString] -= int64(len(toRemoveUTXOOutpointEntryPairs))
 		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 		bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 		// Invalidate per-script cache for this key
@@ -292,6 +297,7 @@ func (uis *utxoIndexStore) commit() error {
 	toAddSompiSupply := uint64(0)
 
 	for scriptPublicKeyString, toAddUTXOOutpointEntryPairs := range uis.toAdd {
+		countDeltas[scriptPublicKeyString] += int64(len(toAddUTXOOutpointEntryPairs))
 		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 		bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 		// Invalidate per-script cache for this key
@@ -324,6 +330,16 @@ func (uis *utxoIndexStore) commit() error {
 		return err
 	}
 
+	err = uis.applyUTXOCountDeltas(dbTransaction, countDeltas)
+	if err != nil {
+		return err
+	}
+
+	err = dbTransaction.Put(utxoCountsInitializedKey, []byte{1})
+	if err != nil {
+		return err
+	}
+
 	err = dbTransaction.Commit()
 	if err != nil {
 		return err
@@ -339,6 +355,10 @@ func (uis *utxoIndexStore) addAndCommitOutpointsWithoutTransaction(utxoPairs []*
 		errChan    = make(chan error, len(utxoPairs))
 		amountChan = make(chan uint64, len(utxoPairs))
 	)
+	countDeltas := make(map[ScriptPublicKeyString]int64)
+	for _, pair := range utxoPairs {
+		countDeltas[ScriptPublicKeyString(pair.UTXOEntry.ScriptPublicKey().String())]++
+	}
 
 	for _, pair := range utxoPairs {
 		wg.Add(1)
@@ -386,27 +406,50 @@ func (uis *utxoIndexStore) addAndCommitOutpointsWithoutTransaction(utxoPairs []*
 		toAddSompiSupply += amount
 	}
 
+	err := uis.applyUTXOCountDeltasToAccessor(uis.database, countDeltas)
+	if err != nil {
+		return err
+	}
+
+	err = uis.database.Put(utxoCountsInitializedKey, []byte{1})
+	if err != nil {
+		return err
+	}
+
 	// Final update
 	return uis.updateCirculatingSompiSupplyWithoutTransaction(toAddSompiSupply, 0)
 }
 
 func (uis *utxoIndexStore) updateAndCommitVirtualParentsWithoutTransaction(virtualParents []*externalapi.DomainHash) error {
 	serializeParentHashes := serializeHashes(virtualParents)
-	return uis.database.Put(virtualParentsKey, serializeParentHashes)
+	err := uis.database.Put(virtualParentsKey, serializeParentHashes)
+	if err != nil {
+		return err
+	}
+	return uis.database.Put(utxoCountsInitializedKey, []byte{1})
 }
 
 func (uis *utxoIndexStore) bucketForScriptPublicKey(scriptPublicKey *externalapi.ScriptPublicKey) *database.Bucket {
+	return utxoIndexBucket.Bucket(uis.scriptPublicKeyBytes(scriptPublicKey))
+}
+
+func (uis *utxoIndexStore) scriptPublicKeyBytes(scriptPublicKey *externalapi.ScriptPublicKey) []byte {
 	scriptLen := len(scriptPublicKey.Script)
 	if scriptLen <= 64 {
 		var arr [66]byte
 		binary.LittleEndian.PutUint16(arr[:2], scriptPublicKey.Version)
 		copy(arr[2:2+scriptLen], scriptPublicKey.Script)
-		return utxoIndexBucket.Bucket(arr[:2+scriptLen])
+		return arr[:2+scriptLen]
 	}
 	scriptPublicKeyBytes := make([]byte, 2+scriptLen)
 	binary.LittleEndian.PutUint16(scriptPublicKeyBytes[:2], scriptPublicKey.Version)
 	copy(scriptPublicKeyBytes[2:], scriptPublicKey.Script)
-	return utxoIndexBucket.Bucket(scriptPublicKeyBytes)
+	return scriptPublicKeyBytes
+
+}
+
+func (uis *utxoIndexStore) utxoCountKeyForScriptPublicKey(scriptPublicKey *externalapi.ScriptPublicKey) *database.Key {
+	return utxoIndexCountsBucket.Key(uis.scriptPublicKeyBytes(scriptPublicKey))
 }
 
 func (uis *utxoIndexStore) convertOutpointToKey(bucket *database.Bucket, outpoint *externalapi.DomainOutpoint) (*database.Key, error) {
@@ -580,15 +623,7 @@ func (uis *utxoIndexStore) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 		return false, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
-	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
-	cursor, err := uis.database.Cursor(bucket)
-	if err != nil {
-		return false, err
-	}
-
-	ok := cursor.First()
-	cursor.Close()
-	return ok, nil
+	return uis.database.Has(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
 }
 
 // GetBalance returns the total balance for a ScriptPublicKey without allocating full UTXO entries
@@ -647,6 +682,28 @@ func (uis *utxoIndexStore) deleteAll() error {
 	err = uis.database.Delete(circulatingSupplyKey)
 	if err != nil {
 		return err
+	}
+
+	err = uis.database.Delete(utxoCountsInitializedKey)
+	if err != nil {
+		return err
+	}
+
+	countsCursor, err := uis.database.Cursor(utxoIndexCountsBucket)
+	if err != nil {
+		return err
+	}
+	defer countsCursor.Close()
+	for countsCursor.Next() {
+		key, err := countsCursor.Key()
+		if err != nil {
+			return err
+		}
+
+		err = uis.database.Delete(key)
+		if err != nil {
+			return err
+		}
 	}
 
 	cursor, err := uis.database.Cursor(utxoIndexBucket)
@@ -770,4 +827,52 @@ func (uis *utxoIndexStore) getCirculatingSompiSupply() (uint64, error) {
 		return 0, err
 	}
 	return binaryserialization.DeserializeUint64(circulatingSupply)
+}
+
+func (uis *utxoIndexStore) applyUTXOCountDeltas(tx database.Transaction, countDeltas map[ScriptPublicKeyString]int64) error {
+	return uis.applyUTXOCountDeltasToAccessor(tx, countDeltas)
+}
+
+func (uis *utxoIndexStore) applyUTXOCountDeltasToAccessor(accessor database.DataAccessor, countDeltas map[ScriptPublicKeyString]int64) error {
+	for scriptPublicKeyString, delta := range countDeltas {
+		if delta == 0 {
+			continue
+		}
+
+		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
+		countKey := uis.utxoCountKeyForScriptPublicKey(scriptPublicKey)
+
+		currentCount := uint64(0)
+		countBytes, err := accessor.Get(countKey)
+		if err != nil {
+			if !database.IsNotFoundError(err) {
+				return err
+			}
+		} else {
+			currentCount, err = binaryserialization.DeserializeUint64(countBytes)
+			if err != nil {
+				return err
+			}
+		}
+
+		newCount := int64(currentCount) + delta
+		if newCount < 0 {
+			return errors.Errorf("utxo count for scriptPublicKey %s became negative", scriptPublicKeyString)
+		}
+
+		if newCount == 0 {
+			err = accessor.Delete(countKey)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		err = accessor.Put(countKey, binaryserialization.SerializeUint64(uint64(newCount)))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
