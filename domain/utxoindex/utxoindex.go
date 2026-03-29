@@ -135,8 +135,12 @@ func New(domain domain.Domain, database database.Database) (*UTXOIndex, error) {
 	if err != nil {
 		return nil, err
 	}
+	hasUTXOCountsInitializedKey, err := utxoIndex.store.database.Has(utxoCountsInitializedKey)
+	if err != nil {
+		return nil, err
+	}
 
-	if !isSynced || !hasCirculatingSupplyKey {
+	if !isSynced || !hasCirculatingSupplyKey || !hasUTXOCountsInitializedKey {
 
 		err := utxoIndex.Reset()
 		if err != nil {

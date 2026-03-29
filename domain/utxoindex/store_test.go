@@ -1,5 +1,99 @@
 package utxoindex
 
+import (
+	"os"
+	"testing"
+
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	consensusutxo "github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/ldb"
+)
+
+func TestHasUTXOsUsesTrackedCounts(t *testing.T) {
+	path, err := os.MkdirTemp("", "utxoindex-store")
+	if err != nil {
+		t.Fatalf("MkdirTemp unexpectedly failed: %s", err)
+	}
+	defer os.RemoveAll(path)
+
+	db, err := ldb.NewLevelDB(path, 8)
+	if err != nil {
+		t.Fatalf("NewLevelDB unexpectedly failed: %s", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("Close unexpectedly failed: %s", err)
+		}
+	}()
+
+	store := newUTXOIndexStore(db)
+	scriptPublicKey := &externalapi.ScriptPublicKey{Script: []byte{0x51, 0x21, 0x02}, Version: 0}
+	if err := db.Put(circulatingSupplyKey, binaryserialization.SerializeUint64(0)); err != nil {
+		t.Fatalf("initializing circulating supply unexpectedly failed: %s", err)
+	}
+
+	hasUTXOs, err := store.HasUTXOs(scriptPublicKey)
+	if err != nil {
+		t.Fatalf("HasUTXOs unexpectedly failed before writes: %s", err)
+	}
+	if hasUTXOs {
+		t.Fatal("HasUTXOs unexpectedly returned true for an empty script")
+	}
+
+	entry := consensusutxo.NewUTXOEntry(1000, scriptPublicKey, false, 100)
+	outpoint1 := &externalapi.DomainOutpoint{TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{1}), Index: 0}
+	outpoint2 := &externalapi.DomainOutpoint{TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{2}), Index: 1}
+
+	if err := store.add(scriptPublicKey, outpoint1, entry); err != nil {
+		t.Fatalf("add unexpectedly failed: %s", err)
+	}
+	if err := store.add(scriptPublicKey, outpoint2, entry); err != nil {
+		t.Fatalf("second add unexpectedly failed: %s", err)
+	}
+	if err := store.commit(); err != nil {
+		t.Fatalf("commit unexpectedly failed: %s", err)
+	}
+
+	hasUTXOs, err = store.HasUTXOs(scriptPublicKey)
+	if err != nil {
+		t.Fatalf("HasUTXOs unexpectedly failed after commit: %s", err)
+	}
+	if !hasUTXOs {
+		t.Fatal("HasUTXOs unexpectedly returned false after adding UTXOs")
+	}
+
+	if err := store.remove(scriptPublicKey, outpoint1, entry); err != nil {
+		t.Fatalf("remove unexpectedly failed: %s", err)
+	}
+	if err := store.commit(); err != nil {
+		t.Fatalf("commit after first remove unexpectedly failed: %s", err)
+	}
+
+	hasUTXOs, err = store.HasUTXOs(scriptPublicKey)
+	if err != nil {
+		t.Fatalf("HasUTXOs unexpectedly failed after partial remove: %s", err)
+	}
+	if !hasUTXOs {
+		t.Fatal("HasUTXOs unexpectedly returned false while one UTXO remains")
+	}
+
+	if err := store.remove(scriptPublicKey, outpoint2, entry); err != nil {
+		t.Fatalf("second remove unexpectedly failed: %s", err)
+	}
+	if err := store.commit(); err != nil {
+		t.Fatalf("commit after second remove unexpectedly failed: %s", err)
+	}
+
+	hasUTXOs, err = store.HasUTXOs(scriptPublicKey)
+	if err != nil {
+		t.Fatalf("HasUTXOs unexpectedly failed after removing all UTXOs: %s", err)
+	}
+	if hasUTXOs {
+		t.Fatal("HasUTXOs unexpectedly returned true after removing all UTXOs")
+	}
+}
+
 // import (
 // 	"sync"
 // 	"testing"
