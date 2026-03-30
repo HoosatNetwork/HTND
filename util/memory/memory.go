@@ -2,6 +2,7 @@ package memory
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -128,6 +129,9 @@ func LogLeaks() int {
 }
 
 func registerAllocation[T any](b *Block[T], byteSize int) {
+	if os.Getenv("MEMORY_ALLOCATIONS") == "" {
+		return
+	}
 	allocationsMu.Lock()
 	defer allocationsMu.Unlock()
 
@@ -141,6 +145,9 @@ func registerAllocation[T any](b *Block[T], byteSize int) {
 }
 
 func unregisterAllocation(id uint64) {
+	if os.Getenv("MEMORY_ALLOCATIONS") == "" {
+		return
+	}
 	allocationsMu.Lock()
 	defer allocationsMu.Unlock()
 
@@ -148,6 +155,9 @@ func unregisterAllocation(id uint64) {
 }
 
 func outstandingAllocationsCount() int {
+	if os.Getenv("MEMORY_ALLOCATIONS") == "" {
+		return 0
+	}
 	allocationsMu.Lock()
 	defer allocationsMu.Unlock()
 
