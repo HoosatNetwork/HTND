@@ -7,22 +7,22 @@ import (
 )
 
 // UTXODiffToDBUTXODiff converts UTXODiff to DbUtxoDiff
-func UTXODiffToDBUTXODiff(diff externalapi.UTXODiff, toAddBuffer *memory.Block[*DbUtxoCollectionItem], toRemoveBuffer *memory.Block[*DbUtxoCollectionItem]) (*DbUtxoDiff, error) {
+func UTXODiffToDBUTXODiff(diff externalapi.UTXODiff, toAddBuffer *memory.Block[*DbUtxoCollectionItem], toRemoveBuffer *memory.Block[*DbUtxoCollectionItem]) (*DbUtxoDiff, *memory.Block[*DbUtxoCollectionItem], *memory.Block[*DbUtxoCollectionItem], error) {
 
-	toAdd, err := utxoCollectionToDBUTXOCollection(diff.ToAdd(), toAddBuffer)
+	toAdd, toAddBuffer, err := utxoCollectionToDBUTXOCollection(diff.ToAdd(), toAddBuffer)
 	if err != nil {
-		return nil, err
+		return nil, toAddBuffer, toRemoveBuffer, err
 	}
 
-	toRemove, err := utxoCollectionToDBUTXOCollection(diff.ToRemove(), toRemoveBuffer)
+	toRemove, toRemoveBuffer, err := utxoCollectionToDBUTXOCollection(diff.ToRemove(), toRemoveBuffer)
 	if err != nil {
-		return nil, err
+		return nil, toAddBuffer, toRemoveBuffer, err
 	}
 
 	return &DbUtxoDiff{
 		ToAdd:    toAdd,
 		ToRemove: toRemove,
-	}, nil
+	}, toAddBuffer, toRemoveBuffer, nil
 }
 
 // DBUTXODiffToUTXODiff converts DbUtxoDiff to UTXODiff

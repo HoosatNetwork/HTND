@@ -51,7 +51,7 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			errorMessage.Error = appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return nil, err

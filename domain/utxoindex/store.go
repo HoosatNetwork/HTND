@@ -494,15 +494,15 @@ type UTXOPair struct {
 	Entry    externalapi.UTXOEntry
 }
 
-func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	if uis.isAnythingStaged() {
-		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+		return nil, buffer, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
-		return nil, err
+		return nil, buffer, err
 	}
 	defer cursor.Close()
 
@@ -530,19 +530,19 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		if iterator > offset {
 			key, err := cursor.Key()
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			outpoint, err := uis.convertKeyToOutpoint(key)
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			serializedUTXOEntry, err := cursor.Value()
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
 			if limit > 0 && uint32(len(slice)) >= limit {
@@ -551,13 +551,13 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		}
 		iterator++
 	}
-	return slice, nil
+	return slice, buffer, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	if uis.isAnythingStaged() {
-		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+		return nil, buffer, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
 	// scriptKeyString := scriptPublicKey.String()
@@ -568,7 +568,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
-		return nil, err
+		return nil, buffer, err
 	}
 	defer cursor.Close()
 
@@ -593,19 +593,19 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	for ok := cursor.First(); ok; ok = cursor.Next() {
 		key, err := cursor.Key()
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		outpoint, err := uis.convertKeyToOutpoint(key)
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
 		if limit > 0 && uint32(len(slice)) >= limit {
@@ -614,7 +614,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 
 	// uis.scriptCache.Put(scriptKeyString, buffer)
-	return slice, nil
+	return slice, buffer, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)

@@ -295,7 +295,7 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
@@ -303,13 +303,13 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit u
 	// 	return pair, nil
 	// }
 
-	pair, err := ui.store.UTXOs(scriptPublicKey, limit, buffer)
+	pair, updatedBuffer, err := ui.store.UTXOs(scriptPublicKey, limit, buffer)
 	// ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
-	return pair, err
+	return pair, updatedBuffer, err
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
@@ -317,9 +317,9 @@ func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 	// 	return pair, nil
 	// }
 
-	pair, err := ui.store.PaginatedUTXOs(scriptPublicKey, offset, limit, buffer)
+	pair, updatedBuffer, err := ui.store.PaginatedUTXOs(scriptPublicKey, offset, limit, buffer)
 	// ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
-	return pair, err
+	return pair, updatedBuffer, err
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
