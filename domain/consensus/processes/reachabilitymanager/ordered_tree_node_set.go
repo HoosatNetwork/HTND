@@ -31,8 +31,8 @@ func (rt *reachabilityManager) findAncestorOfNode(stagingArea *model.StagingArea
 // the index of the block with the maximum start that is below the
 // given block.
 func (rt *reachabilityManager) findAncestorIndexOfNode(stagingArea *model.StagingArea, tns orderedTreeNodeSet,
-	node *externalapi.DomainHash) (int, bool, error) {
-
+	node *externalapi.DomainHash,
+) (int, bool, error) {
 	blockInterval, err := rt.interval(stagingArea, node)
 	if err != nil {
 		return 0, false, err

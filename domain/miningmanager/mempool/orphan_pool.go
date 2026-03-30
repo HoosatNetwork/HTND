@@ -16,8 +16,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-type idToOrphanMap map[externalapi.DomainTransactionID]*model.OrphanTransaction
-type previousOutpointToOrphanMap map[externalapi.DomainOutpoint]*model.OrphanTransaction
+type (
+	idToOrphanMap               map[externalapi.DomainTransactionID]*model.OrphanTransaction
+	previousOutpointToOrphanMap map[externalapi.DomainOutpoint]*model.OrphanTransaction
+)
 
 type orphansPool struct {
 	mempool                   *mempool
@@ -135,8 +137,8 @@ func (op *orphansPool) addOrphan(transaction *externalapi.DomainTransaction, isH
 }
 
 func (op *orphansPool) processOrphansAfterAcceptedTransaction(acceptedTransaction *externalapi.DomainTransaction) (
-	acceptedOrphans []*externalapi.DomainTransaction, err error) {
-
+	acceptedOrphans []*externalapi.DomainTransaction, err error,
+) {
 	acceptedOrphans = []*externalapi.DomainTransaction{}
 	queue := []*externalapi.DomainTransaction{acceptedTransaction}
 
@@ -169,7 +171,7 @@ func (op *orphansPool) processOrphansAfterAcceptedTransaction(acceptedTransactio
 					}
 					return nil, err
 				}
-				acceptedOrphans = append(acceptedOrphans, orphan.Transaction().Clone()) //these pointers leave the mempool, hence the clone
+				acceptedOrphans = append(acceptedOrphans, orphan.Transaction().Clone()) // these pointers leave the mempool, hence the clone
 			}
 		}
 	}
@@ -302,8 +304,8 @@ func (op *orphansPool) expireOrphanTransactions() error {
 }
 
 func (op *orphansPool) updateOrphansAfterTransactionRemoved(
-	removedTransaction *model.MempoolTransaction, removeRedeemers bool) error {
-
+	removedTransaction *model.MempoolTransaction, removeRedeemers bool,
+) error {
 	if removeRedeemers {
 		return op.removeRedeemersOf(removedTransaction)
 	}
@@ -337,7 +339,7 @@ func (op *orphansPool) getOrphanTransaction(transactionID *externalapi.DomainTra
 	if orphanTransaction, ok := op.allOrphans[*transactionID]; ok {
 		transaction := orphanTransaction.Transaction()
 		if clone {
-			transaction = transaction.Clone() //this pointer leaves the mempool, hence we clone.
+			transaction = transaction.Clone() // this pointer leaves the mempool, hence we clone.
 		}
 		return transaction, true
 	}
@@ -347,17 +349,18 @@ func (op *orphansPool) getOrphanTransaction(transactionID *externalapi.DomainTra
 func (op *orphansPool) getOrphanTransactionsByAddresses(clone bool) (
 	sending model.ScriptPublicKeyStringToDomainTransaction,
 	receiving model.ScriptPublicKeyStringToDomainTransaction,
-	err error) {
+	err error,
+) {
 	sending = make(model.ScriptPublicKeyStringToDomainTransaction)
 	receiving = make(model.ScriptPublicKeyStringToDomainTransaction, op.orphanTransactionCount())
 	var transaction *externalapi.DomainTransaction
 	for _, mempoolTransaction := range op.allOrphans {
 		transaction = mempoolTransaction.Transaction()
 		if clone {
-			transaction = transaction.Clone() //these pointers leave the mempool, hence we clone.
+			transaction = transaction.Clone() // these pointers leave the mempool, hence we clone.
 		}
 		for _, input := range transaction.Inputs {
-			if input.UTXOEntry == nil { //this is not a bug, but a valid state of orphan transactions with missing outpoints.
+			if input.UTXOEntry == nil { // this is not a bug, but a valid state of orphan transactions with missing outpoints.
 				continue
 			}
 
@@ -365,7 +368,6 @@ func (op *orphansPool) getOrphanTransactionsByAddresses(clone bool) (
 		}
 		for _, output := range transaction.Outputs {
 			receiving[output.ScriptPublicKey.String()] = transaction
-
 		}
 	}
 	return sending, receiving, nil
@@ -377,7 +379,7 @@ func (op *orphansPool) getAllOrphanTransactions(clone bool) []*externalapi.Domai
 	for _, mempoolTransaction := range op.allOrphans {
 		allOrphanTransactions[i] = mempoolTransaction.Transaction()
 		if clone {
-			allOrphanTransactions[i] = allOrphanTransactions[i].Clone() //these pointers leave the mempool, hence we clone.
+			allOrphanTransactions[i] = allOrphanTransactions[i].Clone() // these pointers leave the mempool, hence we clone.
 		}
 		i++
 	}

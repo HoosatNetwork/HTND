@@ -180,7 +180,8 @@ func generateRouteInitializer() (netadapter.RouterInitializer, <-chan *Routes) {
 		appmessage.CmdVerAck,
 		appmessage.CmdRequestAddresses,
 		appmessage.CmdAddresses,
-		appmessage.CmdPing}
+		appmessage.CmdPing,
+	}
 
 	everythingElse := make([]appmessage.MessageCommand, 0, len(appmessage.ProtocolMessageCommandToString)-len(cmdsWithBuiltInRoutes))
 outerLoop:

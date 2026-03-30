@@ -47,8 +47,8 @@ func (msg *VirtualDaaScoreChangedNotificationMessage) Command() MessageCommand {
 
 // NewVirtualDaaScoreChangedNotificationMessage returns a instance of the message
 func NewVirtualDaaScoreChangedNotificationMessage(
-	virtualDaaScore uint64) *VirtualDaaScoreChangedNotificationMessage {
-
+	virtualDaaScore uint64,
+) *VirtualDaaScoreChangedNotificationMessage {
 	return &VirtualDaaScoreChangedNotificationMessage{
 		VirtualDaaScore: virtualDaaScore,
 	}

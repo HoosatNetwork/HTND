@@ -62,7 +62,6 @@ func New(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	daaBlocksStore model.DAABlocksStore,
 ) model.BlockBuilder {
-
 	return &blockBuilder{
 		databaseContext: databaseContext,
 		genesisHash:     genesisHash,
@@ -89,8 +88,8 @@ func New(
 // BuildBlock builds a block over the current state, with the given
 // coinbaseData and the given transactions
 func (bb *blockBuilder) BuildBlock(coinbaseData *externalapi.DomainCoinbaseData,
-	transactions []*externalapi.DomainTransaction) (block *externalapi.DomainBlock, coinbaseHasRedReward bool, err error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (block *externalapi.DomainBlock, coinbaseHasRedReward bool, err error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "BuildBlock")
 	defer onEnd()
 
@@ -100,8 +99,8 @@ func (bb *blockBuilder) BuildBlock(coinbaseData *externalapi.DomainCoinbaseData,
 }
 
 func (bb *blockBuilder) buildBlock(stagingArea *model.StagingArea, coinbaseData *externalapi.DomainCoinbaseData,
-	transactions []*externalapi.DomainTransaction) (block *externalapi.DomainBlock, coinbaseHasRedReward bool, err error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (block *externalapi.DomainBlock, coinbaseHasRedReward bool, err error) {
 	err = bb.validateTransactions(stagingArea, transactions)
 	if err != nil {
 		return nil, false, err
@@ -129,7 +128,8 @@ func (bb *blockBuilder) buildBlock(stagingArea *model.StagingArea, coinbaseData 
 }
 
 func (bb *blockBuilder) validateTransactions(stagingArea *model.StagingArea,
-	transactions []*externalapi.DomainTransaction) error {
+	transactions []*externalapi.DomainTransaction,
+) error {
 	if len(transactions) == 0 {
 		return nil
 	}
@@ -154,8 +154,8 @@ func (bb *blockBuilder) validateTransactions(stagingArea *model.StagingArea,
 }
 
 func (bb *blockBuilder) validateTransaction(
-	stagingArea *model.StagingArea, transaction *externalapi.DomainTransaction) error {
-
+	stagingArea *model.StagingArea, transaction *externalapi.DomainTransaction,
+) error {
 	originalEntries := make([]externalapi.UTXOEntry, len(transaction.Inputs))
 	for i := 0; i < len(transaction.Inputs); i++ {
 		originalEntries[i] = transaction.Inputs[i].UTXOEntry
@@ -193,14 +193,14 @@ func (bb *blockBuilder) validateTransaction(
 }
 
 func (bb *blockBuilder) newBlockCoinbaseTransaction(stagingArea *model.StagingArea,
-	coinbaseData *externalapi.DomainCoinbaseData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
-
+	coinbaseData *externalapi.DomainCoinbaseData,
+) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
 	return bb.coinbaseManager.ExpectedCoinbaseTransaction(stagingArea, model.VirtualBlockHash, coinbaseData)
 }
 
 func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions []*externalapi.DomainTransaction,
-	newBlockPruningPoint *externalapi.DomainHash) (externalapi.BlockHeader, error) {
-
+	newBlockPruningPoint *externalapi.DomainHash,
+) (externalapi.BlockHeader, error) {
 	daaScore, err := bb.newBlockDAAScore(stagingArea)
 	if err != nil {
 		return nil, err

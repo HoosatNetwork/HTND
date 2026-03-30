@@ -25,8 +25,8 @@ func New(databaseContext model.DBReader,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	pruningStore model.PruningStore,
 	genesisHash *externalapi.DomainHash,
-	finalityDepth uint64) model.FinalityManager {
-
+	finalityDepth uint64,
+) model.FinalityManager {
 	return &finalityManager{
 		databaseContext:    databaseContext,
 		genesisHash:        genesisHash,
@@ -69,8 +69,8 @@ func (fm *finalityManager) FinalityPoint(stagingArea *model.StagingArea, blockHa
 }
 
 func (fm *finalityManager) calculateAndStageFinalityPoint(
-	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool) (*externalapi.DomainHash, error) {
-
+	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool,
+) (*externalapi.DomainHash, error) {
 	finalityPoint, err := fm.calculateFinalityPoint(stagingArea, blockHash, isBlockWithTrustedData)
 	if err != nil {
 		return nil, err
@@ -80,8 +80,8 @@ func (fm *finalityManager) calculateAndStageFinalityPoint(
 }
 
 func (fm *finalityManager) calculateFinalityPoint(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool) (
-	*externalapi.DomainHash, error) {
-
+	*externalapi.DomainHash, error,
+) {
 	log.Tracef("calculateFinalityPoint start")
 	defer log.Tracef("calculateFinalityPoint end")
 

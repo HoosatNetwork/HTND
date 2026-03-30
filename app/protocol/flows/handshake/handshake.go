@@ -36,7 +36,6 @@ type HandleHandshakeContext interface {
 func HandleHandshake(context HandleHandshakeContext, netConnection *netadapter.NetConnection,
 	receiveVersionRoute *routerpkg.Route, sendVersionRoute *routerpkg.Route, outgoingRoute *routerpkg.Route,
 ) (*peerpkg.Peer, error) {
-
 	// For HandleHandshake to finish, we need to get from the other node
 	// a version and verack messages, so we set doneCount to 2, decrease it
 	// when sending and receiving the version, and close the doneChan when

@@ -62,7 +62,8 @@ func TestBuildBlockErrorCases(t *testing.T) {
 						Inputs: []*externalapi.DomainTransactionInput{
 							{
 								PreviousOutpoint: externalapi.DomainOutpoint{
-									TransactionID: externalapi.DomainTransactionID{}, Index: 0},
+									TransactionID: externalapi.DomainTransactionID{}, Index: 0,
+								},
 							},
 						},
 						Outputs:      nil,
@@ -76,7 +77,8 @@ func TestBuildBlockErrorCases(t *testing.T) {
 						Inputs: []*externalapi.DomainTransactionInput{
 							{
 								PreviousOutpoint: externalapi.DomainOutpoint{
-									TransactionID: externalapi.DomainTransactionID{}, Index: 0},
+									TransactionID: externalapi.DomainTransactionID{}, Index: 0,
+								},
 							},
 						},
 						Outputs:      nil,

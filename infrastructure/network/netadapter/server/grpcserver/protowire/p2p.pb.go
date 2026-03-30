@@ -7,11 +7,12 @@
 package protowire
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -3241,69 +3242,71 @@ func file_p2p_proto_rawDescGZIP() []byte {
 	return file_p2p_proto_rawDescData
 }
 
-var file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
-var file_p2p_proto_goTypes = []any{
-	(*RequestAddressesMessage)(nil),                            // 0: protowire.RequestAddressesMessage
-	(*AddressesMessage)(nil),                                   // 1: protowire.AddressesMessage
-	(*NetAddress)(nil),                                         // 2: protowire.NetAddress
-	(*SubnetworkId)(nil),                                       // 3: protowire.SubnetworkId
-	(*TransactionMessage)(nil),                                 // 4: protowire.TransactionMessage
-	(*TransactionInput)(nil),                                   // 5: protowire.TransactionInput
-	(*Outpoint)(nil),                                           // 6: protowire.Outpoint
-	(*TransactionId)(nil),                                      // 7: protowire.TransactionId
-	(*ScriptPublicKey)(nil),                                    // 8: protowire.ScriptPublicKey
-	(*TransactionOutput)(nil),                                  // 9: protowire.TransactionOutput
-	(*BlockMessage)(nil),                                       // 10: protowire.BlockMessage
-	(*BlockHeader)(nil),                                        // 11: protowire.BlockHeader
-	(*BlockLevelParents)(nil),                                  // 12: protowire.BlockLevelParents
-	(*Hash)(nil),                                               // 13: protowire.Hash
-	(*RequestBlockLocatorMessage)(nil),                         // 14: protowire.RequestBlockLocatorMessage
-	(*BlockLocatorMessage)(nil),                                // 15: protowire.BlockLocatorMessage
-	(*RequestHeadersMessage)(nil),                              // 16: protowire.RequestHeadersMessage
-	(*RequestNextHeadersMessage)(nil),                          // 17: protowire.RequestNextHeadersMessage
-	(*DoneHeadersMessage)(nil),                                 // 18: protowire.DoneHeadersMessage
-	(*RequestRelayBlocksMessage)(nil),                          // 19: protowire.RequestRelayBlocksMessage
-	(*RequestTransactionsMessage)(nil),                         // 20: protowire.RequestTransactionsMessage
-	(*TransactionNotFoundMessage)(nil),                         // 21: protowire.TransactionNotFoundMessage
-	(*InvRelayBlockMessage)(nil),                               // 22: protowire.InvRelayBlockMessage
-	(*InvTransactionsMessage)(nil),                             // 23: protowire.InvTransactionsMessage
-	(*PingMessage)(nil),                                        // 24: protowire.PingMessage
-	(*PongMessage)(nil),                                        // 25: protowire.PongMessage
-	(*VerackMessage)(nil),                                      // 26: protowire.VerackMessage
-	(*VersionMessage)(nil),                                     // 27: protowire.VersionMessage
-	(*RejectMessage)(nil),                                      // 28: protowire.RejectMessage
-	(*RequestPruningPointUTXOSetMessage)(nil),                  // 29: protowire.RequestPruningPointUTXOSetMessage
-	(*PruningPointUtxoSetChunkMessage)(nil),                    // 30: protowire.PruningPointUtxoSetChunkMessage
-	(*OutpointAndUtxoEntryPair)(nil),                           // 31: protowire.OutpointAndUtxoEntryPair
-	(*UtxoEntry)(nil),                                          // 32: protowire.UtxoEntry
-	(*RequestNextPruningPointUtxoSetChunkMessage)(nil),         // 33: protowire.RequestNextPruningPointUtxoSetChunkMessage
-	(*DonePruningPointUtxoSetChunksMessage)(nil),               // 34: protowire.DonePruningPointUtxoSetChunksMessage
-	(*RequestIBDBlocksMessage)(nil),                            // 35: protowire.RequestIBDBlocksMessage
-	(*UnexpectedPruningPointMessage)(nil),                      // 36: protowire.UnexpectedPruningPointMessage
-	(*IbdBlockLocatorMessage)(nil),                             // 37: protowire.IbdBlockLocatorMessage
-	(*RequestIBDChainBlockLocatorMessage)(nil),                 // 38: protowire.RequestIBDChainBlockLocatorMessage
-	(*IbdChainBlockLocatorMessage)(nil),                        // 39: protowire.IbdChainBlockLocatorMessage
-	(*RequestAnticoneMessage)(nil),                             // 40: protowire.RequestAnticoneMessage
-	(*IbdBlockLocatorHighestHashMessage)(nil),                  // 41: protowire.IbdBlockLocatorHighestHashMessage
-	(*IbdBlockLocatorHighestHashNotFoundMessage)(nil),          // 42: protowire.IbdBlockLocatorHighestHashNotFoundMessage
-	(*BlockHeadersMessage)(nil),                                // 43: protowire.BlockHeadersMessage
-	(*RequestPruningPointAndItsAnticoneMessage)(nil),           // 44: protowire.RequestPruningPointAndItsAnticoneMessage
-	(*RequestNextPruningPointAndItsAnticoneBlocksMessage)(nil), // 45: protowire.RequestNextPruningPointAndItsAnticoneBlocksMessage
-	(*BlockWithTrustedDataMessage)(nil),                        // 46: protowire.BlockWithTrustedDataMessage
-	(*DaaBlock)(nil),                                           // 47: protowire.DaaBlock
-	(*DaaBlockV4)(nil),                                         // 48: protowire.DaaBlockV4
-	(*BlockGhostdagDataHashPair)(nil),                          // 49: protowire.BlockGhostdagDataHashPair
-	(*GhostdagData)(nil),                                       // 50: protowire.GhostdagData
-	(*BluesAnticoneSizes)(nil),                                 // 51: protowire.BluesAnticoneSizes
-	(*DoneBlocksWithTrustedDataMessage)(nil),                   // 52: protowire.DoneBlocksWithTrustedDataMessage
-	(*PruningPointsMessage)(nil),                               // 53: protowire.PruningPointsMessage
-	(*RequestPruningPointProofMessage)(nil),                    // 54: protowire.RequestPruningPointProofMessage
-	(*PruningPointProofMessage)(nil),                           // 55: protowire.PruningPointProofMessage
-	(*PruningPointProofHeaderArray)(nil),                       // 56: protowire.PruningPointProofHeaderArray
-	(*ReadyMessage)(nil),                                       // 57: protowire.ReadyMessage
-	(*BlockWithTrustedDataV4Message)(nil),                      // 58: protowire.BlockWithTrustedDataV4Message
-	(*TrustedDataMessage)(nil),                                 // 59: protowire.TrustedDataMessage
-}
+var (
+	file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
+	file_p2p_proto_goTypes  = []any{
+		(*RequestAddressesMessage)(nil),                            // 0: protowire.RequestAddressesMessage
+		(*AddressesMessage)(nil),                                   // 1: protowire.AddressesMessage
+		(*NetAddress)(nil),                                         // 2: protowire.NetAddress
+		(*SubnetworkId)(nil),                                       // 3: protowire.SubnetworkId
+		(*TransactionMessage)(nil),                                 // 4: protowire.TransactionMessage
+		(*TransactionInput)(nil),                                   // 5: protowire.TransactionInput
+		(*Outpoint)(nil),                                           // 6: protowire.Outpoint
+		(*TransactionId)(nil),                                      // 7: protowire.TransactionId
+		(*ScriptPublicKey)(nil),                                    // 8: protowire.ScriptPublicKey
+		(*TransactionOutput)(nil),                                  // 9: protowire.TransactionOutput
+		(*BlockMessage)(nil),                                       // 10: protowire.BlockMessage
+		(*BlockHeader)(nil),                                        // 11: protowire.BlockHeader
+		(*BlockLevelParents)(nil),                                  // 12: protowire.BlockLevelParents
+		(*Hash)(nil),                                               // 13: protowire.Hash
+		(*RequestBlockLocatorMessage)(nil),                         // 14: protowire.RequestBlockLocatorMessage
+		(*BlockLocatorMessage)(nil),                                // 15: protowire.BlockLocatorMessage
+		(*RequestHeadersMessage)(nil),                              // 16: protowire.RequestHeadersMessage
+		(*RequestNextHeadersMessage)(nil),                          // 17: protowire.RequestNextHeadersMessage
+		(*DoneHeadersMessage)(nil),                                 // 18: protowire.DoneHeadersMessage
+		(*RequestRelayBlocksMessage)(nil),                          // 19: protowire.RequestRelayBlocksMessage
+		(*RequestTransactionsMessage)(nil),                         // 20: protowire.RequestTransactionsMessage
+		(*TransactionNotFoundMessage)(nil),                         // 21: protowire.TransactionNotFoundMessage
+		(*InvRelayBlockMessage)(nil),                               // 22: protowire.InvRelayBlockMessage
+		(*InvTransactionsMessage)(nil),                             // 23: protowire.InvTransactionsMessage
+		(*PingMessage)(nil),                                        // 24: protowire.PingMessage
+		(*PongMessage)(nil),                                        // 25: protowire.PongMessage
+		(*VerackMessage)(nil),                                      // 26: protowire.VerackMessage
+		(*VersionMessage)(nil),                                     // 27: protowire.VersionMessage
+		(*RejectMessage)(nil),                                      // 28: protowire.RejectMessage
+		(*RequestPruningPointUTXOSetMessage)(nil),                  // 29: protowire.RequestPruningPointUTXOSetMessage
+		(*PruningPointUtxoSetChunkMessage)(nil),                    // 30: protowire.PruningPointUtxoSetChunkMessage
+		(*OutpointAndUtxoEntryPair)(nil),                           // 31: protowire.OutpointAndUtxoEntryPair
+		(*UtxoEntry)(nil),                                          // 32: protowire.UtxoEntry
+		(*RequestNextPruningPointUtxoSetChunkMessage)(nil),         // 33: protowire.RequestNextPruningPointUtxoSetChunkMessage
+		(*DonePruningPointUtxoSetChunksMessage)(nil),               // 34: protowire.DonePruningPointUtxoSetChunksMessage
+		(*RequestIBDBlocksMessage)(nil),                            // 35: protowire.RequestIBDBlocksMessage
+		(*UnexpectedPruningPointMessage)(nil),                      // 36: protowire.UnexpectedPruningPointMessage
+		(*IbdBlockLocatorMessage)(nil),                             // 37: protowire.IbdBlockLocatorMessage
+		(*RequestIBDChainBlockLocatorMessage)(nil),                 // 38: protowire.RequestIBDChainBlockLocatorMessage
+		(*IbdChainBlockLocatorMessage)(nil),                        // 39: protowire.IbdChainBlockLocatorMessage
+		(*RequestAnticoneMessage)(nil),                             // 40: protowire.RequestAnticoneMessage
+		(*IbdBlockLocatorHighestHashMessage)(nil),                  // 41: protowire.IbdBlockLocatorHighestHashMessage
+		(*IbdBlockLocatorHighestHashNotFoundMessage)(nil),          // 42: protowire.IbdBlockLocatorHighestHashNotFoundMessage
+		(*BlockHeadersMessage)(nil),                                // 43: protowire.BlockHeadersMessage
+		(*RequestPruningPointAndItsAnticoneMessage)(nil),           // 44: protowire.RequestPruningPointAndItsAnticoneMessage
+		(*RequestNextPruningPointAndItsAnticoneBlocksMessage)(nil), // 45: protowire.RequestNextPruningPointAndItsAnticoneBlocksMessage
+		(*BlockWithTrustedDataMessage)(nil),                        // 46: protowire.BlockWithTrustedDataMessage
+		(*DaaBlock)(nil),                                           // 47: protowire.DaaBlock
+		(*DaaBlockV4)(nil),                                         // 48: protowire.DaaBlockV4
+		(*BlockGhostdagDataHashPair)(nil),                          // 49: protowire.BlockGhostdagDataHashPair
+		(*GhostdagData)(nil),                                       // 50: protowire.GhostdagData
+		(*BluesAnticoneSizes)(nil),                                 // 51: protowire.BluesAnticoneSizes
+		(*DoneBlocksWithTrustedDataMessage)(nil),                   // 52: protowire.DoneBlocksWithTrustedDataMessage
+		(*PruningPointsMessage)(nil),                               // 53: protowire.PruningPointsMessage
+		(*RequestPruningPointProofMessage)(nil),                    // 54: protowire.RequestPruningPointProofMessage
+		(*PruningPointProofMessage)(nil),                           // 55: protowire.PruningPointProofMessage
+		(*PruningPointProofHeaderArray)(nil),                       // 56: protowire.PruningPointProofHeaderArray
+		(*ReadyMessage)(nil),                                       // 57: protowire.ReadyMessage
+		(*BlockWithTrustedDataV4Message)(nil),                      // 58: protowire.BlockWithTrustedDataV4Message
+		(*TrustedDataMessage)(nil),                                 // 59: protowire.TrustedDataMessage
+	}
+)
 var file_p2p_proto_depIdxs = []int32{
 	3,  // 0: protowire.RequestAddressesMessage.subnetworkId:type_name -> protowire.SubnetworkId
 	2,  // 1: protowire.AddressesMessage.addressList:type_name -> protowire.NetAddress

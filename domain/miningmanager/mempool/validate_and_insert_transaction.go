@@ -10,8 +10,8 @@ import (
 )
 
 func (mp *mempool) validateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool,
-	allowOrphan bool) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
-
+	allowOrphan bool,
+) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log,
 		fmt.Sprintf("validateAndInsertTransaction %s", consensushashing.TransactionID(transaction)))
 	defer onEnd()
@@ -60,7 +60,7 @@ func (mp *mempool) validateAndInsertTransaction(transaction *externalapi.DomainT
 
 	// Accepted orphans are recorded at their original arrival time inside the orphan pool
 
-	acceptedTransactions = append([]*externalapi.DomainTransaction{transaction.Clone()}, acceptedOrphans...) //these pointer leave the mempool, hence we clone.
+	acceptedTransactions = append([]*externalapi.DomainTransaction{transaction.Clone()}, acceptedOrphans...) // these pointer leave the mempool, hence we clone.
 
 	err = mp.transactionsPool.limitTransactionCount()
 	if err != nil {

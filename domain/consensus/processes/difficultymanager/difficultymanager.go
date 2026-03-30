@@ -47,7 +47,8 @@ func New(databaseContext model.DBReader,
 	disableDifficultyAdjustment bool,
 	targetTimePerBlock []time.Duration,
 	genesisHash *externalapi.DomainHash,
-	genesisBits uint32) model.DifficultyManager {
+	genesisBits uint32,
+) model.DifficultyManager {
 	return &difficultyManager{
 		databaseContext:                databaseContext,
 		ghostdagManager:                ghostdagManager,
@@ -75,8 +76,8 @@ func New(databaseContext model.DBReader,
 func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 	stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
-	isBlockWithTrustedData bool) (uint32, error) {
-
+	isBlockWithTrustedData bool,
+) (uint32, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "StageDAADataAndReturnRequiredDifficulty")
 	defer onEnd()
 
@@ -156,8 +157,8 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 func (dm *difficultyManager) stageDAAScoreAndAddedBlocks(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 	windowPairs []*externalapi.BlockGHOSTDAGDataHashPair,
-	isBlockWithTrustedData bool) error {
-
+	isBlockWithTrustedData bool,
+) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "stageDAAScoreAndAddedBlocks")
 	defer onEnd()
 
@@ -174,8 +175,8 @@ func (dm *difficultyManager) stageDAAScoreAndAddedBlocks(stagingArea *model.Stag
 func (dm *difficultyManager) calculateDaaScoreAndAddedBlocks(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 	windowPairs []*externalapi.BlockGHOSTDAGDataHashPair,
-	isBlockWithTrustedData bool) (uint64, []*externalapi.DomainHash, error) {
-
+	isBlockWithTrustedData bool,
+) (uint64, []*externalapi.DomainHash, error) {
 	if blockHash.Equal(dm.genesisHash) {
 		genesisHeader, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, dm.genesisHash)
 		if err != nil {

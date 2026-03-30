@@ -28,7 +28,6 @@ func (s *server) Broadcast(_ context.Context, request *pb.BroadcastRequest) (*pb
 }
 
 func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan bool, isHighPriority *bool) ([]string, error) {
-
 	txIDs := make([]string, len(transactions))
 	var tx *externalapi.DomainTransaction
 	var err error
@@ -40,7 +39,7 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			if err != nil {
 				return nil, err
 			}
-		} else if !isDomain { //default in proto3 is false
+		} else if !isDomain { // default in proto3 is false
 			tx, err = libhtnwallet.ExtractTransaction(transaction, s.keysFile.ECDSA)
 			if err != nil {
 				return nil, err

@@ -68,8 +68,8 @@ type FlowContext struct {
 
 // New returns a new instance of FlowContext.
 func New(cfg *config.Config, domain domain.Domain, addressManager *addressmanager.AddressManager,
-	netAdapter *netadapter.NetAdapter, connectionManager *connmanager.ConnectionManager) *FlowContext {
-
+	netAdapter *netadapter.NetAdapter, connectionManager *connmanager.ConnectionManager,
+) *FlowContext {
 	return &FlowContext{
 		cfg:                              cfg,
 		netAdapter:                       netAdapter,

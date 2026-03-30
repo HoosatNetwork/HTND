@@ -42,7 +42,8 @@ func NewNetAddressIPPort(ip net.IP, port uint16) *NetAddress {
 // timestamp, IP, port, and supported services. The timestamp is rounded to
 // single millisecond precision.
 func NewNetAddressTimestamp(
-	timestamp mstime.Time, ip net.IP, port uint16) *NetAddress {
+	timestamp mstime.Time, ip net.IP, port uint16,
+) *NetAddress {
 	// Limit the timestamp to one millisecond precision since the protocol
 	// doesn't support better.
 	na := NetAddress{

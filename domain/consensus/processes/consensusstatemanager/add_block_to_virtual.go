@@ -13,8 +13,8 @@ import (
 // current virtual. This process may result in a new virtual block
 // getting created
 func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, updateVirtual bool) (
-	*externalapi.SelectedChainPath, externalapi.UTXODiff, *model.UTXODiffReversalData, error) {
-
+	*externalapi.SelectedChainPath, externalapi.UTXODiff, *model.UTXODiffReversalData, error,
+) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "csm.AddBlock")
 	defer onEnd()
 
@@ -38,7 +38,7 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 			}
 
 			if shouldNotify {
-				//TODO: Send finality conflict notification
+				// TODO: Send finality conflict notification
 				log.Warnf("Finality Violation Detected! Block %s violates finality!", blockHash)
 			}
 
@@ -79,8 +79,8 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 }
 
 func (csm *consensusStateManager) isCandidateToBeNextVirtualSelectedParent(
-	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
-
+	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+) (bool, error) {
 	log.Tracef("isCandidateToBeNextVirtualSelectedParent start for block %s", blockHash)
 	defer log.Tracef("isCandidateToBeNextVirtualSelectedParent end for block %s", blockHash)
 
@@ -128,8 +128,8 @@ func (csm *consensusStateManager) addTip(stagingArea *model.StagingArea, newTipH
 }
 
 func (csm *consensusStateManager) calculateNewTips(
-	stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	log.Tracef("calculateNewTips start for new tip %s", newTipHash)
 	defer log.Tracef("calculateNewTips end for new tip %s", newTipHash)
 

@@ -4,7 +4,8 @@ import "github.com/Hoosat-Oy/HTND/app/appmessage"
 
 // GetVirtualSelectedParentChainFromBlock sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetVirtualSelectedParentChainFromBlock(startHash string, includeAcceptedTransactionIDs bool) (
-	*appmessage.GetVirtualSelectedParentChainFromBlockResponseMessage, error) {
+	*appmessage.GetVirtualSelectedParentChainFromBlockResponseMessage, error,
+) {
 	err := c.rpcRouter.outgoingRoute().Enqueue(
 		appmessage.NewGetVirtualSelectedParentChainFromBlockRequestMessage(startHash, includeAcceptedTransactionIDs))
 	if err != nil {

@@ -74,8 +74,8 @@ func New(
 	finalityStore model.FinalityStore,
 	headersSelectedChainStore model.HeadersSelectedChainStore,
 	mergeDepthRootStore model.MergeDepthRootStore,
-	windowHeapSliceStore model.WindowHeapSliceStore) (model.ConsensusStateManager, error) {
-
+	windowHeapSliceStore model.WindowHeapSliceStore,
+) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
 		maxBlockParents:   maxBlockParents,
 		mergeSetSizeLimit: mergeSetSizeLimit,

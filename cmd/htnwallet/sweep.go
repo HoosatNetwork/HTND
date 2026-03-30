@@ -27,7 +27,6 @@ import (
 const feePerInput = 10000
 
 func sweep(conf *sweepConfig) error {
-
 	privateKeyBytes, err := hex.DecodeString(conf.PrivateKey)
 	if err != nil {
 		return err
@@ -129,7 +128,7 @@ func sweep(conf *sweepConfig) error {
 func newDummyTransaction() *externalapi.DomainTransaction {
 	return &externalapi.DomainTransaction{
 		Version:      constants.MaxTransactionVersion,
-		Inputs:       make([]*externalapi.DomainTransactionInput, 0), //we create empty inputs
+		Inputs:       make([]*externalapi.DomainTransactionInput, 0), // we create empty inputs
 		LockTime:     0,
 		Outputs:      make([]*externalapi.DomainTransactionOutput, 1), // we should always have 1 output to the toAdress
 		SubnetworkID: subnetworks.SubnetworkIDNative,
@@ -142,8 +141,8 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 	params *dagconfig.Params,
 	selectedUTXOs []*libhtnwallet.UTXO,
 	toAddress util.Address,
-	feePerInput int) ([]*externalapi.DomainTransaction, error) {
-
+	feePerInput int,
+) ([]*externalapi.DomainTransaction, error) {
 	var splitTransactions []*externalapi.DomainTransaction
 
 	extraMass := uint64(7000) // Account for future signatures.
@@ -158,9 +157,9 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 	totalSplitAmount := uint64(0)
 
 	lastValidTx := newDummyTransaction()
-	currentTx := newDummyTransaction() //i.e. the tested tx
+	currentTx := newDummyTransaction() // i.e. the tested tx
 
-	//loop through utxos commit segments that don't violate max mass
+	// loop through utxos commit segments that don't violate max mass
 	for i, currentUTXO := range selectedUTXOs {
 
 		totalSplitAmount = totalSplitAmount + currentUTXO.UTXOEntry.Amount()
@@ -186,7 +185,7 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 
 		if massCalculater.CalculateTransactionMass(currentTx)+extraMass >= mempool.MaximumStandardTransactionMass {
 
-			//in this loop we assume a transaction with one input and one output cannot violate max transaction mass, hence a sanity check.
+			// in this loop we assume a transaction with one input and one output cannot violate max transaction mass, hence a sanity check.
 			if len(currentTx.Inputs) == 1 {
 				return nil, errors.Errorf("transaction with one input and one output violates transaction mass")
 			}
@@ -198,7 +197,7 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 			continue
 		}
 
-		//Special case, end of inputs, with no violation, where we can assign currentTX to split and break
+		// Special case, end of inputs, with no violation, where we can assign currentTX to split and break
 		if i == len(selectedUTXOs)-1 {
 			splitTransactions = append(splitTransactions, currentTx)
 			break
@@ -213,7 +212,6 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 }
 
 func signWithSchnorrPrivateKey(params *dagconfig.Params, privateKeyBytes []byte, domainTransactions []*externalapi.DomainTransaction) ([][]byte, error) {
-
 	schnorrkeyPair, err := secp256k1.DeserializeSchnorrPrivateKeyFromSlice(privateKeyBytes)
 	if err != nil {
 		return nil, err

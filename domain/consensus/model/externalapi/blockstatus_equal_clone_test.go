@@ -6,7 +6,6 @@ import (
 )
 
 func initTestBlockStatusForClone() []BlockStatus {
-
 	tests := []BlockStatus{1, 2, 0xFF, 0}
 
 	return tests
@@ -54,7 +53,6 @@ func initTestBlockStatusForEqual() []TestBlockStatusStruct {
 }
 
 func TestBlockStatus_Equal(t *testing.T) {
-
 	testBlockStatus := initTestBlockStatusForEqual()
 
 	for i, test := range testBlockStatus {
@@ -73,7 +71,6 @@ func TestBlockStatus_Equal(t *testing.T) {
 }
 
 func TestBlockStatus_Clone(t *testing.T) {
-
 	testBlockStatus := initTestBlockStatusForClone()
 	for i, blockStatus := range testBlockStatus {
 		blockStatusClone := blockStatus.Clone()

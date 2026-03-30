@@ -10,8 +10,8 @@ import (
 // name and returns the RPC server's response. Additionally, it starts listening for the appropriate notification
 // using the given handler function
 func (c *RPCClient) RegisterForVirtualDaaScoreChangedNotifications(
-	onVirtualDaaScoreChanged func(notification *appmessage.VirtualDaaScoreChangedNotificationMessage)) error {
-
+	onVirtualDaaScoreChanged func(notification *appmessage.VirtualDaaScoreChangedNotificationMessage),
+) error {
 	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualDaaScoreChangedRequestMessage())
 	if err != nil {
 		return err

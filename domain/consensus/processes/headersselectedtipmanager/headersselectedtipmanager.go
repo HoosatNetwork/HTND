@@ -21,8 +21,8 @@ func New(databaseContext model.DBReader,
 	dagTraversalManager model.DAGTraversalManager,
 	ghostdagManager model.GHOSTDAGManager,
 	headersSelectedTipStore model.HeaderSelectedTipStore,
-	headersSelectedChainStore model.HeadersSelectedChainStore) model.HeadersSelectedTipManager {
-
+	headersSelectedChainStore model.HeadersSelectedChainStore,
+) model.HeadersSelectedTipManager {
 	return &headerTipsManager{
 		databaseContext:           databaseContext,
 		dagTopologyManager:        dagTopologyManager,

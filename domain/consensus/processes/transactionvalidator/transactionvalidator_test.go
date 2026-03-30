@@ -1,6 +1,8 @@
 package transactionvalidator_test
 
 import (
+	"testing"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
@@ -9,8 +11,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/kaspanet/go-secp256k1"
-
-	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -124,7 +124,8 @@ func TestValidateTransactionInContextAndPopulateFee(t *testing.T) {
 			Outputs:      []*externalapi.DomainTransactionOutput{&txOutput},
 			SubnetworkID: subnetworks.SubnetworkIDRegistry,
 			Gas:          0,
-			LockTime:     0}
+			LockTime:     0,
+		}
 
 		for i, input := range validTx.Inputs {
 			signatureScript, err := txscript.SignatureScript(&validTx, i, consensushashing.SigHashAll, privateKey,
@@ -141,7 +142,8 @@ func TestValidateTransactionInContextAndPopulateFee(t *testing.T) {
 			Outputs:      []*externalapi.DomainTransactionOutput{&txOutput},
 			SubnetworkID: subnetworks.SubnetworkIDRegistry,
 			Gas:          0,
-			LockTime:     0}
+			LockTime:     0,
+		}
 
 		for i, input := range txWithImmatureCoinbase.Inputs {
 			signatureScript, err := txscript.SignatureScript(&txWithImmatureCoinbase, i, consensushashing.SigHashAll, privateKey,
@@ -157,7 +159,8 @@ func TestValidateTransactionInContextAndPopulateFee(t *testing.T) {
 			Outputs:      []*externalapi.DomainTransactionOutput{&txOutput},
 			SubnetworkID: subnetworks.SubnetworkIDRegistry,
 			Gas:          0,
-			LockTime:     0}
+			LockTime:     0,
+		}
 
 		txWithInvalidAmount := externalapi.DomainTransaction{
 			Version:      constants.MaxTransactionVersion,
@@ -165,7 +168,8 @@ func TestValidateTransactionInContextAndPopulateFee(t *testing.T) {
 			Outputs:      []*externalapi.DomainTransactionOutput{&txOutput},
 			SubnetworkID: subnetworks.SubnetworkIDRegistry,
 			Gas:          0,
-			LockTime:     0}
+			LockTime:     0,
+		}
 
 		for i, input := range txWithLargeAmountBeforeHF.Inputs {
 			signatureScript, err := txscript.SignatureScript(&txWithLargeAmountBeforeHF, i, consensushashing.SigHashAll, privateKey,
@@ -182,14 +186,16 @@ func TestValidateTransactionInContextAndPopulateFee(t *testing.T) {
 			Outputs:      []*externalapi.DomainTransactionOutput{&txOutputBigValue},
 			SubnetworkID: subnetworks.SubnetworkIDRegistry,
 			Gas:          0,
-			LockTime:     0}
+			LockTime:     0,
+		}
 		txWithInvalidSignature := externalapi.DomainTransaction{
 			Version:      constants.MaxTransactionVersion,
 			Inputs:       []*externalapi.DomainTransactionInput{&txInputWrongSignature},
 			Outputs:      []*externalapi.DomainTransactionOutput{&txOutput},
 			SubnetworkID: subnetworks.SubnetworkIDRegistry,
 			Gas:          0,
-			LockTime:     0}
+			LockTime:     0,
+		}
 
 		stagingArea := model.NewStagingArea()
 

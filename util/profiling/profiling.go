@@ -6,15 +6,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 
 	// Required for profiling
 	_ "net/http/pprof"
-
-	"runtime"
-	"runtime/pprof"
 
 	"github.com/Hoosat-Oy/HTND/util/panics"
 )
@@ -41,7 +40,7 @@ func TrackHeap(appDir string, log *logger.Logger) {
 	spawn := panics.GoroutineWrapperFunc(log)
 	spawn("profiling.TrackHeap", func() {
 		dumpFolder := filepath.Join(appDir, "dumps")
-		err := os.MkdirAll(dumpFolder, 0700)
+		err := os.MkdirAll(dumpFolder, 0o700)
 		if err != nil {
 			log.Errorf("Could not create heap dumps folder at %s", dumpFolder)
 			return

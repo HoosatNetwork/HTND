@@ -16,8 +16,8 @@ type ReceiveAddressesContext interface {
 
 // ReceiveAddresses asks a peer for more addresses if needed.
 func ReceiveAddresses(context ReceiveAddressesContext, incomingRoute *router.Route, outgoingRoute *router.Route,
-	peer *peerpkg.Peer) error {
-
+	peer *peerpkg.Peer,
+) error {
 	subnetworkID := peer.SubnetworkID()
 	msgGetAddresses := appmessage.NewMsgRequestAddresses(false, subnetworkID)
 	err := outgoingRoute.Enqueue(msgGetAddresses)

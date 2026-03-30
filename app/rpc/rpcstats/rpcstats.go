@@ -11,8 +11,10 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/panics"
 )
 
-var log = logger.RegisterSubSystem("RPCSTATS")
-var spawn = panics.GoroutineWrapperFunc(log)
+var (
+	log   = logger.RegisterSubSystem("RPCSTATS")
+	spawn = panics.GoroutineWrapperFunc(log)
+)
 
 const (
 	// statsLoggingInterval is how often we log the RPC statistics

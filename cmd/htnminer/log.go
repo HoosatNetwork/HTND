@@ -36,5 +36,4 @@ func initLog(logFile, errLogFile string) {
 		fmt.Fprintf(os.Stderr, "Error starting the logger: %s ", err)
 		os.Exit(1)
 	}
-
 }

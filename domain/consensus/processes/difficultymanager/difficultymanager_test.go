@@ -140,8 +140,7 @@ func TestDifficulty(t *testing.T) {
 				t.Fatalf("GHOSTDAGDataStore: %+v", err)
 			}
 
-			selectedParentHeader, err :=
-				tc.BlockHeaderStore().BlockHeader(tc.DatabaseContext(), stagingArea, tipGHOSTDAGData.SelectedParent())
+			selectedParentHeader, err := tc.BlockHeaderStore().BlockHeader(tc.DatabaseContext(), stagingArea, tipGHOSTDAGData.SelectedParent())
 			if err != nil {
 				t.Fatalf("BlockHeader: %+v", err)
 			}

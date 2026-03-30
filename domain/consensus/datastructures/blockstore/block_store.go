@@ -86,7 +86,6 @@ func (bs *blockStore) Block(dbContext model.DBReader, stagingArea *model.Staging
 }
 
 func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStagingShard, blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
-
 	block, ok := stagingShard.toAdd[*blockHash]
 	if ok && block != nil {
 		return block.Clone(), nil

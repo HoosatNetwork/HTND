@@ -268,7 +268,7 @@ var MainnetParams = Params{
 		"mainnet-node-2.hoosat.org",
 		"mainnet-node-3.hoosat.org",
 		"mainnet-node-4.hoosat.org",
-		//These DNS seeders are ran by Evern00b
+		// These DNS seeders are ran by Evern00b
 		"hoosat.seed-fi.evern00b.com",
 		"hoosat.seed-de.evern00b.com",
 		"hoosat.seed-in.evern00b.com",

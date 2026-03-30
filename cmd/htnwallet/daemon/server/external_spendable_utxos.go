@@ -39,7 +39,7 @@ func (s *server) selectExternalSpendableUTXOs(externalUTXOs *appmessage.GetUTXOs
 	daaScore := dagInfo.VirtualDAAScore
 	maturity := s.params.BlockCoinbaseMaturity
 
-	//we do not make because we do not know size, because of unspendable utxos
+	// we do not make because we do not know size, because of unspendable utxos
 	var selectedExternalUtxos []*pb.UtxosByAddressesEntry
 
 	for _, entry := range externalUTXOs.Entries {

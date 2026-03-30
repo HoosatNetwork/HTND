@@ -13,7 +13,6 @@ import (
 
 func main() {
 	err := realMain()
-
 	if err != nil {
 		log.Criticalf("An error occured: %+v", err)
 		backendLog.Close()

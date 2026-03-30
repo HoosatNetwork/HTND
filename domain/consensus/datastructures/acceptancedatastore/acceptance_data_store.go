@@ -37,6 +37,7 @@ func (ads *acceptanceDataStore) Stage(stagingArea *model.StagingArea, blockHash 
 func (ads *acceptanceDataStore) IsStaged(stagingArea *model.StagingArea) bool {
 	return ads.stagingShard(stagingArea).isStaged()
 }
+
 func (ads *acceptanceDataStore) UnstageAll(stagingArea *model.StagingArea) {
 	stagingShard := ads.stagingShard(stagingArea)
 	stagingShard.toAdd = make(map[externalapi.DomainHash]externalapi.AcceptanceData)

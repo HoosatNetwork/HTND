@@ -1,11 +1,10 @@
 package ghostdag2
 
 import (
+	"math/big"
 	"sort"
 
 	"github.com/Hoosat-Oy/HTND/util/difficulty"
-
-	"math/big"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -28,8 +27,8 @@ func New(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
 	k []externalapi.KType,
-	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
-
+	genesisHash *externalapi.DomainHash,
+) model.GHOSTDAGManager {
 	return &ghostdagHelper{
 		dbAccess:           databaseContext,
 		dagTopologyManager: dagTopologyManager,
@@ -51,7 +50,7 @@ func (gh *ghostdagHelper) GHOSTDAG(stagingArea *model.StagingArea, blockCandidat
 	if err != nil {
 		return err
 	}
-	var selectedParent = blockParents[0]
+	selectedParent := blockParents[0]
 	for _, parent := range blockParents {
 		blockData, err := gh.dataStore.Get(gh.dbAccess, stagingArea, parent, false)
 		if database.IsNotFoundError(err) {
@@ -78,9 +77,9 @@ func (gh *ghostdagHelper) GHOSTDAG(stagingArea *model.StagingArea, blockCandidat
 	myScore = spScore
 
 	/* Goal: iterate blockCandidate's mergeSet and divide it to : blue, blues, reds. */
-	var mergeSetBlues = make([]*externalapi.DomainHash, 0)
-	var mergeSetReds = make([]*externalapi.DomainHash, 0)
-	var blueSet = make([]*externalapi.DomainHash, 0)
+	mergeSetBlues := make([]*externalapi.DomainHash, 0)
+	mergeSetReds := make([]*externalapi.DomainHash, 0)
+	blueSet := make([]*externalapi.DomainHash, 0)
 
 	mergeSetBlues = append(mergeSetBlues, selectedParent)
 
@@ -131,7 +130,7 @@ func (gh *ghostdagHelper) GHOSTDAG(stagingArea *model.StagingArea, blockCandidat
 func ismoreHash(parent *externalapi.DomainHash, selectedParent *externalapi.DomainHash) bool {
 	parentByteArray := parent.ByteArray()
 	selectedParentByteArray := selectedParent.ByteArray()
-	//Check if parentHash is more then selectedParentHash
+	// Check if parentHash is more then selectedParentHash
 	for i := range len(parentByteArray) {
 		switch {
 		case parentByteArray[i] < selectedParentByteArray[i]:
@@ -151,14 +150,14 @@ func ismoreHash(parent *externalapi.DomainHash, selectedParent *externalapi.Doma
 /* ---------------divideBluesReds--------------------- */
 func (gh *ghostdagHelper) divideBlueRed(stagingArea *model.StagingArea,
 	selectedParent *externalapi.DomainHash, desiredBlock *externalapi.DomainHash,
-	blues *[]*externalapi.DomainHash, reds *[]*externalapi.DomainHash, blueSet *[]*externalapi.DomainHash) error {
-
-	var k = int(gh.k[constants.GetBlockVersion()-1])
+	blues *[]*externalapi.DomainHash, reds *[]*externalapi.DomainHash, blueSet *[]*externalapi.DomainHash,
+) error {
+	k := int(gh.k[constants.GetBlockVersion()-1])
 	counter := 0
 
-	var suspectsBlues = make([]*externalapi.DomainHash, 0)
+	suspectsBlues := make([]*externalapi.DomainHash, 0)
 	isMergeBlue := true
-	//check that not-connected to at most k.
+	// check that not-connected to at most k.
 	for _, block := range *blueSet {
 		isAnticone, err := gh.isAnticone(stagingArea, block, desiredBlock)
 		if err != nil {
@@ -237,10 +236,10 @@ func contains(item *externalapi.DomainHash, items []*externalapi.DomainHash) boo
 /* ----------------checkIfDestroy------------------- */
 /* find number of not-connected in his blue*/
 func (gh *ghostdagHelper) checkIfDestroy(stagingArea *model.StagingArea, blockBlue *externalapi.DomainHash,
-	blueSet *[]*externalapi.DomainHash) (bool, error) {
-
+	blueSet *[]*externalapi.DomainHash,
+) (bool, error) {
 	// Goal: check that the K-cluster of each block in the blueSet is not destroyed when adding the block to the mergeSet.
-	var k = int(gh.k[constants.GetBlockVersion()-1])
+	k := int(gh.k[constants.GetBlockVersion()-1])
 	counter := 0
 	for _, blue := range *blueSet {
 		isAnticone, err := gh.isAnticone(stagingArea, blue, blockBlue)
@@ -259,15 +258,14 @@ func (gh *ghostdagHelper) checkIfDestroy(stagingArea *model.StagingArea, blockBl
 
 /* ----------------findMergeSet------------------- */
 func (gh *ghostdagHelper) findMergeSet(stagingArea *model.StagingArea, parents []*externalapi.DomainHash,
-	selectedParent *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	selectedParent *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	allMergeSet := make([]*externalapi.DomainHash, 0)
 	blockQueue := make([]*externalapi.DomainHash, 0)
 	for _, parent := range parents {
 		if !contains(parent, blockQueue) {
 			blockQueue = append(blockQueue, parent)
 		}
-
 	}
 	for len(blockQueue) > 0 {
 		block := blockQueue[0]
@@ -300,8 +298,8 @@ func (gh *ghostdagHelper) findMergeSet(stagingArea *model.StagingArea, parents [
 /* ----------------insertParent------------------- */
 /* Insert all parents to the queue*/
 func (gh *ghostdagHelper) insertParent(stagingArea *model.StagingArea, child *externalapi.DomainHash,
-	queue *[]*externalapi.DomainHash) error {
-
+	queue *[]*externalapi.DomainHash,
+) error {
 	parents, err := gh.dagTopologyManager.Parents(stagingArea, child)
 	if err != nil {
 		return err
@@ -343,10 +341,8 @@ func (gh *ghostdagHelper) findBlueSet(stagingArea *model.StagingArea, blueSet *[
 
 /* ----------------sortByBlueScore------------------- */
 func (gh *ghostdagHelper) sortByBlueWork(stagingArea *model.StagingArea, arr []*externalapi.DomainHash) error {
-
 	var err error = nil
 	sort.Slice(arr, func(i, j int) bool {
-
 		blockLeft, error := gh.dataStore.Get(gh.dbAccess, stagingArea, arr[i], false)
 		if error != nil {
 			err = error
@@ -379,6 +375,7 @@ func (gh *ghostdagHelper) sortByBlueWork(stagingArea *model.StagingArea, arr []*
 func (gh *ghostdagHelper) BlockData(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.BlockGHOSTDAGData, error) {
 	return gh.dataStore.Get(gh.dbAccess, stagingArea, blockHash, false)
 }
+
 func (gh *ghostdagHelper) ChooseSelectedParent(stagingArea *model.StagingArea, blockHashes ...*externalapi.DomainHash) (*externalapi.DomainHash, error) {
 	panic("implement me")
 }

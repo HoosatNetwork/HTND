@@ -13,11 +13,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-var currentPruningPointIndexKeyName = []byte("pruning-block-index")
-var candidatePruningPointHashKeyName = []byte("candidate-pruning-point-hash")
-var pruningPointUTXOSetBucketName = []byte("pruning-point-utxo-set")
-var updatingPruningPointUTXOSetKeyName = []byte("updating-pruning-point-utxo-set")
-var pruningPointByIndexBucketName = []byte("pruning-point-by-index")
+var (
+	currentPruningPointIndexKeyName    = []byte("pruning-block-index")
+	candidatePruningPointHashKeyName   = []byte("candidate-pruning-point-hash")
+	pruningPointUTXOSetBucketName      = []byte("pruning-point-utxo-set")
+	updatingPruningPointUTXOSetKeyName = []byte("updating-pruning-point-utxo-set")
+	pruningPointByIndexBucketName      = []byte("pruning-point-by-index")
+)
 
 // pruningStore represents a store for the current pruning state
 type pruningStore struct {
@@ -250,8 +252,8 @@ func (ps *pruningStore) PruningPointUTXOIterator(dbContext model.DBReader) (exte
 }
 
 func (ps *pruningStore) PruningPointUTXOs(dbContext model.DBReader,
-	fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
-
+	fromOutpoint *externalapi.DomainOutpoint, limit int,
+) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
 	cursor, err := dbContext.Cursor(ps.pruningPointUTXOSetBucket)
 	if err != nil {
 		return nil, err
@@ -308,8 +310,8 @@ func (ps *pruningStore) indexAsKey(index uint64) model.DBKey {
 }
 
 func (ps *pruningStore) StagePruningPointByIndex(dbContext model.DBReader, stagingArea *model.StagingArea,
-	pruningPointBlockHash *externalapi.DomainHash, index uint64) error {
-
+	pruningPointBlockHash *externalapi.DomainHash, index uint64,
+) error {
 	stagingShard := ps.stagingShard(stagingArea)
 	_, exists := stagingShard.pruningPointByIndex[index]
 	if exists {

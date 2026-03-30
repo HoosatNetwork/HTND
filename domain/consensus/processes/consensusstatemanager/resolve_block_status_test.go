@@ -160,7 +160,7 @@ func TestDoubleSpends(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error adding goodBlock: %+v", err)
 		}
-		//use ResolveBlockStatus, since goodBlock2 might not be the selectedTip
+		// use ResolveBlockStatus, since goodBlock2 might not be the selectedTip
 		goodBlock2Status, err := consensus.ConsensusStateManager().ResolveBlockStatus(
 			stagingArea, goodBlock2Hash, true)
 		if err != nil {
@@ -440,8 +440,8 @@ func TestTransactionAcceptance(t *testing.T) {
 		// For UTXO entries created while applying the merge set, the consensus state manager
 		// uses the validating block header's DAA score (see CalculatePastUTXOAndAcceptanceData).
 		expectedAddedUTXOEntryDAAScore := blockG.Header.DAAScore()
-		//We expect the second transaction in the "blue block" (blueChildOfRedBlock) to be accepted because the merge set is ordered topologically
-		//and the red block is ordered topologically before the "blue block" so the input is known in the UTXOSet.
+		// We expect the second transaction in the "blue block" (blueChildOfRedBlock) to be accepted because the merge set is ordered topologically
+		// and the red block is ordered topologically before the "blue block" so the input is known in the UTXOSet.
 		expectedAcceptanceData := externalapi.AcceptanceData{
 			{
 				BlockHash: blockHashF,
@@ -457,7 +457,7 @@ func TestTransactionAcceptance(t *testing.T) {
 			{
 				BlockHash: redHash,
 				TransactionAcceptanceData: []*externalapi.TransactionAcceptanceData{
-					{ //Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain,
+					{ // Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain,
 						// and this block isn't.
 						Transaction:                 redBlock.Transactions[0],
 						Fee:                         0,
@@ -475,7 +475,7 @@ func TestTransactionAcceptance(t *testing.T) {
 			{
 				BlockHash: hashBlueChildOfRedBlock,
 				TransactionAcceptanceData: []*externalapi.TransactionAcceptanceData{
-					{ //Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain,
+					{ // Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain,
 						// and this block isn't.
 						Transaction:                 blueChildOfRedBlock.Transactions[0],
 						Fee:                         0,
@@ -490,7 +490,8 @@ func TestTransactionAcceptance(t *testing.T) {
 						TransactionInputUTXOEntries: []externalapi.UTXOEntry{
 							utxo.NewUTXOEntry(transactionFromBlueChildOfRedBlockInput0UTXOEntry.Amount(),
 								transactionFromBlueChildOfRedBlockInput0UTXOEntry.ScriptPublicKey(),
-								transactionFromBlueChildOfRedBlockInput0UTXOEntry.IsCoinbase(), expectedAddedUTXOEntryDAAScore)},
+								transactionFromBlueChildOfRedBlockInput0UTXOEntry.IsCoinbase(), expectedAddedUTXOEntryDAAScore),
+						},
 					},
 				},
 			},

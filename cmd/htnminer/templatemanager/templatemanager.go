@@ -8,10 +8,12 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 )
 
-var currentTemplate *externalapi.DomainBlock
-var currentState *pow.State
-var isSynced bool
-var lock = &sync.Mutex{}
+var (
+	currentTemplate *externalapi.DomainBlock
+	currentState    *pow.State
+	isSynced        bool
+	lock            = &sync.Mutex{}
+)
 
 // Get returns the template to work on
 func Get() (*externalapi.DomainBlock, *pow.State, bool) {

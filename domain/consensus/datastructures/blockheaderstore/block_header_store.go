@@ -10,8 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var bucketName = []byte("block-headers")
-var countKeyName = []byte("block-headers-count")
+var (
+	bucketName   = []byte("block-headers")
+	countKeyName = []byte("block-headers-count")
+)
 
 // blockHeaderStore represents a store of blocks
 type blockHeaderStore struct {
@@ -80,15 +82,16 @@ func (bhs *blockHeaderStore) UnstageAll(stagingArea *model.StagingArea) {
 
 // BlockHeader gets the block header associated with the given blockHash
 func (bhs *blockHeaderStore) BlockHeader(dbContext model.DBReader, stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error) {
-
+	blockHash *externalapi.DomainHash,
+) (externalapi.BlockHeader, error) {
 	stagingShard := bhs.stagingShard(stagingArea)
 
 	return bhs.blockHeader(dbContext, stagingShard, blockHash)
 }
 
 func (bhs *blockHeaderStore) blockHeader(dbContext model.DBReader, stagingShard *blockHeaderStagingShard,
-	blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error) {
+	blockHash *externalapi.DomainHash,
+) (externalapi.BlockHeader, error) {
 	header, ok := stagingShard.toAdd[*blockHash]
 	if ok && header != nil {
 		return header, nil
@@ -137,8 +140,8 @@ func (bhs *blockHeaderStore) HasBlockHeader(dbContext model.DBReader, stagingAre
 
 // BlockHeaders gets the block headers associated with the given blockHashes
 func (bhs *blockHeaderStore) BlockHeaders(dbContext model.DBReader, stagingArea *model.StagingArea,
-	blockHashes []*externalapi.DomainHash) ([]externalapi.BlockHeader, error) {
-
+	blockHashes []*externalapi.DomainHash,
+) ([]externalapi.BlockHeader, error) {
 	stagingShard := bhs.stagingShard(stagingArea)
 
 	headers := make([]externalapi.BlockHeader, len(blockHashes))

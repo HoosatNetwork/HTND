@@ -20,8 +20,8 @@ import (
 )
 
 func (bp *blockProcessor) setBlockStatusAfterBlockValidation(
-	stagingArea *model.StagingArea, block *externalapi.DomainBlock, isPruningPoint bool) (externalapi.BlockStatus, error) {
-
+	stagingArea *model.StagingArea, block *externalapi.DomainBlock, isPruningPoint bool,
+) (externalapi.BlockStatus, error) {
 	blockHash := consensushashing.BlockHash(block)
 
 	exists, err := bp.blockStatusStore.Exists(bp.databaseContext, stagingArea, blockHash)
@@ -68,8 +68,7 @@ func (bp *blockProcessor) setBlockStatusAfterBlockValidation(
 }
 
 func (bp *blockProcessor) updateVirtualAcceptanceDataAfterImportingPruningPoint(stagingArea *model.StagingArea) error {
-	_, virtualAcceptanceData, virtualMultiset, err :=
-		bp.consensusStateManager.CalculatePastUTXOAndAcceptanceData(stagingArea, model.VirtualBlockHash)
+	_, virtualAcceptanceData, virtualMultiset, err := bp.consensusStateManager.CalculatePastUTXOAndAcceptanceData(stagingArea, model.VirtualBlockHash)
 	if err != nil {
 		return err
 	}
@@ -83,8 +82,8 @@ func (bp *blockProcessor) updateVirtualAcceptanceDataAfterImportingPruningPoint(
 }
 
 func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
-	isPruningPoint bool, shouldValidateAgainstUTXO bool, isBlockWithTrustedData bool, trusted bool, powSkip bool) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
-
+	isPruningPoint bool, shouldValidateAgainstUTXO bool, isBlockWithTrustedData bool, trusted bool, powSkip bool,
+) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
 	blockHash := consensushashing.HeaderHash(block.Header)
 	err := bp.validateBlock(stagingArea, block, isBlockWithTrustedData, trusted, powSkip)
 	if err != nil {
@@ -250,8 +249,8 @@ func isHeaderOnlyBlock(block *externalapi.DomainBlock) bool {
 }
 
 func (bp *blockProcessor) updateReachabilityReindexRoot(stagingArea *model.StagingArea,
-	oldHeadersSelectedTip *externalapi.DomainHash) error {
-
+	oldHeadersSelectedTip *externalapi.DomainHash,
+) error {
 	headersSelectedTip, err := bp.headersSelectedTipStore.HeadersSelectedTip(bp.databaseContext, stagingArea)
 	if err != nil {
 		return err

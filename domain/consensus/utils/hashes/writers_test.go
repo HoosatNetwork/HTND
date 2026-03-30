@@ -72,7 +72,6 @@ func TestNewBlockHash(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func BenchmarkNewBlockHashWriterSmall(b *testing.B) {

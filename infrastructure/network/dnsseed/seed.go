@@ -43,8 +43,8 @@ type LookupFunc func(string) ([]net.IP, error)
 
 // SeedFromDNS uses DNS seeding to populate the address manager with peers.
 func SeedFromDNS(dagParams *dagconfig.Params, customSeed string, includeAllSubnetworks bool,
-	subnetworkID *externalapi.DomainSubnetworkID, lookupFn LookupFunc, seedFn OnSeed) {
-
+	subnetworkID *externalapi.DomainSubnetworkID, lookupFn LookupFunc, seedFn OnSeed,
+) {
 	var dnsSeeds []string
 	if customSeed != "" {
 		dnsSeeds = []string{customSeed}
@@ -97,8 +97,8 @@ func SeedFromDNS(dagParams *dagconfig.Params, customSeed string, includeAllSubne
 
 // SeedFromGRPC send gRPC request to get list of peers for a given host
 func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubnetworks bool,
-	subnetworkID *externalapi.DomainSubnetworkID, seedFn OnSeed) {
-
+	subnetworkID *externalapi.DomainSubnetworkID, seedFn OnSeed,
+) {
 	var grpcSeeds []string
 	if customSeed != "" {
 		grpcSeeds = []string{customSeed}
@@ -128,7 +128,6 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 				IncludeAllSubnetworks: includeAllSubnetworks,
 			}
 			res, err := client.GetPeersList(context.Background(), req)
-
 			if err != nil {
 				log.Infof("gRPC request to get peers failed (host=%s): %s", host, err)
 				return

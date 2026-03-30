@@ -248,8 +248,8 @@ func (msg *MsgTx) IsSubnetworkCompatible(subnetworkID *externalapi.DomainSubnetw
 // Also, the lock time is set to zero to indicate the transaction is valid
 // immediately as opposed to some time in future.
 func newMsgTx(version uint16, txIn []*TxIn, txOut []*TxOut, subnetworkID *externalapi.DomainSubnetworkID,
-	gas uint64, payload []byte, lockTime uint64) *MsgTx {
-
+	gas uint64, payload []byte, lockTime uint64,
+) *MsgTx {
 	if txIn == nil {
 		txIn = make([]*TxIn, 0, defaultTxInOutAlloc)
 	}
@@ -276,8 +276,8 @@ func NewNativeMsgTx(version uint16, txIn []*TxIn, txOut []*TxOut) *MsgTx {
 
 // NewSubnetworkMsgTx returns a new tx message in the specified subnetwork with specified gas and payload
 func NewSubnetworkMsgTx(version uint16, txIn []*TxIn, txOut []*TxOut, subnetworkID *externalapi.DomainSubnetworkID,
-	gas uint64, payload []byte) *MsgTx {
-
+	gas uint64, payload []byte,
+) *MsgTx {
 	return newMsgTx(version, txIn, txOut, subnetworkID, gas, payload, 0)
 }
 

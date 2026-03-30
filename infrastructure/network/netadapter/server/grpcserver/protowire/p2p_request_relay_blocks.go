@@ -25,7 +25,6 @@ func (x *RequestRelayBlocksMessage) toAppMessage() (appmessage.Message, error) {
 		return nil, err
 	}
 	return &appmessage.MsgRequestRelayBlocks{Hashes: hashes}, nil
-
 }
 
 func (x *HoosatdMessage_RequestRelayBlocks) fromAppMessage(msgGetRelayBlocks *appmessage.MsgRequestRelayBlocks) error {

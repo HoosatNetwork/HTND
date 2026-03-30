@@ -35,7 +35,7 @@ func checkDatabaseVersion(dbPath string) (err error) {
 }
 
 func createDatabaseVersionFile(dbPath string, versionFileName string) error {
-	err := os.MkdirAll(dbPath, 0700)
+	err := os.MkdirAll(dbPath, 0o700)
 	if err != nil {
 		return err
 	}

@@ -78,8 +78,8 @@ func (a *ComponentManager) Stop() {
 // NewComponentManager returns a new ComponentManager instance.
 // Use Start() to begin all services within this ComponentManager
 func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database, interrupt chan<- struct{}) (
-	*ComponentManager, error) {
-
+	*ComponentManager, error,
+) {
 	consensusConfig := consensus.Config{
 		Params:                          *cfg.ActiveNetParams,
 		IsArchival:                      cfg.IsArchivalNode,
@@ -152,7 +152,6 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		netAdapter:        netAdapter,
 		addressManager:    addressManager,
 	}, nil
-
 }
 
 func setupRPC(
@@ -166,7 +165,6 @@ func setupRPC(
 	consensusEventsChan chan externalapi.ConsensusEvent,
 	shutDownChan chan<- struct{},
 ) *rpc.Manager {
-
 	rpcManager := rpc.NewManager(
 		cfg,
 		domain,

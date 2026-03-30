@@ -20,8 +20,8 @@ type handleRequestBlockLocatorFlow struct {
 
 // HandleRequestBlockLocator handles getBlockLocator messages
 func HandleRequestBlockLocator(context RequestBlockLocatorContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route) error {
-
+	outgoingRoute *router.Route,
+) error {
 	flow := &handleRequestBlockLocatorFlow{
 		RequestBlockLocatorContext: context,
 		incomingRoute:              incomingRoute,
@@ -52,7 +52,6 @@ func (flow *handleRequestBlockLocatorFlow) start() error {
 }
 
 func (flow *handleRequestBlockLocatorFlow) receiveGetBlockLocator() (highHash *externalapi.DomainHash, limit uint32, err error) {
-
 	message, err := flow.incomingRoute.Dequeue()
 	if err != nil {
 		return nil, 0, err

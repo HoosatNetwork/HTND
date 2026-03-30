@@ -134,6 +134,7 @@ func (mat *matrix) computeHoohashRank() int {
 	}
 	return rank
 }
+
 func generateHoohashMatrix(hash *externalapi.DomainHash) *matrix {
 	var mat matrix
 	generator := newxoShiRo256PlusPlus(hash)

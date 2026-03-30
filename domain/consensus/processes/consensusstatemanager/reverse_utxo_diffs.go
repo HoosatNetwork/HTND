@@ -9,8 +9,8 @@ import (
 )
 
 func (csm *consensusStateManager) ReverseUTXODiffs(tipHash *externalapi.DomainHash,
-	reversalData *model.UTXODiffReversalData) error {
-
+	reversalData *model.UTXODiffReversalData,
+) error {
 	// During the process of resolving a chain of blocks, we temporarily set all blocks' (except the tip)
 	// UTXODiffChild to be the selected parent.
 	// Once the process is complete, we can reverse said chain, to now go directly to virtual through the relevant tip
@@ -90,8 +90,8 @@ func (csm *consensusStateManager) ReverseUTXODiffs(tipHash *externalapi.DomainHa
 }
 
 func (csm *consensusStateManager) commitUTXODiffInSeparateStagingArea(
-	blockHash *externalapi.DomainHash, utxoDiff externalapi.UTXODiff, utxoDiffChild *externalapi.DomainHash) error {
-
+	blockHash *externalapi.DomainHash, utxoDiff externalapi.UTXODiff, utxoDiffChild *externalapi.DomainHash,
+) error {
 	stagingAreaForCurrentBlock := model.NewStagingArea()
 
 	csm.utxoDiffStore.Stage(stagingAreaForCurrentBlock, blockHash, utxoDiff, utxoDiffChild)

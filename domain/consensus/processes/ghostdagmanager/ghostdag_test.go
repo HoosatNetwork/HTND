@@ -53,7 +53,7 @@ type implManager struct {
 // that the blue score, blue set and selected parent of each
 // block are calculated as expected.
 func TestGHOSTDAG(t *testing.T) {
-	//NOTE: FOR ADDING/REMOVING AN IMPLEMENTATION CHANGE BELOW:
+	// NOTE: FOR ADDING/REMOVING AN IMPLEMENTATION CHANGE BELOW:
 	implementationFactories := []implManager{
 		{ghostdagmanager.New, "Original"},
 		{ghostdag2.New, "Tal's impl"},
@@ -286,7 +286,7 @@ func TestBlueWork(t *testing.T) {
 }
 
 func hashesToStrings(arr []*externalapi.DomainHash) []string {
-	var strArr = make([]string, len(arr))
+	strArr := make([]string, len(arr))
 	for i, hash := range arr {
 		strArr[i] = string(hash.ByteSlice())
 	}
@@ -399,15 +399,16 @@ func (dt *DAGTopologyManagerImpl) IsAncestorOf(stagingArea *model.StagingArea, b
 		}
 	}
 	return false, nil
-
 }
 
 func (dt *DAGTopologyManagerImpl) IsAncestorOfAny(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, potentialDescendants []*externalapi.DomainHash) (bool, error) {
 	panic("unimplemented")
 }
+
 func (dt *DAGTopologyManagerImpl) IsAnyAncestorOf(*model.StagingArea, []*externalapi.DomainHash, *externalapi.DomainHash) (bool, error) {
 	panic("unimplemented")
 }
+
 func (dt *DAGTopologyManagerImpl) IsInSelectedParentChainOf(stagingArea *model.StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
 	panic("unimplemented")
 }

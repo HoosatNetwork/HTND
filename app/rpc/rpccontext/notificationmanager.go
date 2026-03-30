@@ -114,8 +114,8 @@ func (nm *NotificationManager) NotifyBlockAdded(notification *appmessage.BlockAd
 
 // NotifyVirtualSelectedParentChainChanged notifies the notification manager that the DAG's selected parent chain has changed
 func (nm *NotificationManager) NotifyVirtualSelectedParentChainChanged(
-	notification *appmessage.VirtualSelectedParentChainChangedNotificationMessage) error {
-
+	notification *appmessage.VirtualSelectedParentChainChangedNotificationMessage,
+) error {
 	nm.RLock()
 	defer nm.RUnlock()
 
@@ -146,7 +146,6 @@ func (nm *NotificationManager) NotifyVirtualSelectedParentChainChanged(
 // subscribed to VirtualSelectedParentChainChanged notifications as well as checks if any such listener requested
 // to include AcceptedTransactionIDs.
 func (nm *NotificationManager) HasListenersThatPropagateVirtualSelectedParentChainChanged() (hasListeners, hasListenersThatRequireAcceptedTransactionIDs bool) {
-
 	nm.RLock()
 	defer nm.RUnlock()
 
@@ -230,8 +229,8 @@ func (nm *NotificationManager) NotifyUTXOsChanged(utxoChanges *utxoindex.UTXOCha
 // NotifyVirtualSelectedParentBlueScoreChanged notifies the notification manager that the DAG's
 // virtual selected parent blue score has changed
 func (nm *NotificationManager) NotifyVirtualSelectedParentBlueScoreChanged(
-	notification *appmessage.VirtualSelectedParentBlueScoreChangedNotificationMessage) error {
-
+	notification *appmessage.VirtualSelectedParentBlueScoreChangedNotificationMessage,
+) error {
 	nm.RLock()
 	defer nm.RUnlock()
 
@@ -249,8 +248,8 @@ func (nm *NotificationManager) NotifyVirtualSelectedParentBlueScoreChanged(
 // NotifyVirtualDaaScoreChanged notifies the notification manager that the DAG's
 // virtual DAA score has changed
 func (nm *NotificationManager) NotifyVirtualDaaScoreChanged(
-	notification *appmessage.VirtualDaaScoreChangedNotificationMessage) error {
-
+	notification *appmessage.VirtualDaaScoreChangedNotificationMessage,
+) error {
 	nm.RLock()
 	defer nm.RUnlock()
 
@@ -268,8 +267,8 @@ func (nm *NotificationManager) NotifyVirtualDaaScoreChanged(
 // NotifyNewBlockTemplate notifies the notification manager that a new
 // block template is available for miners
 func (nm *NotificationManager) NotifyNewBlockTemplate(
-	notification *appmessage.NewBlockTemplateNotificationMessage) error {
-
+	notification *appmessage.NewBlockTemplateNotificationMessage,
+) error {
 	nm.RLock()
 	defer nm.RUnlock()
 
@@ -358,8 +357,7 @@ func (nm *NotificationManager) PropagateUTXOsChangedNotifications(nl *Notificati
 
 	if !nl.propagateUTXOsChangedNotifications {
 		nl.propagateUTXOsChangedNotifications = true
-		nl.propagateUTXOsChangedNotificationAddresses =
-			make(map[utxoindex.ScriptPublicKeyString]*UTXOsChangedNotificationAddress, len(addresses))
+		nl.propagateUTXOsChangedNotificationAddresses = make(map[utxoindex.ScriptPublicKeyString]*UTXOsChangedNotificationAddress, len(addresses))
 	}
 
 	for _, address := range addresses {
@@ -387,7 +385,6 @@ func (nm *NotificationManager) StopPropagatingUTXOsChangedNotifications(nl *Noti
 func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
 	utxoChanges *utxoindex.UTXOChanges,
 ) (*appmessage.UTXOsChangedNotificationMessage, error) {
-
 	if len(utxoChanges.Added) == 0 && len(utxoChanges.Removed) == 0 {
 		return &appmessage.UTXOsChangedNotificationMessage{}, nil
 	}

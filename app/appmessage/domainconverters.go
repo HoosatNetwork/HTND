@@ -377,8 +377,8 @@ func DomainTransactionToRPCTransaction(transaction *externalapi.DomainTransactio
 // OutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs converts
 // OutpointAndUTXOEntryPairs to domain OutpointAndUTXOEntryPairs
 func OutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
-	outpointAndUTXOEntryPairs []*OutpointAndUTXOEntryPair) []*externalapi.OutpointAndUTXOEntryPair {
-
+	outpointAndUTXOEntryPairs []*OutpointAndUTXOEntryPair,
+) []*externalapi.OutpointAndUTXOEntryPair {
 	domainOutpointAndUTXOEntryPairs := make([]*externalapi.OutpointAndUTXOEntryPair, len(outpointAndUTXOEntryPairs))
 	for i, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
 		domainOutpointAndUTXOEntryPairs[i] = outpointAndUTXOEntryPairToDomainOutpointAndUTXOEntryPair(outpointAndUTXOEntryPair)
@@ -387,7 +387,8 @@ func OutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
 }
 
 func outpointAndUTXOEntryPairToDomainOutpointAndUTXOEntryPair(
-	outpointAndUTXOEntryPair *OutpointAndUTXOEntryPair) *externalapi.OutpointAndUTXOEntryPair {
+	outpointAndUTXOEntryPair *OutpointAndUTXOEntryPair,
+) *externalapi.OutpointAndUTXOEntryPair {
 	return &externalapi.OutpointAndUTXOEntryPair{
 		Outpoint: &externalapi.DomainOutpoint{
 			TransactionID: outpointAndUTXOEntryPair.Outpoint.TxID,
@@ -405,8 +406,8 @@ func outpointAndUTXOEntryPairToDomainOutpointAndUTXOEntryPair(
 // DomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs converts
 // domain OutpointAndUTXOEntryPairs to OutpointAndUTXOEntryPairs
 func DomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
-	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair) []*OutpointAndUTXOEntryPair {
-
+	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair,
+) []*OutpointAndUTXOEntryPair {
 	domainOutpointAndUTXOEntryPairs := make([]*OutpointAndUTXOEntryPair, len(outpointAndUTXOEntryPairs))
 	for i, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
 		domainOutpointAndUTXOEntryPairs[i] = &OutpointAndUTXOEntryPair{
@@ -697,8 +698,8 @@ func DomainPruningPointProofToMsgPruningPointProof(pruningPointProof *externalap
 // OutpointAndUTXOEntryPairs to a pre-allocated domain OutpointAndUTXOEntryPairs buffer
 func AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
 	outpointAndUTXOEntryPairs []*OutpointAndUTXOEntryPair,
-	buffer []*externalapi.OutpointAndUTXOEntryPair) []*externalapi.OutpointAndUTXOEntryPair {
-
+	buffer []*externalapi.OutpointAndUTXOEntryPair,
+) []*externalapi.OutpointAndUTXOEntryPair {
 	for _, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
 		buffer = append(buffer, outpointAndUTXOEntryPairToDomainOutpointAndUTXOEntryPair(outpointAndUTXOEntryPair))
 	}
@@ -708,8 +709,8 @@ func AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs(
 // The sending version of  AppendOutpointAndUTXOEntryPairsToDomainOutpointAndUTXOEntryPairs()
 func AppendDomainOutpointAndUTXOEntryPairsToOutpointAndUTXOEntryPairs(
 	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair,
-	buffer []*OutpointAndUTXOEntryPair) []*OutpointAndUTXOEntryPair {
-
+	buffer []*OutpointAndUTXOEntryPair,
+) []*OutpointAndUTXOEntryPair {
 	for _, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
 		buffer = append(buffer, &OutpointAndUTXOEntryPair{
 			Outpoint: &Outpoint{

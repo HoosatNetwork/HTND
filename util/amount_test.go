@@ -131,7 +131,6 @@ func TestAmountUnitConversions(t *testing.T) {
 			s:         "444333222.111 mHSAT",
 		},
 		{
-
 			name:      "μHSAT",
 			amount:    44433322211100,
 			unit:      AmountMicroHSAT,
@@ -139,7 +138,6 @@ func TestAmountUnitConversions(t *testing.T) {
 			s:         "444333222111 μHSAT",
 		},
 		{
-
 			name:      "sompi",
 			amount:    44433322211100,
 			unit:      AmountSompi,
@@ -147,7 +145,6 @@ func TestAmountUnitConversions(t *testing.T) {
 			s:         "44433322211100 Sompi",
 		},
 		{
-
 			name:      "non-standard unit",
 			amount:    44433322211100,
 			unit:      AmountUnit(-1),

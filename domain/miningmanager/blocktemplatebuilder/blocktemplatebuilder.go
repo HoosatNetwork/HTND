@@ -43,7 +43,8 @@ type blockTemplateBuilder struct {
 
 // New creates a new blockTemplateBuilder
 func New(consensusReference consensusreference.ConsensusReference, mempool miningmanagerapi.Mempool,
-	blockMaxMass []uint64, coinbasePayloadScriptPublicKeyMaxLength uint8) miningmanagerapi.BlockTemplateBuilder {
+	blockMaxMass []uint64, coinbasePayloadScriptPublicKeyMaxLength uint8,
+) miningmanagerapi.BlockTemplateBuilder {
 	return &blockTemplateBuilder{
 		consensusReference: consensusReference,
 		mempool:            mempool,
@@ -118,8 +119,8 @@ func New(consensusReference consensusreference.ConsensusReference, mempool minin
 //   -----------------------------------  --
 
 func (btb *blockTemplateBuilder) BuildBlockTemplate(
-	coinbaseData *consensusexternalapi.DomainCoinbaseData) (*consensusexternalapi.DomainBlockTemplate, error) {
-
+	coinbaseData *consensusexternalapi.DomainCoinbaseData,
+) (*consensusexternalapi.DomainBlockTemplate, error) {
 	mempoolTransactions := btb.mempool.BlockCandidateTransactions()
 
 	blockTxs := selectedTransactions{
@@ -181,8 +182,8 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 
 // ModifyBlockTemplate modifies an existing block template to the requested coinbase data and updates the timestamp
 func (btb *blockTemplateBuilder) ModifyBlockTemplate(newCoinbaseData *consensusexternalapi.DomainCoinbaseData,
-	blockTemplateToModify *consensusexternalapi.DomainBlockTemplate) (*consensusexternalapi.DomainBlockTemplate, error) {
-
+	blockTemplateToModify *consensusexternalapi.DomainBlockTemplate,
+) (*consensusexternalapi.DomainBlockTemplate, error) {
 	// The first transaction is always the coinbase transaction
 	coinbaseTx := blockTemplateToModify.Block.Transactions[transactionhelper.CoinbaseTransactionIndex]
 	newPayload, err := coinbasemanager.ModifyCoinbasePayload(coinbaseTx.Payload, newCoinbaseData, btb.coinbasePayloadScriptPublicKeyMaxLength)

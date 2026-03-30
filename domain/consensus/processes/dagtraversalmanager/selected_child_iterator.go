@@ -73,8 +73,8 @@ func (s *selectedChildIterator) Close() error {
 // SelectedChildIterator returns a BlockIterator that iterates from lowHash (exclusive) to highHash (inclusive) over
 // highHash's selected parent chain
 func (dtm *dagTraversalManager) SelectedChildIterator(stagingArea *model.StagingArea,
-	highHash, lowHash *externalapi.DomainHash, includeLowHash bool) (model.BlockIterator, error) {
-
+	highHash, lowHash *externalapi.DomainHash, includeLowHash bool,
+) (model.BlockIterator, error) {
 	isLowHashInSelectedParentChainOfHighHash, err := dtm.dagTopologyManager.IsInSelectedParentChainOf(
 		stagingArea, lowHash, highHash)
 	if err != nil {
@@ -97,8 +97,8 @@ func (dtm *dagTraversalManager) SelectedChildIterator(stagingArea *model.Staging
 var errNoSelectedChild = errors.New("errNoSelectedChild")
 
 func (dtm *dagTraversalManager) SelectedChild(stagingArea *model.StagingArea,
-	highHash, lowHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
-
+	highHash, lowHash *externalapi.DomainHash,
+) (*externalapi.DomainHash, error) {
 	// The selected child is in fact the next reachability tree nextAncestor
 	nextAncestor, err := dtm.reachabilityManager.FindNextAncestor(stagingArea, highHash, lowHash)
 	if err != nil {

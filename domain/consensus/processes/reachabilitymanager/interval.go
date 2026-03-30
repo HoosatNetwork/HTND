@@ -68,8 +68,8 @@ func intervalDecreaseEnd(ri *model.ReachabilityInterval, offset uint64) *model.R
 // intervalSplitInHalf splits this interval by a fraction of 0.5.
 // See splitFraction for further details.
 func intervalSplitInHalf(ri *model.ReachabilityInterval) (
-	left *model.ReachabilityInterval, right *model.ReachabilityInterval, err error) {
-
+	left *model.ReachabilityInterval, right *model.ReachabilityInterval, err error,
+) {
 	return intervalSplitFraction(ri, 0.5)
 }
 
@@ -79,8 +79,8 @@ func intervalSplitInHalf(ri *model.ReachabilityInterval) (
 // Note: if the split results in fractional parts, this method rounds
 // the first part up and the last part down.
 func intervalSplitFraction(ri *model.ReachabilityInterval, fraction float64) (
-	left *model.ReachabilityInterval, right *model.ReachabilityInterval, err error) {
-
+	left *model.ReachabilityInterval, right *model.ReachabilityInterval, err error,
+) {
 	if fraction < 0 || fraction > 1 {
 		return nil, nil, errors.Errorf("fraction must be between 0 and 1")
 	}

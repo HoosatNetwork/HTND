@@ -47,8 +47,8 @@ func TestUTXOIndex(t *testing.T) {
 	const blockAmountToMine = 100
 	onUTXOsChangedChan := make(chan *appmessage.UTXOsChangedNotificationMessage, blockAmountToMine)
 	err = htnd.rpcClient.RegisterForUTXOsChangedNotifications([]string{miningAddress1}, func(
-		notification *appmessage.UTXOsChangedNotificationMessage) {
-
+		notification *appmessage.UTXOsChangedNotificationMessage,
+	) {
 		onUTXOsChangedChan <- notification
 	})
 	if err != nil {

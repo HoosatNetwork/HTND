@@ -39,7 +39,6 @@ func TstAddressPubKeyECDSA(prefix Bech32Prefix, hash [PublicKeySizeECDSA]byte) *
 // TstAddressScriptHash makes an AddressScriptHash, setting the
 // unexported fields with the parameters hash and netID.
 func TstAddressScriptHash(prefix Bech32Prefix, hash [blake2b.Size256]byte) *AddressScriptHash {
-
 	return &AddressScriptHash{
 		prefix: prefix,
 		hash:   hash,

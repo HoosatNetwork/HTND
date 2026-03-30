@@ -7,13 +7,14 @@ package pb
 import (
 	context "context"
 	fmt "fmt"
+	io "io"
+
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	io "io"
 )
 
 const (
@@ -113,6 +114,7 @@ func (this *GetPeersListRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *GetPeersListResponse) EqualVT(that *GetPeersListResponse) bool {
 	if this == that {
 		return true
@@ -146,6 +148,7 @@ func (this *GetPeersListResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *NetAddress) EqualVT(that *NetAddress) bool {
 	if this == that {
 		return true
@@ -210,8 +213,7 @@ type PeerServiceServer interface {
 }
 
 // UnimplementedPeerServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedPeerServiceServer struct {
-}
+type UnimplementedPeerServiceServer struct{}
 
 func (UnimplementedPeerServiceServer) GetPeersList(context.Context, *GetPeersListRequest) (*GetPeersListResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPeersList not implemented")
@@ -711,6 +713,7 @@ func (m *GetPeersListRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetPeersListResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -796,6 +799,7 @@ func (m *GetPeersListResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *NetAddress) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -919,6 +923,7 @@ func (m *NetAddress) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetPeersListRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1021,6 +1026,7 @@ func (m *GetPeersListRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetPeersListResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1106,6 +1112,7 @@ func (m *GetPeersListResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *NetAddress) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0

@@ -34,8 +34,8 @@ func (tc *testConsensus) DAGParams() *dagconfig.Params {
 
 func (tc *testConsensus) BuildBlockWithParents(parentHashes []*externalapi.DomainHash,
 	coinbaseData *externalapi.DomainCoinbaseData, transactions []*externalapi.DomainTransaction) (
-	*externalapi.DomainBlock, externalapi.UTXODiff, error) {
-
+	*externalapi.DomainBlock, externalapi.UTXODiff, error,
+) {
 	// Require write lock because BuildBlockWithParents stages temporary data
 	tc.lock.Lock()
 	defer tc.lock.Unlock()
@@ -49,8 +49,8 @@ func (tc *testConsensus) BuildBlockWithParents(parentHashes []*externalapi.Domai
 }
 
 func (tc *testConsensus) AddBlock(parentHashes []*externalapi.DomainHash, coinbaseData *externalapi.DomainCoinbaseData,
-	transactions []*externalapi.DomainTransaction) (*externalapi.DomainHash, *externalapi.VirtualChangeSet, error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (*externalapi.DomainHash, *externalapi.VirtualChangeSet, error) {
 	// Require write lock because BuildBlockWithParents stages temporary data
 	tc.lock.Lock()
 	defer tc.lock.Unlock()
@@ -69,8 +69,8 @@ func (tc *testConsensus) AddBlock(parentHashes []*externalapi.DomainHash, coinba
 }
 
 func (tc *testConsensus) AddBlockOnTips(coinbaseData *externalapi.DomainCoinbaseData,
-	transactions []*externalapi.DomainTransaction) (*externalapi.DomainHash, *externalapi.VirtualChangeSet, error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (*externalapi.DomainHash, *externalapi.VirtualChangeSet, error) {
 	tips, err := tc.Tips()
 	if err != nil {
 		return nil, nil, err
@@ -80,8 +80,8 @@ func (tc *testConsensus) AddBlockOnTips(coinbaseData *externalapi.DomainCoinbase
 }
 
 func (tc *testConsensus) AddUTXOInvalidHeader(parentHashes []*externalapi.DomainHash) (*externalapi.DomainHash,
-	*externalapi.VirtualChangeSet, error) {
-
+	*externalapi.VirtualChangeSet, error,
+) {
 	// Require write lock because BuildBlockWithParents stages temporary data
 	tc.lock.Lock()
 	defer tc.lock.Unlock()
@@ -103,8 +103,8 @@ func (tc *testConsensus) AddUTXOInvalidHeader(parentHashes []*externalapi.Domain
 }
 
 func (tc *testConsensus) AddUTXOInvalidBlock(parentHashes []*externalapi.DomainHash) (*externalapi.DomainHash,
-	*externalapi.VirtualChangeSet, error) {
-
+	*externalapi.VirtualChangeSet, error,
+) {
 	// Require write lock because BuildBlockWithParents stages temporary data
 	tc.lock.Lock()
 	defer tc.lock.Unlock()

@@ -49,8 +49,8 @@ func (css *consensusStateStore) serializeTips(tips []*externalapi.DomainHash) ([
 }
 
 func (css *consensusStateStore) deserializeTips(tipsBytes []byte) ([]*externalapi.DomainHash,
-	error) {
-
+	error,
+) {
 	dbTips := &serialization.DbTips{}
 	err := dbTips.UnmarshalVT(tipsBytes)
 	if err != nil {

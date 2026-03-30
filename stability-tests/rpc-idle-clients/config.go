@@ -39,7 +39,6 @@ func parseConfig() error {
 
 	parser := flags.NewParser(cfg, flags.PrintErrors|flags.HelpFlag)
 	_, err := parser.Parse()
-
 	if err != nil {
 		return err
 	}

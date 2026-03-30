@@ -62,8 +62,8 @@ func generateFundingCoinbaseTransactions(t *testing.T, rpcClient *rpcclient.RPCC
 
 func submitAnAmountOfTransactionsToTheMempool(t *testing.T, rpcClient *rpcclient.RPCClient,
 	payAddressKeyPair *secp256k1.SchnorrKeyPair, payToPayAddressScript *externalapi.ScriptPublicKey,
-	fundingTransactions *fundingCoinbaseTransactions, amountToSubmit int, ignoreOrphanRejects bool) {
-
+	fundingTransactions *fundingCoinbaseTransactions, amountToSubmit int, ignoreOrphanRejects bool,
+) {
 	log.Infof("Generating %d transactions", amountToSubmit)
 	transactions := make([]*externalapi.DomainTransaction, 0)
 	for len(transactions) < amountToSubmit {
@@ -117,8 +117,8 @@ func mineBlockAndGetCoinbaseTransaction(t *testing.T, rpcClient *rpcclient.RPCCl
 
 func generateTransactionsWithMultipleOutputs(t *testing.T,
 	payAddressKeyPair *secp256k1.SchnorrKeyPair, payToPayAddressScript *externalapi.ScriptPublicKey,
-	fundingTransaction *externalapi.DomainTransaction) []*externalapi.DomainTransaction {
-
+	fundingTransaction *externalapi.DomainTransaction,
+) []*externalapi.DomainTransaction {
 	var transactions []*externalapi.DomainTransaction
 	for fundingTransactionOutputIndex, fundingTransactionOutput := range fundingTransaction.Outputs {
 		if fundingTransactionOutput.Value < transactionFee {

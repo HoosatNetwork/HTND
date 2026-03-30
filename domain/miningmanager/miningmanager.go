@@ -126,8 +126,8 @@ func (mm *miningManager) HandleNewBlockTransactions(txs []*externalapi.DomainTra
 // adds it to the set of known transactions that have not yet been
 // added to any block
 func (mm *miningManager) ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction,
-	isHighPriority bool, allowOrphan bool) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
-
+	isHighPriority bool, allowOrphan bool,
+) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
 	return mm.mempool.ValidateAndInsertTransaction(transaction, isHighPriority, allowOrphan)
 }
 
@@ -137,8 +137,8 @@ func (mm *miningManager) GetTransaction(
 	includeOrphanPool bool) (
 	transactionPoolTransaction *externalapi.DomainTransaction,
 	isOrphan bool,
-	found bool) {
-
+	found bool,
+) {
 	return mm.mempool.GetTransaction(transactionID, includeTransactionPool, includeOrphanPool)
 }
 
@@ -148,22 +148,22 @@ func (mm *miningManager) GetTransactionNoClone(
 	includeOrphanPool bool) (
 	transactionPoolTransaction *externalapi.DomainTransaction,
 	isOrphan bool,
-	found bool) {
-
+	found bool,
+) {
 	return mm.mempool.GetTransactionNoClone(transactionID, includeTransactionPool, includeOrphanPool)
 }
 
 func (mm *miningManager) AllTransactions(includeTransactionPool bool, includeOrphanPool bool) (
 	transactionPoolTransactions []*externalapi.DomainTransaction,
-	orphanPoolTransactions []*externalapi.DomainTransaction) {
-
+	orphanPoolTransactions []*externalapi.DomainTransaction,
+) {
 	return mm.mempool.AllTransactions(includeTransactionPool, includeOrphanPool)
 }
 
 func (mm *miningManager) AllTransactionsNoClone(includeTransactionPool bool, includeOrphanPool bool) (
 	transactionPoolTransactions []*externalapi.DomainTransaction,
-	orphanPoolTransactions []*externalapi.DomainTransaction) {
-
+	orphanPoolTransactions []*externalapi.DomainTransaction,
+) {
 	return mm.mempool.AllTransactionsNoClone(includeTransactionPool, includeOrphanPool)
 }
 
@@ -172,8 +172,8 @@ func (mm *miningManager) GetTransactionsByAddresses(includeTransactionPool bool,
 	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
 	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
 	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
-	err error) {
-
+	err error,
+) {
 	return mm.mempool.GetTransactionsByAddresses(includeTransactionPool, includeOrphanPool)
 }
 
@@ -182,8 +182,8 @@ func (mm *miningManager) GetTransactionsByAddressesNoClone(includeTransactionPoo
 	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
 	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
 	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
-	err error) {
-
+	err error,
+) {
 	return mm.mempool.GetTransactionsByAddressesNoClone(includeTransactionPool, includeOrphanPool)
 }
 
@@ -192,7 +192,7 @@ func (mm *miningManager) TransactionCount(includeTransactionPool bool, includeOr
 }
 
 func (mm *miningManager) RevalidateHighPriorityTransactions() (
-	validTransactions []*externalapi.DomainTransaction, err error) {
-
+	validTransactions []*externalapi.DomainTransaction, err error,
+) {
 	return mm.mempool.RevalidateHighPriorityTransactions()
 }

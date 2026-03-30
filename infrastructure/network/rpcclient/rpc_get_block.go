@@ -4,8 +4,8 @@ import "github.com/Hoosat-Oy/HTND/app/appmessage"
 
 // GetBlock sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetBlock(hash string, includeTransactions bool) (
-	*appmessage.GetBlockResponseMessage, error) {
-
+	*appmessage.GetBlockResponseMessage, error,
+) {
 	err := c.rpcRouter.outgoingRoute().Enqueue(
 		appmessage.NewGetBlockRequestMessage(hash, includeTransactions))
 	if err != nil {

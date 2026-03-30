@@ -21,8 +21,8 @@ type handleRequestIBDChainBlockLocatorFlow struct {
 
 // HandleRequestIBDChainBlockLocator handles getBlockLocator messages
 func HandleRequestIBDChainBlockLocator(context RequestIBDChainBlockLocatorContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route) error {
-
+	outgoingRoute *router.Route,
+) error {
 	flow := &handleRequestIBDChainBlockLocatorFlow{
 		RequestIBDChainBlockLocatorContext: context,
 		incomingRoute:                      incomingRoute,
@@ -63,7 +63,6 @@ func (flow *handleRequestIBDChainBlockLocatorFlow) start() error {
 }
 
 func (flow *handleRequestIBDChainBlockLocatorFlow) receiveRequestIBDChainBlockLocator() (highHash, lowHash *externalapi.DomainHash, err error) {
-
 	message, err := flow.incomingRoute.Dequeue()
 	if err != nil {
 		return nil, nil, err

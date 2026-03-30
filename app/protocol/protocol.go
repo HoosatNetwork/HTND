@@ -155,8 +155,8 @@ func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection
 
 // RegisterFlow registers a flow to the given router.
 func (m *Manager) RegisterFlow(name string, router *routerpkg.Router, messageTypes []appmessage.MessageCommand, isStopping *uint32,
-	errChan chan error, initializeFunc common.FlowInitializeFunc) *common.Flow {
-
+	errChan chan error, initializeFunc common.FlowInitializeFunc,
+) *common.Flow {
 	route, err := router.AddIncomingRoute(name, messageTypes)
 	if err != nil {
 		panic(err)
@@ -168,8 +168,8 @@ func (m *Manager) RegisterFlow(name string, router *routerpkg.Router, messageTyp
 // RegisterFlowWithCapacity registers a flow to the given router with a custom capacity.
 func (m *Manager) RegisterFlowWithCapacity(name string, capacity int, router *routerpkg.Router,
 	messageTypes []appmessage.MessageCommand, isStopping *uint32,
-	errChan chan error, initializeFunc common.FlowInitializeFunc) *common.Flow {
-
+	errChan chan error, initializeFunc common.FlowInitializeFunc,
+) *common.Flow {
 	route, err := router.AddIncomingRouteWithCapacity(name, capacity, messageTypes)
 	if err != nil {
 		panic(err)
@@ -179,8 +179,8 @@ func (m *Manager) RegisterFlowWithCapacity(name string, capacity int, router *ro
 }
 
 func (m *Manager) registerFlowForRoute(route *routerpkg.Route, name string, isStopping *uint32,
-	errChan chan error, initializeFunc common.FlowInitializeFunc) *common.Flow {
-
+	errChan chan error, initializeFunc common.FlowInitializeFunc,
+) *common.Flow {
 	return &common.Flow{
 		Name: name,
 		ExecuteFunc: func(peer *peerpkg.Peer) {
@@ -195,8 +195,8 @@ func (m *Manager) registerFlowForRoute(route *routerpkg.Route, name string, isSt
 
 // RegisterOneTimeFlow registers a one-time flow (that exits once some operations are done) to the given router.
 func (m *Manager) RegisterOneTimeFlow(name string, router *routerpkg.Router, messageTypes []appmessage.MessageCommand,
-	isStopping *uint32, stopChan chan error, initializeFunc common.FlowInitializeFunc) *common.Flow {
-
+	isStopping *uint32, stopChan chan error, initializeFunc common.FlowInitializeFunc,
+) *common.Flow {
 	route, err := router.AddIncomingRoute(name, messageTypes)
 	if err != nil {
 		panic(err)
@@ -222,7 +222,8 @@ func (m *Manager) RegisterOneTimeFlow(name string, router *routerpkg.Router, mes
 }
 
 func registerHandshakeRoutes(router *routerpkg.Router) (
-	receiveVersionRoute, sendVersionRoute, receiveReadyRoute *routerpkg.Route) {
+	receiveVersionRoute, sendVersionRoute, receiveReadyRoute *routerpkg.Route,
+) {
 	receiveVersionRoute, err := router.AddIncomingRoute("recieveVersion - incoming", []appmessage.MessageCommand{appmessage.CmdVersion})
 	if err != nil {
 		panic(err)

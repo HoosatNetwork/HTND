@@ -154,7 +154,6 @@ func (v *transactionValidator) checkCoinbaseInIsolation(tx *externalapi.DomainTr
 	for i, output := range tx.Outputs {
 		if len(output.ScriptPublicKey.Script) > int(v.coinbasePayloadScriptPublicKeyMaxLength) {
 			return errors.Wrapf(ruleerrors.ErrCoinbaseTooLongScriptPublicKey, "coinbase output %d has a too long script public key", i)
-
 		}
 	}
 
@@ -487,7 +486,8 @@ func (v *transactionValidator) checkDataTransactionPayload(tx *externalapi.Domai
 }
 
 func (v *transactionValidator) checkTransactionSubnetwork(tx *externalapi.DomainTransaction,
-	localNodeSubnetworkID *externalapi.DomainSubnetworkID, DAAScore uint64) error {
+	localNodeSubnetworkID *externalapi.DomainSubnetworkID, DAAScore uint64,
+) error {
 	if !v.enableNonNativeSubnetworks &&
 		tx.SubnetworkID != subnetworks.SubnetworkIDNative &&
 		tx.SubnetworkID != subnetworks.SubnetworkIDCoinbase &&

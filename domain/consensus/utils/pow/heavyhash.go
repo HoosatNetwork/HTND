@@ -11,14 +11,18 @@ import (
 	"github.com/chewxy/math32"
 )
 
-const COMPLEX_OUTPUT_CLAMP = 1000000000
-const PRODUCT_VALUE_SCALE_MULTIPLIER = 0.1
-const COMPLEX_TRANSFORM_MULTIPLIER = 0.000001
-const eps float64 = 1e-9
+const (
+	COMPLEX_OUTPUT_CLAMP                   = 1000000000
+	PRODUCT_VALUE_SCALE_MULTIPLIER         = 0.1
+	COMPLEX_TRANSFORM_MULTIPLIER           = 0.000001
+	eps                            float64 = 1e-9
+)
 
 // type matrix [64][64]uint16
-type matrix [64][64]uint16
-type floatMatrix [64][64]float64
+type (
+	matrix      [64][64]uint16
+	floatMatrix [64][64]float64
+)
 
 // func generateMatrix(hash *externalapi.DomainHash) *matrix {
 // 	var mat matrix

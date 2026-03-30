@@ -7,11 +7,12 @@
 package pb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -207,12 +208,14 @@ func file_peer_service_proto_rawDescGZIP() []byte {
 	return file_peer_service_proto_rawDescData
 }
 
-var file_peer_service_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_peer_service_proto_goTypes = []any{
-	(*GetPeersListRequest)(nil),  // 0: GetPeersListRequest
-	(*GetPeersListResponse)(nil), // 1: GetPeersListResponse
-	(*NetAddress)(nil),           // 2: NetAddress
-}
+var (
+	file_peer_service_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+	file_peer_service_proto_goTypes  = []any{
+		(*GetPeersListRequest)(nil),  // 0: GetPeersListRequest
+		(*GetPeersListResponse)(nil), // 1: GetPeersListResponse
+		(*NetAddress)(nil),           // 2: NetAddress
+	}
+)
 var file_peer_service_proto_depIdxs = []int32{
 	2, // 0: GetPeersListResponse.addresses:type_name -> NetAddress
 	0, // 1: PeerService.GetPeersList:input_type -> GetPeersListRequest

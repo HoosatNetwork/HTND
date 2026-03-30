@@ -14,8 +14,8 @@ func (msg *NotifyVirtualSelectedParentChainChangedRequestMessage) Command() Mess
 
 // NewNotifyVirtualSelectedParentChainChangedRequestMessage returns an instance of the message
 func NewNotifyVirtualSelectedParentChainChangedRequestMessage(
-	includeAcceptedTransactionIDs bool) *NotifyVirtualSelectedParentChainChangedRequestMessage {
-
+	includeAcceptedTransactionIDs bool,
+) *NotifyVirtualSelectedParentChainChangedRequestMessage {
 	return &NotifyVirtualSelectedParentChainChangedRequestMessage{
 		IncludeAcceptedTransactionIDs: includeAcceptedTransactionIDs,
 	}
@@ -54,8 +54,8 @@ func (msg *VirtualSelectedParentChainChangedNotificationMessage) Command() Messa
 
 // NewVirtualSelectedParentChainChangedNotificationMessage returns a instance of the message
 func NewVirtualSelectedParentChainChangedNotificationMessage(removedChainBlockHashes,
-	addedChainBlocks []string, acceptedTransactionIDs []*AcceptedTransactionIDs) *VirtualSelectedParentChainChangedNotificationMessage {
-
+	addedChainBlocks []string, acceptedTransactionIDs []*AcceptedTransactionIDs,
+) *VirtualSelectedParentChainChangedNotificationMessage {
 	return &VirtualSelectedParentChainChangedNotificationMessage{
 		RemovedChainBlockHashes: removedChainBlockHashes,
 		AddedChainBlockHashes:   addedChainBlocks,

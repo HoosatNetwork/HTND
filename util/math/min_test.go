@@ -55,7 +55,6 @@ func TestMinUint32(t *testing.T) {
 		result := utilMath.MinUint32(test.inputs[0], test.inputs[1])
 		if result != test.expected {
 			t.Fatalf("Expected %d, instead found: %d", test.expected, result)
-
 		}
 		reverseResult := utilMath.MinUint32(test.inputs[1], test.inputs[0])
 		if result != reverseResult {

@@ -8,8 +8,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var importedPruningPointUTXOsBucketName = []byte("imported-pruning-point-utxos")
-var importedPruningPointMultisetKeyName = []byte("imported-pruning-point-multiset")
+var (
+	importedPruningPointUTXOsBucketName = []byte("imported-pruning-point-utxos")
+	importedPruningPointMultisetKeyName = []byte("imported-pruning-point-multiset")
+)
 
 func (ps *pruningStore) ClearImportedPruningPointUTXOs(dbContext model.DBWriter) error {
 	cursor, err := dbContext.Cursor(ps.importedPruningPointUTXOsBucket)
@@ -32,8 +34,8 @@ func (ps *pruningStore) ClearImportedPruningPointUTXOs(dbContext model.DBWriter)
 }
 
 func (ps *pruningStore) AppendImportedPruningPointUTXOs(dbTx model.DBTransaction,
-	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair) error {
-
+	outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair,
+) error {
 	for _, outpointAndUTXOEntryPair := range outpointAndUTXOEntryPairs {
 		key, err := ps.importedPruningPointUTXOKey(outpointAndUTXOEntryPair.Outpoint)
 		if err != nil {

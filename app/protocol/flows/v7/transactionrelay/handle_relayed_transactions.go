@@ -72,8 +72,8 @@ func (flow *handleRelayedTransactionsFlow) start() error {
 }
 
 func (flow *handleRelayedTransactionsFlow) requestInvTransactions(
-	inv *appmessage.MsgInvTransaction) (requestedIDs []*externalapi.DomainTransactionID, err error) {
-
+	inv *appmessage.MsgInvTransaction,
+) (requestedIDs []*externalapi.DomainTransactionID, err error) {
 	idsToRequest := make([]*externalapi.DomainTransactionID, 0, len(inv.TxIDs))
 	for _, txID := range inv.TxIDs {
 		if flow.isKnownTransaction(txID) {
@@ -138,8 +138,8 @@ func (flow *handleRelayedTransactionsFlow) broadcastAcceptedTransactions(accepte
 //
 // and populates invsQueue with any inv messages that meanwhile arrive.
 func (flow *handleRelayedTransactionsFlow) readMsgTxOrNotFound() (
-	msgTx *appmessage.MsgTx, msgNotFound *appmessage.MsgTransactionNotFound, err error) {
-
+	msgTx *appmessage.MsgTx, msgNotFound *appmessage.MsgTransactionNotFound, err error,
+) {
 	for {
 		message, err := flow.incomingRoute.DequeueWithTimeout(common.DefaultTimeout)
 		if err != nil {

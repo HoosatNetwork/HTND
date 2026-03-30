@@ -22,9 +22,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-var (
-	defaultAppDir = util.AppDir("htnwallet", false)
-)
+var defaultAppDir = util.AppDir("htnwallet", false)
 
 // LastVersion is the most up to date file format version
 const LastVersion = 1
@@ -94,8 +92,7 @@ func (d *File) toJSON() *keysFileJSON {
 
 // NewFileFromMnemonic generates a new File from the given mnemonic string
 func NewFileFromMnemonic(params *dagconfig.Params, mnemonic string, password string) (*File, error) {
-	encryptedMnemonics, extendedPublicKeys, err :=
-		encryptedMnemonicExtendedPublicKeyPairs(params, []string{mnemonic}, password, false)
+	encryptedMnemonics, extendedPublicKeys, err := encryptedMnemonicExtendedPublicKeyPairs(params, []string{mnemonic}, password, false)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +271,7 @@ func createFileDirectoryIfDoesntExist(path string) error {
 		return nil
 	}
 
-	return os.MkdirAll(dir, 0700)
+	return os.MkdirAll(dir, 0o700)
 }
 
 func pathExists(path string) (bool, error) {
@@ -286,7 +283,6 @@ func pathExists(path string) (bool, error) {
 
 	if os.IsNotExist(err) {
 		return false, nil
-
 	}
 
 	return false, err
@@ -303,7 +299,7 @@ func (d *File) Save() error {
 		return err
 	}
 
-	file, err := os.OpenFile(d.path, os.O_WRONLY|os.O_CREATE, 0600)
+	file, err := os.OpenFile(d.path, os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}

@@ -7,9 +7,10 @@ package txscript
 import (
 	"bytes"
 	"fmt"
-	"github.com/pkg/errors"
 	"reflect"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 // checkScriptError ensures the type of the two passed errors are of the

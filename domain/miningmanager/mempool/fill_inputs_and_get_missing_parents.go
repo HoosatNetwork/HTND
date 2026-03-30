@@ -10,8 +10,8 @@ import (
 )
 
 func (mp *mempool) fillInputsAndGetMissingParents(transaction *externalapi.DomainTransaction) (
-	parents model.IDToTransactionMap, missingOutpoints []*externalapi.DomainOutpoint, err error) {
-
+	parents model.IDToTransactionMap, missingOutpoints []*externalapi.DomainOutpoint, err error,
+) {
 	parentsInPool := mp.transactionsPool.getParentTransactionsInPool(transaction)
 
 	fillInputs(transaction, parentsInPool)

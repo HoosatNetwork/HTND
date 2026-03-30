@@ -10,8 +10,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var ghostdagDataBucketName = []byte("block-ghostdag-data")
-var trustedDataBucketName = []byte("block-with-trusted-data-ghostdag-data")
+var (
+	ghostdagDataBucketName = []byte("block-ghostdag-data")
+	trustedDataBucketName  = []byte("block-with-trusted-data-ghostdag-data")
+)
 
 // ghostdagDataStore represents a store of BlockGHOSTDAGData
 type ghostdagDataStore struct {
@@ -33,8 +35,8 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.GHO
 
 // Stage stages the given blockGHOSTDAGData for the given blockHash
 func (gds *ghostdagDataStore) Stage(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData, isTrustedData bool) {
-
+	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData, isTrustedData bool,
+) {
 	stagingShard := gds.stagingShard(stagingArea)
 
 	stagingShard.toAdd[newKey(blockHash, isTrustedData)] = blockGHOSTDAGData

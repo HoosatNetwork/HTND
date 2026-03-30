@@ -94,7 +94,6 @@ func New(powMax *big.Int,
 
 	txMassCalculator *txmass.Calculator,
 ) model.BlockValidator {
-
 	return &blockValidator{
 		powMax:                     powMax,
 		skipPoW:                    skipPoW,

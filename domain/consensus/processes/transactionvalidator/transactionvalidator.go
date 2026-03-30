@@ -38,8 +38,8 @@ func New(blockCoinbaseMaturity uint64,
 	pastMedianTimeManager model.PastMedianTimeManager,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	daaBlocksStore model.DAABlocksStore,
-	txMassCalculator *txmass.Calculator) model.TransactionValidator {
-
+	txMassCalculator *txmass.Calculator,
+) model.TransactionValidator {
 	return &transactionValidator{
 		blockCoinbaseMaturity:                   blockCoinbaseMaturity,
 		enableNonNativeSubnetworks:              enableNonNativeSubnetworks,

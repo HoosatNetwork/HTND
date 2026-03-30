@@ -9,7 +9,8 @@ import (
 )
 
 func (rt *reachabilityManager) reachabilityDataForInsertion(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash) (model.MutableReachabilityData, error) {
+	blockHash *externalapi.DomainHash,
+) (model.MutableReachabilityData, error) {
 	data, err := rt.reachabilityDataStore.ReachabilityData(rt.databaseContext, stagingArea, blockHash)
 	if err == nil {
 		return data.CloneMutable(), nil
@@ -48,8 +49,8 @@ func (rt *reachabilityManager) interval(stagingArea *model.StagingArea, blockHas
 }
 
 func (rt *reachabilityManager) children(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
-	[]*externalapi.DomainHash, error) {
-
+	[]*externalapi.DomainHash, error,
+) {
 	data, err := rt.reachabilityDataStore.ReachabilityData(rt.databaseContext, stagingArea, blockHash)
 	if database.IsNotFoundError(err) {
 		log.Infof("Reachabilitymanager children failed to retrieve with %s\n", blockHash)
@@ -63,8 +64,8 @@ func (rt *reachabilityManager) children(stagingArea *model.StagingArea, blockHas
 }
 
 func (rt *reachabilityManager) parent(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
-	*externalapi.DomainHash, error) {
-
+	*externalapi.DomainHash, error,
+) {
 	data, err := rt.reachabilityDataStore.ReachabilityData(rt.databaseContext, stagingArea, blockHash)
 	if database.IsNotFoundError(err) {
 		log.Infof("Reachabilitymanager parent failed to retrieve with %s\n", blockHash)

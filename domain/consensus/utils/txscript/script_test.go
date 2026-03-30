@@ -18,12 +18,16 @@ func TestParseOpcode(t *testing.T) {
 	// Deep copy the array and make one of the opcodes invalid by setting it
 	// to the wrong length.
 	fakeArray := opcodeArray
-	fakeArray[OpPushData4] = opcode{value: OpPushData4,
-		name: "OP_PUSHDATA4", length: -8, opfunc: opcodePushData}
+	fakeArray[OpPushData4] = opcode{
+		value: OpPushData4,
+		name:  "OP_PUSHDATA4", length: -8, opfunc: opcodePushData,
+	}
 
 	// This script would be fine if -8 was a valid length.
-	_, err := parseScriptTemplate([]byte{OpPushData4, 0x1, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00}, &fakeArray)
+	_, err := parseScriptTemplate([]byte{
+		OpPushData4, 0x1, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00,
+	}, &fakeArray)
 	if err == nil {
 		t.Errorf("no error with dodgy opcode array!")
 	}
@@ -3461,7 +3465,7 @@ func TestUnparsingInvalidOpcodes(t *testing.T) {
 func TestPushedData(t *testing.T) {
 	t.Parallel()
 
-	var tests = []struct {
+	tests := []struct {
 		script string
 		out    [][]byte
 		valid  bool
@@ -3672,7 +3676,6 @@ func TestGetPreciseSigOps(t *testing.T) {
 		if count != test.nSigOps {
 			t.Errorf("%s: expected count of %d, got %d", test.name,
 				test.nSigOps, count)
-
 		}
 	}
 }
@@ -3756,13 +3759,13 @@ func TestIsPushOnly(t *testing.T) {
 		},
 		{
 			name:           "non push only script",
-			script:         mustParseShortForm("0x515293", 0), //OP_1 OP_2 OP_ADD
+			script:         mustParseShortForm("0x515293", 0), // OP_1 OP_2 OP_ADD
 			expectedResult: false,
 			shouldFail:     false,
 		},
 		{
 			name:           "push only script",
-			script:         mustParseShortForm("0x5152", 0), //OP_1 OP_2
+			script:         mustParseShortForm("0x5152", 0), // OP_1 OP_2
 			expectedResult: true,
 			shouldFail:     false,
 		},
@@ -3803,10 +3806,12 @@ func TestIsUnspendable(t *testing.T) {
 		},
 		{
 			// Spendable
-			scriptPubKey: []byte{0x76, 0xa9, 0x14, 0x29, 0x95, 0xa0,
+			scriptPubKey: []byte{
+				0x76, 0xa9, 0x14, 0x29, 0x95, 0xa0,
 				0xfe, 0x68, 0x43, 0xfa, 0x9b, 0x95, 0x45,
 				0x97, 0xf0, 0xdc, 0xa7, 0xa4, 0x4d, 0xf6,
-				0xfa, 0x0b, 0x5c, 0x88, 0xac},
+				0xfa, 0x0b, 0x5c, 0x88, 0xac,
+			},
 			expected: false,
 		},
 	}

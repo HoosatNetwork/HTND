@@ -7,14 +7,15 @@ package pb
 import (
 	context "context"
 	fmt "fmt"
+	io "io"
+	unsafe "unsafe"
+
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	io "io"
-	unsafe "unsafe"
 )
 
 const (
@@ -624,6 +625,7 @@ func (this *GetBalanceRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *GetBalanceResponse) EqualVT(that *GetBalanceResponse) bool {
 	if this == that {
 		return true
@@ -663,6 +665,7 @@ func (this *GetBalanceResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *AddressBalances) EqualVT(that *AddressBalances) bool {
 	if this == that {
 		return true
@@ -688,6 +691,7 @@ func (this *AddressBalances) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *CreateUnsignedTransactionsRequest) EqualVT(that *CreateUnsignedTransactionsRequest) bool {
 	if this == that {
 		return true
@@ -731,6 +735,7 @@ func (this *CreateUnsignedTransactionsRequest) EqualMessageVT(thatMsg proto.Mess
 	}
 	return this.EqualVT(that)
 }
+
 func (this *CreateUnsignedTransactionsResponse) EqualVT(that *CreateUnsignedTransactionsResponse) bool {
 	if this == that {
 		return true
@@ -756,6 +761,7 @@ func (this *CreateUnsignedTransactionsResponse) EqualMessageVT(thatMsg proto.Mes
 	}
 	return this.EqualVT(that)
 }
+
 func (this *CreateUnsignedCompoundTransactionRequest) EqualVT(that *CreateUnsignedCompoundTransactionRequest) bool {
 	if this == that {
 		return true
@@ -790,6 +796,7 @@ func (this *CreateUnsignedCompoundTransactionRequest) EqualMessageVT(thatMsg pro
 	}
 	return this.EqualVT(that)
 }
+
 func (this *CreateUnsignedCompoundTransactionResponse) EqualVT(that *CreateUnsignedCompoundTransactionResponse) bool {
 	if this == that {
 		return true
@@ -815,6 +822,7 @@ func (this *CreateUnsignedCompoundTransactionResponse) EqualMessageVT(thatMsg pr
 	}
 	return this.EqualVT(that)
 }
+
 func (this *ShowAddressesRequest) EqualVT(that *ShowAddressesRequest) bool {
 	if this == that {
 		return true
@@ -831,6 +839,7 @@ func (this *ShowAddressesRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *ShowAddressesResponse) EqualVT(that *ShowAddressesResponse) bool {
 	if this == that {
 		return true
@@ -856,6 +865,7 @@ func (this *ShowAddressesResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *NewAddressRequest) EqualVT(that *NewAddressRequest) bool {
 	if this == that {
 		return true
@@ -872,6 +882,7 @@ func (this *NewAddressRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *NewAddressResponse) EqualVT(that *NewAddressResponse) bool {
 	if this == that {
 		return true
@@ -891,6 +902,7 @@ func (this *NewAddressResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *BroadcastRequest) EqualVT(that *BroadcastRequest) bool {
 	if this == that {
 		return true
@@ -925,6 +937,7 @@ func (this *BroadcastRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *BroadcastResponse) EqualVT(that *BroadcastResponse) bool {
 	if this == that {
 		return true
@@ -950,6 +963,7 @@ func (this *BroadcastResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *ShutdownRequest) EqualVT(that *ShutdownRequest) bool {
 	if this == that {
 		return true
@@ -966,6 +980,7 @@ func (this *ShutdownRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *ShutdownResponse) EqualVT(that *ShutdownResponse) bool {
 	if this == that {
 		return true
@@ -982,6 +997,7 @@ func (this *ShutdownResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *Outpoint) EqualVT(that *Outpoint) bool {
 	if this == that {
 		return true
@@ -1004,6 +1020,7 @@ func (this *Outpoint) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *UtxosByAddressesEntry) EqualVT(that *UtxosByAddressesEntry) bool {
 	if this == that {
 		return true
@@ -1029,6 +1046,7 @@ func (this *UtxosByAddressesEntry) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *ScriptPublicKey) EqualVT(that *ScriptPublicKey) bool {
 	if this == that {
 		return true
@@ -1051,6 +1069,7 @@ func (this *ScriptPublicKey) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *UtxoEntry) EqualVT(that *UtxoEntry) bool {
 	if this == that {
 		return true
@@ -1079,6 +1098,7 @@ func (this *UtxoEntry) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *GetExternalSpendableUTXOsRequest) EqualVT(that *GetExternalSpendableUTXOsRequest) bool {
 	if this == that {
 		return true
@@ -1098,6 +1118,7 @@ func (this *GetExternalSpendableUTXOsRequest) EqualMessageVT(thatMsg proto.Messa
 	}
 	return this.EqualVT(that)
 }
+
 func (this *GetExternalSpendableUTXOsResponse) EqualVT(that *GetExternalSpendableUTXOsResponse) bool {
 	if this == that {
 		return true
@@ -1131,6 +1152,7 @@ func (this *GetExternalSpendableUTXOsResponse) EqualMessageVT(thatMsg proto.Mess
 	}
 	return this.EqualVT(that)
 }
+
 func (this *SendRequest) EqualVT(that *SendRequest) bool {
 	if this == that {
 		return true
@@ -1174,6 +1196,7 @@ func (this *SendRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *SendResponse) EqualVT(that *SendResponse) bool {
 	if this == that {
 		return true
@@ -1208,6 +1231,7 @@ func (this *SendResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *SignRequest) EqualVT(that *SignRequest) bool {
 	if this == that {
 		return true
@@ -1236,6 +1260,7 @@ func (this *SignRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *SignResponse) EqualVT(that *SignResponse) bool {
 	if this == that {
 		return true
@@ -1261,6 +1286,7 @@ func (this *SignResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *GetVersionRequest) EqualVT(that *GetVersionRequest) bool {
 	if this == that {
 		return true
@@ -1277,6 +1303,7 @@ func (this *GetVersionRequest) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *GetVersionResponse) EqualVT(that *GetVersionResponse) bool {
 	if this == that {
 		return true
@@ -1449,39 +1476,48 @@ type HtnwalletdServer interface {
 }
 
 // UnimplementedHtnwalletdServer must be embedded to have forward compatible implementations.
-type UnimplementedHtnwalletdServer struct {
-}
+type UnimplementedHtnwalletdServer struct{}
 
 func (UnimplementedHtnwalletdServer) GetBalance(context.Context, *GetBalanceRequest) (*GetBalanceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBalance not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) GetExternalSpendableUTXOs(context.Context, *GetExternalSpendableUTXOsRequest) (*GetExternalSpendableUTXOsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetExternalSpendableUTXOs not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) CreateUnsignedTransactions(context.Context, *CreateUnsignedTransactionsRequest) (*CreateUnsignedTransactionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateUnsignedTransactions not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) ShowAddresses(context.Context, *ShowAddressesRequest) (*ShowAddressesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ShowAddresses not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) NewAddress(context.Context, *NewAddressRequest) (*NewAddressResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NewAddress not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Broadcast not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) Send(context.Context, *SendRequest) (*SendResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Send not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) Sign(context.Context, *SignRequest) (*SignResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Sign not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
 }
+
 func (UnimplementedHtnwalletdServer) CreateUnsignedCompoundTransaction(context.Context, *CreateUnsignedCompoundTransactionRequest) (*CreateUnsignedCompoundTransactionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateUnsignedCompoundTransaction not implemented")
 }
@@ -4900,6 +4936,7 @@ func (m *GetBalanceRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetBalanceResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5023,6 +5060,7 @@ func (m *GetBalanceResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *AddressBalances) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5144,6 +5182,7 @@ func (m *AddressBalances) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CreateUnsignedTransactionsRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5385,6 +5424,7 @@ func (m *CreateUnsignedTransactionsRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CreateUnsignedTransactionsResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5468,6 +5508,7 @@ func (m *CreateUnsignedTransactionsResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CreateUnsignedCompoundTransactionRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5636,6 +5677,7 @@ func (m *CreateUnsignedCompoundTransactionRequest) UnmarshalVT(dAtA []byte) erro
 	}
 	return nil
 }
+
 func (m *CreateUnsignedCompoundTransactionResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5719,6 +5761,7 @@ func (m *CreateUnsignedCompoundTransactionResponse) UnmarshalVT(dAtA []byte) err
 	}
 	return nil
 }
+
 func (m *ShowAddressesRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5770,6 +5813,7 @@ func (m *ShowAddressesRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ShowAddressesResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5853,6 +5897,7 @@ func (m *ShowAddressesResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *NewAddressRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5904,6 +5949,7 @@ func (m *NewAddressRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *NewAddressResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5987,6 +6033,7 @@ func (m *NewAddressResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *BroadcastRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6131,6 +6178,7 @@ func (m *BroadcastRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *BroadcastResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6214,6 +6262,7 @@ func (m *BroadcastResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ShutdownRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6265,6 +6314,7 @@ func (m *ShutdownRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ShutdownResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6316,6 +6366,7 @@ func (m *ShutdownResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Outpoint) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6418,6 +6469,7 @@ func (m *Outpoint) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *UtxosByAddressesEntry) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6573,6 +6625,7 @@ func (m *UtxosByAddressesEntry) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6675,6 +6728,7 @@ func (m *ScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *UtxoEntry) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6820,6 +6874,7 @@ func (m *UtxoEntry) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetExternalSpendableUTXOsRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6903,6 +6958,7 @@ func (m *GetExternalSpendableUTXOsRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetExternalSpendableUTXOsResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6988,6 +7044,7 @@ func (m *GetExternalSpendableUTXOsResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SendRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7227,6 +7284,7 @@ func (m *SendRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SendResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7342,6 +7400,7 @@ func (m *SendResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SignRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7457,6 +7516,7 @@ func (m *SignRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SignResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7540,6 +7600,7 @@ func (m *SignResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetVersionRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7591,6 +7652,7 @@ func (m *GetVersionRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetVersionResponse) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7674,6 +7736,7 @@ func (m *GetVersionResponse) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetBalanceRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7725,6 +7788,7 @@ func (m *GetBalanceRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetBalanceResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7848,6 +7912,7 @@ func (m *GetBalanceResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *AddressBalances) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7973,6 +8038,7 @@ func (m *AddressBalances) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CreateUnsignedTransactionsRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8223,6 +8289,7 @@ func (m *CreateUnsignedTransactionsRequest) UnmarshalVTUnsafe(dAtA []byte) error
 	}
 	return nil
 }
+
 func (m *CreateUnsignedTransactionsResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8305,6 +8372,7 @@ func (m *CreateUnsignedTransactionsResponse) UnmarshalVTUnsafe(dAtA []byte) erro
 	}
 	return nil
 }
+
 func (m *CreateUnsignedCompoundTransactionRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8485,6 +8553,7 @@ func (m *CreateUnsignedCompoundTransactionRequest) UnmarshalVTUnsafe(dAtA []byte
 	}
 	return nil
 }
+
 func (m *CreateUnsignedCompoundTransactionResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8567,6 +8636,7 @@ func (m *CreateUnsignedCompoundTransactionResponse) UnmarshalVTUnsafe(dAtA []byt
 	}
 	return nil
 }
+
 func (m *ShowAddressesRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8618,6 +8688,7 @@ func (m *ShowAddressesRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ShowAddressesResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8705,6 +8776,7 @@ func (m *ShowAddressesResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *NewAddressRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8756,6 +8828,7 @@ func (m *NewAddressRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *NewAddressResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8843,6 +8916,7 @@ func (m *NewAddressResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *BroadcastRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8986,6 +9060,7 @@ func (m *BroadcastRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *BroadcastResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9073,6 +9148,7 @@ func (m *BroadcastResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ShutdownRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9124,6 +9200,7 @@ func (m *ShutdownRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ShutdownResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9175,6 +9252,7 @@ func (m *ShutdownResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Outpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9281,6 +9359,7 @@ func (m *Outpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *UtxosByAddressesEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9440,6 +9519,7 @@ func (m *UtxosByAddressesEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9546,6 +9626,7 @@ func (m *ScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *UtxoEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9691,6 +9772,7 @@ func (m *UtxoEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetExternalSpendableUTXOsRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9778,6 +9860,7 @@ func (m *GetExternalSpendableUTXOsRequest) UnmarshalVTUnsafe(dAtA []byte) error 
 	}
 	return nil
 }
+
 func (m *GetExternalSpendableUTXOsResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9863,6 +9946,7 @@ func (m *GetExternalSpendableUTXOsResponse) UnmarshalVTUnsafe(dAtA []byte) error
 	}
 	return nil
 }
+
 func (m *SendRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10118,6 +10202,7 @@ func (m *SendRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SendResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10236,6 +10321,7 @@ func (m *SendResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SignRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10354,6 +10440,7 @@ func (m *SignRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SignResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10436,6 +10523,7 @@ func (m *SignResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetVersionRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10487,6 +10575,7 @@ func (m *GetVersionRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GetVersionResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0

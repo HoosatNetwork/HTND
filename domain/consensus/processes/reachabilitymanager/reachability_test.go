@@ -25,7 +25,6 @@ func (r *reachabilityDataStoreMock) Commit(_ model.DBTransaction) error {
 }
 
 func (r *reachabilityDataStoreMock) StageReachabilityData(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, reachabilityData model.ReachabilityData) {
-
 	r.reachabilityDataStaging[*blockHash] = reachabilityData
 	r.recorder[*blockHash] = struct{}{}
 }
@@ -39,7 +38,6 @@ func (r *reachabilityDataStoreMock) IsStaged(*model.StagingArea) bool {
 }
 
 func (r *reachabilityDataStoreMock) ReachabilityData(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (model.ReachabilityData, error) {
-
 	return r.reachabilityDataStaging[*blockHash], nil
 }
 
@@ -135,8 +133,8 @@ func (th *testHelper) getIntervalSize(stagingArea *model.StagingArea, node *exte
 }
 
 func (th *testHelper) remainingIntervalBefore(
-	stagingArea *model.StagingArea, node *externalapi.DomainHash) *model.ReachabilityInterval {
-
+	stagingArea *model.StagingArea, node *externalapi.DomainHash,
+) *model.ReachabilityInterval {
 	interval, err := th.reachabilityManager.remainingIntervalBefore(stagingArea, node)
 	if err != nil {
 		th.t.Fatalf("remainingIntervalBefore: %s", err)
@@ -146,8 +144,8 @@ func (th *testHelper) remainingIntervalBefore(
 }
 
 func (th *testHelper) remainingIntervalAfter(stagingArea *model.StagingArea,
-	node *externalapi.DomainHash) *model.ReachabilityInterval {
-
+	node *externalapi.DomainHash,
+) *model.ReachabilityInterval {
 	interval, err := th.reachabilityManager.remainingIntervalAfter(stagingArea, node)
 	if err != nil {
 		th.t.Fatalf("remainingIntervalAfter: %s", err)
@@ -164,8 +162,8 @@ func (th *testHelper) addChild(stagingArea *model.StagingArea, node, child, rein
 }
 
 func (th *testHelper) isReachabilityTreeAncestorOf(
-	stagingArea *model.StagingArea, node, other *externalapi.DomainHash) bool {
-
+	stagingArea *model.StagingArea, node, other *externalapi.DomainHash,
+) bool {
 	isReachabilityTreeAncestorOf, err := th.reachabilityManager.IsReachabilityTreeAncestorOf(stagingArea, node, other)
 	if err != nil {
 		th.t.Fatalf("IsReachabilityTreeAncestorOf: %s", err)

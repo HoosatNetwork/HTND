@@ -119,8 +119,8 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 }
 
 func (csm *consensusStateManager) removeHashesInFutureOf(stagingArea *model.StagingArea, hashes []*externalapi.DomainHash,
-	ancestor *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	ancestor *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	// Source: https://github.com/golang/go/wiki/SliceTricks#filter-in-place
 	i := 0
 	for _, hash := range hashes {
@@ -137,8 +137,8 @@ func (csm *consensusStateManager) removeHashesInFutureOf(stagingArea *model.Stag
 }
 
 func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model.StagingArea,
-	candidatesHeap model.BlockHeap) (*externalapi.DomainHash, error) {
-
+	candidatesHeap model.BlockHeap,
+) (*externalapi.DomainHash, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "selectVirtualSelectedParent")
 	defer onEnd()
 
@@ -254,8 +254,8 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 // If the candidate can't be a virtual parent, then canBeParent=false and newCandidate is a new proposed candidate in the past of candidate.
 func (csm *consensusStateManager) mergeSetIncrease(stagingArea *model.StagingArea, candidate *externalapi.DomainHash,
 	selectedVirtualParents []*externalapi.DomainHash, mergeSetSize uint64) (
-	canBeParent bool, newCandidate *externalapi.DomainHash, mergeSetIncrease uint64, err error) {
-
+	canBeParent bool, newCandidate *externalapi.DomainHash, mergeSetIncrease uint64, err error,
+) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "mergeSetIncrease")
 	defer onEnd()
 
@@ -310,8 +310,8 @@ func (csm *consensusStateManager) mergeSetIncrease(stagingArea *model.StagingAre
 }
 
 func (csm *consensusStateManager) boundedMergeBreakingParents(stagingArea *model.StagingArea,
-	parents []*externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	parents []*externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "boundedMergeBreakingParents")
 	defer onEnd()
 
@@ -334,8 +334,7 @@ func (csm *consensusStateManager) boundedMergeBreakingParents(stagingArea *model
 	}
 	log.Debugf("The merge depth root of virtual is: %s", virtualMergeDepthRoot)
 
-	potentiallyKosherizingBlocks, err :=
-		csm.mergeDepthManager.NonBoundedMergeDepthViolatingBlues(stagingArea, model.VirtualBlockHash, virtualMergeDepthRoot)
+	potentiallyKosherizingBlocks, err := csm.mergeDepthManager.NonBoundedMergeDepthViolatingBlues(stagingArea, model.VirtualBlockHash, virtualMergeDepthRoot)
 	if err != nil {
 		return nil, err
 	}

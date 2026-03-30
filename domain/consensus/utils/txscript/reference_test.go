@@ -176,8 +176,10 @@ func parseExpectedResult(expected string) ([]ErrorCode, error) {
 	case "BAD_OPCODE":
 		return []ErrorCode{ErrReservedOpcode, ErrMalformedPush}, nil
 	case "UNBALANCED_CONDITIONAL":
-		return []ErrorCode{ErrUnbalancedConditional,
-			ErrInvalidStackOperation}, nil
+		return []ErrorCode{
+			ErrUnbalancedConditional,
+			ErrInvalidStackOperation,
+		}, nil
 	case "OP_RETURN":
 		return []ErrorCode{ErrEarlyReturn}, nil
 	case "VERIFY":

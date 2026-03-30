@@ -33,8 +33,8 @@ func newTransactionsPool(mp *mempool) *transactionsPool {
 }
 
 func (tp *transactionsPool) addTransaction(transaction *externalapi.DomainTransaction,
-	parentTransactionsInPool model.IDToTransactionMap, isHighPriority bool) (*model.MempoolTransaction, error) {
-
+	parentTransactionsInPool model.IDToTransactionMap, isHighPriority bool,
+) (*model.MempoolTransaction, error) {
 	virtualDAAScore, err := tp.mempool.consensusReference.Consensus().GetVirtualDAAScore()
 	if err != nil {
 		return nil, err
@@ -59,8 +59,7 @@ func (tp *transactionsPool) addMempoolTransaction(transaction *model.MempoolTran
 		if tp.chainedTransactionsByParentID[parentTransactionID] == nil {
 			tp.chainedTransactionsByParentID[parentTransactionID] = []*model.MempoolTransaction{}
 		}
-		tp.chainedTransactionsByParentID[parentTransactionID] =
-			append(tp.chainedTransactionsByParentID[parentTransactionID], transaction)
+		tp.chainedTransactionsByParentID[parentTransactionID] = append(tp.chainedTransactionsByParentID[parentTransactionID], transaction)
 	}
 
 	tp.mempool.mempoolUTXOSet.addTransaction(transaction)
@@ -137,7 +136,7 @@ func (tp *transactionsPool) allReadyTransactions() []*externalapi.DomainTransact
 
 	for _, mempoolTransaction := range tp.allTransactions {
 		if len(mempoolTransaction.ParentTransactionsInPool()) == 0 {
-			result[resultCount] = mempoolTransaction.Transaction().Clone() //this pointer leaves the mempool, and gets its utxo set to nil, hence we clone.
+			result[resultCount] = mempoolTransaction.Transaction().Clone() // this pointer leaves the mempool, and gets its utxo set to nil, hence we clone.
 			resultCount++
 		}
 	}
@@ -146,8 +145,8 @@ func (tp *transactionsPool) allReadyTransactions() []*externalapi.DomainTransact
 }
 
 func (tp *transactionsPool) getParentTransactionsInPool(
-	transaction *externalapi.DomainTransaction) model.IDToTransactionMap {
-
+	transaction *externalapi.DomainTransaction,
+) model.IDToTransactionMap {
 	parentsTransactionsInPool := model.IDToTransactionMap{}
 
 	for _, input := range transaction.Inputs {
@@ -210,7 +209,7 @@ func (tp *transactionsPool) limitTransactionCount() error {
 func (tp *transactionsPool) getTransaction(transactionID *externalapi.DomainTransactionID, clone bool) (*externalapi.DomainTransaction, bool) {
 	if mempoolTransaction, ok := tp.allTransactions[*transactionID]; ok {
 		if clone {
-			return mempoolTransaction.Transaction().Clone(), true //this pointer leaves the mempool, hence we clone.
+			return mempoolTransaction.Transaction().Clone(), true // this pointer leaves the mempool, hence we clone.
 		}
 		return mempoolTransaction.Transaction(), true
 	}
@@ -220,14 +219,15 @@ func (tp *transactionsPool) getTransaction(transactionID *externalapi.DomainTran
 func (tp *transactionsPool) getTransactionsByAddresses(clone bool) (
 	sending model.ScriptPublicKeyStringToDomainTransaction,
 	receiving model.ScriptPublicKeyStringToDomainTransaction,
-	err error) {
+	err error,
+) {
 	sending = make(model.ScriptPublicKeyStringToDomainTransaction, tp.transactionCount())
 	receiving = make(model.ScriptPublicKeyStringToDomainTransaction, tp.transactionCount())
 	var transaction *externalapi.DomainTransaction
 	for _, mempoolTransaction := range tp.allTransactions {
 		transaction = mempoolTransaction.Transaction()
 		if clone {
-			transaction = transaction.Clone() //this pointer leaves the mempool, hence we clone.
+			transaction = transaction.Clone() // this pointer leaves the mempool, hence we clone.
 		}
 		for _, input := range transaction.Inputs {
 			if input.UTXOEntry == nil {
@@ -248,7 +248,7 @@ func (tp *transactionsPool) getAllTransactions(clone bool) []*externalapi.Domain
 	for _, mempoolTransaction := range tp.allTransactions {
 		allTransactions[i] = mempoolTransaction.Transaction()
 		if clone {
-			allTransactions[i] = allTransactions[i].Clone() //this pointer leaves the mempool, hence we clone.
+			allTransactions[i] = allTransactions[i].Clone() // this pointer leaves the mempool, hence we clone.
 		}
 		i++
 	}

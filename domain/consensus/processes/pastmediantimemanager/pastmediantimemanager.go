@@ -33,8 +33,8 @@ func New(timestampDeviationTolerance int,
 	dagTraversalManager model.DAGTraversalManager,
 	blockHeaderStore model.BlockHeaderStore,
 	ghostdagDataStore model.GHOSTDAGDataStore,
-	genesisHash *externalapi.DomainHash) model.PastMedianTimeManager {
-
+	genesisHash *externalapi.DomainHash,
+) model.PastMedianTimeManager {
 	return &pastMedianTimeManager{
 		timestampDeviationTolerance: timestampDeviationTolerance,
 		databaseContext:             databaseContext,
@@ -77,8 +77,8 @@ func (pmtm *pastMedianTimeManager) PastMedianTime(stagingArea *model.StagingArea
 }
 
 func (pmtm *pastMedianTimeManager) windowMedianTimestamp(
-	stagingArea *model.StagingArea, window []*externalapi.DomainHash) (int64, error) {
-
+	stagingArea *model.StagingArea, window []*externalapi.DomainHash,
+) (int64, error) {
 	if len(window) == 0 {
 		return 0, errors.New("Cannot calculate median timestamp for an empty block window")
 	}

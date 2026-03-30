@@ -23,7 +23,8 @@ func New(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
 	k []externalapi.KType,
-	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
+	genesisHash *externalapi.DomainHash,
+) model.GHOSTDAGManager {
 	return &ghostdagManager{
 		databaseContext:    databaseContext,
 		dagTopologyManager: dagTopologyManager,

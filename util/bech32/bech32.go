@@ -11,8 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-const checksumLength = 8
+const (
+	charset        = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+	checksumLength = 8
+)
 
 // For use in convertBits. Represents a number of bits to convert to or from and whether
 // to add padding.
@@ -23,8 +25,10 @@ type conversionType struct {
 }
 
 // Conversion types to use in convertBits.
-var fiveToEightBits = conversionType{fromBits: 5, toBits: 8, pad: false}
-var eightToFiveBits = conversionType{fromBits: 8, toBits: 5, pad: true}
+var (
+	fiveToEightBits = conversionType{fromBits: 5, toBits: 8, pad: false}
+	eightToFiveBits = conversionType{fromBits: 8, toBits: 5, pad: true}
+)
 
 var generator = []int{0x98f2bc8e61, 0x79b76d99e2, 0xf33e5fb3c4, 0xae2eabe2a8, 0x1e4f43e470}
 

@@ -9,8 +9,8 @@ import (
 // RegisterForUTXOsChangedNotifications sends an RPC request respective to the function's name and returns the RPC server's response.
 // Additionally, it starts listening for the appropriate notification using the given handler function
 func (c *RPCClient) RegisterForUTXOsChangedNotifications(addresses []string,
-	onUTXOsChanged func(notification *appmessage.UTXOsChangedNotificationMessage)) error {
-
+	onUTXOsChanged func(notification *appmessage.UTXOsChangedNotificationMessage),
+) error {
 	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyUTXOsChangedRequestMessage(addresses))
 	if err != nil {
 		return err

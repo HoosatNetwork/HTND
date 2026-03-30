@@ -53,6 +53,5 @@ func TestExtractCoinbaseDataBlueScoreAndSubsidy(t *testing.T) {
 				t.Fatalf("test %s post HF expected %d but got %d", test.name, test.scriptPublicKeyVersion, cbData.ScriptPublicKey.Version)
 			}
 		}
-
 	})
 }

@@ -20,7 +20,6 @@ import (
 // relays newly unorphaned transactions and possibly rebroadcast
 // manually added transactions when not in IBD.
 func (f *FlowContext) OnNewBlock(block *externalapi.DomainBlock) error {
-
 	// hash := consensushashing.BlockHash(block)
 	// log.Tracef("OnNewBlock start for block %s", hash)
 	// defer log.Tracef("OnNewBlock end for block %s", hash)
@@ -71,8 +70,8 @@ func (f *FlowContext) OnPruningPointUTXOSetOverride() error {
 }
 
 func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
-	addedBlocks []*externalapi.DomainBlock, transactionsAcceptedToMempool []*externalapi.DomainTransaction) error {
-
+	addedBlocks []*externalapi.DomainBlock, transactionsAcceptedToMempool []*externalapi.DomainTransaction,
+) error {
 	// Don't relay transactions when in IBD.
 	if f.IsIBDRunning() {
 		return nil

@@ -18,8 +18,8 @@ func (msg *MsgIBDBlockLocator) Command() MessageCommand {
 
 // NewMsgIBDBlockLocator returns a new hoosat ibdBlockLocator message
 func NewMsgIBDBlockLocator(targetHash *externalapi.DomainHash,
-	blockLocatorHashes []*externalapi.DomainHash) *MsgIBDBlockLocator {
-
+	blockLocatorHashes []*externalapi.DomainHash,
+) *MsgIBDBlockLocator {
 	return &MsgIBDBlockLocator{
 		TargetHash:         targetHash,
 		BlockLocatorHashes: blockLocatorHashes,

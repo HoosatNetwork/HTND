@@ -89,8 +89,8 @@ func (v *blockValidator) checkBlockIsNotPruned(stagingArea *model.StagingArea, b
 }
 
 func (v *blockValidator) checkParentBlockBodiesExist(
-	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) error {
-
+	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+) error {
 	missingParentHashes := []*externalapi.DomainHash{}
 	parents, err := v.dagTopologyManagers[0].Parents(stagingArea, blockHash)
 	if err != nil {
@@ -143,8 +143,8 @@ func (v *blockValidator) checkParentBlockBodiesExist(
 }
 
 func (v *blockValidator) checkBlockTransactions(
-	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, block *externalapi.DomainBlock) error {
-
+	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, block *externalapi.DomainBlock,
+) error {
 	// Ensure all transactions in the block are finalized.
 	pastMedianTime, err := v.pastMedianTimeManager.PastMedianTime(stagingArea, blockHash)
 	if err != nil {
@@ -160,7 +160,6 @@ func (v *blockValidator) checkBlockTransactions(
 }
 
 func (v *blockValidator) checkCoinbaseSubsidy(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, block *externalapi.DomainBlock) (uint64, error) {
-
 	expectedSubsidy, err := v.coinbaseManager.CalcBlockSubsidy(stagingArea, blockHash, block.Header.Version())
 	if err != nil {
 		return 0, err

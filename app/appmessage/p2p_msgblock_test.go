@@ -176,7 +176,8 @@ var blockOne = MsgBlock{
 							0xee, // 65-byte signature
 							0xac, // OP_CHECKSIG
 						},
-						Version: 0},
+						Version: 0,
+					},
 				},
 			}),
 	},

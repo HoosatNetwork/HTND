@@ -6,10 +6,10 @@ import (
 )
 
 func initTestSyncInfoForClone() []*SyncInfo {
-
 	tests := []*SyncInfo{{
 		0xF,
-		0xF}}
+		0xF,
+	}}
 	return tests
 }
 
@@ -31,36 +31,45 @@ func initTestSyncInfoForEqual() []*testSyncInfoStruct {
 				{
 					syncInfo: &SyncInfo{
 						0xF,
-						0xF},
+						0xF,
+					},
 					expectedResult: false,
 				}, {
 					syncInfo:       nil,
 					expectedResult: true,
 				},
-			}}, {
+			},
+		}, {
 			baseSyncInfo: &SyncInfo{
 				0xF,
-				0xF},
+				0xF,
+			},
 			syncInfoToCompareTo: []testSyncInfoToCompare{
 				{
 					syncInfo: &SyncInfo{
 						0xF,
-						0xF},
+						0xF,
+					},
 					expectedResult: true,
 				},
 				{
 					syncInfo: &SyncInfo{
 						0xF1,
-						0xF},
+						0xF,
+					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					syncInfo:       nil,
 					expectedResult: false,
-				}, {
+				},
+				{
 					syncInfo: &SyncInfo{
 						0xF,
-						0xF1},
-					expectedResult: false},
+						0xF1,
+					},
+					expectedResult: false,
+				},
 			},
 		},
 	}
@@ -68,7 +77,6 @@ func initTestSyncInfoForEqual() []*testSyncInfoStruct {
 }
 
 func TestSyncInfo_Equal(t *testing.T) {
-
 	testSyncState := initTestSyncInfoForEqual()
 	for i, test := range testSyncState {
 		for j, subTest := range test.syncInfoToCompareTo {
@@ -85,7 +93,6 @@ func TestSyncInfo_Equal(t *testing.T) {
 }
 
 func TestSyncInfo_Clone(t *testing.T) {
-
 	testSyncInfo := initTestSyncInfoForClone()
 	for i, syncInfo := range testSyncInfo {
 		syncStateClone := syncInfo.Clone()

@@ -148,6 +148,5 @@ func (tc *testConsensus) DAABlocksStore() model.DAABlocksStore {
 }
 
 func (tc *testConsensus) Consensus() externalapi.Consensus {
-
 	return tc
 }

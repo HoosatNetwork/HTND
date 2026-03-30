@@ -116,8 +116,7 @@ type RPCTransactionVerboseData struct {
 }
 
 // RPCTransactionInputVerboseData holds data about a transaction input
-type RPCTransactionInputVerboseData struct {
-}
+type RPCTransactionInputVerboseData struct{}
 
 // RPCTransactionOutputVerboseData holds data about a transaction output
 type RPCTransactionOutputVerboseData struct {

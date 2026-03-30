@@ -65,7 +65,7 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		}
 	}
 
-	//TODO: Think if there is better way to check for indirect parents than the whole reachability.
+	// TODO: Think if there is better way to check for indirect parents than the whole reachability.
 	if !isBlockWithTrustedData {
 		err = v.checkIndirectParents(stagingArea, header)
 		if err != nil {
@@ -195,7 +195,6 @@ func (v *blockValidator) validateMedianTime(stagingArea *model.StagingArea, head
 }
 
 func (v *blockValidator) checkMergeSizeLimit(stagingArea *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData) error {
-
 	mergeSetSize := len(ghostdagData.MergeSetBlues()) + len(ghostdagData.MergeSetReds())
 
 	if uint64(mergeSetSize) > v.mergeSetSizeLimit {
@@ -220,8 +219,8 @@ func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, he
 }
 
 func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	header externalapi.BlockHeader) error {
-
+	header externalapi.BlockHeader,
+) error {
 	expectedDAAScore, err := v.daaBlocksStore.DAAScore(v.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		return err
@@ -233,8 +232,8 @@ func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash
 }
 
 func (v *blockValidator) checkBlueWork(stagingArea *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
-	header externalapi.BlockHeader) error {
-
+	header externalapi.BlockHeader,
+) error {
 	expectedBlueWork := ghostdagData.BlueWork()
 	headerBlueWork := header.BlueWork()
 
@@ -247,8 +246,8 @@ func (v *blockValidator) checkBlueWork(stagingArea *model.StagingArea, ghostdagD
 }
 
 func (v *blockValidator) checkHeaderBlueScore(stagingArea *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
-	header externalapi.BlockHeader) error {
-
+	header externalapi.BlockHeader,
+) error {
 	expectedBlueScore := ghostdagData.BlueScore()
 	headerBlueScore := header.BlueScore()
 

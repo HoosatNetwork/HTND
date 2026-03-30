@@ -58,7 +58,6 @@ func TestValidateAmountFormat(t *testing.T) {
 
 	for _, testCase := range validCases {
 		err := validateHSATAmountFormat(testCase)
-
 		if err != nil {
 			t.Error(err)
 		}

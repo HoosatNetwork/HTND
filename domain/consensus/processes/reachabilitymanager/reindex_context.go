@@ -59,7 +59,6 @@ Core (BFS) algorithms used during reindexing
 // size information is gathered at the root of the operation
 // (i.e. at node).
 func (rc *reindexContext) countSubtrees(stagingArea *model.StagingArea, node *externalapi.DomainHash) error {
-
 	if _, ok := rc.subTreeSizesCache[*node]; ok {
 		return nil
 	}
@@ -129,7 +128,6 @@ func (rc *reindexContext) countSubtrees(stagingArea *model.StagingArea, node *ex
 // Subtree intervals are recursively allocated according to subtree sizes and
 // the allocation rule in splitWithExponentialBias.
 func (rc *reindexContext) propagateInterval(stagingArea *model.StagingArea, node *externalapi.DomainHash) error {
-
 	// Make sure subtrees are counted before propagating
 	err := rc.countSubtrees(stagingArea, node)
 	if err != nil {
@@ -264,8 +262,8 @@ func (rc *reindexContext) reindexIntervals(stagingArea *model.StagingArea, newCh
 // `requiredAllocation` to be added to interval of `allocationNode`. `commonAncestor` is
 // expected to be a direct parent of `allocationNode` and an ancestor of `reindexRoot`.
 func (rc *reindexContext) reindexIntervalsEarlierThanRoot(stagingArea *model.StagingArea,
-	allocationNode, reindexRoot, commonAncestor *externalapi.DomainHash, requiredAllocation uint64) error {
-
+	allocationNode, reindexRoot, commonAncestor *externalapi.DomainHash, requiredAllocation uint64,
+) error {
 	// The chosen child is:
 	// a. A reachability tree child of `commonAncestor`
 	// b. A reachability tree ancestor of `reindexRoot` or `reindexRoot` itself
@@ -294,8 +292,8 @@ func (rc *reindexContext) reindexIntervalsEarlierThanRoot(stagingArea *model.Sta
 }
 
 func (rc *reindexContext) reclaimIntervalBefore(stagingArea *model.StagingArea,
-	allocationNode, commonAncestor, chosenChild, reindexRoot *externalapi.DomainHash, requiredAllocation uint64) error {
-
+	allocationNode, commonAncestor, chosenChild, reindexRoot *externalapi.DomainHash, requiredAllocation uint64,
+) error {
 	var slackSum uint64 = 0
 	var pathLen uint64 = 0
 	var pathSlackAlloc uint64 = 0
@@ -411,8 +409,8 @@ func (rc *reindexContext) reclaimIntervalBefore(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) offsetSiblingsBefore(stagingArea *model.StagingArea,
-	allocationNode, current *externalapi.DomainHash, offset uint64) error {
-
+	allocationNode, current *externalapi.DomainHash, offset uint64,
+) error {
 	parent, err := rc.manager.parent(stagingArea, current)
 	if err != nil {
 		return err
@@ -466,8 +464,8 @@ func (rc *reindexContext) offsetSiblingsBefore(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) reclaimIntervalAfter(stagingArea *model.StagingArea,
-	allocationNode, commonAncestor, chosenChild, reindexRoot *externalapi.DomainHash, requiredAllocation uint64) error {
-
+	allocationNode, commonAncestor, chosenChild, reindexRoot *externalapi.DomainHash, requiredAllocation uint64,
+) error {
 	var slackSum uint64 = 0
 	var pathLen uint64 = 0
 	var pathSlackAlloc uint64 = 0
@@ -583,8 +581,8 @@ func (rc *reindexContext) reclaimIntervalAfter(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) offsetSiblingsAfter(stagingArea *model.StagingArea,
-	allocationNode, current *externalapi.DomainHash, offset uint64) error {
-
+	allocationNode, current *externalapi.DomainHash, offset uint64,
+) error {
 	parent, err := rc.manager.parent(stagingArea, current)
 	if err != nil {
 		return err
@@ -642,8 +640,8 @@ Functions for handling reindex triggered by moving reindex root
 */
 
 func (rc *reindexContext) concentrateInterval(stagingArea *model.StagingArea,
-	reindexRoot, chosenChild *externalapi.DomainHash, isFinalReindexRoot bool) error {
-
+	reindexRoot, chosenChild *externalapi.DomainHash, isFinalReindexRoot bool,
+) error {
 	siblingsBeforeChosen, siblingsAfterChosen, err := rc.manager.splitChildren(stagingArea, reindexRoot, chosenChild)
 	if err != nil {
 		return err
@@ -669,8 +667,8 @@ func (rc *reindexContext) concentrateInterval(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) tightenIntervalsBefore(stagingArea *model.StagingArea,
-	reindexRoot *externalapi.DomainHash, siblingsBeforeChosen []*externalapi.DomainHash) (sizesSum uint64, err error) {
-
+	reindexRoot *externalapi.DomainHash, siblingsBeforeChosen []*externalapi.DomainHash,
+) (sizesSum uint64, err error) {
 	siblingSubtreeSizes, sizesSum := rc.countChildrenSubtrees(stagingArea, siblingsBeforeChosen)
 
 	rootInterval, err := rc.manager.interval(stagingArea, reindexRoot)
@@ -692,8 +690,8 @@ func (rc *reindexContext) tightenIntervalsBefore(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) tightenIntervalsAfter(stagingArea *model.StagingArea,
-	reindexRoot *externalapi.DomainHash, siblingsAfterChosen []*externalapi.DomainHash) (sizesSum uint64, err error) {
-
+	reindexRoot *externalapi.DomainHash, siblingsAfterChosen []*externalapi.DomainHash,
+) (sizesSum uint64, err error) {
 	siblingSubtreeSizes, sizesSum := rc.countChildrenSubtrees(stagingArea, siblingsAfterChosen)
 
 	rootInterval, err := rc.manager.interval(stagingArea, reindexRoot)
@@ -715,8 +713,8 @@ func (rc *reindexContext) tightenIntervalsAfter(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) expandIntervalToChosen(stagingArea *model.StagingArea,
-	reindexRoot, chosenChild *externalapi.DomainHash, sizesSumBefore, sizesSumAfter uint64, isFinalReindexRoot bool) error {
-
+	reindexRoot, chosenChild *externalapi.DomainHash, sizesSumBefore, sizesSumAfter uint64, isFinalReindexRoot bool,
+) error {
 	rootInterval, err := rc.manager.interval(stagingArea, reindexRoot)
 	if err != nil {
 		return err
@@ -766,8 +764,8 @@ func (rc *reindexContext) expandIntervalToChosen(stagingArea *model.StagingArea,
 }
 
 func (rc *reindexContext) countChildrenSubtrees(stagingArea *model.StagingArea, children []*externalapi.DomainHash) (
-	sizes []uint64, sum uint64) {
-
+	sizes []uint64, sum uint64,
+) {
 	sizes = make([]uint64, len(children))
 	sum = 0
 	for i, node := range children {
@@ -784,8 +782,8 @@ func (rc *reindexContext) countChildrenSubtrees(stagingArea *model.StagingArea, 
 }
 
 func (rc *reindexContext) propagateChildrenIntervals(stagingArea *model.StagingArea,
-	interval *model.ReachabilityInterval, children []*externalapi.DomainHash, sizes []uint64) error {
-
+	interval *model.ReachabilityInterval, children []*externalapi.DomainHash, sizes []uint64,
+) error {
 	childIntervals, err := intervalSplitExact(interval, sizes)
 	if err != nil {
 		return err

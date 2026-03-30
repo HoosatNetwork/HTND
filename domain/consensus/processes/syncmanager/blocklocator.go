@@ -10,8 +10,8 @@ import (
 // createBlockLocator creates a block locator for the passed high and low hashes.
 // See the BlockLocator type comments for more details.
 func (sm *syncManager) createBlockLocator(stagingArea *model.StagingArea, lowHash, highHash *externalapi.DomainHash,
-	limit uint32) (externalapi.BlockLocator, error) {
-
+	limit uint32,
+) (externalapi.BlockLocator, error) {
 	lowBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, lowHash, false)
 	if err != nil {
 		return nil, err
@@ -42,8 +42,7 @@ func (sm *syncManager) createBlockLocator(stagingArea *model.StagingArea, lowHas
 
 		// Nothing more to add once the low node has been added.
 		if currentBlockBlueScore <= lowBlockBlueScore {
-			isCurrentHashInSelectedParentChainOfLowHash, err :=
-				sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, currentHash, lowHash)
+			isCurrentHashInSelectedParentChainOfLowHash, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, currentHash, lowHash)
 			if err != nil {
 				return nil, err
 			}
@@ -75,8 +74,8 @@ func (sm *syncManager) createBlockLocator(stagingArea *model.StagingArea, lowHas
 }
 
 func (sm *syncManager) createHeadersSelectedChainBlockLocator(stagingArea *model.StagingArea,
-	lowHash, highHash *externalapi.DomainHash) (externalapi.BlockLocator, error) {
-
+	lowHash, highHash *externalapi.DomainHash,
+) (externalapi.BlockLocator, error) {
 	if highHash.Equal(sm.genesisBlockHash) && lowHash.Equal(sm.genesisBlockHash) {
 		return externalapi.BlockLocator{sm.genesisBlockHash}, nil
 	}

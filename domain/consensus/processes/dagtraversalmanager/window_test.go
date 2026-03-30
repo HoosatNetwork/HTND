@@ -20,7 +20,7 @@ import (
 func TestBlockWindow(t *testing.T) {
 	tests := map[string][]*struct {
 		parents        []string
-		id             string //id is a virtual entity that is used only for tests so we can define relations between blocks without knowing their hash
+		id             string // id is a virtual entity that is used only for tests so we can define relations between blocks without knowing their hash
 		expectedWindow []string
 	}{
 		dagconfig.MainnetParams.Name: {

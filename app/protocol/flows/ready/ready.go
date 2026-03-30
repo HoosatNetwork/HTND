@@ -17,7 +17,6 @@ import (
 func HandleReady(incomingRoute *routerpkg.Route, outgoingRoute *routerpkg.Route,
 	peer *peerpkg.Peer,
 ) error {
-
 	log.Debugf("Sending ready message to %s", peer)
 
 	isStopping := uint32(0)

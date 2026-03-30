@@ -21,8 +21,8 @@ func checkIntersection(collection1 utxoCollection, collection2 utxoCollection) b
 // such outpoint exists
 func checkIntersectionWithRule(collection1 utxoCollection, collection2 utxoCollection,
 	extraRule func(*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry) bool) (
-	*externalapi.DomainOutpoint, bool) {
-
+	*externalapi.DomainOutpoint, bool,
+) {
 	for outpoint, utxoEntry := range collection1 {
 		if diffEntry, ok := collection2.Get(&outpoint); ok {
 			if extraRule(&outpoint, utxoEntry, diffEntry) {
@@ -115,22 +115,18 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toRemove.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	if offendingOutpoint, ok :=
-		checkIntersectionWithRule(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
+	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
 		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove", offendingOutpoint)
 	}
 
-	//check that NOT (entries with unequal DAA score AND utxoEntry is in this.toRemove and/or other.toAdd) -> Error
-	isNotRemovedOutputAddedWithDAAScore :=
-		func(outpoint *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
+	// check that NOT (entries with unequal DAA score AND utxoEntry is in this.toRemove and/or other.toAdd) -> Error
+	isNotRemovedOutputAddedWithDAAScore := func(outpoint *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
+		return !(diffEntry.BlockDAAScore() != utxoEntry.BlockDAAScore() &&
+			(this.toRemove.containsWithDAAScore(outpoint, diffEntry.BlockDAAScore()) ||
+				other.toAdd.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
+	}
 
-			return !(diffEntry.BlockDAAScore() != utxoEntry.BlockDAAScore() &&
-				(this.toRemove.containsWithDAAScore(outpoint, diffEntry.BlockDAAScore()) ||
-					other.toAdd.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
-		}
-
-	if offendingOutpoint, ok :=
-		checkIntersectionWithRule(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
+	if offendingOutpoint, ok := checkIntersectionWithRule(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
 		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd", offendingOutpoint)
 	}
 

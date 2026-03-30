@@ -42,8 +42,8 @@ func (ctx *Context) GetDifficultyRatio(bits uint32, params *dagconfig.Params) fl
 // PopulateBlockWithVerboseData populates the given `block` with verbose
 // data from `domainBlockHeader` and optionally from `domainBlock`
 func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, domainBlockHeader externalapi.BlockHeader,
-	domainBlock *externalapi.DomainBlock, includeTransactionVerboseData bool) error {
-
+	domainBlock *externalapi.DomainBlock, includeTransactionVerboseData bool,
+) error {
 	blockHash := consensushashing.HeaderHash(domainBlockHeader)
 
 	blockInfo, err := ctx.Domain.Consensus().GetBlockInfo(blockHash)
@@ -122,8 +122,8 @@ func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, dom
 // avoid rebuilding the domain transaction from the RPC representation.
 func (ctx *Context) PopulateTransactionWithVerboseData(
 	transaction *appmessage.RPCTransaction, domainTransaction *externalapi.DomainTransaction,
-	domainBlockHeader externalapi.BlockHeader) error {
-
+	domainBlockHeader externalapi.BlockHeader,
+) error {
 	if domainTransaction == nil {
 		var err error
 		domainTransaction, err = appmessage.RPCTransactionToDomainTransaction(transaction)

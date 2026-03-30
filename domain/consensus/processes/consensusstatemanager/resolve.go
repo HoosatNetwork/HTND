@@ -51,7 +51,7 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 
 		if isViolatingFinality {
 			if shouldNotify {
-				//TODO: Send finality conflict notification
+				// TODO: Send finality conflict notification
 				log.Warnf("Skipping %s tip resolution because it violates finality", tip)
 			}
 			continue

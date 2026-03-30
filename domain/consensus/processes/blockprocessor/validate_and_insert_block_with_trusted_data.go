@@ -8,8 +8,8 @@ import (
 )
 
 func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *model.StagingArea,
-	block *externalapi.BlockWithTrustedData, validateUTXO bool) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
-
+	block *externalapi.BlockWithTrustedData, validateUTXO bool,
+) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
 	blockHash := consensushashing.BlockHash(block.Block)
 	for i, daaBlock := range block.DAAWindow {
 		hash := consensushashing.HeaderHash(daaBlock.Header)
@@ -35,7 +35,8 @@ func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *mod
 }
 
 func (bp *blockProcessor) ghostdagDataWithoutPrunedBlocks(stagingArea *model.StagingArea,
-	data *externalapi.BlockGHOSTDAGData) (*externalapi.BlockGHOSTDAGData, error) {
+	data *externalapi.BlockGHOSTDAGData,
+) (*externalapi.BlockGHOSTDAGData, error) {
 	mergeSetBlues := make([]*externalapi.DomainHash, 0, len(data.MergeSetBlues()))
 	for _, blockHash := range data.MergeSetBlues() {
 		isPruned, err := bp.isPruned(stagingArea, blockHash)

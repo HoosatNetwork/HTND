@@ -136,8 +136,8 @@ type chainBlockData struct {
 
 func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, newBlockData *externalapi.BlockGHOSTDAGData,
 	blueCandidate *externalapi.DomainHash) (isBlue bool, candidateAnticoneSize externalapi.KType,
-	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType, err error) {
-
+	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType, err error,
+) {
 	// The maximum length of node.blues can be K+1 because
 	// it contains the selected parent.
 	if externalapi.KType(len(newBlockData.MergeSetBlues())) == gm.k[constants.GetBlockVersion()-1]+1 {
@@ -178,7 +178,8 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 			return false, 0, nil, err
 		}
 
-		chainBlock = chainBlockData{hash: chainBlock.blockData.SelectedParent(),
+		chainBlock = chainBlockData{
+			hash:      chainBlock.blockData.SelectedParent(),
 			blockData: selectedParentGHOSTDAGData,
 		}
 	}
@@ -189,8 +190,8 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.StagingArea,
 	newBlockData *externalapi.BlockGHOSTDAGData, chainBlock chainBlockData, blueCandidate *externalapi.DomainHash,
 	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType,
-	candidateAnticoneSize *externalapi.KType) (isBlue, isRed bool, err error) {
-
+	candidateAnticoneSize *externalapi.KType,
+) (isBlue, isRed bool, err error) {
 	// If blueCandidate is in the future of chainBlock, it means
 	// that all remaining blues are in the past of chainBlock and thus
 	// in the past of blueCandidate. In this case we know for sure that
@@ -252,8 +253,8 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 // blueAnticoneSize returns the blue anticone size of 'block' from the worldview of 'context'.
 // Expects 'block' to be in the blue set of 'context'
 func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
-	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData) (externalapi.KType, error) {
-
+	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData,
+) (externalapi.KType, error) {
 	isTrustedData := false
 	for current := context; current != nil; {
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {

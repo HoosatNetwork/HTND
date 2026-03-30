@@ -13,11 +13,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-var utxoIndexBucket = database.MakeBucket([]byte("utxo-index"))
-var utxoIndexCountsBucket = database.MakeBucket([]byte("utxo-index-counts"))
-var virtualParentsKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
-var circulatingSupplyKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
-var utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
+var (
+	utxoIndexBucket          = database.MakeBucket([]byte("utxo-index"))
+	utxoIndexCountsBucket    = database.MakeBucket([]byte("utxo-index-counts"))
+	virtualParentsKey        = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
+	circulatingSupplyKey     = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
+	utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
+)
 
 var utxoPairPool = sync.Pool{
 	New: func() interface{} {
@@ -174,7 +176,6 @@ func copyUTXOPairs(pairs []UTXOPair) []UTXOPair {
 }
 
 func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
-
 	key := ScriptPublicKeyString(scriptPublicKey.String())
 	log.Tracef("Adding outpoint %s:%d to scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -445,7 +446,6 @@ func (uis *utxoIndexStore) scriptPublicKeyBytes(scriptPublicKey *externalapi.Scr
 	binary.LittleEndian.PutUint16(scriptPublicKeyBytes[:2], scriptPublicKey.Version)
 	copy(scriptPublicKeyBytes[2:], scriptPublicKey.Script)
 	return scriptPublicKeyBytes
-
 }
 
 func (uis *utxoIndexStore) utxoCountKeyForScriptPublicKey(scriptPublicKey *externalapi.ScriptPublicKey) *database.Key {
@@ -468,7 +468,8 @@ func (uis *utxoIndexStore) convertKeyToOutpoint(key *database.Key) (*externalapi
 func (uis *utxoIndexStore) stagedData() (
 	toAdd []UTXOPair,
 	toRemove []UTXOPair,
-	virtualParents []*externalapi.DomainHash) {
+	virtualParents []*externalapi.DomainHash,
+) {
 	// Flatten uis.toAdd map to []UTXOPair
 	for _, utxoPairs := range uis.toAdd {
 		for outpoint, entry := range utxoPairs {
@@ -730,7 +731,6 @@ func (uis *utxoIndexStore) deleteAll() error {
 }
 
 func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
-
 	cursor, err := uis.database.Cursor(utxoIndexBucket)
 	if err != nil {
 		return err
@@ -755,7 +755,6 @@ func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
 		circulatingSupplyKey,
 		binaryserialization.SerializeUint64(circulatingSompiSupplyInDatabase),
 	)
-
 	if err != nil {
 		return err
 	}

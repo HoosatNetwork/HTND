@@ -203,5 +203,4 @@ func openDB(cfg *config.Config) (database.Database, error) {
 		}
 		return db, nil
 	}
-
 }

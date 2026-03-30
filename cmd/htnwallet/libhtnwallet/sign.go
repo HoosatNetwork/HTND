@@ -12,8 +12,8 @@ import (
 )
 
 func rawTxInSignature(extendedKey *bip32.ExtendedKey, tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	sighashReusedValues *consensushashing.SighashReusedValues, ecdsa bool) ([]byte, error) {
-
+	sighashReusedValues *consensushashing.SighashReusedValues, ecdsa bool,
+) ([]byte, error) {
 	privateKey := extendedKey.PrivateKey()
 	if ecdsa {
 		return txscript.RawTxInSignatureECDSA(tx, idx, hashType, privateKey, sighashReusedValues)

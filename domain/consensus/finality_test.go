@@ -151,14 +151,12 @@ func TestFinality(t *testing.T) {
 		if err != nil {
 			t.Fatalf("TestFinality: Failed getting virtual selectedParent: %v", err)
 		}
-		selectedTipGhostDagData, err :=
-			consensus.GHOSTDAGDataStore().Get(consensus.DatabaseContext(), stagingArea, selectedTip, false)
+		selectedTipGhostDagData, err := consensus.GHOSTDAGDataStore().Get(consensus.DatabaseContext(), stagingArea, selectedTip, false)
 		if err != nil {
 			t.Fatalf("TestFinality: Failed getting the ghost dag data of the selected tip: %v", err)
 		}
 
-		sideChainTipGhostDagData, err :=
-			consensus.GHOSTDAGDataStore().Get(consensus.DatabaseContext(), stagingArea, sideChainTipHash, false)
+		sideChainTipGhostDagData, err := consensus.GHOSTDAGDataStore().Get(consensus.DatabaseContext(), stagingArea, sideChainTipHash, false)
 		if err != nil {
 			t.Fatalf("TestFinality: Failed getting the ghost dag data of the sidechain tip: %v", err)
 		}
@@ -218,11 +216,9 @@ func TestBoundedMergeDepth(t *testing.T) {
 		}
 
 		processBlock := func(consensus testapi.TestConsensus, block *externalapi.DomainBlock, name string) {
-
 			err := consensus.ValidateAndInsertBlock(block, true, true)
 			if err != nil {
 				t.Fatalf("TestBoundedMergeDepth: %s got unexpected error from ProcessBlock: %+v", name, err)
-
 			}
 		}
 
@@ -440,8 +436,7 @@ func TestBoundedMergeDepth(t *testing.T) {
 			}
 
 			// Now `pointAtBlueKosherizing` itself is actually still blue, so we can still point at that even though we can't point at kosherizing directly anymore
-			transitiveBlueKosherizing, isViolatingMergeDepth :=
-				checkViolatingMergeDepth(consensusReal, []*externalapi.DomainHash{consensushashing.BlockHash(pointAtBlueKosherizing), tip})
+			transitiveBlueKosherizing, isViolatingMergeDepth := checkViolatingMergeDepth(consensusReal, []*externalapi.DomainHash{consensushashing.BlockHash(pointAtBlueKosherizing), tip})
 			if isViolatingMergeDepth {
 				t.Fatalf("TestBoundedMergeDepth: Expected transitiveBlueKosherizing to not violate merge depth")
 			}

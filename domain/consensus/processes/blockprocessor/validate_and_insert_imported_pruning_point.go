@@ -8,8 +8,8 @@ import (
 )
 
 func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
-	stagingArea *model.StagingArea, newPruningPointHash *externalapi.DomainHash) error {
-
+	stagingArea *model.StagingArea, newPruningPointHash *externalapi.DomainHash,
+) error {
 	log.Info("Checking that the given pruning point is the expected pruning point")
 
 	isValidPruningPoint, err := bp.pruningManager.IsValidPruningPoint(stagingArea, newPruningPointHash)

@@ -24,6 +24,7 @@ func (x *HoosatdMessage_RequestHeaders) toAppMessage() (appmessage.Message, erro
 		HighHash: highHash,
 	}, nil
 }
+
 func (x *RequestHeadersMessage) toAppMessage() (appmessage.Message, error) {
 	if x == nil {
 		return nil, errors.Wrapf(errorNil, "RequestHeadersMessage is nil")
@@ -42,7 +43,6 @@ func (x *RequestHeadersMessage) toAppMessage() (appmessage.Message, error) {
 		LowHash:  lowHash,
 		HighHash: highHash,
 	}, nil
-
 }
 
 func (x *HoosatdMessage_RequestHeaders) fromAppMessage(msgRequestHeaders *appmessage.MsgRequestHeaders) error {

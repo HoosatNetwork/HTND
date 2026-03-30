@@ -24,7 +24,6 @@ func (x *IbdBlockLocatorHighestHashMessage) toAppMessgage() (appmessage.Message,
 	return &appmessage.MsgIBDBlockLocatorHighestHash{
 		HighestHash: highestHash,
 	}, nil
-
 }
 
 func (x *HoosatdMessage_IbdBlockLocatorHighestHash) fromAppMessage(message *appmessage.MsgIBDBlockLocatorHighestHash) error {

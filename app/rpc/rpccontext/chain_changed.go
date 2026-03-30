@@ -10,8 +10,8 @@ import (
 // VirtualSelectedParentChainChanges to VirtualSelectedParentChainChangedNotificationMessage
 func (ctx *Context) ConvertVirtualSelectedParentChainChangesToChainChangedNotificationMessage(
 	selectedParentChainChanges *externalapi.SelectedChainPath, includeAcceptedTransactionIDs bool) (
-	*appmessage.VirtualSelectedParentChainChangedNotificationMessage, error) {
-
+	*appmessage.VirtualSelectedParentChainChangedNotificationMessage, error,
+) {
 	removedChainBlockHashes := make([]string, len(selectedParentChainChanges.Removed))
 	for i, removed := range selectedParentChainChanges.Removed {
 		removedChainBlockHashes[i] = removed.String()
@@ -36,8 +36,8 @@ func (ctx *Context) ConvertVirtualSelectedParentChainChangesToChainChangedNotifi
 }
 
 func (ctx *Context) getAndConvertAcceptedTransactionIDs(selectedParentChainChanges *externalapi.SelectedChainPath) (
-	[]*appmessage.AcceptedTransactionIDs, error) {
-
+	[]*appmessage.AcceptedTransactionIDs, error,
+) {
 	acceptedTransactionIDs := make([]*appmessage.AcceptedTransactionIDs, len(selectedParentChainChanges.Added))
 
 	const chunk = 1000
@@ -65,8 +65,7 @@ func (ctx *Context) getAndConvertAcceptedTransactionIDs(selectedParentChainChang
 			for x := range chainBlockAcceptanceData {
 				for y := 0; y < len(chainBlockAcceptanceData[x].TransactionAcceptanceData); y++ {
 					if chainBlockAcceptanceData[x].TransactionAcceptanceData[y].IsAccepted {
-						acceptedTransactionIDs[position+i].AcceptedTransactionIDs =
-							append(acceptedTransactionIDs[position+i].AcceptedTransactionIDs, consensushashing.TransactionID(chainBlockAcceptanceData[x].TransactionAcceptanceData[y].Transaction).String())
+						acceptedTransactionIDs[position+i].AcceptedTransactionIDs = append(acceptedTransactionIDs[position+i].AcceptedTransactionIDs, consensushashing.TransactionID(chainBlockAcceptanceData[x].TransactionAcceptanceData[y].Transaction).String())
 					}
 				}
 			}

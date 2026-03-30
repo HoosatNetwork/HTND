@@ -15,8 +15,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const maxRetries = 10
-const retryDelay = 2 * time.Second
+const (
+	maxRetries = 10
+	retryDelay = 2 * time.Second
+)
 
 func send(conf *sendConfig) error {
 	keysFile, err := keys.ReadKeysFile(conf.NetParams(), conf.KeysFile)
@@ -46,16 +48,15 @@ func send(conf *sendConfig) error {
 	}
 retry:
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		createUnsignedTransactionsResponse, err :=
-			daemonClient.CreateUnsignedTransactions(ctx, &pb.CreateUnsignedTransactionsRequest{
-				From:                     conf.FromAddresses,
-				Address:                  conf.ToAddress,
-				Amount:                   sendAmountSompi,
-				IsSendAll:                conf.IsSendAll,
-				UseExistingChangeAddress: conf.UseExistingChangeAddress,
-				Payload:                  nil,
-				Limit:                    &conf.Limit,
-			})
+		createUnsignedTransactionsResponse, err := daemonClient.CreateUnsignedTransactions(ctx, &pb.CreateUnsignedTransactionsRequest{
+			From:                     conf.FromAddresses,
+			Address:                  conf.ToAddress,
+			Amount:                   sendAmountSompi,
+			IsSendAll:                conf.IsSendAll,
+			UseExistingChangeAddress: conf.UseExistingChangeAddress,
+			Payload:                  nil,
+			Limit:                    &conf.Limit,
+		})
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")

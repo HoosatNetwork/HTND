@@ -7,7 +7,6 @@ import (
 
 func (csm *consensusStateManager) isViolatingFinality(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 ) (isViolatingFinality bool, shouldSendNotification bool, err error) {
-
 	log.Tracef("isViolatingFinality start for block %s", blockHash)
 	defer log.Tracef("isViolatingFinality end for block %s", blockHash)
 

@@ -55,15 +55,14 @@ func vote(conf *voteConfig) error {
 
 retry:
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		createUnsignedTransactionsResponse, err :=
-			daemonClient.CreateUnsignedTransactions(ctx, &pb.CreateUnsignedTransactionsRequest{
-				From:                     conf.FromAddresses,
-				Address:                  votingAddress,
-				Amount:                   sendAmountSompi,
-				IsSendAll:                false,
-				UseExistingChangeAddress: conf.UseExistingChangeAddress,
-				Payload:                  payloadBytes,
-			})
+		createUnsignedTransactionsResponse, err := daemonClient.CreateUnsignedTransactions(ctx, &pb.CreateUnsignedTransactionsRequest{
+			From:                     conf.FromAddresses,
+			Address:                  votingAddress,
+			Amount:                   sendAmountSompi,
+			IsSendAll:                false,
+			UseExistingChangeAddress: conf.UseExistingChangeAddress,
+			Payload:                  payloadBytes,
+		})
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")

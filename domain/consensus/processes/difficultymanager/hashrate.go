@@ -18,8 +18,8 @@ func (dm *difficultyManager) EstimateNetworkHashesPerSecond(startHash *externala
 }
 
 func (dm *difficultyManager) estimateNetworkHashesPerSecond(stagingArea *model.StagingArea,
-	startHash *externalapi.DomainHash, windowSize int) (uint64, error) {
-
+	startHash *externalapi.DomainHash, windowSize int,
+) (uint64, error) {
 	const minWindowSize = 1000
 	if windowSize < minWindowSize {
 		return 0, errors.Errorf("windowSize must be equal to or greater than %d", minWindowSize)

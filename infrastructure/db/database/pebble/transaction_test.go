@@ -133,6 +133,7 @@ func TestTransactionCloseErrors(t *testing.T) {
 		}()
 	}
 }
+
 func TestTransactionHasBatchIsolation(t *testing.T) {
 	ldb, teardownFunc := prepareDatabaseForTest(t, "TestTransactionHasBatchIsolation")
 	defer teardownFunc()

@@ -27,8 +27,8 @@ type handleRequestPruningPointUTXOSetFlow struct {
 // HandleRequestPruningPointUTXOSet listens to appmessage.MsgRequestPruningPointUTXOSet messages and sends
 // the pruning point UTXO set and block body.
 func HandleRequestPruningPointUTXOSet(context HandleRequestPruningPointUTXOSetContext, incomingRoute,
-	outgoingRoute *router.Route) error {
-
+	outgoingRoute *router.Route,
+) error {
 	flow := &handleRequestPruningPointUTXOSetFlow{
 		HandleRequestPruningPointUTXOSetContext: context,
 		incomingRoute:                           incomingRoute,
@@ -53,8 +53,8 @@ func (flow *handleRequestPruningPointUTXOSetFlow) start() error {
 }
 
 func (flow *handleRequestPruningPointUTXOSetFlow) handleRequestPruningPointUTXOSetMessage(
-	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet) error {
-
+	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
+) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "handleRequestPruningPointUTXOSetFlow")
 	defer onEnd()
 
@@ -64,8 +64,8 @@ func (flow *handleRequestPruningPointUTXOSetFlow) handleRequestPruningPointUTXOS
 }
 
 func (flow *handleRequestPruningPointUTXOSetFlow) waitForRequestPruningPointUTXOSetMessages() (
-	*appmessage.MsgRequestPruningPointUTXOSet, error) {
-
+	*appmessage.MsgRequestPruningPointUTXOSet, error,
+) {
 	message, err := flow.incomingRoute.Dequeue()
 	if err != nil {
 		return nil, err
@@ -80,7 +80,8 @@ func (flow *handleRequestPruningPointUTXOSetFlow) waitForRequestPruningPointUTXO
 }
 
 func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
-	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet) error {
+	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
+) error {
 	ibdBatchSize := getIBDBatchSize()
 	// Send the UTXO set in `step`-sized chunks
 	const step = 1000

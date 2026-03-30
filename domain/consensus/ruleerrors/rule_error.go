@@ -30,7 +30,7 @@ var (
 	// the last several blocks per the DAG consensus rules.
 	ErrTimeTooOld = newRuleError("ErrTimeTooOld")
 
-	//ErrTimeTooMuchInTheFuture indicates that the block timestamp is too much in the future.
+	// ErrTimeTooMuchInTheFuture indicates that the block timestamp is too much in the future.
 	ErrTimeTooMuchInTheFuture = newRuleError("ErrTimeTooMuchInTheFuture")
 
 	// ErrNoParents indicates that the block is missing parents
@@ -216,7 +216,7 @@ var (
 
 	ErrWrongPruningPointHash = newRuleError("ErrWrongPruningPointHash")
 
-	//ErrPruningPointViolation indicates that the pruning point isn't in the block past.
+	// ErrPruningPointViolation indicates that the pruning point isn't in the block past.
 	ErrPruningPointViolation = newRuleError("ErrPruningPointViolation")
 
 	ErrUnexpectedParents = newRuleError("ErrUnexpectedParents")
@@ -227,10 +227,10 @@ var (
 
 	ErrSuggestedPruningViolatesFinality = newRuleError("ErrSuggestedPruningViolatesFinality")
 
-	//ErrBlockVersionIsUnknown indicates that the block version is unknown.
+	// ErrBlockVersionIsUnknown indicates that the block version is unknown.
 	ErrBlockVersionIsUnknown = newRuleError("ErrBlockVersionIsUnknown")
 
-	//ErrTransactionVersionIsUnknown indicates that the transaction version is unknown.
+	// ErrTransactionVersionIsUnknown indicates that the transaction version is unknown.
 	ErrTransactionVersionIsUnknown = newRuleError("ErrTransactionVersionIsUnknown")
 
 	// ErrPrunedBlock indicates that the block currently being validated had already been pruned.

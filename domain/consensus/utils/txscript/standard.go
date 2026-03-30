@@ -66,7 +66,6 @@ func isPayToPubkeyECDSA(pops []parsedOpcode) bool {
 	return len(pops) == 2 &&
 		pops[0].opcode.value == OpData33 &&
 		pops[1].opcode.value == OpCheckSigECDSA
-
 }
 
 // scriptType returns the type of the script being inspected from the known
@@ -93,6 +92,7 @@ func GetScriptClass(script []byte) ScriptClass {
 	}
 	return GetScriptClassFromParsedScript(pops)
 }
+
 func GetScriptClassFromParsedScript(pops []parsedOpcode) ScriptClass {
 	return typeOfScript(pops)
 }

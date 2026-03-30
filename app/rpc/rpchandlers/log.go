@@ -5,5 +5,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/panics"
 )
 
-var log = logger.RegisterSubSystem("RPCS")
-var spawn = panics.GoroutineWrapperFunc(log)
+var (
+	log   = logger.RegisterSubSystem("RPCS")
+	spawn = panics.GoroutineWrapperFunc(log)
+)

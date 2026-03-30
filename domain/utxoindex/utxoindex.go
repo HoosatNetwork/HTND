@@ -168,7 +168,7 @@ func (ui *UTXOIndex) Reset() error {
 		return err
 	}
 
-	err = ui.store.initializeCirculatingSompiSupply() //At this point the database is empty, so the sole purpose of this call is to initialize the circulating supply key
+	err = ui.store.initializeCirculatingSompiSupply() // At this point the database is empty, so the sole purpose of this call is to initialize the circulating supply key
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,6 @@ func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (u
 
 // GetCirculatingSompiSupply returns the current circulating supply of sompis in the network
 func (ui *UTXOIndex) GetCirculatingSompiSupply() (uint64, error) {
-
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 

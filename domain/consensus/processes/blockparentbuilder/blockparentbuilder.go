@@ -99,7 +99,8 @@ func New(
 }
 
 func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
-	daaScore uint64, directParentHashes []*externalapi.DomainHash) ([]externalapi.BlockLevelParents, error) {
+	daaScore uint64, directParentHashes []*externalapi.DomainHash,
+) ([]externalapi.BlockLevelParents, error) {
 	_ = daaScore
 
 	// Late on we'll mutate direct parent hashes, so we first clone it.
@@ -362,8 +363,8 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 }
 
 func (bpb *blockParentBuilder) isInFutureOfReferences(stagingArea *model.StagingArea,
-	references candidateReferences, blockHash *externalapi.DomainHash) (bool, error) {
-
+	references candidateReferences, blockHash *externalapi.DomainHash,
+) (bool, error) {
 	if references.single != nil {
 		return bpb.dagTopologyManager.IsAncestorOf(stagingArea, references.single, blockHash)
 	}
@@ -371,8 +372,8 @@ func (bpb *blockParentBuilder) isInFutureOfReferences(stagingArea *model.Staging
 }
 
 func (bpb *blockParentBuilder) isAncestorOfReferences(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash, references candidateReferences) (bool, error) {
-
+	blockHash *externalapi.DomainHash, references candidateReferences,
+) (bool, error) {
 	if references.single != nil {
 		return bpb.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, references.single)
 	}

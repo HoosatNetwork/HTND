@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/Hoosat-Oy/HTND/version"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Hoosat-Oy/HTND/version"
 )
 
 func showVersion() {

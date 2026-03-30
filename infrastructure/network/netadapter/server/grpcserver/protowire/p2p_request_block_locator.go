@@ -26,7 +26,6 @@ func (x *RequestBlockLocatorMessage) toAppMessage() (appmessage.Message, error) 
 		HighHash: highHash,
 		Limit:    x.Limit,
 	}, nil
-
 }
 
 func (x *HoosatdMessage_RequestBlockLocator) fromAppMessage(msgGetBlockLocator *appmessage.MsgRequestBlockLocator) error {

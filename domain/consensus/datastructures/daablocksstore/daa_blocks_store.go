@@ -10,8 +10,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var daaScoreBucketName = []byte("daa-score")
-var daaAddedBlocksBucketName = []byte("daa-added-blocks")
+var (
+	daaScoreBucketName       = []byte("daa-score")
+	daaAddedBlocksBucketName = []byte("daa-added-blocks")
+)
 
 // daaBlocksStore represents a store of DAABlocksStore
 type daaBlocksStore struct {

@@ -26,8 +26,8 @@ type handleRequestAnticoneFlow struct {
 
 // HandleRequestAnticone handles RequestAnticone messages
 func HandleRequestAnticone(context RequestAnticoneContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peer.Peer) error {
-
+	outgoingRoute *router.Route, peer *peer.Peer,
+) error {
 	flow := &handleRequestAnticoneFlow{
 		RequestAnticoneContext: context,
 		incomingRoute:          incomingRoute,
@@ -85,8 +85,8 @@ func (flow *handleRequestAnticoneFlow) start() error {
 }
 
 func receiveRequestAnticone(incomingRoute *router.Route) (blockHash *externalapi.DomainHash,
-	contextHash *externalapi.DomainHash, err error) {
-
+	contextHash *externalapi.DomainHash, err error,
+) {
 	message, err := incomingRoute.Dequeue()
 	if err != nil {
 		return nil, nil, err

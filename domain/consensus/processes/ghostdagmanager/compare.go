@@ -7,8 +7,8 @@ import (
 )
 
 func (gm *ghostdagManager) findSelectedParent(stagingArea *model.StagingArea, parentHashes []*externalapi.DomainHash) (
-	*externalapi.DomainHash, error) {
-
+	*externalapi.DomainHash, error,
+) {
 	var selectedParent *externalapi.DomainHash
 	for _, hash := range parentHashes {
 		if selectedParent == nil {
@@ -64,7 +64,8 @@ func (gm *ghostdagManager) ChooseSelectedParent(stagingArea *model.StagingArea, 
 }
 
 func (gm *ghostdagManager) Less(blockHashA *externalapi.DomainHash, ghostdagDataA *externalapi.BlockGHOSTDAGData,
-	blockHashB *externalapi.DomainHash, ghostdagDataB *externalapi.BlockGHOSTDAGData) bool {
+	blockHashB *externalapi.DomainHash, ghostdagDataB *externalapi.BlockGHOSTDAGData,
+) bool {
 	switch ghostdagDataA.BlueWork().Cmp(ghostdagDataB.BlueWork()) {
 	case -1:
 		return true

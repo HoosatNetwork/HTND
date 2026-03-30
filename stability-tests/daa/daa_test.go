@@ -16,11 +16,13 @@ import (
 	"github.com/Hoosat-Oy/HTND/stability-tests/common"
 )
 
-const rpcAddress = "localhost:9000"
-const miningAddress = "htndev:qrcqat6l9zcjsu7swnaztqzrv0s7hu04skpaezxk43y4etj8ncwfkuhy0zmax"
-const blockRateDeviationThreshold = 0.5
-const averageBlockRateSampleSize = 60
-const averageHashRateSampleSize = 100_000
+const (
+	rpcAddress                  = "localhost:9000"
+	miningAddress               = "htndev:qrcqat6l9zcjsu7swnaztqzrv0s7hu04skpaezxk43y4etj8ncwfkuhy0zmax"
+	blockRateDeviationThreshold = 0.5
+	averageBlockRateSampleSize  = 60
+	averageHashRateSampleSize   = 100_000
+)
 
 func TestDAA(t *testing.T) {
 	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
@@ -178,8 +180,8 @@ func measureMachineHashNanoseconds(t *testing.T) int64 {
 }
 
 func runDAATest(t *testing.T, testName string, runDuration time.Duration,
-	targetHashNanosecondsFunction func(totalElapsedDuration time.Duration) int64) {
-
+	targetHashNanosecondsFunction func(totalElapsedDuration time.Duration) int64,
+) {
 	t.Logf("DAA TEST STARTED: %s", testName)
 	defer t.Logf("DAA TEST FINISHED: %s", testName)
 
@@ -268,8 +270,8 @@ func fetchBlockForMining(t *testing.T, rpcClient *rpcclient.RPCClient) *external
 }
 
 func waitUntilTargetHashDurationHadElapsed(startTime time.Time, hashStartTime time.Time,
-	targetHashNanosecondsFunction func(totalElapsedDuration time.Duration) int64) {
-
+	targetHashNanosecondsFunction func(totalElapsedDuration time.Duration) int64,
+) {
 	// Yielding a thread in Go takes up to a few milliseconds whereas hashing once
 	// takes a few hundred nanoseconds, so we spin in place instead of e.g. calling time.Sleep()
 	for {
@@ -283,8 +285,8 @@ func waitUntilTargetHashDurationHadElapsed(startTime time.Time, hashStartTime ti
 
 func logMinedBlockStatsAndUpdateStatFields(t *testing.T, rpcClient *rpcclient.RPCClient,
 	averageMiningDuration *averageDuration, averageHashDurations *averageDuration,
-	startTime time.Time, miningDuration time.Duration, previousDifficulty *float64, blocksMined *int) {
-
+	startTime time.Time, miningDuration time.Duration, previousDifficulty *float64, blocksMined *int,
+) {
 	averageMiningDurationAsDuration := averageMiningDuration.toDuration()
 	averageHashNanoseconds := averageHashDurations.toDuration().Nanoseconds()
 	averageHashesPerSecond := hashNanosecondsToHashesPerSecond(averageHashNanoseconds)

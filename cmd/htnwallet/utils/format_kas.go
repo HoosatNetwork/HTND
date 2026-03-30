@@ -23,7 +23,6 @@ func FomatHSAT(amount uint64) string {
 // KasToSompi takes in a string representation of the Kas value to convert to Sompi
 func KasToSompi(amount string) (uint64, error) {
 	err := validateHSATAmountFormat(amount)
-
 	if err != nil {
 		return 0, err
 	}

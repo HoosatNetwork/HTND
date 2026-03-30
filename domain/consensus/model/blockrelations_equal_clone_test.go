@@ -8,7 +8,6 @@ import (
 )
 
 func initTestBlockRelationsForClone() []*BlockRelations {
-
 	tests := []*BlockRelations{
 		{
 			[]*externalapi.DomainHash{
@@ -35,8 +34,7 @@ type testBlockRelationsStruct struct {
 }
 
 func initTestBlockRelationsForEqual() []testBlockRelationsStruct {
-
-	var testBlockRelationsBase = BlockRelations{
+	testBlockRelationsBase := BlockRelations{
 		[]*externalapi.DomainHash{
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1}),
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{2}),
@@ -46,8 +44,8 @@ func initTestBlockRelationsForEqual() []testBlockRelationsStruct {
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{4}),
 		},
 	}
-	//First test: structs are equal
-	var testBlockRelations1 = BlockRelations{
+	// First test: structs are equal
+	testBlockRelations1 := BlockRelations{
 		[]*externalapi.DomainHash{
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1}),
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{2}),
@@ -57,8 +55,8 @@ func initTestBlockRelationsForEqual() []testBlockRelationsStruct {
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{4}),
 		},
 	}
-	//Second test: children changed
-	var testBlockRelations2 = BlockRelations{
+	// Second test: children changed
+	testBlockRelations2 := BlockRelations{
 		[]*externalapi.DomainHash{
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1}),
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{2}),
@@ -68,8 +66,8 @@ func initTestBlockRelationsForEqual() []testBlockRelationsStruct {
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{5}),
 		},
 	}
-	//Third test: parents changed
-	var testBlockRelations3 = BlockRelations{
+	// Third test: parents changed
+	testBlockRelations3 := BlockRelations{
 		[]*externalapi.DomainHash{
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{6}),
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{2}),
@@ -115,7 +113,6 @@ func initTestBlockRelationsForEqual() []testBlockRelationsStruct {
 }
 
 func TestBlockRelationsData_Equal(t *testing.T) {
-
 	blockRelationss := initTestBlockRelationsForEqual()
 	for i, test := range blockRelationss {
 		for j, subTest := range test.blockRelationsToCompareTo {
@@ -132,7 +129,6 @@ func TestBlockRelationsData_Equal(t *testing.T) {
 }
 
 func TestBlockRelations_Clone(t *testing.T) {
-
 	testBlockRelations := initTestBlockRelationsForClone()
 	for i, blockRelations := range testBlockRelations {
 		blockRelationsClone := blockRelations.Clone()

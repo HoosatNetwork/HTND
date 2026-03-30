@@ -8,7 +8,6 @@ import (
 
 // UTXODiffToDBUTXODiff converts UTXODiff to DbUtxoDiff
 func UTXODiffToDBUTXODiff(diff externalapi.UTXODiff, toAddBuffer *memory.Block[*DbUtxoCollectionItem], toRemoveBuffer *memory.Block[*DbUtxoCollectionItem]) (*DbUtxoDiff, *memory.Block[*DbUtxoCollectionItem], *memory.Block[*DbUtxoCollectionItem], error) {
-
 	toAdd, toAddBuffer, err := utxoCollectionToDBUTXOCollection(diff.ToAdd(), toAddBuffer)
 	if err != nil {
 		return nil, toAddBuffer, toRemoveBuffer, err

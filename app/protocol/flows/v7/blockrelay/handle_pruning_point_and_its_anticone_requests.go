@@ -24,8 +24,8 @@ var isBusy uint32
 // HandlePruningPointAndItsAnticoneRequests listens to appmessage.MsgRequestPruningPointAndItsAnticone messages and sends
 // the pruning point and its anticone to the requesting peer.
 func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticoneRequestsContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
-
+	outgoingRoute *router.Route, peer *peerpkg.Peer,
+) error {
 	for {
 		err := func() error {
 			_, err := incomingRoute.Dequeue()

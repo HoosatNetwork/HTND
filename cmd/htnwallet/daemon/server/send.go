@@ -23,7 +23,6 @@ func (s *server) Send(_ context.Context, request *pb.SendRequest) (*pb.SendRespo
 
 	unsignedTransactions, err := s.createUnsignedTransactions(request.ToAddress, request.Amount, request.IsSendAll,
 		request.From, request.UseExistingChangeAddress, nil, limit)
-
 	if err != nil {
 		return nil, err
 	}

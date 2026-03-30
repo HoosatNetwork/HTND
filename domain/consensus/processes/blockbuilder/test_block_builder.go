@@ -25,7 +25,8 @@ type testBlockBuilder struct {
 }
 
 var tempBlockHash = externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+})
 
 // NewTestBlockBuilder creates an instance of a TestBlockBuilder
 func NewTestBlockBuilder(baseBlockBuilder model.BlockBuilder, testConsensus testapi.TestConsensus) testapi.TestBlockBuilder {
@@ -58,8 +59,8 @@ func (bb *testBlockBuilder) nextTempBlockHash() *externalapi.DomainHash {
 // and returns the block together with its past UTXO-diff from the virtual.
 func (bb *testBlockBuilder) BuildBlockWithParents(parentHashes []*externalapi.DomainHash,
 	coinbaseData *externalapi.DomainCoinbaseData, transactions []*externalapi.DomainTransaction) (
-	*externalapi.DomainBlock, externalapi.UTXODiff, error) {
-
+	*externalapi.DomainBlock, externalapi.UTXODiff, error,
+) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "BuildBlockWithParents")
 	defer onEnd()
 
@@ -79,8 +80,8 @@ func (bb *testBlockBuilder) BuildBlockWithParents(parentHashes []*externalapi.Do
 
 func (bb *testBlockBuilder) buildUTXOInvalidHeader(stagingArea *model.StagingArea,
 	tempHash *externalapi.DomainHash, parentHashes []*externalapi.DomainHash, bits uint32, daaScore, blueScore uint64, blueWork *big.Int,
-	transactions []*externalapi.DomainTransaction) (externalapi.BlockHeader, error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (externalapi.BlockHeader, error) {
 	timeInMilliseconds, err := bb.minBlockTime(stagingArea, tempHash)
 	if err != nil {
 		return nil, err
@@ -130,8 +131,8 @@ func (bb *testBlockBuilder) buildUTXOInvalidHeader(stagingArea *model.StagingAre
 
 func (bb *testBlockBuilder) buildHeaderWithParents(stagingArea *model.StagingArea,
 	tempHash *externalapi.DomainHash, parentHashes []*externalapi.DomainHash, bits uint32, transactions []*externalapi.DomainTransaction,
-	acceptanceData externalapi.AcceptanceData, multiset model.Multiset, daaScore, blueScore uint64, blueWork *big.Int) (externalapi.BlockHeader, error) {
-
+	acceptanceData externalapi.AcceptanceData, multiset model.Multiset, daaScore, blueScore uint64, blueWork *big.Int,
+) (externalapi.BlockHeader, error) {
 	header, err := bb.buildUTXOInvalidHeader(stagingArea, tempHash, parentHashes, bits, daaScore, blueScore, blueWork, transactions)
 	if err != nil {
 		return nil, err
@@ -162,8 +163,8 @@ func (bb *testBlockBuilder) buildHeaderWithParents(stagingArea *model.StagingAre
 
 func (bb *testBlockBuilder) buildBlockWithParents(stagingArea *model.StagingArea, parentHashes []*externalapi.DomainHash,
 	coinbaseData *externalapi.DomainCoinbaseData, transactions []*externalapi.DomainTransaction) (
-	*externalapi.DomainBlock, externalapi.UTXODiff, error) {
-
+	*externalapi.DomainBlock, externalapi.UTXODiff, error,
+) {
 	if coinbaseData == nil {
 		scriptPublicKeyScript, err := txscript.PayToScriptHashScript([]byte{txscript.OpTrue})
 		if err != nil {
@@ -215,8 +216,7 @@ func (bb *testBlockBuilder) buildBlockWithParents(stagingArea *model.StagingArea
 			ghostdagData.SelectedParent())
 	}
 
-	pastUTXO, acceptanceData, multiset, err :=
-		bb.consensusStateManager.CalculatePastUTXOAndAcceptanceData(stagingArea, tempHash)
+	pastUTXO, acceptanceData, multiset, err := bb.consensusStateManager.CalculatePastUTXOAndAcceptanceData(stagingArea, tempHash)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -247,8 +247,8 @@ func (bb *testBlockBuilder) buildBlockWithParents(stagingArea *model.StagingArea
 }
 
 func (bb *testBlockBuilder) BuildUTXOInvalidHeader(parentHashes []*externalapi.DomainHash) (externalapi.BlockHeader,
-	error) {
-
+	error,
+) {
 	block, err := bb.BuildUTXOInvalidBlock(parentHashes)
 	if err != nil {
 		return nil, err
@@ -258,8 +258,8 @@ func (bb *testBlockBuilder) BuildUTXOInvalidHeader(parentHashes []*externalapi.D
 }
 
 func (bb *testBlockBuilder) BuildUTXOInvalidBlock(parentHashes []*externalapi.DomainHash) (*externalapi.DomainBlock,
-	error) {
-
+	error,
+) {
 	stagingArea := model.NewStagingArea()
 	tempHash := bb.nextTempBlockHash()
 

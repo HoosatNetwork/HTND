@@ -7,11 +7,12 @@
 package protoserialization
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -665,19 +666,21 @@ func file_wallet_proto_rawDescGZIP() []byte {
 	return file_wallet_proto_rawDescData
 }
 
-var file_wallet_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
-var file_wallet_proto_goTypes = []any{
-	(*PartiallySignedTransaction)(nil), // 0: protoserialization.PartiallySignedTransaction
-	(*PartiallySignedInput)(nil),       // 1: protoserialization.PartiallySignedInput
-	(*PubKeySignaturePair)(nil),        // 2: protoserialization.PubKeySignaturePair
-	(*SubnetworkId)(nil),               // 3: protoserialization.SubnetworkId
-	(*TransactionMessage)(nil),         // 4: protoserialization.TransactionMessage
-	(*TransactionInput)(nil),           // 5: protoserialization.TransactionInput
-	(*Outpoint)(nil),                   // 6: protoserialization.Outpoint
-	(*TransactionId)(nil),              // 7: protoserialization.TransactionId
-	(*ScriptPublicKey)(nil),            // 8: protoserialization.ScriptPublicKey
-	(*TransactionOutput)(nil),          // 9: protoserialization.TransactionOutput
-}
+var (
+	file_wallet_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+	file_wallet_proto_goTypes  = []any{
+		(*PartiallySignedTransaction)(nil), // 0: protoserialization.PartiallySignedTransaction
+		(*PartiallySignedInput)(nil),       // 1: protoserialization.PartiallySignedInput
+		(*PubKeySignaturePair)(nil),        // 2: protoserialization.PubKeySignaturePair
+		(*SubnetworkId)(nil),               // 3: protoserialization.SubnetworkId
+		(*TransactionMessage)(nil),         // 4: protoserialization.TransactionMessage
+		(*TransactionInput)(nil),           // 5: protoserialization.TransactionInput
+		(*Outpoint)(nil),                   // 6: protoserialization.Outpoint
+		(*TransactionId)(nil),              // 7: protoserialization.TransactionId
+		(*ScriptPublicKey)(nil),            // 8: protoserialization.ScriptPublicKey
+		(*TransactionOutput)(nil),          // 9: protoserialization.TransactionOutput
+	}
+)
 var file_wallet_proto_depIdxs = []int32{
 	4,  // 0: protoserialization.PartiallySignedTransaction.tx:type_name -> protoserialization.TransactionMessage
 	1,  // 1: protoserialization.PartiallySignedTransaction.partiallySignedInputs:type_name -> protoserialization.PartiallySignedInput

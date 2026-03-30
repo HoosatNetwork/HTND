@@ -34,8 +34,8 @@ func NewContext(cfg *config.Config,
 	connectionManager *connmanager.ConnectionManager,
 	addressManager *addressmanager.AddressManager,
 	utxoIndex *utxoindex.UTXOIndex,
-	shutDownChan chan<- struct{}) *Context {
-
+	shutDownChan chan<- struct{},
+) *Context {
 	context := &Context{
 		Config:            cfg,
 		NetAdapter:        netAdapter,

@@ -44,8 +44,8 @@ func New(config *Config, consensusReference consensusreference.ConsensusReferenc
 }
 
 func (mp *mempool) ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool) (
-	acceptedTransactions []*externalapi.DomainTransaction, err error) {
-
+	acceptedTransactions []*externalapi.DomainTransaction, err error,
+) {
 	mp.mtx.Lock()
 	defer mp.mtx.Unlock()
 
@@ -57,8 +57,8 @@ func (mp *mempool) GetTransaction(transactionID *externalapi.DomainTransactionID
 	includeOrphanPool bool) (
 	transaction *externalapi.DomainTransaction,
 	isOrphan bool,
-	found bool) {
-
+	found bool,
+) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -82,8 +82,8 @@ func (mp *mempool) GetTransactionNoClone(transactionID *externalapi.DomainTransa
 	includeOrphanPool bool) (
 	transaction *externalapi.DomainTransaction,
 	isOrphan bool,
-	found bool) {
-
+	found bool,
+) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -107,7 +107,8 @@ func (mp *mempool) GetTransactionsByAddresses(includeTransactionPool bool, inclu
 	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
 	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
 	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
-	err error) {
+	err error,
+) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -133,7 +134,8 @@ func (mp *mempool) GetTransactionsByAddressesNoClone(includeTransactionPool bool
 	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
 	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
 	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
-	err error) {
+	err error,
+) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -156,8 +158,8 @@ func (mp *mempool) GetTransactionsByAddressesNoClone(includeTransactionPool bool
 
 func (mp *mempool) AllTransactions(includeTransactionPool bool, includeOrphanPool bool) (
 	transactionPoolTransactions []*externalapi.DomainTransaction,
-	orphanPoolTransactions []*externalapi.DomainTransaction) {
-
+	orphanPoolTransactions []*externalapi.DomainTransaction,
+) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -174,8 +176,8 @@ func (mp *mempool) AllTransactions(includeTransactionPool bool, includeOrphanPoo
 
 func (mp *mempool) AllTransactionsNoClone(includeTransactionPool bool, includeOrphanPool bool) (
 	transactionPoolTransactions []*externalapi.DomainTransaction,
-	orphanPoolTransactions []*externalapi.DomainTransaction) {
-
+	orphanPoolTransactions []*externalapi.DomainTransaction,
+) {
 	mp.mtx.RLock()
 	defer mp.mtx.RUnlock()
 
@@ -207,8 +209,8 @@ func (mp *mempool) TransactionCount(includeTransactionPool bool, includeOrphanPo
 }
 
 func (mp *mempool) HandleNewBlockTransactions(transactions []*externalapi.DomainTransaction) (
-	acceptedOrphans []*externalapi.DomainTransaction, err error) {
-
+	acceptedOrphans []*externalapi.DomainTransaction, err error,
+) {
 	mp.mtx.Lock()
 	defer mp.mtx.Unlock()
 

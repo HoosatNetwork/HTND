@@ -16,7 +16,8 @@ func (msg *GetBlocksRequestMessage) Command() MessageCommand {
 
 // NewGetBlocksRequestMessage returns a instance of the message
 func NewGetBlocksRequestMessage(lowHash string, includeBlocks bool,
-	includeTransactions bool) *GetBlocksRequestMessage {
+	includeTransactions bool,
+) *GetBlocksRequestMessage {
 	return &GetBlocksRequestMessage{
 		LowHash:             lowHash,
 		IncludeBlocks:       includeBlocks,
