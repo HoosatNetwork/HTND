@@ -1,22 +1,25 @@
 #!/bin/sh
 
-# Auto-format Go files with gofmt -s before commit (no Python required)
+# Smart Go pre-commit hook: gofumpt + goimports
 
-# Get only staged .go files that are added/modified
+# Find staged Go files (added, copied, modified)
 STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$')
 
 if [ -z "$STAGED_GO_FILES" ]; then
     exit 0
 fi
 
-echo "🔧 Running gofmt -s on staged Go files..."
+echo "🔧 Formatting staged Go files with gofumpt + goimports..."
 
 for file in $STAGED_GO_FILES; do
-    # Format with simplify flag and write changes
-    gofmt -s -w "$file"
+    # First run goimports (handles import organization + basic formatting)
+    goimports -w "$file"
     
-    # Re-stage the formatted file so the changes are included in the commit
+    # Then run gofumpt (stricter formatting rules on top)
+    gofumpt -w "$file"
+    
+    # Re-stage the file with all formatting changes applied
     git add "$file"
 done
 
-echo "✅ gofmt -s applied successfully"
+echo "✅ All staged Go files formatted successfully with gofumpt + goimports"
