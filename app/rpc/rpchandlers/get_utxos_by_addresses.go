@@ -43,7 +43,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 
 	getUTXOsByAddressesRequest := request.(*appmessage.GetUTXOsByAddressesRequestMessage)
 
-	if getUTXOsByAddressesRequest.Limit < 0 || getUTXOsByAddressesRequest.Limit > 10_000_000 {
+	if getUTXOsByAddressesRequest.Limit > 10_000_000 {
 		errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Invalid limit: %d. Limit must be between 0 and 10,000,000", getUTXOsByAddressesRequest.Limit)
 		return errorMessage, nil
