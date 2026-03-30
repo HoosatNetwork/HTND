@@ -138,6 +138,8 @@ func BenchmarkRealloc(b *testing.B) {
 }
 
 func TestLogLeaksTracksOutstandingAllocations(t *testing.T) {
+	t.Setenv("MEMORY_ALLOCATIONS", "1")
+
 	b := Malloc[int](4)
 	if b == nil {
 		t.Fatal("Expected block, got nil")
