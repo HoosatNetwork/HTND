@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
@@ -160,10 +161,22 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 	if os.Getenv("HTND_PROFILER") != "" {
 		go s.displayCacheSizes()
 		go s.displayMemUse()
+		go s.periodicLogFrees()
 	}
 
 	// go s.periodicFreeOSMemory()
 
+	return nil
+}
+
+func (s *consensus) periodicLogFrees() error {
+	minutes := 1
+	time.Sleep(time.Duration(minutes))
+
+	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
+	for range ticker.C {
+		memory.LogLeaks()
+	}
 	return nil
 }
 

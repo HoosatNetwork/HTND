@@ -136,3 +136,24 @@ func BenchmarkRealloc(b *testing.B) {
 	b.StopTimer()
 	Free(blk)
 }
+
+func TestLogLeaksTracksOutstandingAllocations(t *testing.T) {
+	b := Malloc[int](4)
+	if b == nil {
+		t.Fatal("Expected block, got nil")
+	}
+
+	if count := outstandingAllocationsCount(); count != 1 {
+		t.Fatalf("Expected 1 outstanding allocation, got %d", count)
+	}
+
+	if count := LogLeaks(); count != 1 {
+		t.Fatalf("Expected LogLeaks to report 1 outstanding allocation, got %d", count)
+	}
+
+	Free(b)
+
+	if count := LogLeaks(); count != 0 {
+		t.Fatalf("Expected LogLeaks to report 0 outstanding allocations after Free, got %d", count)
+	}
+}
