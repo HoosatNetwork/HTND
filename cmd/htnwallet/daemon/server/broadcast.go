@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -48,6 +49,9 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 
 		txIDs[i], err = sendTransaction(s.rpcClient, tx, allowOrphan, isHighPriority)
 		if err != nil {
+			if shouldReleaseUsedOutpointsOnBroadcastError(err) {
+				s.releaseUsedOutpoints(tx)
+			}
 			return nil, err
 		}
 
@@ -58,6 +62,27 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 
 	s.forceSync()
 	return txIDs, nil
+}
+
+func shouldReleaseUsedOutpointsOnBroadcastError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errString := strings.ToLower(err.Error())
+	return strings.Contains(errString, "rejected transaction") ||
+		strings.Contains(errString, "already spent by transaction") ||
+		strings.Contains(errString, "compound transaction rate limit exceeded")
+}
+
+func (s *server) releaseUsedOutpoints(tx *externalapi.DomainTransaction) {
+	if tx == nil {
+		return
+	}
+
+	for _, input := range tx.Inputs {
+		delete(s.usedOutpoints, input.PreviousOutpoint)
+	}
 }
 
 func sendTransaction(client *rpcclient.RPCClient, tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {

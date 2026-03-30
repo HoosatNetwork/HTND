@@ -291,7 +291,9 @@ func (s *server) refreshUTXOs(limit uint32) error {
 	// and not in consensus, and between the calls its spending transaction will be
 	// added to consensus and removed from the mempool, so `getUTXOsByAddressesResponse`
 	// will include an obsolete output.
-	mempoolEntriesByAddresses, err := s.backgroundRPCClient.GetMempoolEntriesByAddresses(addresses, true, true)
+	// Include both transaction-pool and orphan-pool spends so we can exclude UTXOs that are
+	// already being spent anywhere in the node mempool before building a new transaction.
+	mempoolEntriesByAddresses, err := s.backgroundRPCClient.GetMempoolEntriesByAddresses(addresses, true, false)
 	if err != nil {
 		return err
 	}
