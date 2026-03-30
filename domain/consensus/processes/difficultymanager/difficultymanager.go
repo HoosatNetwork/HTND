@@ -82,10 +82,10 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 	defer onEnd()
 
 	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	defer targetsWindow.free()
 	if err != nil {
 		return 0, err
 	}
-	defer targetsWindow.free()
 
 	err = dm.stageDAAScoreAndAddedBlocks(stagingArea, blockHash, targetsWindow.pairs, isBlockWithTrustedData)
 	if err != nil {
@@ -98,10 +98,10 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 // RequiredDifficulty returns the difficulty required for some block
 func (dm *difficultyManager) RequiredDifficulty(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint32, error) {
 	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	defer targetsWindow.free()
 	if err != nil {
 		return 0, err
 	}
-	defer targetsWindow.free()
 
 	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockHash)
 }

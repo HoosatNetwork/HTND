@@ -24,6 +24,7 @@ type allocationInfo struct {
 }
 
 var (
+	logLeaks      uint64 = 0
 	allocationSeq uint64
 	allocationsMu sync.Mutex
 	allocations   = make(map[uint64]allocationInfo)
@@ -54,7 +55,7 @@ func Malloc[T any](n int) *Block[T] {
 	}
 
 	registerAllocation(block, size)
-	log.Debugf("malloc id=%d type=%T len=%d bytes=%d ptr=%p", id, *new(T), n, size, ptr)
+	log.Debugf("Malloc id=%d type=%T len=%d bytes=%d ptr=%p", id, *new(T), n, size, ptr)
 
 	return block
 }
@@ -93,7 +94,7 @@ func Realloc[T any](b *Block[T], n int) *Block[T] {
 		copyLen = b.len
 	}
 	copy(newBlock.Slice()[:copyLen], b.Slice()[:copyLen])
-	log.Debugf("realloc old_id=%d new_id=%d type=%T old_len=%d new_len=%d old_ptr=%p new_ptr=%p", b.id, newBlock.id, *new(T), b.len, n, b.ptr, newBlock.ptr)
+	log.Debugf("Realloc old_id=%d new_id=%d type=%T old_len=%d new_len=%d old_ptr=%p new_ptr=%p", b.id, newBlock.id, *new(T), b.len, n, b.ptr, newBlock.ptr)
 	Free(b)
 
 	return newBlock
@@ -113,18 +114,21 @@ func Free[T any](b *Block[T]) {
 		panic(err)
 	}
 	unregisterAllocation(id)
-	log.Debugf("free id=%d type=%s len=%d bytes=%d ptr=%p", id, typeName, length, byteSize, ptr)
+	log.Debugf("Free id=%d type=%s len=%d bytes=%d ptr=%p", id, typeName, length, byteSize, ptr)
 	*b = Block[T]{} // zero out to prevent use-after-free
 }
 
 func LogLeaks() int {
+	if os.Getenv("MEMORY_ALLOCATIONS") == "" {
+		return 0
+	}
 	allocationsMu.Lock()
 	defer allocationsMu.Unlock()
 
 	for _, allocation := range allocations {
-		log.Warnf("memory block not freed: id=%d type=%s len=%d bytes=%d ptr=%#x", allocation.id, allocation.typeName, allocation.length, allocation.byteSize, allocation.ptr)
+		log.Infof("Memory block not freed yet on logLeaks %d: id=%d type=%s len=%d bytes=%d ptr=%#x", logLeaks, allocation.id, allocation.typeName, allocation.length, allocation.byteSize, allocation.ptr)
 	}
-
+	logLeaks++
 	return len(allocations)
 }
 

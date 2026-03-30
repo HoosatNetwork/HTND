@@ -26,10 +26,10 @@ func (dm *difficultyManager) estimateNetworkHashesPerSecond(stagingArea *model.S
 	}
 
 	blockWindow, err := dm.blockWindow(stagingArea, startHash, windowSize)
+	defer blockWindow.free()
 	if err != nil {
 		return 0, err
 	}
-	defer blockWindow.free()
 
 	// return 0 if no blocks had been mined yet
 	if len(blockWindow.pairs) == 0 {
