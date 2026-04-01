@@ -140,7 +140,6 @@ func (s *server) collectRecentAddresses() error {
 	maxUsedIndex := uint32(0)
 	for ; index < maxUsedIndex+numIndexesToQueryForRecentAddresses; index += numIndexesToQueryForRecentAddresses {
 		err := s.collectAddressesWithLock(index, index+numIndexesToQueryForRecentAddresses)
-
 		if err != nil {
 			return err
 		}
@@ -185,7 +184,8 @@ func (s *server) collectAddresses(start, end uint32) error {
 }
 
 func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAddressSet,
-	getUsableAddressesResponse *appmessage.GetUsableAddressesResponseMessage) error {
+	getUsableAddressesResponse *appmessage.GetUsableAddressesResponseMessage,
+) error {
 	lastUsedExternalIndex := s.keysFile.LastUsedExternalIndex()
 	lastUsedInternalIndex := s.keysFile.LastUsedInternalIndex()
 
@@ -269,7 +269,7 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 	sort.Slice(utxos, func(i, j int) bool { return utxos[i].UTXOEntry.Amount() > utxos[j].UTXOEntry.Amount() })
 	s.startTimeOfLastCompletedRefresh = refreshStart
 	s.utxosSortedByAmount = utxos
-	//log.Infof("Updating %d UTXOs", len(s.utxosSortedByAmount))
+	// log.Infof("Updating %d UTXOs", len(s.utxosSortedByAmount))
 
 	// Cleanup expired used outpoints to avoid a memory leak
 	for outpoint, broadcastTime := range s.usedOutpoints {
@@ -302,7 +302,7 @@ func (s *server) refreshUTXOs(limit uint32) error {
 	if err != nil {
 		return err
 	}
-	//log.Infof("Got %d UTXOs from node", len(getUTXOsByAddressesResponse.Entries))
+	// log.Infof("Got %d UTXOs from node", len(getUTXOsByAddressesResponse.Entries))
 
 	return s.updateUTXOSet(getUTXOsByAddressesResponse.Entries, mempoolEntriesByAddresses.Entries, refreshStart)
 }

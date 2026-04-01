@@ -81,5 +81,4 @@ func TestPastMedianTime(t *testing.T) {
 			}
 		}
 	})
-
 }

@@ -92,7 +92,8 @@ func standardSetup(t *testing.T) (appHarness1, appHarness2, appHarness3 *appHarn
 			rpcAddress:              rpcAddress2,
 			miningAddress:           miningAddress2,
 			miningAddressPrivateKey: miningAddress2PrivateKey,
-		}, {
+		},
+		{
 			p2pAddress:              p2pAddress3,
 			rpcAddress:              rpcAddress3,
 			miningAddress:           miningAddress3,

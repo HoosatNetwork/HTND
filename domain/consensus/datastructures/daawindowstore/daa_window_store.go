@@ -37,7 +37,6 @@ func (daaws *daaWindowStore) Stage(stagingArea *model.StagingArea, blockHash *ex
 		stagingShard.toAdd[key] = pair
 		daaws.cache.Add(blockHash, index, pair)
 	}
-
 }
 
 func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, index uint64) (*externalapi.BlockGHOSTDAGDataHashPair, error) {

@@ -17,8 +17,8 @@ import (
 // RawTxInSignature returns the serialized Schnorr signature for the input idx of
 // the given transaction, with hashType appended to it.
 func RawTxInSignature(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	key *secp256k1.SchnorrKeyPair, sighashReusedValues *consensushashing.SighashReusedValues) ([]byte, error) {
-
+	key *secp256k1.SchnorrKeyPair, sighashReusedValues *consensushashing.SighashReusedValues,
+) ([]byte, error) {
 	hash, err := consensushashing.CalculateSignatureHashSchnorr(tx, idx, hashType, sighashReusedValues)
 	if err != nil {
 		return nil, err
@@ -35,8 +35,8 @@ func RawTxInSignature(tx *externalapi.DomainTransaction, idx int, hashType conse
 // RawTxInSignatureECDSA returns the serialized ECDSA signature for the input idx of
 // the given transaction, with hashType appended to it.
 func RawTxInSignatureECDSA(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	key *secp256k1.ECDSAPrivateKey, sighashReusedValues *consensushashing.SighashReusedValues) ([]byte, error) {
-
+	key *secp256k1.ECDSAPrivateKey, sighashReusedValues *consensushashing.SighashReusedValues,
+) ([]byte, error) {
 	hash, err := consensushashing.CalculateSignatureHashECDSA(tx, idx, hashType, sighashReusedValues)
 	if err != nil {
 		return nil, err
@@ -59,8 +59,8 @@ func RawTxInSignatureECDSA(tx *externalapi.DomainTransaction, idx int, hashType 
 // uncompressed format based on compress. This format must match the same format
 // used to generate the payment address, or the script validation will fail.
 func SignatureScript(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	privKey *secp256k1.SchnorrKeyPair, sighashReusedValues *consensushashing.SighashReusedValues) ([]byte, error) {
-
+	privKey *secp256k1.SchnorrKeyPair, sighashReusedValues *consensushashing.SighashReusedValues,
+) ([]byte, error) {
 	sig, err := RawTxInSignature(tx, idx, hashType, privKey, sighashReusedValues)
 	if err != nil {
 		return nil, err
@@ -78,8 +78,8 @@ func SignatureScript(tx *externalapi.DomainTransaction, idx int, hashType consen
 // uncompressed format based on compress. This format must match the same format
 // used to generate the payment address, or the script validation will fail.
 func SignatureScriptECDSA(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	privKey *secp256k1.ECDSAPrivateKey, sighashReusedValues *consensushashing.SighashReusedValues) ([]byte, error) {
-
+	privKey *secp256k1.ECDSAPrivateKey, sighashReusedValues *consensushashing.SighashReusedValues,
+) ([]byte, error) {
 	sig, err := RawTxInSignatureECDSA(tx, idx, hashType, privKey, sighashReusedValues)
 	if err != nil {
 		return nil, err
@@ -91,8 +91,8 @@ func SignatureScriptECDSA(tx *externalapi.DomainTransaction, idx int, hashType c
 func sign(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction, idx int,
 	script *externalapi.ScriptPublicKey, hashType consensushashing.SigHashType,
 	sighashReusedValues *consensushashing.SighashReusedValues, kdb KeyDB, sdb ScriptDB) (
-	[]byte, ScriptClass, util.Address, error) {
-
+	[]byte, ScriptClass, util.Address, error,
+) {
 	class, address, err := ExtractScriptPubKeyAddress(script, dagParams)
 	if err != nil {
 		return nil, NonStandardTy, nil, err
@@ -131,8 +131,8 @@ func sign(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction, idx in
 // function with addresses, class and nrequired that do not match scriptPubKey is
 // an error and results in undefined behaviour.
 func mergeScripts(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction, idx int,
-	class ScriptClass, sigScript []byte, prevScript *externalapi.ScriptPublicKey) ([]byte, error) {
-
+	class ScriptClass, sigScript []byte, prevScript *externalapi.ScriptPublicKey,
+) ([]byte, error) {
 	switch class {
 	case ScriptHashTy:
 		// Remove the last push in the script and then recurse.
@@ -154,8 +154,7 @@ func mergeScripts(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction
 			Version: prevScript.Version,
 		}
 		// We already know this information somewhere up the stack.
-		class, _, _ :=
-			ExtractScriptPubKeyAddress(scriptPubKey, dagParams)
+		class, _, _ := ExtractScriptPubKeyAddress(scriptPubKey, dagParams)
 
 		// regenerate scripts.
 		sigScript, _ := unparseScript(sigPops)
@@ -228,8 +227,8 @@ func (sc ScriptClosure) GetScript(address util.Address) ([]byte, error) {
 func SignTxOutput(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction, idx int,
 	scriptPublicKey *externalapi.ScriptPublicKey, hashType consensushashing.SigHashType,
 	sighashReusedValues *consensushashing.SighashReusedValues, kdb KeyDB, sdb ScriptDB,
-	previousScript *externalapi.ScriptPublicKey) ([]byte, error) {
-
+	previousScript *externalapi.ScriptPublicKey,
+) ([]byte, error) {
 	sigScript, class, _, err := sign(dagParams, tx,
 		idx, scriptPublicKey, hashType, sighashReusedValues, kdb, sdb)
 	if err != nil {

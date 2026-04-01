@@ -10,8 +10,10 @@ import (
 
 const leveldbCacheSizeMiB = 256
 
-var blockIDToHashBucket = database.MakeBucket([]byte("id-to-block-hash"))
-var lastMinedBlockKey = database.MakeBucket(nil).Key([]byte("last-sent-block"))
+var (
+	blockIDToHashBucket = database.MakeBucket([]byte("id-to-block-hash"))
+	lastMinedBlockKey   = database.MakeBucket(nil).Key([]byte("last-sent-block"))
+)
 
 type miningDB struct {
 	idToBlockHash map[string]*externalapi.DomainHash

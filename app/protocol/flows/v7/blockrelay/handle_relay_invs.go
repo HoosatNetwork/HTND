@@ -62,8 +62,8 @@ type handleRelayInvsFlow struct {
 // HandleRelayInvs listens to appmessage.MsgInvRelayBlock messages, requests their corresponding blocks if they
 // are missing, adds them to the DAG and propagates them to the rest of the network.
 func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.ConnectionManager, netConnection *netadapter.NetConnection, incomingRoute *router.Route, outgoingRoute *router.Route,
-	peer *peerpkg.Peer) error {
-
+	peer *peerpkg.Peer,
+) error {
 	flow := &handleRelayInvsFlow{
 		RelayInvsContext:  context,
 		incomingRoute:     incomingRoute,

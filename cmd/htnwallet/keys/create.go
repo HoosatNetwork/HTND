@@ -49,7 +49,8 @@ func ImportMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword s
 }
 
 func encryptedMnemonicExtendedPublicKeyPairs(params *dagconfig.Params, mnemonics []string, cmdLinePassword string, isMultisig bool) (
-	encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error) {
+	encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error,
+) {
 	password := []byte(cmdLinePassword)
 	if len(password) == 0 {
 

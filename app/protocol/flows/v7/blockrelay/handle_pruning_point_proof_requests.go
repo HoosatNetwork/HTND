@@ -15,8 +15,8 @@ type PruningPointProofRequestsContext interface {
 // HandlePruningPointProofRequests listens to appmessage.MsgRequestPruningPointProof messages and sends
 // the pruning point proof to the requesting peer.
 func HandlePruningPointProofRequests(context PruningPointProofRequestsContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
-
+	outgoingRoute *router.Route, peer *peerpkg.Peer,
+) error {
 	for {
 		_, err := incomingRoute.Dequeue()
 		if err != nil {

@@ -39,6 +39,7 @@ func connect(t *testing.T, incoming, outgoing *appHarness) {
 		t.Fatalf("Timed out waiting for the apps to connect")
 	}
 }
+
 func isConnected(t *testing.T, appHarness1, appHarness2 *appHarness) bool {
 	connectedPeerInfo1, err := appHarness1.rpcClient.GetConnectedPeerInfo()
 	if err != nil {

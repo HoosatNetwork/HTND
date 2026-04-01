@@ -16,7 +16,6 @@ import (
 )
 
 func TestAddBlockBetweenResolveVirtualCalls(t *testing.T) {
-
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 
@@ -102,7 +101,6 @@ func TestAddBlockBetweenResolveVirtualCalls(t *testing.T) {
 }
 
 func TestAddGenesisChildAfterOneResolveVirtualCall(t *testing.T) {
-
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 
@@ -167,7 +165,6 @@ func TestAddGenesisChildAfterOneResolveVirtualCall(t *testing.T) {
 }
 
 func TestAddGenesisChildAfterTwoResolveVirtualCalls(t *testing.T) {
-
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 
@@ -238,7 +235,6 @@ func TestAddGenesisChildAfterTwoResolveVirtualCalls(t *testing.T) {
 }
 
 func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
-
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 
@@ -424,7 +420,7 @@ func verifyUtxoDiffPaths(t *testing.T, tc testapi.TestConsensus, hashes []*exter
 
 func printfDebug(format string, a ...any) {
 	// Uncomment below when debugging the test
-	//fmt.Printf(format, a...)
+	// fmt.Printf(format, a...)
 }
 
 func printUtxoDiffChildren(t *testing.T, tc testapi.TestConsensus, hashes []*externalapi.DomainHash, blocks map[externalapi.DomainHash]string) {

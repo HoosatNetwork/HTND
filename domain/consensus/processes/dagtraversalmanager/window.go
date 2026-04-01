@@ -14,8 +14,8 @@ func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, h
 // BlockWindowHeapSlice returns the cached or computed heap slice for the given
 // block window. The returned slice must be treated as read-only by callers.
 func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
-	windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
-
+	windowSize int,
+) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	// Fast path: if the heap slice is already cached in the staging-area-aware
 	// store, return it directly without cloning or extracting a hash-only view.
 	cachedSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, highHash, windowSize)
@@ -43,7 +43,8 @@ func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingA
 // blocks in the past of highHash, the sorting is unspecified.
 // If the number of blocks in the past of startingNode is less then windowSize,
 func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
-	windowSize int) ([]*externalapi.DomainHash, error) {
+	windowSize int,
+) ([]*externalapi.DomainHash, error) {
 	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize)
 	if err != nil {
 		return nil, err
@@ -58,8 +59,8 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 }
 
 func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.StagingArea,
-	highHash *externalapi.DomainHash, windowSize int) (*sizedUpBlockHeap, error) {
-
+	highHash *externalapi.DomainHash, windowSize int,
+) (*sizedUpBlockHeap, error) {
 	if highHash.Equal(dtm.genesisHash) {
 		return dtm.newSizedUpHeap(stagingArea, windowSize), nil
 	}

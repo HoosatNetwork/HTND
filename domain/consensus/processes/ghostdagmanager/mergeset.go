@@ -10,8 +10,8 @@ import (
 )
 
 func (gm *ghostdagManager) mergeSetWithoutSelectedParent(stagingArea *model.StagingArea,
-	selectedParent *externalapi.DomainHash, blockParents []*externalapi.DomainHash, k externalapi.KType) ([]*externalapi.DomainHash, error) {
-
+	selectedParent *externalapi.DomainHash, blockParents []*externalapi.DomainHash, k externalapi.KType,
+) ([]*externalapi.DomainHash, error) {
 	mergeSetMap := make(map[externalapi.DomainHash]struct{}, k)
 	mergeSetSlice := make([]*externalapi.DomainHash, 0, k)
 	selectedParentPast := make(map[externalapi.DomainHash]struct{})
@@ -86,8 +86,8 @@ func (gm *ghostdagManager) sortMergeSet(stagingArea *model.StagingArea, mergeSet
 
 // GetSortedMergeSet return the merge set sorted in a toplogical order.
 func (gm *ghostdagManager) GetSortedMergeSet(stagingArea *model.StagingArea,
-	current *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	current *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	currentGhostdagData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current, false)
 	if database.IsNotFoundError(err) {
 		log.Infof("GetSortedMergeSet failed to retrieve with %s\n", current)

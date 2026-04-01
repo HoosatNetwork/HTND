@@ -30,7 +30,6 @@ func (x *RequestAnticoneMessage) toAppMessage() (appmessage.Message, error) {
 		BlockHash:   blockHash,
 		ContextHash: contextHash,
 	}, nil
-
 }
 
 func (x *HoosatdMessage_RequestAnticone) fromAppMessage(msgRequestPastDiff *appmessage.MsgRequestAnticone) error {

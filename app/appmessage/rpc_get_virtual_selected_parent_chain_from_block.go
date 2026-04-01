@@ -15,8 +15,8 @@ func (msg *GetVirtualSelectedParentChainFromBlockRequestMessage) Command() Messa
 
 // NewGetVirtualSelectedParentChainFromBlockRequestMessage returns a instance of the message
 func NewGetVirtualSelectedParentChainFromBlockRequestMessage(
-	startHash string, includeAcceptedTransactionIDs bool) *GetVirtualSelectedParentChainFromBlockRequestMessage {
-
+	startHash string, includeAcceptedTransactionIDs bool,
+) *GetVirtualSelectedParentChainFromBlockRequestMessage {
 	return &GetVirtualSelectedParentChainFromBlockRequestMessage{
 		StartHash:                     startHash,
 		IncludeAcceptedTransactionIDs: includeAcceptedTransactionIDs,
@@ -48,8 +48,8 @@ func (msg *GetVirtualSelectedParentChainFromBlockResponseMessage) Command() Mess
 
 // NewGetVirtualSelectedParentChainFromBlockResponseMessage returns a instance of the message
 func NewGetVirtualSelectedParentChainFromBlockResponseMessage(removedChainBlockHashes,
-	addedChainBlockHashes []string, acceptedTransactionIDs []*AcceptedTransactionIDs) *GetVirtualSelectedParentChainFromBlockResponseMessage {
-
+	addedChainBlockHashes []string, acceptedTransactionIDs []*AcceptedTransactionIDs,
+) *GetVirtualSelectedParentChainFromBlockResponseMessage {
 	return &GetVirtualSelectedParentChainFromBlockResponseMessage{
 		RemovedChainBlockHashes: removedChainBlockHashes,
 		AddedChainBlockHashes:   addedChainBlockHashes,

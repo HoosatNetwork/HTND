@@ -114,7 +114,6 @@ func (x *MempoolEntryByAddress) toAppMessage() (*appmessage.MempoolEntryByAddres
 }
 
 func (x *MempoolEntryByAddress) fromAppMessage(message *appmessage.MempoolEntryByAddress) error {
-
 	sending := make([]*MempoolEntry, len(message.Sending))
 	for i, mempoolEntry := range message.Sending {
 		sending[i] = &MempoolEntry{}

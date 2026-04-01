@@ -2,8 +2,6 @@ package logger
 
 import (
 	"fmt"
-	"github.com/jrick/logrotate/rotator"
-	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/jrick/logrotate/rotator"
+	"github.com/pkg/errors"
 )
 
 const normalLogSize = 512
@@ -120,7 +121,7 @@ func (b *Backend) AddLogFileWithCustomRotator(logFile string, logLevel Level, th
 	logDir, _ := filepath.Split(logFile)
 	// if the logDir is empty then `logFile` is in the cwd and there's no need to create any directory.
 	if logDir != "" {
-		err := os.MkdirAll(logDir, 0700)
+		err := os.MkdirAll(logDir, 0o700)
 		if err != nil {
 			return errors.Errorf("failed to create log directory: %+v", err)
 		}

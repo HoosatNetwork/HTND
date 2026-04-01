@@ -73,9 +73,17 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 
 // If this doesn't compile, it means the type definition has been changed, so it's
 // an indication to update Equal and Clone accordingly.
-var _ = DomainTransaction{0, []*DomainTransactionInput{}, []*DomainTransactionOutput{}, 0,
-	DomainSubnetworkID{}, 0, []byte{}, 0, 0,
-	&DomainTransactionID{}}
+var _ = DomainTransaction{
+	0,
+	[]*DomainTransactionInput{},
+	[]*DomainTransactionOutput{},
+	0,
+	DomainSubnetworkID{},
+	0,
+	[]byte{},
+	0, 0,
+	&DomainTransactionID{},
+}
 
 // Equal returns whether tx equals to other
 func (tx *DomainTransaction) Equal(other *DomainTransaction) bool {

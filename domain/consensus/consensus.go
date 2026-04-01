@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
@@ -160,10 +161,22 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 	if os.Getenv("HTND_PROFILER") != "" {
 		go s.displayCacheSizes()
 		go s.displayMemUse()
+		go s.periodicLogFrees()
 	}
 
 	// go s.periodicFreeOSMemory()
 
+	return nil
+}
+
+func (s *consensus) periodicLogFrees() error {
+	minutes := 1
+	time.Sleep(time.Duration(minutes))
+
+	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
+	for range ticker.C {
+		memory.LogLeaks()
+	}
 	return nil
 }
 
@@ -250,8 +263,8 @@ func (s *consensus) PruningPointAndItsAnticone() ([]*externalapi.DomainHash, err
 // BuildBlock builds a block over the current state, with the transactions
 // selected by the given transactionSelector
 func (s *consensus) BuildBlock(coinbaseData *externalapi.DomainCoinbaseData,
-	transactions []*externalapi.DomainTransaction) (*externalapi.DomainBlock, error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (*externalapi.DomainBlock, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -263,8 +276,8 @@ func (s *consensus) BuildBlock(coinbaseData *externalapi.DomainCoinbaseData,
 // selected by the given transactionSelector plus metadata information related to
 // coinbase rewards and node sync status
 func (s *consensus) BuildBlockTemplate(coinbaseData *externalapi.DomainCoinbaseData,
-	transactions []*externalapi.DomainTransaction) (*externalapi.DomainBlockTemplate, error) {
-
+	transactions []*externalapi.DomainTransaction,
+) (*externalapi.DomainBlockTemplate, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -582,8 +595,8 @@ func (s *consensus) GetBlockInfo(blockHash *externalapi.DomainHash) (*externalap
 }
 
 func (s *consensus) GetBlockRelations(blockHash *externalapi.DomainHash) (
-	parents []*externalapi.DomainHash, children []*externalapi.DomainHash, err error) {
-
+	parents []*externalapi.DomainHash, children []*externalapi.DomainHash, err error,
+) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -638,8 +651,8 @@ func (s *consensus) GetBlocksAcceptanceData(blockHashes []*externalapi.DomainHas
 }
 
 func (s *consensus) GetHashesBetween(lowHash, highHash *externalapi.DomainHash, maxBlocks uint64) (
-	hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error) {
-
+	hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error,
+) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -658,7 +671,8 @@ func (s *consensus) GetHashesBetween(lowHash, highHash *externalapi.DomainHash, 
 }
 
 func (s *consensus) GetAnticone(blockHash, contextHash *externalapi.DomainHash,
-	maxBlocks uint64) (hashes []*externalapi.DomainHash, err error) {
+	maxBlocks uint64,
+) (hashes []*externalapi.DomainHash, err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -691,8 +705,8 @@ func (s *consensus) GetMissingBlockBodyHashes(highHash *externalapi.DomainHash) 
 }
 
 func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.DomainHash,
-	fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
-
+	fromOutpoint *externalapi.DomainOutpoint, limit int,
+) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -717,8 +731,8 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 }
 
 func (s *consensus) GetVirtualUTXOs(expectedVirtualParents []*externalapi.DomainHash,
-	fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
-
+	fromOutpoint *externalapi.DomainOutpoint, limit int,
+) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -1293,7 +1307,6 @@ func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 }
 
 func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTransactionID) (*externalapi.DomainBlock, error) {
-
 	// Get an iterator to go through all blocks
 	iterator, err := s.blockStore.AllBlockHashesIterator(s.databaseContext)
 	if err != nil {

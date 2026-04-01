@@ -35,7 +35,8 @@ func New(
 	headerStore model.BlockHeaderStore,
 	consensusStateStore model.ConsensusStateStore,
 	k []externalapi.KType,
-	genesisHash *externalapi.DomainHash) model.GHOSTDAGManager {
+	genesisHash *externalapi.DomainHash,
+) model.GHOSTDAGManager {
 	return &ghostdagManager{
 		databaseContext:     databaseContext,
 		dagTopologyManager:  dagTopologyManager,

@@ -32,7 +32,8 @@ func New(
 	daaWindowStore model.BlocksWithTrustedDataDAAWindowStore,
 	windowHeapSliceStore model.WindowHeapSliceStore,
 	genesisHash *externalapi.DomainHash,
-	difficultyAdjustmentWindowSize []int) model.DAGTraversalManager {
+	difficultyAdjustmentWindowSize []int,
+) model.DAGTraversalManager {
 	return &dagTraversalManager{
 		databaseContext:     databaseContext,
 		dagTopologyManager:  dagTopologyManager,
@@ -83,8 +84,8 @@ func (dtm *dagTraversalManager) LowestChainBlockAboveOrEqualToBlueScore(stagingA
 }
 
 func (dtm *dagTraversalManager) CalculateChainPath(stagingArea *model.StagingArea,
-	fromBlockHash, toBlockHash *externalapi.DomainHash) (*externalapi.SelectedChainPath, error) {
-
+	fromBlockHash, toBlockHash *externalapi.DomainHash,
+) (*externalapi.SelectedChainPath, error) {
 	// Walk down from fromBlockHash until we reach the common selected
 	// parent chain ancestor of fromBlockHash and toBlockHash. Note
 	// that this slice will be empty if fromBlockHash is the selected
@@ -92,8 +93,7 @@ func (dtm *dagTraversalManager) CalculateChainPath(stagingArea *model.StagingAre
 	var removed []*externalapi.DomainHash
 	current := fromBlockHash
 	for {
-		isCurrentInTheSelectedParentChainOfNewVirtualSelectedParent, err :=
-			dtm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, current, toBlockHash)
+		isCurrentInTheSelectedParentChainOfNewVirtualSelectedParent, err := dtm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, current, toBlockHash)
 		if err != nil {
 			return nil, err
 		}

@@ -96,12 +96,12 @@ func TestTx(t *testing.T) {
 			0xa6, // 65-byte signature
 			0xac, // OP_CHECKSIG
 		},
-		Version: 0}
+		Version: 0,
+	}
 	txOut := NewTxOut(txValue, scriptPubKey)
 	if txOut.Value != txValue {
 		t.Errorf("NewTxOut: wrong scriptPubKey - got %v, want %v",
 			txOut.Value, txValue)
-
 	}
 	if !bytes.Equal(txOut.ScriptPubKey.Script, scriptPubKey.Script) {
 		t.Errorf("NewTxOut: wrong scriptPubKey - got %v, want %v",

@@ -16,14 +16,14 @@ func NewTestConsensusStateManager(baseConsensusStateManager model.ConsensusState
 }
 
 func (csm *testConsensusStateManager) AddUTXOToMultiset(
-	multiset model.Multiset, entry externalapi.UTXOEntry, outpoint *externalapi.DomainOutpoint) error {
-
+	multiset model.Multiset, entry externalapi.UTXOEntry, outpoint *externalapi.DomainOutpoint,
+) error {
 	return addUTXOToMultiset(multiset, entry, outpoint)
 }
 
 func (csm *testConsensusStateManager) ResolveBlockStatus(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, error) {
-
+	useSeparateStagingAreaPerBlock bool,
+) (externalapi.BlockStatus, error) {
 	status, _, err := csm.resolveBlockStatus(stagingArea, blockHash, useSeparateStagingAreaPerBlock)
 	return status, err
 }

@@ -10,8 +10,8 @@ import (
 // Additionally, it starts listening for the appropriate notification using the given handler function
 func (c *RPCClient) RegisterForFinalityConflictsNotifications(
 	onFinalityConflict func(notification *appmessage.FinalityConflictNotificationMessage),
-	onFinalityConflictResolved func(notification *appmessage.FinalityConflictResolvedNotificationMessage)) error {
-
+	onFinalityConflictResolved func(notification *appmessage.FinalityConflictResolvedNotificationMessage),
+) error {
 	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyFinalityConflictsRequestMessage())
 	if err != nil {
 		return err

@@ -34,8 +34,8 @@ type sendVersionFlow struct {
 
 // SendVersion sends a version to a peer and waits for verack.
 func SendVersion(context HandleHandshakeContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
-
+	outgoingRoute *router.Route, peer *peerpkg.Peer,
+) error {
 	flow := &sendVersionFlow{
 		HandleHandshakeContext: context,
 		incomingRoute:          incomingRoute,

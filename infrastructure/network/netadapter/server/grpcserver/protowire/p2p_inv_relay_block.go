@@ -22,7 +22,6 @@ func (x *InvRelayBlockMessage) toAppMessage() (appmessage.Message, error) {
 	}
 
 	return &appmessage.MsgInvRelayBlock{Hash: hash}, nil
-
 }
 
 func (x *HoosatdMessage_InvRelayBlock) fromAppMessage(msgInvRelayBlock *appmessage.MsgInvRelayBlock) error {

@@ -42,7 +42,8 @@ type grpcStream interface {
 }
 
 func newConnection(server *gRPCServer, address *net.TCPAddr, stream grpcStream,
-	lowLevelClientConnection *grpc.ClientConn) *gRPCConnection {
+	lowLevelClientConnection *grpc.ClientConn,
+) *gRPCConnection {
 	connection := &gRPCConnection{
 		server:                   server,
 		address:                  address,

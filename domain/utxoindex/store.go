@@ -13,11 +13,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-var utxoIndexBucket = database.MakeBucket([]byte("utxo-index"))
-var utxoIndexCountsBucket = database.MakeBucket([]byte("utxo-index-counts"))
-var virtualParentsKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
-var circulatingSupplyKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
-var utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
+var (
+	utxoIndexBucket          = database.MakeBucket([]byte("utxo-index"))
+	utxoIndexCountsBucket    = database.MakeBucket([]byte("utxo-index-counts"))
+	virtualParentsKey        = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
+	circulatingSupplyKey     = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
+	utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
+)
 
 var utxoPairPool = sync.Pool{
 	New: func() interface{} {
@@ -174,7 +176,6 @@ func copyUTXOPairs(pairs []UTXOPair) []UTXOPair {
 }
 
 func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
-
 	key := ScriptPublicKeyString(scriptPublicKey.String())
 	log.Tracef("Adding outpoint %s:%d to scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -445,7 +446,6 @@ func (uis *utxoIndexStore) scriptPublicKeyBytes(scriptPublicKey *externalapi.Scr
 	binary.LittleEndian.PutUint16(scriptPublicKeyBytes[:2], scriptPublicKey.Version)
 	copy(scriptPublicKeyBytes[2:], scriptPublicKey.Script)
 	return scriptPublicKeyBytes
-
 }
 
 func (uis *utxoIndexStore) utxoCountKeyForScriptPublicKey(scriptPublicKey *externalapi.ScriptPublicKey) *database.Key {
@@ -468,7 +468,8 @@ func (uis *utxoIndexStore) convertKeyToOutpoint(key *database.Key) (*externalapi
 func (uis *utxoIndexStore) stagedData() (
 	toAdd []UTXOPair,
 	toRemove []UTXOPair,
-	virtualParents []*externalapi.DomainHash) {
+	virtualParents []*externalapi.DomainHash,
+) {
 	// Flatten uis.toAdd map to []UTXOPair
 	for _, utxoPairs := range uis.toAdd {
 		for outpoint, entry := range utxoPairs {
@@ -494,15 +495,15 @@ type UTXOPair struct {
 	Entry    externalapi.UTXOEntry
 }
 
-func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	if uis.isAnythingStaged() {
-		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+		return nil, buffer, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
-		return nil, err
+		return nil, buffer, err
 	}
 	defer cursor.Close()
 
@@ -530,19 +531,19 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		if iterator > offset {
 			key, err := cursor.Key()
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			outpoint, err := uis.convertKeyToOutpoint(key)
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			serializedUTXOEntry, err := cursor.Value()
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
 			if err != nil {
-				return nil, err
+				return nil, buffer, err
 			}
 			slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
 			if limit > 0 && uint32(len(slice)) >= limit {
@@ -551,13 +552,13 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		}
 		iterator++
 	}
-	return slice, nil
+	return slice, buffer, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
-func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, error) {
+func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	if uis.isAnythingStaged() {
-		return nil, errors.Errorf("cannot get UTXOs while staging isn't empty")
+		return nil, buffer, errors.Errorf("cannot get UTXOs while staging isn't empty")
 	}
 
 	// scriptKeyString := scriptPublicKey.String()
@@ -568,7 +569,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 	cursor, err := uis.database.Cursor(bucket)
 	if err != nil {
-		return nil, err
+		return nil, buffer, err
 	}
 	defer cursor.Close()
 
@@ -593,19 +594,19 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	for ok := cursor.First(); ok; ok = cursor.Next() {
 		key, err := cursor.Key()
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		outpoint, err := uis.convertKeyToOutpoint(key)
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 		slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
 		if limit > 0 && uint32(len(slice)) >= limit {
@@ -614,7 +615,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 
 	// uis.scriptCache.Put(scriptKeyString, buffer)
-	return slice, nil
+	return slice, buffer, nil
 }
 
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
@@ -730,7 +731,6 @@ func (uis *utxoIndexStore) deleteAll() error {
 }
 
 func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
-
 	cursor, err := uis.database.Cursor(utxoIndexBucket)
 	if err != nil {
 		return err
@@ -755,7 +755,6 @@ func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
 		circulatingSupplyKey,
 		binaryserialization.SerializeUint64(circulatingSompiSupplyInDatabase),
 	)
-
 	if err != nil {
 		return err
 	}

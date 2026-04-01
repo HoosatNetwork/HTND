@@ -8,8 +8,10 @@ import (
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
 )
 
-type balancesType struct{ available, pending uint64 }
-type balancesMapType map[string]*balancesType
+type (
+	balancesType    struct{ available, pending uint64 }
+	balancesMapType map[string]*balancesType
+)
 
 func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.GetBalanceResponse, error) {
 	s.lock.RLock()

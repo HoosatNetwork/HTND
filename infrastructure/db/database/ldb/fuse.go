@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
-	"time"
-
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb/opt"

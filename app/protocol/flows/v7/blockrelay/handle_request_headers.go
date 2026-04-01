@@ -29,8 +29,8 @@ type handleRequestHeadersFlow struct {
 
 // HandleRequestHeaders handles RequestHeaders messages
 func HandleRequestHeaders(context RequestHeadersContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peer.Peer) error {
-
+	outgoingRoute *router.Route, peer *peer.Peer,
+) error {
 	flow := &handleRequestHeadersFlow{
 		RequestHeadersContext: context,
 		incomingRoute:         incomingRoute,
@@ -125,8 +125,8 @@ func (flow *handleRequestHeadersFlow) start() error {
 }
 
 func receiveRequestHeaders(incomingRoute *router.Route) (lowHash *externalapi.DomainHash,
-	highHash *externalapi.DomainHash, err error) {
-
+	highHash *externalapi.DomainHash, err error,
+) {
 	message, err := incomingRoute.Dequeue()
 	if err != nil {
 		return nil, nil, err

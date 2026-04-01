@@ -14,8 +14,8 @@ import (
 )
 
 func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficulty(stagingArea *model.StagingArea,
-	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool, trusted bool, powSkip bool) error {
-
+	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool, trusted bool, powSkip bool,
+) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "ValidatePruningPointViolationAndProofOfWorkAndDifficulty")
 	defer onEnd()
 
@@ -69,8 +69,8 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 func (v *blockValidator) setParents(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 	header externalapi.BlockHeader,
-	isBlockWithTrustedData bool) error {
-
+	isBlockWithTrustedData bool,
+) error {
 	for level := 0; level <= header.BlockLevel(v.maxBlockLevel); level++ {
 		var parents []*externalapi.DomainHash
 		for _, parent := range v.parentsManager.ParentsAtLevel(header, level) {
@@ -105,7 +105,8 @@ func (v *blockValidator) setParents(stagingArea *model.StagingArea,
 
 func (v *blockValidator) validateDifficulty(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
-	isBlockWithTrustedData bool) error {
+	isBlockWithTrustedData bool,
+) error {
 	const bitsTolerance = 10000
 	if !isBlockWithTrustedData {
 		// We need to calculate GHOSTDAG for the block in order to check its difficulty and blue work
@@ -195,8 +196,8 @@ func (v *blockValidator) checkParentNotVirtualGenesis(header externalapi.BlockHe
 
 func (v *blockValidator) checkParentHeadersExist(stagingArea *model.StagingArea,
 	header externalapi.BlockHeader,
-	isBlockWithTrustedData bool) error {
-
+	isBlockWithTrustedData bool,
+) error {
 	if isBlockWithTrustedData {
 		return nil
 	}
@@ -236,7 +237,7 @@ func (v *blockValidator) checkPruningPointViolation(stagingArea *model.StagingAr
 		return err
 	}
 
-	//If hasPruningPoint has a false value, it means that it's the genesis - so no violation can exist.
+	// If hasPruningPoint has a false value, it means that it's the genesis - so no violation can exist.
 	if !hasPruningPoint {
 		return nil
 	}

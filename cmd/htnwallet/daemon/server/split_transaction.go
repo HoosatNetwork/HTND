@@ -21,7 +21,8 @@ import (
 // An additional `mergeTransaction` is generated - which merges the outputs of the above splits into a single output
 // paying to the original transaction's payee.
 func (s *server) maybeAutoCompoundTransaction(transactionBytes []byte, toAddress util.Address,
-	changeAddress util.Address, changeWalletAddress *walletAddress) ([][]byte, error) {
+	changeAddress util.Address, changeWalletAddress *walletAddress,
+) ([][]byte, error) {
 	transaction, err := serialization.DeserializePartiallySignedTransaction(transactionBytes)
 	if err != nil {
 		return nil, err
@@ -106,8 +107,8 @@ func (s *server) mergeTransaction(
 }
 
 func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.PartiallySignedTransaction, toAddress util.Address,
-	changeAddress util.Address, changeWalletAddress *walletAddress) ([]*serialization.PartiallySignedTransaction, error) {
-
+	changeAddress util.Address, changeWalletAddress *walletAddress,
+) ([]*serialization.PartiallySignedTransaction, error) {
 	transactionMass, err := s.estimateMassAfterSignatures(transaction)
 	if err != nil {
 		return nil, err
@@ -152,8 +153,8 @@ func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.Partia
 
 // splitAndInputPerSplitCounts calculates the number of splits to create, and the number of inputs to assign per split.
 func (s *server) splitAndInputPerSplitCounts(transaction *serialization.PartiallySignedTransaction, transactionMass uint64,
-	changeAddress util.Address) (splitCount, inputsPerSplitCount int, err error) {
-
+	changeAddress util.Address,
+) (splitCount, inputsPerSplitCount int, err error) {
 	// Create a dummy transaction which is a clone of the original transaction, but without inputs,
 	// to calculate how much mass do all the inputs have
 	transactionWithoutInputs := transaction.Tx.Clone()
@@ -176,8 +177,7 @@ func (s *server) splitAndInputPerSplitCounts(transaction *serialization.Partiall
 	if err != nil {
 		return 0, 0, err
 	}
-	massForEverythingExceptInputsInSplitTransaction :=
-		s.txMassCalculator.CalculateTransactionMass(splitTransactionWithoutInputs.Tx)
+	massForEverythingExceptInputsInSplitTransaction := s.txMassCalculator.CalculateTransactionMass(splitTransactionWithoutInputs.Tx)
 	massForInputsInSplitTransaction := mempool.MaximumStandardTransactionMass - massForEverythingExceptInputsInSplitTransaction
 
 	inputsPerSplitCount = int(massForInputsInSplitTransaction / massPerInput)
@@ -190,8 +190,8 @@ func (s *server) splitAndInputPerSplitCounts(transaction *serialization.Partiall
 }
 
 func (s *server) createSplitTransaction(transaction *serialization.PartiallySignedTransaction,
-	changeAddress util.Address, startIndex int, endIndex int) (*serialization.PartiallySignedTransaction, error) {
-
+	changeAddress util.Address, startIndex int, endIndex int,
+) (*serialization.PartiallySignedTransaction, error) {
 	selectedUTXOs := make([]*libhtnwallet.UTXO, 0, endIndex-startIndex)
 	totalSompi := uint64(0)
 
@@ -249,8 +249,8 @@ func (s *server) estimateMassAfterSignatures(transaction *serialization.Partiall
 }
 
 func (s *server) moreUTXOsForMergeTransaction(alreadySelectedUTXOs []*libhtnwallet.UTXO, requiredAmount uint64) (
-	additionalUTXOs []*libhtnwallet.UTXO, totalValueAdded uint64, err error) {
-
+	additionalUTXOs []*libhtnwallet.UTXO, totalValueAdded uint64, err error,
+) {
 	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
 	if err != nil {
 		return nil, 0, err
@@ -270,7 +270,8 @@ func (s *server) moreUTXOsForMergeTransaction(alreadySelectedUTXOs []*libhtnwall
 		additionalUTXOs = append(additionalUTXOs, &libhtnwallet.UTXO{
 			Outpoint:       utxo.Outpoint,
 			UTXOEntry:      utxo.UTXOEntry,
-			DerivationPath: s.walletAddressPath(utxo.address)})
+			DerivationPath: s.walletAddressPath(utxo.address),
+		})
 		totalValueAdded += utxo.UTXOEntry.Amount() - feePerInput
 		if totalValueAdded >= requiredAmount {
 			break

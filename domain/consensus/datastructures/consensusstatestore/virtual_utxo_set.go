@@ -19,8 +19,8 @@ func (css *consensusStateStore) FinishImportingPruningPointUTXOSet(dbContext mod
 }
 
 func (css *consensusStateStore) ImportPruningPointUTXOSetIntoVirtualUTXOSet(dbContext model.DBWriter,
-	pruningPointUTXOSetIterator externalapi.ReadOnlyUTXOSetIterator) error {
-
+	pruningPointUTXOSetIterator externalapi.ReadOnlyUTXOSetIterator,
+) error {
 	hadStartedImportingPruningPointUTXOSet, err := css.HadStartedImportingPruningPointUTXOSet(dbContext)
 	if err != nil {
 		return err

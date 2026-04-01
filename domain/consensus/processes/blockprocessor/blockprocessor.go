@@ -84,7 +84,6 @@ func New(
 	daaBlocksStore model.DAABlocksStore,
 	blocksWithTrustedDataDAAWindowStore model.BlocksWithTrustedDataDAAWindowStore,
 ) model.BlockProcessor {
-
 	return &blockProcessor{
 		genesisHash:           genesisHash,
 		targetTimePerBlock:    targetTimePerBlock,
@@ -144,7 +143,8 @@ func New(
 // ValidateAndInsertBlock validates the given block and, if valid, applies it
 // to the current state
 func (bp *blockProcessor) ValidateAndInsertBlock(block *externalapi.DomainBlock,
-	shouldValidateAgainstUTXO bool, powSkip bool) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
+	shouldValidateAgainstUTXO bool, powSkip bool,
+) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "ValidateAndInsertBlock")
 	defer onEnd()
 
@@ -161,7 +161,8 @@ func (bp *blockProcessor) ValidateAndInsertImportedPruningPoint(newPruningPoint 
 }
 
 func (bp *blockProcessor) ValidateAndInsertBlockWithTrustedData(block *externalapi.BlockWithTrustedData,
-	shouldValidateAgainstUTXO bool) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
+	shouldValidateAgainstUTXO bool,
+) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "ValidateAndInsertBlockWithTrustedData")
 	defer onEnd()
 

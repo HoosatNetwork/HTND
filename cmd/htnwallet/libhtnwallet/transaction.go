@@ -32,8 +32,8 @@ func CreateUnsignedTransaction(
 	minimumSignatures uint32,
 	payments []*Payment,
 	selectedUTXOs []*UTXO,
-	payload []byte) ([]byte, error) {
-
+	payload []byte,
+) ([]byte, error) {
 	sortPublicKeys(extendedPublicKeys)
 	unsignedTransaction, err := createUnsignedTransaction(extendedPublicKeys, minimumSignatures, payments, selectedUTXOs, payload)
 	if err != nil {
@@ -100,8 +100,8 @@ func createUnsignedTransaction(
 	minimumSignatures uint32,
 	payments []*Payment,
 	selectedUTXOs []*UTXO,
-	payload []byte) (*serialization.PartiallySignedTransaction, error) {
-
+	payload []byte,
+) (*serialization.PartiallySignedTransaction, error) {
 	inputs := make([]*externalapi.DomainTransactionInput, len(selectedUTXOs))
 	partiallySignedInputs := make([]*serialization.PartiallySignedInput, len(selectedUTXOs))
 	for i, utxo := range selectedUTXOs {
@@ -166,7 +166,6 @@ func createUnsignedTransaction(
 		Tx:                    domainTransaction,
 		PartiallySignedInputs: partiallySignedInputs,
 	}, nil
-
 }
 
 // IsTransactionFullySigned returns whether the transaction is fully signed and ready to broadcast.
@@ -208,8 +207,8 @@ func ExtractTransaction(partiallySignedTransactionBytes []byte, ecdsa bool) (*ex
 // ExtractTransactionDeserialized does the same thing ExtractTransaction does, only receives the PartiallySignedTransaction
 // in an already deserialized format
 func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.PartiallySignedTransaction, ecdsa bool) (
-	*externalapi.DomainTransaction, error) {
-
+	*externalapi.DomainTransaction, error,
+) {
 	for i, input := range partiallySignedTransaction.PartiallySignedInputs {
 		isMultisig := len(input.PubKeySignaturePairs) > 1
 		scriptBuilder := txscript.NewScriptBuilder()

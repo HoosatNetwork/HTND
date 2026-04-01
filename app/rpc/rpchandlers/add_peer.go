@@ -12,8 +12,7 @@ func HandleAddPeer(context *rpccontext.Context, _ *router.Router, request appmes
 	if context.Config.SafeRPC {
 		log.Warn("AddPeer RPC command called while node in safe RPC mode -- ignoring.")
 		response := appmessage.NewAddPeerResponseMessage()
-		response.Error =
-			appmessage.RPCErrorf("AddPeer RPC command called while node in safe RPC mode")
+		response.Error = appmessage.RPCErrorf("AddPeer RPC command called while node in safe RPC mode")
 		return response, nil
 	}
 

@@ -45,8 +45,8 @@ func prepareLDBForTest(t *testing.T, testName string) (db database.Database, nam
 // all supported database types adhere to the assumptions defined in
 // the interfaces in this package.
 func testForAllDatabaseTypes(t *testing.T, testName string,
-	testFunc func(t *testing.T, db database.Database, testName string)) {
-
+	testFunc func(t *testing.T, db database.Database, testName string),
+) {
 	for _, prepareDatabase := range databasePrepareFuncs {
 		func() {
 			db, dbType, teardownFunc := prepareDatabase(t, testName)

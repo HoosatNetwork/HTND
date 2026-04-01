@@ -5,8 +5,10 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 )
 
-var activePrefixKey = database.MakeBucket(nil).Key([]byte("active-prefix"))
-var inactivePrefixKey = database.MakeBucket(nil).Key([]byte("inactive-prefix"))
+var (
+	activePrefixKey   = database.MakeBucket(nil).Key([]byte("active-prefix"))
+	inactivePrefixKey = database.MakeBucket(nil).Key([]byte("inactive-prefix"))
+)
 
 // ActivePrefix returns the current active database prefix, and whether it exists
 func ActivePrefix(dataAccessor database.DataAccessor) (*prefix.Prefix, bool, error) {

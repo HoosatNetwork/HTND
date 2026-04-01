@@ -23,7 +23,8 @@ const getBlockRetryInterval = 10 * time.Millisecond
 // HandleRelayBlockRequests listens to appmessage.MsgRequestRelayBlocks messages and sends
 // their corresponding blocks to the requesting peer.
 func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
+	outgoingRoute *router.Route, peer *peerpkg.Peer,
+) error {
 	threadcount := runtime.NumCPU() * 2
 	semaphore := make(chan struct{}, threadcount)
 

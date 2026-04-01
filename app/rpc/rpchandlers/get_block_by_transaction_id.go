@@ -15,8 +15,7 @@ func HandleGetBlockByTransactionID(context *rpccontext.Context, _ *router.Router
 	if context.Config.SafeRPC {
 		log.Warn("GetBlockByTransactionID RPC command called while node in safe RPC mode -- ignoring.")
 		response := appmessage.NewGetBlockByTransactionIDResponseMessage()
-		response.Error =
-			appmessage.RPCErrorf("GetBlockByTransactionID RPC command called while node in safe RPC mode")
+		response.Error = appmessage.RPCErrorf("GetBlockByTransactionID RPC command called while node in safe RPC mode")
 		return response, nil
 	}
 

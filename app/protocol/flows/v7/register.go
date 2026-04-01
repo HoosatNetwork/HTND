@@ -115,8 +115,10 @@ func registerBlockRelayFlows(m protocolManager, netConnection *netadapter.NetCon
 		),
 
 		m.RegisterFlow("HandleRequestPruningPointUTXOSet", router,
-			[]appmessage.MessageCommand{appmessage.CmdRequestPruningPointUTXOSet,
-				appmessage.CmdRequestNextPruningPointUTXOSetChunk}, isStopping, errChan,
+			[]appmessage.MessageCommand{
+				appmessage.CmdRequestPruningPointUTXOSet,
+				appmessage.CmdRequestNextPruningPointUTXOSetChunk,
+			}, isStopping, errChan,
 			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
 				return blockrelay.HandleRequestPruningPointUTXOSet(m.Context(), incomingRoute, outgoingRoute)
 			},

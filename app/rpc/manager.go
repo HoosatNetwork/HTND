@@ -30,8 +30,8 @@ func NewManager(
 	addressManager *addressmanager.AddressManager,
 	utxoIndex *utxoindex.UTXOIndex,
 	consensusEventsChan chan externalapi.ConsensusEvent,
-	shutDownChan chan<- struct{}) *Manager {
-
+	shutDownChan chan<- struct{},
+) *Manager {
 	manager := Manager{
 		context: rpccontext.NewContext(
 			cfg,

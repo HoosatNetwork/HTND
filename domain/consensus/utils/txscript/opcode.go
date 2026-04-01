@@ -946,7 +946,6 @@ func opcodeIf(op *parsedOpcode, vm *Engine) error {
 	condVal := OpCondFalse
 	if vm.isBranchExecuting() {
 		ok, err := popIfBool(vm)
-
 		if err != nil {
 			return err
 		}

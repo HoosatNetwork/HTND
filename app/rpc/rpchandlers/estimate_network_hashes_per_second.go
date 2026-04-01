@@ -10,8 +10,8 @@ import (
 
 // HandleEstimateNetworkHashesPerSecond handles the respectively named RPC command
 func HandleEstimateNetworkHashesPerSecond(
-	context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
-
+	context *rpccontext.Context, _ *router.Router, request appmessage.Message,
+) (appmessage.Message, error) {
 	estimateNetworkHashesPerSecondRequest := request.(*appmessage.EstimateNetworkHashesPerSecondRequestMessage)
 
 	windowSize := int(estimateNetworkHashesPerSecondRequest.WindowSize)
@@ -31,20 +31,18 @@ func HandleEstimateNetworkHashesPerSecond(
 		const windowSizeLimit = 10000
 		if windowSize > windowSizeLimit {
 			response := &appmessage.EstimateNetworkHashesPerSecondResponseMessage{}
-			response.Error =
-				appmessage.RPCErrorf(
-					"Requested window size %d is larger than max allowed in RPC safe mode (%d)",
-					windowSize, windowSizeLimit)
+			response.Error = appmessage.RPCErrorf(
+				"Requested window size %d is larger than max allowed in RPC safe mode (%d)",
+				windowSize, windowSizeLimit)
 			return response, nil
 		}
 	}
 
 	if uint64(windowSize) > context.Config.ActiveNetParams.PruningDepth() {
 		response := &appmessage.EstimateNetworkHashesPerSecondResponseMessage{}
-		response.Error =
-			appmessage.RPCErrorf(
-				"Requested window size %d is larger than pruning point depth %d",
-				windowSize, context.Config.ActiveNetParams.PruningDepth())
+		response.Error = appmessage.RPCErrorf(
+			"Requested window size %d is larger than pruning point depth %d",
+			windowSize, context.Config.ActiveNetParams.PruningDepth())
 		return response, nil
 	}
 

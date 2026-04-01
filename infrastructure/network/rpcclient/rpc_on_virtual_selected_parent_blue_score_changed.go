@@ -10,8 +10,8 @@ import (
 // name and returns the RPC server's response. Additionally, it starts listening for the appropriate notification
 // using the given handler function
 func (c *RPCClient) RegisterForVirtualSelectedParentBlueScoreChangedNotifications(
-	onVirtualSelectedParentBlueScoreChanged func(notification *appmessage.VirtualSelectedParentBlueScoreChangedNotificationMessage)) error {
-
+	onVirtualSelectedParentBlueScoreChanged func(notification *appmessage.VirtualSelectedParentBlueScoreChangedNotificationMessage),
+) error {
 	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualSelectedParentBlueScoreChangedRequestMessage())
 	if err != nil {
 		return err

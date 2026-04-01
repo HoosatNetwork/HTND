@@ -68,8 +68,8 @@ func TestEstimateMassAfterSignatures(t *testing.T) {
 }
 
 func testEstimateMassIncreaseForSignaturesSetUp(t *testing.T, consensusConfig *consensus.Config) (
-	[]byte, []string, *dagconfig.Params, func(keepDataDir bool)) {
-
+	[]byte, []string, *dagconfig.Params, func(keepDataDir bool),
+) {
 	consensusConfig.BlockCoinbaseMaturity = 0
 	params := &consensusConfig.Params
 

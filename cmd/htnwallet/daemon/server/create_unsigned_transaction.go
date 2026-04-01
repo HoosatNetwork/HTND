@@ -138,8 +138,8 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 var targetCompoundInputs = 88
 
 func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*walletAddress) (
-	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error) {
-
+	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error,
+) {
 	selectedUTXOs = make([]*libhtnwallet.UTXO, 0, targetCompoundInputs)
 	var totalValue uint64
 
@@ -320,8 +320,8 @@ func (s *server) sortUTXOsByAmountDescending() {
 }
 
 func (s *server) selectUTXOsForTransaction(spendAmount uint64, isSendAll bool, feePerInput uint64, fromAddresses []*walletAddress) (
-	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error) {
-
+	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error,
+) {
 	selectedUTXOs = []*libhtnwallet.UTXO{}
 	totalValue := uint64(0)
 

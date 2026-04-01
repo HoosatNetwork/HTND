@@ -46,8 +46,7 @@ func sign(conf *signConfig) error {
 
 	updatedPartiallySignedTransactions := make([][]byte, len(partiallySignedTransactions))
 	for i, partiallySignedTransaction := range partiallySignedTransactions {
-		updatedPartiallySignedTransactions[i], err =
-			libhtnwallet.Sign(conf.NetParams(), privateKeys, partiallySignedTransaction, keysFile.ECDSA)
+		updatedPartiallySignedTransactions[i], err = libhtnwallet.Sign(conf.NetParams(), privateKeys, partiallySignedTransaction, keysFile.ECDSA)
 		if err != nil {
 			return err
 		}

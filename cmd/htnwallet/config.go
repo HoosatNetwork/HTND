@@ -160,8 +160,7 @@ type dumpUnencryptedDataConfig struct {
 	config.NetworkFlags
 }
 
-type versionConfig struct {
-}
+type versionConfig struct{}
 
 type getDaemonVersionConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`

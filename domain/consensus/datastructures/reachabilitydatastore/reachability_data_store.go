@@ -10,8 +10,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var reachabilityDataBucketName = []byte("reachability-data")
-var reachabilityReindexRootKeyName = []byte("reachability-reindex-root")
+var (
+	reachabilityDataBucketName     = []byte("reachability-data")
+	reachabilityReindexRootKeyName = []byte("reachability-reindex-root")
+)
 
 // reachabilityDataStore represents a store of ReachabilityData
 type reachabilityDataStore struct {

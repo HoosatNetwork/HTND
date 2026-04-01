@@ -49,7 +49,7 @@ func TestBestLocalAddress(t *testing.T) {
 		{IP: net.ParseIP("2001:470::1")},
 	}
 
-	var tests = []struct {
+	tests := []struct {
 		remoteAddr appmessage.NetAddress
 		want0      appmessage.NetAddress
 		want1      appmessage.NetAddress

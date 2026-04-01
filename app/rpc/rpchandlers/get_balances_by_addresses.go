@@ -44,7 +44,6 @@ func purgeExpiredBalancesByAddressesCache(now time.Time) {
 
 // HandleGetBalancesByAddresses handles the respectively named RPC command
 func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
-
 	if !context.Config.UTXOIndex {
 		errorMessage := &appmessage.GetBalancesByAddressesResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Method unavailable when htnd is run without --utxoindex")
@@ -84,7 +83,6 @@ func HandleGetBalancesByAddresses(context *rpccontext.Context, _ *router.Router,
 	allEntries = allEntries[:len(getBalancesByAddressesRequest.Addresses)]
 	for i, address := range getBalancesByAddressesRequest.Addresses {
 		balance, err := getBalanceByAddress(context, address)
-
 		if err != nil {
 			rpcError := &appmessage.RPCError{}
 			if !errors.As(err, &rpcError) {

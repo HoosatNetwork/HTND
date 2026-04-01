@@ -16,8 +16,8 @@ type SendVirtualSelectedParentInvContext interface {
 
 // SendVirtualSelectedParentInv sends a peer the selected parent hash of the virtual
 func SendVirtualSelectedParentInv(context SendVirtualSelectedParentInvContext,
-	outgoingRoute *router.Route, peer *peerpkg.Peer) error {
-
+	outgoingRoute *router.Route, peer *peerpkg.Peer,
+) error {
 	virtualSelectedParent, err := context.Domain().Consensus().GetVirtualSelectedParent()
 	if err != nil {
 		return err

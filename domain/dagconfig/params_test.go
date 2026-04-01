@@ -19,12 +19,16 @@ func TestNewHashFromStr(t *testing.T) {
 		expectedPanic bool
 	}{
 		{"banana", nil, true},
-		{"0000000000000000000000000000000000000000000000000000000000000000",
+		{
+			"0000000000000000000000000000000000000000000000000000000000000000",
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-			false},
-		{"0101010101010101010101010101010101010101010101010101010101010101",
+			false,
+		},
+		{
+			"0101010101010101010101010101010101010101010101010101010101010101",
 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}),
-			false},
+			false,
+		},
 	}
 
 	for _, test := range tests {
@@ -178,7 +182,7 @@ func TestCalculateK(t *testing.T) {
 }
 
 func TestFinalityDepth(t *testing.T) {
-	var blockVersion = 5
+	blockVersion := 5
 	var finalityDuration time.Duration = 14400 * time.Second
 	var targetTimePerBlock time.Duration = 250 * time.Millisecond
 	var finalityDepth uint64
@@ -192,7 +196,7 @@ func TestFinalityDepth(t *testing.T) {
 
 // PruningDepth returns the pruning duration represented in blocks
 func TestPruningDepth(t *testing.T) {
-	var blockVersion = 5
+	blockVersion := 5
 	var finalityDepth uint64 = 57600
 	var PruningMultiplier uint64 = 3
 	var K uint64 = 40

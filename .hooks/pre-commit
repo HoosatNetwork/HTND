@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Smart Go pre-commit hook: gofumpt + goimports
+
+# Find staged Go files (added, copied, modified)
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$')
+
+if [ -z "$STAGED_GO_FILES" ]; then
+    exit 0
+fi
+
+echo "🔧 Formatting staged Go files with gofumpt + goimports..."
+
+for file in $STAGED_GO_FILES; do
+    # First run goimports (handles import organization + basic formatting)
+    goimports -w "$file"
+    
+    # Then run gofumpt (stricter formatting rules on top)
+    gofumpt -w "$file"
+    
+    # Re-stage the file with all formatting changes applied
+    git add "$file"
+done
+
+echo "✅ All staged Go files formatted successfully with gofumpt + goimports"

@@ -26,7 +26,6 @@ func (x *RequestAddressesMessage) toAppMessage() (appmessage.Message, error) {
 		IncludeAllSubnetworks: x.IncludeAllSubnetworks,
 		SubnetworkID:          subnetworkID,
 	}, nil
-
 }
 
 func (x *HoosatdMessage_RequestAddresses) fromAppMessage(msgGetAddresses *appmessage.MsgRequestAddresses) error {

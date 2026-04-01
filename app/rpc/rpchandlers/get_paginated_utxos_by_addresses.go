@@ -20,7 +20,7 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 
 	getPaginatedUTXOsByAddressesRequest := request.(*appmessage.GetPaginatedUTXOsByAddressesRequestMessage)
 
-	if getPaginatedUTXOsByAddressesRequest.Limit < 0 || getPaginatedUTXOsByAddressesRequest.Limit > 10_000_000 {
+	if getPaginatedUTXOsByAddressesRequest.Limit > 10_000_000 {
 		errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Invalid limit: %d. Limit must be between 0 and 10,000,000", getPaginatedUTXOsByAddressesRequest.Limit)
 		return errorMessage, nil
@@ -51,7 +51,7 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			errorMessage.Error = appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return nil, err

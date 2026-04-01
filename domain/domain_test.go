@@ -3,7 +3,6 @@ package domain_test
 import (
 	"fmt"
 	"math/big"
-
 	"os"
 	"strings"
 	"testing"

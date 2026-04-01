@@ -19,8 +19,8 @@ type HandleIBDBlockLocatorContext interface {
 // the highest known block that's in the selected parent chain of `targetHash` to the
 // requesting peer.
 func HandleIBDBlockLocator(context HandleIBDBlockLocatorContext, incomingRoute *router.Route,
-	outgoingRoute *router.Route, peer *peer.Peer) error {
-
+	outgoingRoute *router.Route, peer *peer.Peer,
+) error {
 	for {
 		message, err := incomingRoute.Dequeue()
 		if err != nil {
@@ -68,8 +68,7 @@ func HandleIBDBlockLocator(context HandleIBDBlockLocatorContext, incomingRoute *
 				continue
 			}
 
-			isBlockLocatorHashInSelectedParentChainOfHighHash, err :=
-				context.Domain().Consensus().IsInSelectedParentChainOf(blockLocatorHash, targetHash)
+			isBlockLocatorHashInSelectedParentChainOfHighHash, err := context.Domain().Consensus().IsInSelectedParentChainOf(blockLocatorHash, targetHash)
 			if err != nil {
 				return err
 			}

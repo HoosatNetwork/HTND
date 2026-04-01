@@ -24,8 +24,8 @@ func (x *RequestPruningPointUTXOSetMessage) toAppMessage() (appmessage.Message, 
 }
 
 func (x *HoosatdMessage_RequestPruningPointUTXOSet) fromAppMessage(
-	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet) error {
-
+	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
+) error {
 	x.RequestPruningPointUTXOSet = &RequestPruningPointUTXOSetMessage{}
 	x.RequestPruningPointUTXOSet.PruningPointHash = domainHashToProto(msgRequestPruningPointUTXOSet.PruningPointHash)
 	return nil

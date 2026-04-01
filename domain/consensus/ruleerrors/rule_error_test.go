@@ -51,7 +51,7 @@ func TestNewErrInvalidTransactionsInNewBlock(t *testing.T) {
 	tx := &externalapi.DomainTransaction{Fee: 1337}
 	txID := consensushashing.TransactionID(tx)
 	outer := NewErrInvalidTransactionsInNewBlock([]InvalidTransaction{{tx, &ErrNoTxInputs}})
-	//TODO: Implement Stringer for `DomainTransaction`
+	// TODO: Implement Stringer for `DomainTransaction`
 	expectedOuterErr := fmt.Sprintf("ErrInvalidTransactionsInNewBlock: [(%s: ErrNoTxInputs)]", txID)
 	inner := &ErrInvalidTransactionsInNewBlock{}
 	if !errors.As(outer, inner) {

@@ -88,7 +88,6 @@ func New(
 	difficultyAdjustmentWindowSize []int,
 	targetTimePerBlock []time.Duration,
 ) model.PruningManager {
-
 	return &pruningManager{
 		databaseContext:       databaseContext,
 		dagTraversalManager:   dagTraversalManager,
@@ -251,8 +250,8 @@ func (b *blockIteratorFromOneBlock) Close() error {
 }
 
 func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *model.StagingArea,
-	blockHash, suggestedLowHash *externalapi.DomainHash) (*externalapi.DomainHash, *externalapi.DomainHash, error) {
-
+	blockHash, suggestedLowHash *externalapi.DomainHash,
+) (*externalapi.DomainHash, *externalapi.DomainHash, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.nextPruningPointAndCandidateByBlockHash")
 	defer onEnd()
 
@@ -364,8 +363,8 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 }
 
 func (pm *pruningManager) isInPruningFutureOrInVirtualPast(stagingArea *model.StagingArea, block *externalapi.DomainHash,
-	pruningPoint *externalapi.DomainHash, virtualParents []*externalapi.DomainHash) (bool, error) {
-
+	pruningPoint *externalapi.DomainHash, virtualParents []*externalapi.DomainHash,
+) (bool, error) {
 	hasPruningPointInPast, err := pm.dagTopologyManager.IsAncestorOf(stagingArea, pruningPoint, block)
 	if err != nil {
 		return false, err
@@ -433,8 +432,8 @@ func (pm *pruningManager) deletePastBlocks(stagingArea *model.StagingArea, pruni
 }
 
 func (pm *pruningManager) calculateBlocksToKeep(stagingArea *model.StagingArea,
-	pruningPoint *externalapi.DomainHash) (map[externalapi.DomainHash]struct{}, error) {
-
+	pruningPoint *externalapi.DomainHash,
+) (map[externalapi.DomainHash]struct{}, error) {
 	pruningPointAnticone, err := pm.dagTraversalManager.AnticoneFromVirtualPOV(stagingArea, pruningPoint)
 	if err != nil {
 		return nil, err
@@ -455,8 +454,8 @@ func (pm *pruningManager) calculateBlocksToKeep(stagingArea *model.StagingArea,
 }
 
 func (pm *pruningManager) deleteBlocksDownward(stagingArea *model.StagingArea,
-	queue model.BlockHeap, blocksToKeep map[externalapi.DomainHash]struct{}) error {
-
+	queue model.BlockHeap, blocksToKeep map[externalapi.DomainHash]struct{},
+) error {
 	visited := map[externalapi.DomainHash]struct{}{}
 	// Prune everything in the queue including its past, unless it's in `blocksToKeep`
 	for queue.Len() > 0 {
@@ -493,8 +492,8 @@ func (pm *pruningManager) deleteBlocksDownward(stagingArea *model.StagingArea,
 }
 
 func (pm *pruningManager) pruneTips(stagingArea *model.StagingArea, pruningPoint *externalapi.DomainHash,
-	virtualParents []*externalapi.DomainHash) (prunedTips []*externalapi.DomainHash, err error) {
-
+	virtualParents []*externalapi.DomainHash,
+) (prunedTips []*externalapi.DomainHash, err error) {
 	// Find P.AC that's not in V.Past
 	dagTips, err := pm.consensusStateStore.Tips(stagingArea, pm.databaseContext)
 	if err != nil {
@@ -502,8 +501,7 @@ func (pm *pruningManager) pruneTips(stagingArea *model.StagingArea, pruningPoint
 	}
 	newTips := make([]*externalapi.DomainHash, 0, len(dagTips))
 	for _, tip := range dagTips {
-		isInPruningFutureOrInVirtualPast, err :=
-			pm.isInPruningFutureOrInVirtualPast(stagingArea, tip, pruningPoint, virtualParents)
+		isInPruningFutureOrInVirtualPast, err := pm.isInPruningFutureOrInVirtualPast(stagingArea, tip, pruningPoint, virtualParents)
 		if err != nil {
 			return nil, err
 		}
@@ -531,8 +529,8 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 }
 
 func (pm *pruningManager) deleteBlock(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
-	alreadyPruned bool, err error) {
-
+	alreadyPruned bool, err error,
+) {
 	status, err := pm.blockStatusStore.Get(pm.databaseContext, stagingArea, blockHash)
 	if database.IsNotFoundError(err) {
 		log.Infof("deleteBlock failed to retrieve with %s\n", blockHash)
@@ -579,8 +577,7 @@ func (pm *pruningManager) IsValidPruningPoint(stagingArea *model.StagingArea, bl
 		return false, err
 	}
 
-	isInSelectedParentChainOfHeadersSelectedTip, err :=
-		pm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, blockHash, headersSelectedTip)
+	isInSelectedParentChainOfHeadersSelectedTip, err := pm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, blockHash, headersSelectedTip)
 	if err != nil {
 		return false, err
 	}
@@ -603,8 +600,8 @@ func (pm *pruningManager) IsValidPruningPoint(stagingArea *model.StagingArea, bl
 }
 
 func (pm *pruningManager) ArePruningPointsViolatingFinality(stagingArea *model.StagingArea,
-	pruningPoints []externalapi.BlockHeader) (bool, error) {
-
+	pruningPoints []externalapi.BlockHeader,
+) (bool, error) {
 	virtualFinalityPoint, err := pm.finalityManager.VirtualFinalityPoint(stagingArea)
 	if err != nil {
 		return false, err

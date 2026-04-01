@@ -109,11 +109,14 @@ func TestCalcMinRequiredTxRelayFee(t *testing.T) {
 
 func TestIsTransactionOutputDust(t *testing.T) {
 	scriptPublicKey := &externalapi.ScriptPublicKey{
-		Script: []byte{0x76, 0xa9, 0x21, 0x03, 0x2f, 0x7e, 0x43,
+		Script: []byte{
+			0x76, 0xa9, 0x21, 0x03, 0x2f, 0x7e, 0x43,
 			0x0a, 0xa4, 0xc9, 0xd1, 0x59, 0x43, 0x7e, 0x84, 0xb9,
 			0x75, 0xdc, 0x76, 0xd9, 0x00, 0x3b, 0xf0, 0x92, 0x2c,
 			0xf3, 0xaa, 0x45, 0x28, 0x46, 0x4b, 0xab, 0x78, 0x0d,
-			0xba, 0x5e}, Version: 0}
+			0xba, 0x5e,
+		}, Version: 0,
+	}
 
 	tests := []struct {
 		name                       string // test description
@@ -271,7 +274,7 @@ func TestCheckTransactionStandardInIsolation(t *testing.T) {
 			isStandard: false,
 			code:       RejectNonstandard,
 		},
-		{ //Todo : check on ScriptPublicKey type.
+		{ // Todo : check on ScriptPublicKey type.
 			name: "Dust output",
 			tx: &externalapi.DomainTransaction{Version: 0, Inputs: []*externalapi.DomainTransactionInput{&dummyTxIn}, Outputs: []*externalapi.DomainTransactionOutput{{
 				Value:           0,

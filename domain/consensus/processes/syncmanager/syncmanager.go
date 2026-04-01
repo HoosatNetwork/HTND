@@ -41,8 +41,8 @@ func New(
 	blockHeaderStore model.BlockHeaderStore,
 	blockStore model.BlockStore,
 	pruningStore model.PruningStore,
-	headersSelectedChainStore model.HeadersSelectedChainStore) model.SyncManager {
-
+	headersSelectedChainStore model.HeadersSelectedChainStore,
+) model.SyncManager {
 	return &syncManager{
 		databaseContext:  databaseContext,
 		genesisBlockHash: genesisBlockHash,
@@ -62,8 +62,8 @@ func New(
 }
 
 func (sm *syncManager) GetHashesBetween(stagingArea *model.StagingArea, lowHash, highHash *externalapi.DomainHash,
-	maxBlocks uint64) (hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error) {
-
+	maxBlocks uint64,
+) (hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "GetHashesBetween")
 	defer onEnd()
 
@@ -97,8 +97,8 @@ func (sm *syncManager) GetMissingBlockBodyHashes(stagingArea *model.StagingArea,
 }
 
 func (sm *syncManager) CreateBlockLocator(stagingArea *model.StagingArea,
-	lowHash, highHash *externalapi.DomainHash, limit uint32) (externalapi.BlockLocator, error) {
-
+	lowHash, highHash *externalapi.DomainHash, limit uint32,
+) (externalapi.BlockLocator, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "CreateBlockLocatorFromPruningPoint")
 	defer onEnd()
 
@@ -106,8 +106,8 @@ func (sm *syncManager) CreateBlockLocator(stagingArea *model.StagingArea,
 }
 
 func (sm *syncManager) CreateHeadersSelectedChainBlockLocator(stagingArea *model.StagingArea,
-	lowHash, highHash *externalapi.DomainHash) (externalapi.BlockLocator, error) {
-
+	lowHash, highHash *externalapi.DomainHash,
+) (externalapi.BlockLocator, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "CreateHeadersSelectedChainBlockLocator")
 	defer onEnd()
 

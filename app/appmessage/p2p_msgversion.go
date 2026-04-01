@@ -82,8 +82,8 @@ func (msg *MsgVersion) Command() MessageCommand {
 // Message interface using the passed parameters and defaults for the remaining
 // fields.
 func NewMsgVersion(addr *NetAddress, id *id.ID, network string,
-	subnetworkID *externalapi.DomainSubnetworkID, protocolVersion uint32) *MsgVersion {
-
+	subnetworkID *externalapi.DomainSubnetworkID, protocolVersion uint32,
+) *MsgVersion {
 	// Limit the timestamp to one millisecond precision since the protocol
 	// doesn't support better.
 	return &MsgVersion{
@@ -113,8 +113,8 @@ func ValidateUserAgent(userAgent string) error {
 // message. The version string is not defined to any strict format, although
 // it is recommended to use the form "major.minor.revision" e.g. "2.6.41".
 func (msg *MsgVersion) AddUserAgent(name string, version string,
-	comments ...string) {
-
+	comments ...string,
+) {
 	newUserAgent := fmt.Sprintf("%s:%s", name, version)
 	if len(comments) != 0 {
 		newUserAgent = fmt.Sprintf("%s(%s)", newUserAgent,

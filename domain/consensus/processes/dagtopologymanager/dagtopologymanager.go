@@ -21,8 +21,8 @@ func New(
 	databaseContext model.DBReader,
 	reachabilityManager model.ReachabilityManager,
 	blockRelationStore model.BlockRelationStore,
-	ghostdagStore model.GHOSTDAGDataStore) model.DAGTopologyManager {
-
+	ghostdagStore model.GHOSTDAGDataStore,
+) model.DAGTopologyManager {
 	return &dagTopologyManager{
 		databaseContext:     databaseContext,
 		reachabilityManager: reachabilityManager,
@@ -106,7 +106,6 @@ func (dtm *dagTopologyManager) IsAnyAncestorOf(stagingArea *model.StagingArea, p
 
 // IsInSelectedParentChainOf returns true if blockHashA is in the selected parent chain of blockHashB
 func (dtm *dagTopologyManager) IsInSelectedParentChainOf(stagingArea *model.StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
-
 	// Virtual doesn't have reachability data, therefore, it should be treated as a special case -
 	// use its selected parent as blockHashB.
 	if blockHashB == model.VirtualBlockHash {
@@ -194,7 +193,6 @@ func (dtm *dagTopologyManager) SetParents(stagingArea *model.StagingArea, blockH
 
 // ChildInSelectedParentChainOf returns the child of `lowHash` that is in the selected-parent-chain of `highHash`
 func (dtm *dagTopologyManager) ChildInSelectedParentChainOf(stagingArea *model.StagingArea, lowHash, highHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
-
 	// Virtual doesn't have reachability data, therefore, it should be treated as a special case -
 	// use its selected parent as highHash.
 	specifiedHighHash := highHash

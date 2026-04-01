@@ -12,8 +12,8 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	blockHash *externalapi.DomainHash,
 	acceptanceData externalapi.AcceptanceData,
 	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData,
-	daaScore uint64) (model.Multiset, error) {
-
+	daaScore uint64,
+) (model.Multiset, error) {
 	log.Tracef("calculateMultiset start for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 	defer log.Tracef("calculateMultiset end for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 
@@ -57,8 +57,8 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 }
 
 func addTransactionToMultiset(multiset model.Multiset, transaction *externalapi.DomainTransaction,
-	blockDAAScore uint64, isCoinbase bool) error {
-
+	blockDAAScore uint64, isCoinbase bool,
+) error {
 	transactionID := consensushashing.TransactionID(transaction)
 	log.Tracef("addTransactionToMultiset start for transaction %s", transactionID)
 	defer log.Tracef("addTransactionToMultiset end for transaction %s", transactionID)
@@ -90,8 +90,8 @@ func addTransactionToMultiset(multiset model.Multiset, transaction *externalapi.
 }
 
 func addUTXOToMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
-	outpoint *externalapi.DomainOutpoint) error {
-
+	outpoint *externalapi.DomainOutpoint,
+) error {
 	serializedUTXO, err := utxo.SerializeUTXO(entry, outpoint)
 	if err != nil {
 		return err
@@ -102,8 +102,8 @@ func addUTXOToMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
 }
 
 func removeUTXOFromMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
-	outpoint *externalapi.DomainOutpoint) error {
-
+	outpoint *externalapi.DomainOutpoint,
+) error {
 	serializedUTXO, err := utxo.SerializeUTXO(entry, outpoint)
 	if err != nil {
 		return err

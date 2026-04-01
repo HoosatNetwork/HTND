@@ -35,7 +35,6 @@ func (x *RequestIBDChainBlockLocatorMessage) toAppMessage() (appmessage.Message,
 		HighHash: highHash,
 		LowHash:  lowHash,
 	}, nil
-
 }
 
 func (x *HoosatdMessage_RequestIBDChainBlockLocator) fromAppMessage(msgGetBlockLocator *appmessage.MsgRequestIBDChainBlockLocator) error {

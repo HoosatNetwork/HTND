@@ -444,8 +444,8 @@ func (vm *Engine) SetAltStack(data [][]byte) {
 // transaction, and input index. The flags modify the behavior of the script
 // engine according to the description provided by each flag.
 func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues) (*Engine, error) {
-
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues,
+) (*Engine, error) {
 	vm := &Engine{}
 	err := vm.Init(scriptPubKey, tx, txIdx, flags, sigCache, sigCacheECDSA, sighashReusedValues)
 	if err != nil {
@@ -456,8 +456,8 @@ func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.Domain
 
 // init initializes the Engine with the provided parameters.
 func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues) error {
-
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues,
+) error {
 	// The provided transaction input index must refer to a valid input.
 	if txIdx < 0 || txIdx >= len(tx.Inputs) {
 		str := fmt.Sprintf("transaction input index %d is negative or "+

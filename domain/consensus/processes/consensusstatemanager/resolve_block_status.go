@@ -14,8 +14,8 @@ import (
 )
 
 func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, *model.UTXODiffReversalData, error) {
-
+	useSeparateStagingAreaPerBlock bool,
+) (externalapi.BlockStatus, *model.UTXODiffReversalData, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveBlockStatus for %s", blockHash))
 	defer onEnd()
 
@@ -145,8 +145,8 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 // chain, in addition, if the status is UTXOValid, it return it's pastUTXOSet
 func (csm *consensusStateManager) selectedParentInfo(
 	stagingArea *model.StagingArea, unverifiedBlocks []*externalapi.DomainHash) (
-	*externalapi.DomainHash, externalapi.BlockStatus, externalapi.UTXODiff, error) {
-
+	*externalapi.DomainHash, externalapi.BlockStatus, externalapi.UTXODiff, error,
+) {
 	log.Tracef("findSelectedParentStatus start")
 	defer log.Tracef("findSelectedParentStatus end")
 
@@ -189,8 +189,8 @@ func (csm *consensusStateManager) selectedParentInfo(
 }
 
 func (csm *consensusStateManager) getUnverifiedChainBlocks(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	blockHash *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	log.Tracef("getUnverifiedChainBlocks start for block %s", blockHash)
 	defer log.Tracef("getUnverifiedChainBlocks end for block %s", blockHash)
 
@@ -236,8 +236,8 @@ func (csm *consensusStateManager) getUnverifiedChainBlocks(stagingArea *model.St
 
 func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.StagingArea,
 	blockHash, selectedParentHash *externalapi.DomainHash, selectedParentPastUTXOSet externalapi.UTXODiff, isResolveTip bool) (
-	externalapi.BlockStatus, externalapi.UTXODiff, error) {
-
+	externalapi.BlockStatus, externalapi.UTXODiff, error,
+) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveSingleBlockStatus for %s", blockHash))
 	defer onEnd()
 
@@ -347,8 +347,8 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 }
 
 func (csm *consensusStateManager) isNewSelectedTip(stagingArea *model.StagingArea,
-	blockHash, oldSelectedTip *externalapi.DomainHash) (bool, error) {
-
+	blockHash, oldSelectedTip *externalapi.DomainHash,
+) (bool, error) {
 	newSelectedTip, err := csm.ghostdagManager.ChooseSelectedParent(stagingArea, blockHash, oldSelectedTip)
 	if database.IsNotFoundError(err) {
 		log.Infof("isNewSelectedTip failed to retrieve with %s\n", oldSelectedTip)

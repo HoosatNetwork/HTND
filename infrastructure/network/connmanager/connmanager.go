@@ -108,7 +108,6 @@ func (c *ConnectionManager) initiateConnection(address string) error {
 const connectionsLoopInterval = 30 * time.Second
 
 func (c *ConnectionManager) connectionsLoop() {
-
 	for atomic.LoadUint32(&c.stop) == 0 {
 		connections := c.netAdapter.P2PConnections()
 
@@ -280,7 +279,8 @@ func (c *ConnectionManager) findRequestedConnection(address string) (*connection
 }
 
 func (c *ConnectionManager) findMatchingRequestedConnectionByResolvedAddress(address string,
-	requested map[string]*connectionRequest) (string, *connectionRequest, error) {
+	requested map[string]*connectionRequest,
+) (string, *connectionRequest, error) {
 	for requestedAddress, connReq := range requested {
 		matches, err := c.addressesMatch(requestedAddress, address)
 		if err != nil {

@@ -81,8 +81,8 @@ func (h *MsgBlockHeader) BlockHash() *externalapi.DomainHash {
 // block with defaults or calclulated values for the remaining fields.
 func NewBlockHeader(version uint16, parents []externalapi.BlockLevelParents, hashMerkleRoot *externalapi.DomainHash,
 	acceptedIDMerkleRoot *externalapi.DomainHash, utxoCommitment *externalapi.DomainHash, bits uint32, nonce,
-	daaScore, blueScore uint64, blueWork *big.Int, pruningPoint *externalapi.DomainHash) *MsgBlockHeader {
-
+	daaScore, blueScore uint64, blueWork *big.Int, pruningPoint *externalapi.DomainHash,
+) *MsgBlockHeader {
 	// Limit the timestamp to one millisecond precision since the protocol
 	// doesn't support better.
 	return &MsgBlockHeader{

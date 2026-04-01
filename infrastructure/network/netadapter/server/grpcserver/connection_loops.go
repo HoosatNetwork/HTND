@@ -30,8 +30,10 @@ func (c *gRPCConnection) connectionLoops() error {
 	return err
 }
 
-var blockDelayOnce sync.Once
-var blockDelay = 0
+var (
+	blockDelayOnce sync.Once
+	blockDelay     = 0
+)
 
 func (c *gRPCConnection) sendLoop() error {
 	outgoingRoute := c.router.OutgoingRoute()

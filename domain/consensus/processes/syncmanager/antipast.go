@@ -14,8 +14,8 @@ import (
 // because it returns blocks with MergeSet granularity,
 // so if MergeSet > maxBlocks, function will return nothing
 func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, lowHash, highHash *externalapi.DomainHash,
-	maxBlocks uint64) (hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error) {
-
+	maxBlocks uint64,
+) (hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error) {
 	// Sanity check, for debugging only
 	if maxBlocks != 0 && maxBlocks < sm.mergeSetSizeLimit+1 {
 		return nil, nil,
@@ -104,7 +104,8 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 }
 
 func (sm *syncManager) findLowHashInHighHashSelectedParentChain(stagingArea *model.StagingArea,
-	lowHash *externalapi.DomainHash, highHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
+	lowHash *externalapi.DomainHash, highHash *externalapi.DomainHash,
+) (*externalapi.DomainHash, error) {
 	for {
 		isInSelectedParentChain, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, lowHash, highHash)
 		if err != nil {
@@ -127,8 +128,8 @@ func (sm *syncManager) findLowHashInHighHashSelectedParentChain(stagingArea *mod
 }
 
 func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, highHash *externalapi.DomainHash) (
-	[]*externalapi.DomainHash, error) {
-
+	[]*externalapi.DomainHash, error,
+) {
 	pruningPoint, err := sm.pruningStore.PruningPoint(sm.databaseContext, stagingArea)
 	if err != nil {
 		return nil, err

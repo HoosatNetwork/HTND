@@ -48,7 +48,7 @@ func TestCheckLockTimeVerifyConditionedByDAAScore(t *testing.T) {
 			t.Fatalf("Failed getting blockD: %v", err)
 		}
 		fees := uint64(1)
-		//Create a CLTV script:
+		// Create a CLTV script:
 		targetDAAScore := consensusConfig.GenesisBlock.Header.DAAScore() + uint64(30)
 		redeemScriptCLTV, err := createScriptCLTV(targetDAAScore)
 		if err != nil {
@@ -155,7 +155,7 @@ func TestCheckLockTimeVerifyConditionedByDAAScoreWithWrongLockTime(t *testing.T)
 			t.Fatalf("Failed getting blockD: %v", err)
 		}
 		fees := uint64(1)
-		//Create a CLTV script:
+		// Create a CLTV script:
 		targetDAAScore := consensusConfig.GenesisBlock.Header.DAAScore() + uint64(30)
 		redeemScriptCLTV, err := createScriptCLTV(targetDAAScore)
 		if err != nil {
@@ -256,7 +256,7 @@ func TestCheckLockTimeVerifyConditionedByAbsoluteTime(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed getting blockD: %v", err)
 		}
-		//Create a CLTV script:
+		// Create a CLTV script:
 		timeToWait := uint64(12 * 1000)
 		lockTimeTarget := uint64(blockD.Header.TimeInMilliseconds()) + timeToWait
 		redeemScriptCLTV, err := createScriptCLTV(lockTimeTarget)
@@ -385,7 +385,7 @@ func TestCheckLockTimeVerifyConditionedByAbsoluteTimeWithWrongLockTime(t *testin
 		if err != nil {
 			t.Fatalf("Failed getting blockD: %v", err)
 		}
-		//Create a CLTV script:
+		// Create a CLTV script:
 		timeToWait := uint64(12 * 1000)
 		lockTimeTarget := uint64(blockD.Header.TimeInMilliseconds()) + timeToWait
 		redeemScriptCLTV, err := createScriptCLTV(lockTimeTarget)
@@ -482,8 +482,8 @@ func createScriptCLTV(absoluteTimeOrDAAScoreTarget uint64) ([]byte, error) {
 }
 
 func createTransactionWithLockedOutput(txToSpend *externalapi.DomainTransaction, fee uint64,
-	scriptPublicKeyCLTV *externalapi.ScriptPublicKey) (*externalapi.DomainTransaction, error) {
-
+	scriptPublicKeyCLTV *externalapi.ScriptPublicKey,
+) (*externalapi.DomainTransaction, error) {
 	_, redeemScript := testutils.OpTrueScript()
 	signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)
 	if err != nil {
@@ -510,8 +510,8 @@ func createTransactionWithLockedOutput(txToSpend *externalapi.DomainTransaction,
 }
 
 func createTransactionThatSpentTheLockedOutput(txToSpend *externalapi.DomainTransaction, fee uint64,
-	redeemScript []byte, lockTime uint64) (*externalapi.DomainTransaction, error) {
-
+	redeemScript []byte, lockTime uint64,
+) (*externalapi.DomainTransaction, error) {
 	signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, []byte{})
 	if err != nil {
 		return nil, err

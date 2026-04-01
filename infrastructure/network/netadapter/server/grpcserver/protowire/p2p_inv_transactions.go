@@ -26,7 +26,6 @@ func (x *InvTransactionsMessage) toAppMessage() (appmessage.Message, error) {
 		return nil, err
 	}
 	return &appmessage.MsgInvTransaction{TxIDs: ids}, nil
-
 }
 
 func (x *HoosatdMessage_InvTransactions) fromAppMessage(msgInvTransaction *appmessage.MsgInvTransaction) error {

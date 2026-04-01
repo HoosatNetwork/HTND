@@ -28,8 +28,8 @@ type PowTransfer struct {
 }
 
 func mineLoop(client *minerClient, numberOfBlocks uint64, targetBlocksPerSecond float64, mineWhenNotSynced bool,
-	miningAddr util.Address, threads *int) error {
-
+	miningAddr util.Address, threads *int,
+) error {
 	errChan := make(chan error)
 	doneChan := make(chan struct{})
 

@@ -1,9 +1,10 @@
 package bip32
 
 import (
-	"github.com/pkg/errors"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type path struct {

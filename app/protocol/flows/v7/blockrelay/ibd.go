@@ -48,8 +48,8 @@ type handleIBDFlow struct {
 
 // HandleIBD handles IBD
 func HandleIBD(context IBDContext, incomingRoute *router.Route, outgoingRoute *router.Route,
-	peer *peerpkg.Peer) error {
-
+	peer *peerpkg.Peer,
+) error {
 	flow := &handleIBDFlow{
 		IBDContext:    context,
 		incomingRoute: incomingRoute,
@@ -399,8 +399,8 @@ func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error
 }
 
 func (flow *handleIBDFlow) getSyncerChainBlockLocator(
-	highHash, lowHash *externalapi.DomainHash, timeout time.Duration) ([]*externalapi.DomainHash, error) {
-
+	highHash, lowHash *externalapi.DomainHash, timeout time.Duration,
+) ([]*externalapi.DomainHash, error) {
 	requestIbdChainBlockLocatorMessage := appmessage.NewMsgIBDRequestChainBlockLocator(highHash, lowHash)
 	err := flow.outgoingRoute.Enqueue(requestIbdChainBlockLocatorMessage)
 	if err != nil {
@@ -430,7 +430,6 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 	syncerHeaderSelectedTipHash, highestKnownSyncerChainHash, relayBlockHash *externalapi.DomainHash,
 	highBlockDAAScoreHint uint64,
 ) error {
-
 	log.Infof("Downloading headers from %s", flow.peer)
 
 	if highestKnownSyncerChainHash.Equal(syncerHeaderSelectedTipHash) {
@@ -550,15 +549,15 @@ func (flow *handleIBDFlow) syncMissingRelayPast(consensus externalapi.Consensus,
 }
 
 func (flow *handleIBDFlow) sendRequestAnticone(
-	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash) error {
-
+	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash,
+) error {
 	msgRequestAnticone := appmessage.NewMsgRequestAnticone(syncerHeaderSelectedTipHash, relayBlockHash)
 	return flow.outgoingRoute.Enqueue(msgRequestAnticone)
 }
 
 func (flow *handleIBDFlow) sendRequestHeaders(
-	highestKnownSyncerChainHash, syncerHeaderSelectedTipHash *externalapi.DomainHash) error {
-
+	highestKnownSyncerChainHash, syncerHeaderSelectedTipHash *externalapi.DomainHash,
+) error {
 	msgRequestHeaders := appmessage.NewMsgRequstHeaders(highestKnownSyncerChainHash, syncerHeaderSelectedTipHash)
 	return flow.outgoingRoute.Enqueue(msgRequestHeaders)
 }
@@ -607,7 +606,6 @@ func (flow *handleIBDFlow) processHeader(consensus externalapi.Consensus, msgBlo
 			log.Errorf("Rejected block header %s from %s during IBD: %+v", blockHash, flow.peer, errors.WithStack(err))
 			return err
 		}
-
 	}
 
 	return nil
@@ -648,8 +646,8 @@ func (flow *handleIBDFlow) validatePruningPointFutureHeaderTimestamps() error {
 }
 
 func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
-	consensus externalapi.Consensus, pruningPointHash *externalapi.DomainHash) (bool, error) {
-
+	consensus externalapi.Consensus, pruningPointHash *externalapi.DomainHash,
+) (bool, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "receiveAndInsertPruningPointUTXOSet")
 	defer onEnd()
 

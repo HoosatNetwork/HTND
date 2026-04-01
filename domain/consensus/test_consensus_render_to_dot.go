@@ -79,5 +79,5 @@ func renderDotScript(dotScript string, filename string) error {
 		return fmt.Errorf("Error getting output of dot: %s\nstderr:\n%s", err, stderr.String())
 	}
 
-	return os.WriteFile(filename, svg, 0600)
+	return os.WriteFile(filename, svg, 0o600)
 }

@@ -8,8 +8,8 @@ import (
 )
 
 func (dtm *dagTraversalManager) AnticoneFromVirtualPOV(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
-	[]*externalapi.DomainHash, error) {
-
+	[]*externalapi.DomainHash, error,
+) {
 	virtualParents, err := dtm.dagTopologyManager.Parents(stagingArea, model.VirtualBlockHash)
 	if err != nil {
 		return nil, err
@@ -20,8 +20,8 @@ func (dtm *dagTraversalManager) AnticoneFromVirtualPOV(stagingArea *model.Stagin
 
 func (dtm *dagTraversalManager) AnticoneFromBlocks(stagingArea *model.StagingArea, tips []*externalapi.DomainHash,
 	blockHash *externalapi.DomainHash, maxTraversalAllowed uint64) (
-	[]*externalapi.DomainHash, error) {
-
+	[]*externalapi.DomainHash, error,
+) {
 	anticone := []*externalapi.DomainHash{}
 	queue := tips
 	visited := hashset.New()

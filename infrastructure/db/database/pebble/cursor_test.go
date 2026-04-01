@@ -11,8 +11,8 @@ import (
 )
 
 func validateCurrentCursorKeyAndValue(t *testing.T, testName string, cursor database.Cursor,
-	expectedKey *database.Key, expectedValue []byte) {
-
+	expectedKey *database.Key, expectedValue []byte,
+) {
 	cursorKey, err := cursor.Key()
 	if err != nil {
 		t.Fatalf("%s: Key unexpectedly failed: %s", testName, err)

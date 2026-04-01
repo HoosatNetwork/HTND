@@ -29,7 +29,6 @@ type blockWindow struct {
 // If the number of blocks in the past of startingBlock is less then windowSize,
 // the window will be padded by genesis blocks to achieve a size of windowSize.
 func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startingBlock *externalapi.DomainHash, windowSize int) (blockWindow, error) {
-
 	windowPairs, err := dm.dagTraversalManager.BlockWindowHeapSlice(stagingArea, startingBlock, windowSize)
 	if err != nil {
 		return blockWindow{}, err
@@ -38,13 +37,11 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 	buffer := memory.Malloc[difficultyBlock](len(windowPairs))
 	window := blockWindow{
 		buffer:            buffer,
+		blocks:            buffer.Slice(),
 		pairs:             windowPairs,
 		minTimestamp:      math.MaxInt64,
 		maxTimestamp:      0,
 		minTimestampIndex: 0,
-	}
-	if buffer != nil {
-		window.blocks = buffer.Slice()
 	}
 
 	var minBlueWork *big.Int
@@ -53,7 +50,6 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 		hash := pair.Hash
 		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
 		if err != nil {
-			window.free()
 			return blockWindow{}, err
 		}
 

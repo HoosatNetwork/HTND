@@ -176,8 +176,8 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 }
 
 func rebalanceCandidates(oldCandidateTxs []*candidateTx, isFirstRun bool) (
-	candidateTxs []*candidateTx, totalP float64) {
-
+	candidateTxs []*candidateTx, totalP float64,
+) {
 	totalP = 0.0
 
 	candidateTxs = make([]*candidateTx, 0, len(oldCandidateTxs))

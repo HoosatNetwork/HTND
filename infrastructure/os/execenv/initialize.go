@@ -18,5 +18,4 @@ func Initialize(desiredLimits *limits.DesiredLimits) {
 		fmt.Fprintf(os.Stderr, "failed to set limits: %s\n", err)
 		os.Exit(1)
 	}
-
 }

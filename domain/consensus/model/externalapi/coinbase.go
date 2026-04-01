@@ -11,7 +11,6 @@ type DomainCoinbaseData struct {
 
 // Clone returns a clone of DomainCoinbaseData
 func (dcd *DomainCoinbaseData) Clone() *DomainCoinbaseData {
-
 	scriptPubKeyClone := make([]byte, len(dcd.ScriptPublicKey.Script))
 	copy(scriptPubKeyClone, dcd.ScriptPublicKey.Script)
 

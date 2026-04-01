@@ -6,7 +6,6 @@ import (
 )
 
 func TestBinaryFreeList(t *testing.T) {
-
 	expectedCapacity := 8
 	expectedLength := 8
 

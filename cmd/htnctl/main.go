@@ -71,7 +71,8 @@ func main() {
 }
 
 func postWithTimeout(client *grpcclient.GRPCClient, message *protowire.HoosatdMessage,
-	timeout time.Duration) (*protowire.HoosatdMessage, error) {
+	timeout time.Duration,
+) (*protowire.HoosatdMessage, error) {
 	type result struct {
 		message *protowire.HoosatdMessage
 		err     error

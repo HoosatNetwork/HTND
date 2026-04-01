@@ -19,8 +19,8 @@ import (
 
 func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
 	blockHash *externalapi.DomainHash, pastUTXODiff externalapi.UTXODiff, acceptanceData externalapi.AcceptanceData,
-	multiset model.Multiset) error {
-
+	multiset model.Multiset,
+) error {
 	log.Tracef("verifyUTXO start for block %s", blockHash)
 	defer log.Tracef("verifyUTXO end for block %s", blockHash)
 
@@ -60,8 +60,8 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 }
 
 func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagingArea *model.StagingArea,
-	block *externalapi.DomainBlock, pastUTXODiff externalapi.UTXODiff) error {
-
+	block *externalapi.DomainBlock, pastUTXODiff externalapi.UTXODiff,
+) error {
 	blockHash := consensushashing.BlockHash(block)
 	log.Tracef("validateBlockTransactionsAgainstPastUTXO start for block %s", blockHash)
 	defer log.Tracef("validateBlockTransactionsAgainstPastUTXO end for block %s", blockHash)
@@ -133,8 +133,8 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 }
 
 func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalapi.DomainBlock,
-	blockHash *externalapi.DomainHash, acceptanceData externalapi.AcceptanceData) error {
-
+	blockHash *externalapi.DomainHash, acceptanceData externalapi.AcceptanceData,
+) error {
 	log.Tracef("validateAcceptedIDMerkleRoot start for block %s", blockHash)
 	defer log.Tracef("validateAcceptedIDMerkleRoot end for block %s", blockHash)
 
@@ -149,8 +149,8 @@ func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalap
 }
 
 func (csm *consensusStateManager) validateUTXOCommitment(
-	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash, multiset model.Multiset) error {
-
+	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash, multiset model.Multiset,
+) error {
 	log.Tracef("validateUTXOCommitment start for block %s", blockHash)
 	defer log.Tracef("validateUTXOCommitment end for block %s", blockHash)
 
@@ -193,8 +193,8 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 }
 
 func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
-	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData) error {
-
+	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
+) error {
 	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
 	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
 
@@ -206,8 +206,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	}
 
 	log.Tracef("Calculating the expected coinbase transaction for the given coinbase data and block %s", blockHash)
-	expectedCoinbaseTransaction, _, err :=
-		csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
+	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
 	if err != nil {
 		return err
 	}

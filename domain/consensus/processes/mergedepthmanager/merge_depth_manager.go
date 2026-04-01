@@ -55,8 +55,8 @@ func New(
 	mergeDepthRootStore model.MergeDepthRootStore,
 	daaBlocksStore model.DAABlocksStore,
 	pruningStore model.PruningStore,
-	finalityStore model.FinalityStore) model.MergeDepthManager {
-
+	finalityStore model.FinalityStore,
+) model.MergeDepthManager {
 	return &mergeDepthManager{
 		databaseContext:     databaseContext,
 		dagTopologyManager:  dagTopologyManager,
@@ -70,12 +70,10 @@ func New(
 		pruningStore:        pruningStore,
 		finalityStore:       finalityStore,
 	}
-
 }
 
 // CheckBoundedMergeDepth is used for validation, so must follow the HF1 DAA score for determining the correct depth to verify
 func (mdm *mergeDepthManager) CheckBoundedMergeDepth(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, ghostdagData *externalapi.BlockGHOSTDAGData, header externalapi.BlockHeader, isBlockWithTrustedData bool) error {
-
 	// Return nil on genesis
 	if ghostdagData.SelectedParent() == nil {
 		return nil
@@ -107,8 +105,7 @@ func (mdm *mergeDepthManager) CheckBoundedMergeDepth(stagingArea *model.StagingA
 			continue
 		}
 
-		isRedInPastOfAnyNonMergeDepthViolatingBlue, err :=
-			mdm.dagTopologyManager.IsAncestorOfAny(stagingArea, red, nonBoundedMergeDepthViolatingBlues)
+		isRedInPastOfAnyNonMergeDepthViolatingBlue, err := mdm.dagTopologyManager.IsAncestorOfAny(stagingArea, red, nonBoundedMergeDepthViolatingBlues)
 		if err != nil {
 			return err
 		}
@@ -121,8 +118,8 @@ func (mdm *mergeDepthManager) CheckBoundedMergeDepth(stagingArea *model.StagingA
 }
 
 func (mdm *mergeDepthManager) NonBoundedMergeDepthViolatingBlues(
-	stagingArea *model.StagingArea, blockHash, mergeDepthRoot *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-
+	stagingArea *model.StagingArea, blockHash, mergeDepthRoot *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
 	ghostdagData, err := mdm.ghostdagDataStore.Get(mdm.databaseContext, stagingArea, blockHash, false)
 	if database.IsNotFoundError(err) {
 		log.Infof("NonBoundedMergeDepthViolatingBlues failed to retrieve with %s\n", blockHash)
@@ -178,8 +175,8 @@ func (mdm *mergeDepthManager) MergeDepthRoot(stagingArea *model.StagingArea, blo
 }
 
 func (mdm *mergeDepthManager) calculateAndStageMergeDepthRoot(
-	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool) (*externalapi.DomainHash, error) {
-
+	stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool,
+) (*externalapi.DomainHash, error) {
 	root, err := mdm.calculateMergeDepthRoot(stagingArea, blockHash, isBlockWithTrustedData)
 	if err != nil {
 		return nil, err
@@ -189,8 +186,8 @@ func (mdm *mergeDepthManager) calculateAndStageMergeDepthRoot(
 }
 
 func (mdm *mergeDepthManager) calculateMergeDepthRoot(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool) (
-	*externalapi.DomainHash, error) {
-
+	*externalapi.DomainHash, error,
+) {
 	log.Tracef("calculateMergeDepthRoot start")
 	defer log.Tracef("calculateMergeDepthRoot end")
 

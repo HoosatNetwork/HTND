@@ -8,6 +8,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	consensusutxo "github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/ldb"
+	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
 func TestHasUTXOsUsesTrackedCounts(t *testing.T) {
@@ -91,6 +92,73 @@ func TestHasUTXOsUsesTrackedCounts(t *testing.T) {
 	}
 	if hasUTXOs {
 		t.Fatal("HasUTXOs unexpectedly returned true after removing all UTXOs")
+	}
+}
+
+func TestUTXOsReturnsReallocatedBufferForCallerCleanup(t *testing.T) {
+	if leaks := memory.LogLeaks(); leaks != 0 {
+		t.Fatalf("expected no outstanding allocations before test, got %d", leaks)
+	}
+
+	path, err := os.MkdirTemp("", "utxoindex-store")
+	if err != nil {
+		t.Fatalf("MkdirTemp unexpectedly failed: %s", err)
+	}
+	defer os.RemoveAll(path)
+
+	db, err := ldb.NewLevelDB(path, 8)
+	if err != nil {
+		t.Fatalf("NewLevelDB unexpectedly failed: %s", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("Close unexpectedly failed: %s", err)
+		}
+	}()
+
+	store := newUTXOIndexStore(db)
+	scriptPublicKey := &externalapi.ScriptPublicKey{Script: []byte{0x51, 0x21, 0x02}, Version: 0}
+	entry := consensusutxo.NewUTXOEntry(1000, scriptPublicKey, false, 100)
+	if err := db.Put(circulatingSupplyKey, binaryserialization.SerializeUint64(0)); err != nil {
+		t.Fatalf("initializing circulating supply unexpectedly failed: %s", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		outpoint := &externalapi.DomainOutpoint{
+			TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i + 1)}),
+			Index:         uint32(i),
+		}
+		if err := store.add(scriptPublicKey, outpoint, entry); err != nil {
+			t.Fatalf("add unexpectedly failed: %s", err)
+		}
+	}
+	if err := store.commit(); err != nil {
+		t.Fatalf("commit unexpectedly failed: %s", err)
+	}
+
+	buffer := memory.Malloc[UTXOPair](1)
+	if buffer == nil {
+		t.Fatal("expected initial buffer allocation")
+	}
+
+	pairs, updatedBuffer, err := store.UTXOs(scriptPublicKey, 0, buffer)
+	if err != nil {
+		memory.Free(buffer)
+		t.Fatalf("UTXOs unexpectedly failed: %s", err)
+	}
+	if len(pairs) != 2 {
+		memory.Free(updatedBuffer)
+		t.Fatalf("expected 2 UTXO pairs, got %d", len(pairs))
+	}
+	if updatedBuffer == buffer {
+		memory.Free(updatedBuffer)
+		t.Fatal("expected UTXOs to return a reallocated buffer when capacity was insufficient")
+	}
+
+	memory.Free(updatedBuffer)
+
+	if leaks := memory.LogLeaks(); leaks != 0 {
+		t.Fatalf("expected no outstanding allocations after freeing returned buffer, got %d", leaks)
 	}
 }
 

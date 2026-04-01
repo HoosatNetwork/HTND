@@ -92,7 +92,8 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 }
 
 func (c *ConnectionManager) findRequestedConnectionInSet(connSet connectionSet,
-	requestedAddress string) (*netadapter.NetConnection, string, bool, error) {
+	requestedAddress string,
+) (*netadapter.NetConnection, string, bool, error) {
 	if connection, ok := connSet.get(requestedAddress); ok {
 		return connection, requestedAddress, true, nil
 	}

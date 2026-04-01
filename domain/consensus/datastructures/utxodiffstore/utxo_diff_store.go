@@ -11,8 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var utxoDiffBucketName = []byte("utxo-diffs")
-var utxoDiffChildBucketName = []byte("utxo-diff-children")
+var (
+	utxoDiffBucketName      = []byte("utxo-diffs")
+	utxoDiffChildBucketName = []byte("utxo-diff-children")
+)
 
 // utxoDiffStore represents a store of UTXODiffs
 type utxoDiffStore struct {
@@ -36,8 +38,8 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.UTX
 
 // Stage stages the given utxoDiff for the given blockHash
 func (uds *utxoDiffStore) Stage(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	utxoDiff externalapi.UTXODiff, utxoDiffChild *externalapi.DomainHash) {
-
+	utxoDiff externalapi.UTXODiff, utxoDiffChild *externalapi.DomainHash,
+) {
 	stagingShard := uds.stagingShard(stagingArea)
 
 	stagingShard.utxoDiffToAdd[*blockHash] = utxoDiff
@@ -166,7 +168,7 @@ func (uds *utxoDiffStore) utxoDiffChildHashAsKey(hash *externalapi.DomainHash) m
 func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]byte, error) {
 	toAddBuffer := memory.Malloc[*serialization.DbUtxoCollectionItem](utxoDiff.ToAdd().Len())
 	toRemoveBuffer := memory.Malloc[*serialization.DbUtxoCollectionItem](utxoDiff.ToRemove().Len())
-	dbUtxoDiff, err := serialization.UTXODiffToDBUTXODiff(utxoDiff, toAddBuffer, toRemoveBuffer)
+	dbUtxoDiff, toAddBuffer, toRemoveBuffer, err := serialization.UTXODiffToDBUTXODiff(utxoDiff, toAddBuffer, toRemoveBuffer)
 	if err != nil {
 		return nil, err
 	}

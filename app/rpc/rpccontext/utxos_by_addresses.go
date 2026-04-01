@@ -15,7 +15,6 @@ import (
 // ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry converts
 // a UTXOOutpointEntryPair to a slice of UTXOsByAddressesEntry
 func ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry(address string, script *appmessage.RPCScriptPublicKey, pair utxoindex.UTXOPair) *appmessage.UTXOsByAddressesEntry {
-
 	// Compute scriptHex once per address (all UTXOs for this address share the same ScriptPublicKey)
 
 	return &appmessage.UTXOsByAddressesEntry{
@@ -56,8 +55,8 @@ func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings
 // to UTXOsChangedNotificationAddresses
 func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
-	addressStrings []string) ([]*UTXOsChangedNotificationAddress, error) {
-
+	addressStrings []string,
+) ([]*UTXOsChangedNotificationAddress, error) {
 	addresses := make([]*UTXOsChangedNotificationAddress, len(addressStrings))
 	var reusableHexBuffer []byte
 	for i, addressString := range addressStrings {

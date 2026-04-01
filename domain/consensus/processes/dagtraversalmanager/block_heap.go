@@ -176,8 +176,8 @@ func (sbh *sizedUpBlockHeap) pop() *externalapi.DomainHash {
 
 // tryPushWithGHOSTDAGData is just like tryPush but the caller provides the ghostdagData of the block.
 func (sbh *sizedUpBlockHeap) tryPushWithGHOSTDAGData(blockHash *externalapi.DomainHash,
-	ghostdagData *externalapi.BlockGHOSTDAGData) (bool, error) {
-
+	ghostdagData *externalapi.BlockGHOSTDAGData,
+) (bool, error) {
 	node := &externalapi.BlockGHOSTDAGDataHashPair{
 		Hash:         blockHash,
 		GHOSTDAGData: ghostdagData,

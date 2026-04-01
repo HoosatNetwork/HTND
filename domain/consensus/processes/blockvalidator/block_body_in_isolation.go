@@ -192,7 +192,6 @@ func (v *blockValidator) checkBlockDoubleSpends(block *externalapi.DomainBlock) 
 }
 
 func (v *blockValidator) checkBlockHasNoChainedTransactions(block *externalapi.DomainBlock) error {
-
 	transactions := block.Transactions
 	transactionsSet := make(map[externalapi.DomainTransactionID]struct{}, len(transactions))
 	for _, transaction := range transactions {

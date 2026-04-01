@@ -81,7 +81,6 @@ func TestIBDWithPruning(t *testing.T) {
 		err := syncee.rpcClient.RegisterPruningPointUTXOSetNotifications(func() {
 			close(utxoSetOverriden)
 		})
-
 		if err != nil {
 			t.Fatalf("RegisterPruningPointUTXOSetNotifications: %+v", err)
 		}

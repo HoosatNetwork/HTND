@@ -13,8 +13,7 @@ func HandleUnban(context *rpccontext.Context, _ *router.Router, request appmessa
 	if context.Config.SafeRPC {
 		log.Warn("Unban RPC command called while node in safe RPC mode -- ignoring.")
 		response := appmessage.NewUnbanResponseMessage()
-		response.Error =
-			appmessage.RPCErrorf("Unban RPC command called while node in safe RPC mode")
+		response.Error = appmessage.RPCErrorf("Unban RPC command called while node in safe RPC mode")
 		return response, nil
 	}
 

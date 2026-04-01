@@ -6,9 +6,11 @@ import (
 )
 
 func initTestDomainSubnetworkIDForClone() []*DomainSubnetworkID {
-
-	tests := []*DomainSubnetworkID{{1, 0, 0xFF, 0}, {0, 1, 0xFF, 1},
-		{0, 1, 0xFF, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+	tests := []*DomainSubnetworkID{
+		{1, 0, 0xFF, 0},
+		{0, 1, 0xFF, 1},
+		{0, 1, 0xFF, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	}
 	return tests
 }
 
@@ -49,12 +51,16 @@ func initTestDomainSubnetworkIDForEqual() []testDomainSubnetworkIDStruct {
 				},
 			},
 		}, {
-			baseDomainSubnetworkID: &DomainSubnetworkID{0, 1, 0xFF, 1, 1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-				0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+			baseDomainSubnetworkID: &DomainSubnetworkID{
+				0, 1, 0xFF, 1, 1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+				0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+			},
 			domainSubnetworkIDToCompareTo: []testDomainSubnetworkIDToCompare{
 				{
-					domainSubnetworkID: &DomainSubnetworkID{0, 1, 0xFF, 1, 1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-						0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+					domainSubnetworkID: &DomainSubnetworkID{
+						0, 1, 0xFF, 1, 1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+						0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+					},
 					expectedResult: true,
 				},
 				{
@@ -68,7 +74,6 @@ func initTestDomainSubnetworkIDForEqual() []testDomainSubnetworkIDStruct {
 }
 
 func TestDomainSubnetworkID_Equal(t *testing.T) {
-
 	domainSubnetworkIDs := initTestDomainSubnetworkIDForEqual()
 	for i, test := range domainSubnetworkIDs {
 		for j, subTest := range test.domainSubnetworkIDToCompareTo {
@@ -85,7 +90,6 @@ func TestDomainSubnetworkID_Equal(t *testing.T) {
 }
 
 func TestDomainSubnetworkID_Clone(t *testing.T) {
-
 	domainSubnetworkIDs := initTestDomainSubnetworkIDForClone()
 	for i, domainSubnetworkID := range domainSubnetworkIDs {
 		domainSubnetworkIDClone := domainSubnetworkID.Clone()

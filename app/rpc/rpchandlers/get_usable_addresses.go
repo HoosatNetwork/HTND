@@ -49,7 +49,6 @@ func releaseUsableAddresses(addresses []string) {
 
 // HandleGetUsableAddresses handles the respectively named RPC command
 func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
-
 	if !context.Config.UTXOIndex {
 		errorMessage := &appmessage.GetUsableAddressesResponseMessage{}
 		errorMessage.Error = appmessage.RPCErrorf("Method unavailable when htnd is run without --utxoindex")
@@ -69,7 +68,6 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 	defer releaseUsableAddresses(UsableAddresses)
 	for _, address := range getUsableAddressesRequest.Addresses {
 		usable, err := getUsabilityOfAddress(context, address)
-
 		if err != nil {
 			rpcError := &appmessage.RPCError{}
 			if !errors.As(err, &rpcError) {

@@ -37,9 +37,11 @@ func (sht SigHashType) IsStandardSigHashType() bool {
 func (sht SigHashType) isSigHashNone() bool {
 	return sht&SigHashMask == SigHashNone
 }
+
 func (sht SigHashType) isSigHashSingle() bool {
 	return sht&SigHashMask == SigHashSingle
 }
+
 func (sht SigHashType) isSigHashAnyOneCanPay() bool {
 	return sht&SigHashAnyOneCanPay == SigHashAnyOneCanPay
 }
@@ -115,8 +117,8 @@ func PrecomputeSighashReusedValues(tx *externalapi.DomainTransaction) *SighashRe
 // to be used for signing and verification for Schnorr.
 // This returns error only if one of the provided parameters are consensus-invalid.
 func CalculateSignatureHashSchnorr(tx *externalapi.DomainTransaction, inputIndex int, hashType SigHashType,
-	reusedValues *SighashReusedValues) (*externalapi.DomainHash, error) {
-
+	reusedValues *SighashReusedValues,
+) (*externalapi.DomainHash, error) {
 	if !hashType.IsStandardSigHashType() {
 		return nil, errors.Errorf("SigHashType %d is not a valid SigHash type", hashType)
 	}
@@ -130,8 +132,8 @@ func CalculateSignatureHashSchnorr(tx *externalapi.DomainTransaction, inputIndex
 // to be used for signing and verification for ECDSA.
 // This returns error only if one of the provided parameters are consensus-invalid.
 func CalculateSignatureHashECDSA(tx *externalapi.DomainTransaction, inputIndex int, hashType SigHashType,
-	reusedValues *SighashReusedValues) (*externalapi.DomainHash, error) {
-
+	reusedValues *SighashReusedValues,
+) (*externalapi.DomainHash, error) {
 	hash, err := CalculateSignatureHashSchnorr(tx, inputIndex, hashType, reusedValues)
 	if err != nil {
 		return nil, err
@@ -145,8 +147,8 @@ func CalculateSignatureHashECDSA(tx *externalapi.DomainTransaction, inputIndex i
 
 func calculateSignatureHash(tx *externalapi.DomainTransaction, inputIndex int, txIn *externalapi.DomainTransactionInput,
 	prevScriptPublicKey *externalapi.ScriptPublicKey, hashType SigHashType, reusedValues *SighashReusedValues) (
-	*externalapi.DomainHash, error) {
-
+	*externalapi.DomainHash, error,
+) {
 	hashWriter := hashes.NewTransactionSigningHashWriter()
 	infallibleWriteElement(hashWriter, tx.Version)
 

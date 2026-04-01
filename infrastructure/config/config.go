@@ -37,9 +37,9 @@ const (
 	defaultMaxInboundPeers     = 500
 	defaultBanDuration         = time.Hour * 24
 	defaultBanThreshold        = 100
-	//DefaultConnectTimeout is the default connection timeout when dialing
+	// DefaultConnectTimeout is the default connection timeout when dialing
 	DefaultConnectTimeout = time.Second * 30
-	//DefaultMaxRPCClients is the default max number of RPC clients
+	// DefaultMaxRPCClients is the default max number of RPC clients
 	DefaultMaxRPCClients         = 500
 	defaultMaxRPCWebsockets      = 250
 	defaultMaxRPCConcurrentReqs  = 10000
@@ -48,7 +48,7 @@ const (
 	blockMaxMassMax              = 10_000_000
 	defaultMinRelayTxFee         = 1e-5 // 1 sompi per byte
 	defaultMaxOrphanTransactions = 100
-	//DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
+	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
 	defaultMaxUTXOCacheSize       = 5_000_000_000
@@ -315,7 +315,7 @@ func LoadConfig() (*Config, error) {
 
 	// Create the home directory if it doesn't already exist.
 	funcName := "loadConfig"
-	err = os.MkdirAll(DefaultAppDir, 0700)
+	err = os.MkdirAll(DefaultAppDir, 0o700)
 	if err != nil {
 		// Show a nicer error message if it's because a symlink is
 		// linked to a directory that does not exist (probably because
@@ -617,13 +617,13 @@ func LoadConfig() (*Config, error) {
 // and populates it with some randomly generated RPC username and password.
 func createDefaultConfigFile(destinationPath string) error {
 	// Create the destination directory if it does not exists
-	err := os.MkdirAll(filepath.Dir(destinationPath), 0700)
+	err := os.MkdirAll(filepath.Dir(destinationPath), 0o700)
 	if err != nil {
 		return err
 	}
 
 	dest, err := os.OpenFile(destinationPath,
-		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}

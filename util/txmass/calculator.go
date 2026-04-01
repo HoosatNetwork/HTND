@@ -43,7 +43,7 @@ func (c *Calculator) CalculateTransactionMass(transaction *externalapi.DomainTra
 	// calculate mass for scriptPubKey
 	totalScriptPubKeySize := uint64(0)
 	for _, output := range transaction.Outputs {
-		totalScriptPubKeySize += 2 //output.ScriptPublicKey.Version (uint16)
+		totalScriptPubKeySize += 2 // output.ScriptPublicKey.Version (uint16)
 		totalScriptPubKeySize += uint64(len(output.ScriptPublicKey.Script))
 	}
 	massForScriptPubKey := totalScriptPubKeySize * c.massPerScriptPubKeyByte

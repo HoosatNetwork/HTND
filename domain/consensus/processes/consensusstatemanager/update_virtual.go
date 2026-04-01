@@ -8,8 +8,8 @@ import (
 )
 
 func (csm *consensusStateManager) updateVirtual(stagingArea *model.StagingArea, newBlockHash *externalapi.DomainHash,
-	tips []*externalapi.DomainHash) (*externalapi.SelectedChainPath, externalapi.UTXODiff, error) {
-
+	tips []*externalapi.DomainHash,
+) (*externalapi.SelectedChainPath, externalapi.UTXODiff, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "updateVirtual")
 	defer onEnd()
 
@@ -62,7 +62,8 @@ func (csm *consensusStateManager) updateVirtual(stagingArea *model.StagingArea, 
 }
 
 func (csm *consensusStateManager) updateVirtualWithParents(
-	stagingArea *model.StagingArea, virtualParents []*externalapi.DomainHash) (externalapi.UTXODiff, error) {
+	stagingArea *model.StagingArea, virtualParents []*externalapi.DomainHash,
+) (externalapi.UTXODiff, error) {
 	err := csm.dagTopologyManager.SetParents(stagingArea, model.VirtualBlockHash, virtualParents)
 	if err != nil {
 		return nil, err
@@ -81,8 +82,7 @@ func (csm *consensusStateManager) updateVirtualWithParents(
 	}
 
 	log.Debugf("Calculating past UTXO, acceptance data, and multiset for the new virtual block")
-	virtualUTXODiff, virtualAcceptanceData, virtualMultiset, err :=
-		csm.CalculatePastUTXOAndAcceptanceData(stagingArea, model.VirtualBlockHash)
+	virtualUTXODiff, virtualAcceptanceData, virtualMultiset, err := csm.CalculatePastUTXOAndAcceptanceData(stagingArea, model.VirtualBlockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -105,8 +105,8 @@ func (csm *consensusStateManager) updateVirtualWithParents(
 }
 
 func (csm *consensusStateManager) updateSelectedTipUTXODiff(
-	stagingArea *model.StagingArea, virtualUTXODiff externalapi.UTXODiff) error {
-
+	stagingArea *model.StagingArea, virtualUTXODiff externalapi.UTXODiff,
+) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "updateSelectedTipUTXODiff")
 	defer onEnd()
 

@@ -71,6 +71,5 @@ func TestConsensus_GetBlockInfo(t *testing.T) {
 		if info.BlockStatus != externalapi.StatusUTXOValid {
 			t.Fatalf("Expected block status: %s, instead got: %s", externalapi.StatusUTXOValid, info.BlockStatus)
 		}
-
 	})
 }

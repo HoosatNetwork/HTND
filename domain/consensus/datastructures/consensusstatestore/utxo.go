@@ -80,16 +80,16 @@ func (csss *consensusStateStagingShard) commitVirtualUTXODiff(dbTx model.DBTrans
 }
 
 func (css *consensusStateStore) UTXOByOutpoint(dbContext model.DBReader, stagingArea *model.StagingArea,
-	outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error) {
-
+	outpoint *externalapi.DomainOutpoint,
+) (externalapi.UTXOEntry, bool, error) {
 	stagingShard := css.stagingShard(stagingArea)
 
 	return css.utxoByOutpointFromStagedVirtualUTXODiff(dbContext, stagingShard, outpoint)
 }
 
 func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContext model.DBReader,
-	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error) {
-
+	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint,
+) (externalapi.UTXOEntry, bool, error) {
 	if stagingShard.virtualUTXODiffStaging != nil {
 		if stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
 			return nil, false, errors.Errorf("outpoint was not found")
@@ -126,16 +126,16 @@ func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContex
 }
 
 func (css *consensusStateStore) HasUTXOByOutpoint(dbContext model.DBReader, stagingArea *model.StagingArea,
-	outpoint *externalapi.DomainOutpoint) (bool, error) {
-
+	outpoint *externalapi.DomainOutpoint,
+) (bool, error) {
 	stagingShard := css.stagingShard(stagingArea)
 
 	return css.hasUTXOByOutpointFromStagedVirtualUTXODiff(dbContext, stagingShard, outpoint)
 }
 
 func (css *consensusStateStore) hasUTXOByOutpointFromStagedVirtualUTXODiff(dbContext model.DBReader,
-	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint) (bool, error) {
-
+	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint,
+) (bool, error) {
 	if stagingShard.virtualUTXODiffStaging != nil {
 		if stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
 			return false, nil
@@ -154,8 +154,8 @@ func (css *consensusStateStore) hasUTXOByOutpointFromStagedVirtualUTXODiff(dbCon
 }
 
 func (css *consensusStateStore) VirtualUTXOs(dbContext model.DBReader, fromOutpoint *externalapi.DomainOutpoint, limit int) (
-	[]*externalapi.OutpointAndUTXOEntryPair, error) {
-
+	[]*externalapi.OutpointAndUTXOEntryPair, error,
+) {
 	cursor, err := dbContext.Cursor(css.utxoSetBucket)
 	if err != nil {
 		return nil, err
@@ -193,8 +193,8 @@ func (css *consensusStateStore) VirtualUTXOs(dbContext model.DBReader, fromOutpo
 }
 
 func (css *consensusStateStore) VirtualUTXOSetIterator(dbContext model.DBReader, stagingArea *model.StagingArea) (
-	externalapi.ReadOnlyUTXOSetIterator, error) {
-
+	externalapi.ReadOnlyUTXOSetIterator, error,
+) {
 	stagingShard := css.stagingShard(stagingArea)
 
 	cursor, err := dbContext.Cursor(css.utxoSetBucket)

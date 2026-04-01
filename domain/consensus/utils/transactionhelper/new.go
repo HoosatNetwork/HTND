@@ -8,8 +8,8 @@ import (
 // NewSubnetworkTransaction returns a new trsnactions in the specified subnetwork with specified gas and payload
 func NewSubnetworkTransaction(version uint16, inputs []*externalapi.DomainTransactionInput,
 	outputs []*externalapi.DomainTransactionOutput, subnetworkID *externalapi.DomainSubnetworkID,
-	gas uint64, payload []byte) *externalapi.DomainTransaction {
-
+	gas uint64, payload []byte,
+) *externalapi.DomainTransaction {
 	return &externalapi.DomainTransaction{
 		Version:      version,
 		Inputs:       inputs,
@@ -25,7 +25,8 @@ func NewSubnetworkTransaction(version uint16, inputs []*externalapi.DomainTransa
 
 // NewNativeTransaction returns a new native transaction
 func NewNativeTransaction(version uint16, inputs []*externalapi.DomainTransactionInput,
-	outputs []*externalapi.DomainTransactionOutput) *externalapi.DomainTransaction {
+	outputs []*externalapi.DomainTransactionOutput,
+) *externalapi.DomainTransaction {
 	return &externalapi.DomainTransaction{
 		Version:      version,
 		Inputs:       inputs,

@@ -7,8 +7,8 @@ import (
 )
 
 func (mp *mempool) handleNewBlockTransactions(blockTransactions []*externalapi.DomainTransaction) (
-	[]*externalapi.DomainTransaction, error) {
-
+	[]*externalapi.DomainTransaction, error,
+) {
 	// Skip the coinbase transaction
 	blockTransactions = blockTransactions[transactionhelper.CoinbaseTransactionIndex+1:]
 

@@ -85,8 +85,8 @@ func (csm *consensusStateManager) ValidateUTXODiffChildChains() error {
 // using the selected parent chain
 func (csm *consensusStateManager) repairUTXODiffChildChains(
 	stagingArea *model.StagingArea,
-	pruningPoint, tip *externalapi.DomainHash) error {
-
+	pruningPoint, tip *externalapi.DomainHash,
+) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "repairUTXODiffChildChains")
 	defer onEnd()
 

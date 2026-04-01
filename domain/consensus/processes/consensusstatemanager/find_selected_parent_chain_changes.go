@@ -7,7 +7,6 @@ import (
 )
 
 func (csm *consensusStateManager) GetVirtualSelectedParentChainFromBlock(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.SelectedChainPath, error) {
-
 	// Calculate chain changes between the given blockHash and the
 	// virtual's selected parent. Note that we explicitly don't
 	// do the calculation against the virtual itself so that we

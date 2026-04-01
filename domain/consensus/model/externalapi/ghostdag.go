@@ -24,8 +24,8 @@ func NewBlockGHOSTDAGData(
 	selectedParent *DomainHash,
 	mergeSetBlues []*DomainHash,
 	mergeSetReds []*DomainHash,
-	bluesAnticoneSizes map[DomainHash]KType) *BlockGHOSTDAGData {
-
+	bluesAnticoneSizes map[DomainHash]KType,
+) *BlockGHOSTDAGData {
 	return &BlockGHOSTDAGData{
 		blueScore:          blueScore,
 		blueWork:           blueWork,

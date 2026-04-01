@@ -14,7 +14,8 @@ import (
 )
 
 func (flow *handleIBDFlow) ibdWithHeadersProof(
-	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash, highBlockDAAScore uint64) error {
+	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash, highBlockDAAScore uint64,
+) error {
 	flow.updateBlockVersionFromDAAScore(highBlockDAAScore)
 	err := flow.Domain().InitStagingConsensusWithoutGenesis()
 	if err != nil {
@@ -68,8 +69,8 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 
 func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
 	relayBlock *externalapi.DomainBlock,
-	highestKnownSyncerChainHash *externalapi.DomainHash) (shouldDownload, shouldSync bool, err error) {
-
+	highestKnownSyncerChainHash *externalapi.DomainHash,
+) (shouldDownload, shouldSync bool, err error) {
 	var highestSharedBlockFound, isPruningPointInSharedBlockChain bool
 	if highestKnownSyncerChainHash != nil {
 		blockInfo, err := flow.Domain().Consensus().GetBlockInfo(highestKnownSyncerChainHash)
@@ -165,8 +166,8 @@ func (flow *handleIBDFlow) syncAndValidatePruningPointProof() (*externalapi.Doma
 
 func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash,
-	highBlockDAAScore uint64) error {
-
+	highBlockDAAScore uint64,
+) error {
 	proofPruningPoint, err := flow.syncAndValidatePruningPointProof()
 	if err != nil {
 		return err
@@ -292,7 +293,8 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 }
 
 func (flow *handleIBDFlow) processBlockWithTrustedData(
-	consensus externalapi.Consensus, block *appmessage.MsgBlockWithTrustedDataV4, data *appmessage.MsgTrustedData) error {
+	consensus externalapi.Consensus, block *appmessage.MsgBlockWithTrustedDataV4, data *appmessage.MsgTrustedData,
+) error {
 	blockWithTrustedData := &externalapi.BlockWithTrustedData{
 		Block:        appmessage.MsgBlockToDomainBlock(block.Block),
 		DAAWindow:    make([]*externalapi.TrustedDataDataDAAHeader, 0, len(block.DAAWindowIndices)),
@@ -398,8 +400,8 @@ func (flow *handleIBDFlow) validateAndInsertPruningPoints(proofPruningPoint *ext
 }
 
 func (flow *handleIBDFlow) syncPruningPointUTXOSet(consensus externalapi.Consensus,
-	pruningPoint *externalapi.DomainHash) (bool, error) {
-
+	pruningPoint *externalapi.DomainHash,
+) (bool, error) {
 	log.Infof("Checking if the suggested pruning point %s is compatible to the node DAG", pruningPoint)
 	isValid, err := flow.Domain().StagingConsensus().IsValidPruningPoint(pruningPoint)
 	if err != nil {

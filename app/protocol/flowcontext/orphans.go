@@ -31,7 +31,7 @@ func (f *FlowContext) AddOrphan(orphanBlock *externalapi.DomainBlock) {
 		f.evictRandomOrphan()
 	}
 
-	//log.Infof("Received a block with missing parents, adding to orphan pool: %s", orphanHash)
+	// log.Infof("Received a block with missing parents, adding to orphan pool: %s", orphanHash)
 }
 
 func (f *FlowContext) evictRandomOrphan() {
@@ -106,8 +106,8 @@ func (f *FlowContext) UnorphanBlocks(rootBlock *externalapi.DomainBlock) ([]*ext
 // inside of it
 // Note that this method does not modify the given `processQueue`
 func (f *FlowContext) addChildOrphansToProcessQueue(blockHash *externalapi.DomainHash,
-	processQueue []externalapi.DomainHash) []externalapi.DomainHash {
-
+	processQueue []externalapi.DomainHash,
+) []externalapi.DomainHash {
 	blockChildren := f.findChildOrphansOfBlock(blockHash)
 	for _, blockChild := range blockChildren {
 		exists := slices.Contains(processQueue, blockChild)

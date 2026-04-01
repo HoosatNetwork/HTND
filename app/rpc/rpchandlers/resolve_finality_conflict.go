@@ -11,8 +11,7 @@ func HandleResolveFinalityConflict(context *rpccontext.Context, _ *router.Router
 	if context.Config.SafeRPC {
 		log.Warn("ResolveFinalityConflict RPC command called while node in safe RPC mode -- ignoring.")
 		response := &appmessage.ResolveFinalityConflictResponseMessage{}
-		response.Error =
-			appmessage.RPCErrorf("ResolveFinalityConflict RPC command called while node in safe RPC mode")
+		response.Error = appmessage.RPCErrorf("ResolveFinalityConflict RPC command called while node in safe RPC mode")
 		return response, nil
 	}
 

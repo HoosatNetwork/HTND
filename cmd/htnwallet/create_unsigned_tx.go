@@ -21,7 +21,6 @@ func createUnsignedTransaction(conf *createUnsignedTransactionConfig) error {
 	defer cancel()
 
 	sendAmountSompi, err := utils.KasToSompi(conf.SendAmount)
-
 	if err != nil {
 		return err
 	}

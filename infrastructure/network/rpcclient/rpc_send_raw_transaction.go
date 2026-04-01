@@ -13,7 +13,8 @@ func (c *RPCClient) SubmitTransaction(transaction *appmessage.RPCTransaction, tr
 
 // SubmitTransactionWithPriority sends an RPC request respective to the function's name and returns the RPC server's response.
 func (c *RPCClient) SubmitTransactionWithPriority(transaction *appmessage.RPCTransaction, transactionID string, allowOrphan bool,
-	isHighPriority *bool) (*appmessage.SubmitTransactionResponseMessage, error) {
+	isHighPriority *bool,
+) (*appmessage.SubmitTransactionResponseMessage, error) {
 	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionRequestMessageWithPriority(transaction, allowOrphan, isHighPriority))
 	if err != nil {
 		return nil, err
@@ -34,7 +35,6 @@ func (c *RPCClient) SubmitTransactionWithPriority(transaction *appmessage.RPCTra
 					log.Warnf("SubmitTransaction: received an error response for previous request: %s", submitTransactionResponse.Error)
 					continue
 				}
-
 			} else {
 				log.Warnf("SubmitTransaction: received a successful response for previous request with ID %s",
 					submitTransactionResponse.TransactionID)

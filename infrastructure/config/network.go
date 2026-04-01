@@ -57,7 +57,7 @@ type overrideDAGParamsConfig struct {
 // ResolveNetwork parses the network command line argument and sets NetParams accordingly.
 // It returns error if more than one network was selected, nil otherwise.
 func (networkFlags *NetworkFlags) ResolveNetwork(parser *flags.Parser) error {
-	//NetParams holds the selected network parameters. Default value is main-net.
+	// NetParams holds the selected network parameters. Default value is main-net.
 	networkFlags.ActiveNetParams = &dagconfig.MainnetParams
 	// Multiple networks can't be selected simultaneously.
 	numNets := 0
@@ -107,7 +107,6 @@ func (networkFlags *NetworkFlags) NetParams() *dagconfig.Params {
 }
 
 func (networkFlags *NetworkFlags) overrideDAGParams() error {
-
 	if networkFlags.OverrideDAGParamsFile == "" {
 		return nil
 	}

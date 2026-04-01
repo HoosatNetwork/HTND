@@ -48,8 +48,8 @@ func (v *transactionValidator) IsFinalizedTransaction(tx *externalapi.DomainTran
 
 // ValidateTransactionInContextIgnoringUTXO validates the transaction with consensus context but ignoring UTXO
 func (v *transactionValidator) ValidateTransactionInContextIgnoringUTXO(stagingArea *model.StagingArea, tx *externalapi.DomainTransaction,
-	povBlockHash *externalapi.DomainHash, povBlockPastMedianTime int64, povDAAScore uint64) error {
-
+	povBlockHash *externalapi.DomainHash, povBlockPastMedianTime int64, povDAAScore uint64,
+) error {
 	if isFinalized := v.IsFinalizedTransaction(tx, povDAAScore, povBlockPastMedianTime); !isFinalized {
 		return errors.Wrapf(ruleerrors.ErrUnfinalizedTx, "unfinalized transaction %v", tx)
 	}
@@ -67,7 +67,6 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 	povBlockHash *externalapi.DomainHash,
 	povDAAScore uint64,
 ) error {
-
 	// 1. Compute the fee – this as it is always needed
 	totalSompiIn, err := v.checkTransactionInputAmounts(tx)
 	if err != nil {
@@ -118,8 +117,8 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 }
 
 func (v *transactionValidator) checkTransactionCoinbaseMaturity(stagingArea *model.StagingArea,
-	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction, povDAAScore uint64) error {
-
+	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction, povDAAScore uint64,
+) error {
 	var missingOutpoints []*externalapi.DomainOutpoint
 	for i := 0; i < len(tx.Inputs); i++ {
 		utxoEntry := tx.Inputs[i].UTXOEntry
@@ -210,8 +209,8 @@ func (v *transactionValidator) checkTransactionOutputAmounts(tx *externalapi.Dom
 }
 
 func (v *transactionValidator) checkTransactionSequenceLock(stagingArea *model.StagingArea,
-	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction, povDAAScore uint64) error {
-
+	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction, povDAAScore uint64,
+) error {
 	// A transaction can only be included within a block
 	// once the sequence locks of *all* its inputs are
 	// active.
@@ -277,10 +276,10 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 }
 
 func (v *transactionValidator) calcTxSequenceLockFromReferencedUTXOEntries(stagingArea *model.StagingArea,
-	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction) (*sequenceLock, error) {
-
+	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction,
+) (*sequenceLock, error) {
 	// A value of -1 represents a relative timelock value that will allow a transaction to be
-	//included in a block at any given DAA score.
+	// included in a block at any given DAA score.
 	sequenceLock := &sequenceLock{BlockDAAScore: -1}
 
 	// Sequence locks don't apply to coinbase transactions Therefore, we
@@ -341,7 +340,6 @@ type sequenceLock struct {
 // met, meaning that all the inputs of a given transaction have reached a
 // DAA score sufficient for their relative lock-time maturity.
 func (v *transactionValidator) sequenceLockActive(sequenceLock *sequenceLock, blockDAAScore uint64) bool {
-
 	// If (DAA score) relative-lock time has not yet
 	// reached, then the transaction is not yet mature according to its
 	// sequence locks.

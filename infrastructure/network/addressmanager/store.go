@@ -10,8 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var notBannedAddressBucket = database.MakeBucket([]byte("not-banned-addresses"))
-var bannedAddressBucket = database.MakeBucket([]byte("banned-addresses"))
+var (
+	notBannedAddressBucket = database.MakeBucket([]byte("not-banned-addresses"))
+	bannedAddressBucket    = database.MakeBucket([]byte("banned-addresses"))
+)
 
 type addressStore struct {
 	database           database.Database

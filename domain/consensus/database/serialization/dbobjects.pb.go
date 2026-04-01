@@ -7,11 +7,12 @@
 package serialization
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1788,38 +1789,41 @@ func file_dbobjects_proto_rawDescGZIP() []byte {
 	return file_dbobjects_proto_rawDescData
 }
 
-var file_dbobjects_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
-var file_dbobjects_proto_goTypes = []any{
-	(*DbBlock)(nil),                     // 0: serialization.DbBlock
-	(*DbBlockHeader)(nil),               // 1: serialization.DbBlockHeader
-	(*DbBlockLevelParents)(nil),         // 2: serialization.DbBlockLevelParents
-	(*DbHash)(nil),                      // 3: serialization.DbHash
-	(*DbTransaction)(nil),               // 4: serialization.DbTransaction
-	(*DbTransactionInput)(nil),          // 5: serialization.DbTransactionInput
-	(*DbOutpoint)(nil),                  // 6: serialization.DbOutpoint
-	(*DbTransactionId)(nil),             // 7: serialization.DbTransactionId
-	(*DbTransactionOutput)(nil),         // 8: serialization.DbTransactionOutput
-	(*DbSubnetworkId)(nil),              // 9: serialization.DbSubnetworkId
-	(*DbAcceptanceData)(nil),            // 10: serialization.DbAcceptanceData
-	(*DbBlockAcceptanceData)(nil),       // 11: serialization.DbBlockAcceptanceData
-	(*DbTransactionAcceptanceData)(nil), // 12: serialization.DbTransactionAcceptanceData
-	(*DbBlockRelations)(nil),            // 13: serialization.DbBlockRelations
-	(*DbBlockStatus)(nil),               // 14: serialization.DbBlockStatus
-	(*DbBlockGhostdagData)(nil),         // 15: serialization.DbBlockGhostdagData
-	(*DbBluesAnticoneSizes)(nil),        // 16: serialization.DbBluesAnticoneSizes
-	(*DbMultiset)(nil),                  // 17: serialization.DbMultiset
-	(*DbUtxoSet)(nil),                   // 18: serialization.DbUtxoSet
-	(*DbUtxoCollectionItem)(nil),        // 19: serialization.DbUtxoCollectionItem
-	(*DbScriptPublicKey)(nil),           // 20: serialization.DbScriptPublicKey
-	(*DbUtxoEntry)(nil),                 // 21: serialization.DbUtxoEntry
-	(*DbReachabilityData)(nil),          // 22: serialization.DbReachabilityData
-	(*DbReachabilityInterval)(nil),      // 23: serialization.DbReachabilityInterval
-	(*DbUtxoDiff)(nil),                  // 24: serialization.DbUtxoDiff
-	(*DbTips)(nil),                      // 25: serialization.DbTips
-	(*DbBlockCount)(nil),                // 26: serialization.DbBlockCount
-	(*DbBlockHeaderCount)(nil),          // 27: serialization.DbBlockHeaderCount
-	(*DbBlockGHOSTDAGDataHashPair)(nil), // 28: serialization.DbBlockGHOSTDAGDataHashPair
-}
+var (
+	file_dbobjects_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+	file_dbobjects_proto_goTypes  = []any{
+		(*DbBlock)(nil),                     // 0: serialization.DbBlock
+		(*DbBlockHeader)(nil),               // 1: serialization.DbBlockHeader
+		(*DbBlockLevelParents)(nil),         // 2: serialization.DbBlockLevelParents
+		(*DbHash)(nil),                      // 3: serialization.DbHash
+		(*DbTransaction)(nil),               // 4: serialization.DbTransaction
+		(*DbTransactionInput)(nil),          // 5: serialization.DbTransactionInput
+		(*DbOutpoint)(nil),                  // 6: serialization.DbOutpoint
+		(*DbTransactionId)(nil),             // 7: serialization.DbTransactionId
+		(*DbTransactionOutput)(nil),         // 8: serialization.DbTransactionOutput
+		(*DbSubnetworkId)(nil),              // 9: serialization.DbSubnetworkId
+		(*DbAcceptanceData)(nil),            // 10: serialization.DbAcceptanceData
+		(*DbBlockAcceptanceData)(nil),       // 11: serialization.DbBlockAcceptanceData
+		(*DbTransactionAcceptanceData)(nil), // 12: serialization.DbTransactionAcceptanceData
+		(*DbBlockRelations)(nil),            // 13: serialization.DbBlockRelations
+		(*DbBlockStatus)(nil),               // 14: serialization.DbBlockStatus
+		(*DbBlockGhostdagData)(nil),         // 15: serialization.DbBlockGhostdagData
+		(*DbBluesAnticoneSizes)(nil),        // 16: serialization.DbBluesAnticoneSizes
+		(*DbMultiset)(nil),                  // 17: serialization.DbMultiset
+		(*DbUtxoSet)(nil),                   // 18: serialization.DbUtxoSet
+		(*DbUtxoCollectionItem)(nil),        // 19: serialization.DbUtxoCollectionItem
+		(*DbScriptPublicKey)(nil),           // 20: serialization.DbScriptPublicKey
+		(*DbUtxoEntry)(nil),                 // 21: serialization.DbUtxoEntry
+		(*DbReachabilityData)(nil),          // 22: serialization.DbReachabilityData
+		(*DbReachabilityInterval)(nil),      // 23: serialization.DbReachabilityInterval
+		(*DbUtxoDiff)(nil),                  // 24: serialization.DbUtxoDiff
+		(*DbTips)(nil),                      // 25: serialization.DbTips
+		(*DbBlockCount)(nil),                // 26: serialization.DbBlockCount
+		(*DbBlockHeaderCount)(nil),          // 27: serialization.DbBlockHeaderCount
+		(*DbBlockGHOSTDAGDataHashPair)(nil), // 28: serialization.DbBlockGHOSTDAGDataHashPair
+	}
+)
+
 var file_dbobjects_proto_depIdxs = []int32{
 	1,  // 0: serialization.DbBlock.header:type_name -> serialization.DbBlockHeader
 	4,  // 1: serialization.DbBlock.transactions:type_name -> serialization.DbTransaction

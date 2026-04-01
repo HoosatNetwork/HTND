@@ -4,14 +4,14 @@
 package pow
 
 import (
+	"math/big"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
 	"github.com/Hoosat-Oy/HTND/util/difficulty"
-
-	"math/big"
 
 	"github.com/pkg/errors"
 )
@@ -91,7 +91,6 @@ func NewState(header externalapi.MutableBlockHeader) *State {
 			BlockVersion: header.Version(),
 		}
 	}
-
 }
 
 func (state *State) CalculateProofOfWorkValue() (*big.Int, *externalapi.DomainHash) {

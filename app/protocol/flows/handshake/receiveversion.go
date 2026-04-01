@@ -34,8 +34,8 @@ type receiveVersionFlow struct {
 // ReceiveVersion waits for the peer to send a version message, sends a
 // verack in response, and updates its info accordingly.
 func ReceiveVersion(context HandleHandshakeContext, incomingRoute *router.Route, outgoingRoute *router.Route,
-	peer *peerpkg.Peer) (*appmessage.NetAddress, error) {
-
+	peer *peerpkg.Peer,
+) (*appmessage.NetAddress, error) {
 	flow := &receiveVersionFlow{
 		HandleHandshakeContext: context,
 		incomingRoute:          incomingRoute,

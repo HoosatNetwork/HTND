@@ -9,7 +9,8 @@ import (
 
 // PopulateTransactionWithUTXOEntries populates the transaction UTXO entries with data from the virtual's UTXO set.
 func (csm *consensusStateManager) PopulateTransactionWithUTXOEntries(
-	stagingArea *model.StagingArea, transaction *externalapi.DomainTransaction) error {
+	stagingArea *model.StagingArea, transaction *externalapi.DomainTransaction,
+) error {
 	return csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, nil)
 }
 
@@ -17,7 +18,8 @@ func (csm *consensusStateManager) PopulateTransactionWithUTXOEntries(
 // from the virtual's UTXO set combined with the provided utxoDiff.
 // If utxoDiff == nil UTXO entries are taken from the virtual's UTXO set only
 func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea *model.StagingArea,
-	transaction *externalapi.DomainTransaction, utxoDiff externalapi.UTXODiff) error {
+	transaction *externalapi.DomainTransaction, utxoDiff externalapi.UTXODiff,
+) error {
 	// fast exit for coinbase
 	if len(transaction.Inputs) == 0 {
 		return nil
@@ -84,8 +86,8 @@ func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromVirtualO
 }
 
 func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromUTXOSet(
-	pruningPoint *externalapi.DomainBlock, iterator externalapi.ReadOnlyUTXOSetIterator) error {
-
+	pruningPoint *externalapi.DomainBlock, iterator externalapi.ReadOnlyUTXOSetIterator,
+) error {
 	// Collect the required outpoints from the block
 	outpointsForPopulation := make(map[externalapi.DomainOutpoint]any)
 	for _, transaction := range pruningPoint.Transactions {

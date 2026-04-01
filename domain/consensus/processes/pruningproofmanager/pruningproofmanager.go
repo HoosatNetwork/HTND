@@ -76,7 +76,6 @@ func New(
 	pruningProofM uint64,
 	maxBlockLevel int,
 ) model.PruningProofManager {
-
 	return &pruningProofManager{
 		databaseContext:      databaseContext,
 		dagTopologyManagers:  dagTopologyManagers,
@@ -613,7 +612,6 @@ func (ppm *pruningProofManager) dagProcesses(
 	[]model.DAGTopologyManager,
 	[]model.GHOSTDAGManager,
 ) {
-
 	reachabilityManagers := make([]model.ReachabilityManager, ppm.maxBlockLevel+1)
 	dagTopologyManagers := make([]model.DAGTopologyManager, ppm.maxBlockLevel+1)
 	ghostdagManagers := make([]model.GHOSTDAGManager, ppm.maxBlockLevel+1)
@@ -645,7 +643,8 @@ func (ppm *pruningProofManager) dagProcesses(
 }
 
 func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPointProof *externalapi.PruningPointProof,
-	targetReachabilityDataStore model.ReachabilityDataStore) error {
+	targetReachabilityDataStore model.ReachabilityDataStore,
+) error {
 	// We build a DAG of all multi-level relations between blocks in the proof. We make a upHeap of all blocks, so we can iterate
 	// over them in a topological way, and then build a DAG where we use all multi-level parents of a block to create edges, except
 	// parents that are already in the past of another parent (This can happen between two levels). We run GHOSTDAG on each block of

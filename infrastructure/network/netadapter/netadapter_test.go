@@ -15,7 +15,8 @@ import (
 // routerInitializerForTest returns new RouterInitializer which simply sets
 // new incoming route for router and stores this route in map for further usage in tests
 func routerInitializerForTest(t *testing.T, routes *sync.Map,
-	routeName string, wg *sync.WaitGroup) func(*router.Router, *NetConnection) {
+	routeName string, wg *sync.WaitGroup,
+) func(*router.Router, *NetConnection) {
 	return func(router *router.Router, connection *NetConnection) {
 		route, err := router.AddIncomingRoute(routeName, []appmessage.MessageCommand{appmessage.CmdPing})
 		if err != nil {

@@ -42,7 +42,8 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionWithAcceptanceData(stagingA
 }
 
 func (c *coinbaseManager) ExpectedCoinbaseTransaction(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	coinbaseData *externalapi.DomainCoinbaseData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
+	coinbaseData *externalapi.DomainCoinbaseData,
+) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
 	acceptanceData, err := c.acceptanceDataStore.Get(c.databaseContext, stagingArea, blockHash)
 	if database.IsNotFoundError(err) {
 		log.Infof("ExpectedCoinbaseTransaction failed to retrieve with %s\n", blockHash)
@@ -55,7 +56,6 @@ func (c *coinbaseManager) ExpectedCoinbaseTransaction(stagingArea *model.Staging
 }
 
 func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, coinbaseData *externalapi.DomainCoinbaseData, acceptanceData externalapi.AcceptanceData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
-
 	ghostdagData, err := c.ghostdagDataStore.Get(c.databaseContext, stagingArea, blockHash, true)
 	// If there's ghostdag data with trusted data we prefer it because we need the original merge set non-pruned merge set.
 	if database.IsNotFoundError(err) {
@@ -141,8 +141,8 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 }
 
 func (c *coinbaseManager) daaAddedBlocksSet(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
-	hashset.HashSet, error) {
-
+	hashset.HashSet, error,
+) {
 	daaAddedBlocks, err := c.daaBlocksStore.DAAAddedBlocks(c.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		return nil, err
@@ -155,8 +155,8 @@ func (c *coinbaseManager) daaAddedBlocksSet(stagingArea *model.StagingArea, bloc
 // If blueBlock gets no fee - returns nil for txOut
 func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.StagingArea,
 	blueBlock *externalapi.DomainHash, blockAcceptanceData *externalapi.BlockAcceptanceData,
-	mergingBlockDAAAddedBlocksSet hashset.HashSet) (*externalapi.DomainTransactionOutput, *externalapi.DomainTransactionOutput, bool, error) {
-
+	mergingBlockDAAAddedBlocksSet hashset.HashSet,
+) (*externalapi.DomainTransactionOutput, *externalapi.DomainTransactionOutput, bool, error) {
 	blockReward, err := c.calcMergedBlockReward(stagingArea, blueBlock, blockAcceptanceData, mergingBlockDAAAddedBlocksSet)
 	if err != nil {
 		return nil, nil, false, err
@@ -197,8 +197,8 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 
 func (c *coinbaseManager) coinbaseOutputForBlueBlockV1(stagingArea *model.StagingArea,
 	blueBlock *externalapi.DomainHash, blockAcceptanceData *externalapi.BlockAcceptanceData,
-	mergingBlockDAAAddedBlocksSet hashset.HashSet) (*externalapi.DomainTransactionOutput, bool, error) {
-
+	mergingBlockDAAAddedBlocksSet hashset.HashSet,
+) (*externalapi.DomainTransactionOutput, bool, error) {
 	blockReward, err := c.calcMergedBlockReward(stagingArea, blueBlock, blockAcceptanceData, mergingBlockDAAAddedBlocksSet)
 	if err != nil {
 		return nil, false, err
@@ -224,8 +224,8 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV1(stagingArea *model.Stagin
 
 func (c *coinbaseManager) coinbaseOutputForRewardFromRedBlocksV2(stagingArea *model.StagingArea,
 	ghostdagData *externalapi.BlockGHOSTDAGData, acceptanceData externalapi.AcceptanceData, daaAddedBlocksSet hashset.HashSet,
-	coinbaseData *externalapi.DomainCoinbaseData) (*externalapi.DomainTransactionOutput, *externalapi.DomainTransactionOutput, bool, error) {
-
+	coinbaseData *externalapi.DomainCoinbaseData,
+) (*externalapi.DomainTransactionOutput, *externalapi.DomainTransactionOutput, bool, error) {
 	acceptanceDataMap := acceptanceDataFromArrayToMap(acceptanceData)
 	totalReward := uint64(0)
 	for _, red := range ghostdagData.MergeSetReds() {
@@ -268,8 +268,8 @@ func (c *coinbaseManager) coinbaseOutputForRewardFromRedBlocksV2(stagingArea *mo
 
 func (c *coinbaseManager) coinbaseOutputForRewardFromRedBlocksV1(stagingArea *model.StagingArea,
 	ghostdagData *externalapi.BlockGHOSTDAGData, acceptanceData externalapi.AcceptanceData, daaAddedBlocksSet hashset.HashSet,
-	coinbaseData *externalapi.DomainCoinbaseData) (*externalapi.DomainTransactionOutput, bool, error) {
-
+	coinbaseData *externalapi.DomainCoinbaseData,
+) (*externalapi.DomainTransactionOutput, bool, error) {
 	acceptanceDataMap := acceptanceDataFromArrayToMap(acceptanceData)
 	totalReward := uint64(0)
 	for _, red := range ghostdagData.MergeSetReds() {
@@ -326,7 +326,7 @@ func (c *coinbaseManager) calcDeflationaryPeriodBlockSubsidy(blockDaaScore uint6
 	// We define a year as 365.25 days and a month as 365.25 / 12 = 30.4375
 	// secondsPerMonth = 30.4375 * 24 * 60 * 60 = 2629800
 	// blocksPerYear = 2629800 * 12 / 0.20s (5BPS) = 157788000
-	var blocksPerYear = uint64(31557600 / c.targetTimePerBlock[blockVersion-1].Seconds())
+	blocksPerYear := uint64(31557600 / c.targetTimePerBlock[blockVersion-1].Seconds())
 	// var blocksPerYear = uint64(31557600)
 	// Note that this calculation implicitly assumes that block per second = 1 (by assuming daa score diff is in second units).
 	var yearsSinceDeflationStarted uint64
@@ -374,8 +374,8 @@ func (c *coinbaseManager) calcDeflationaryPeriodBlockSubsidyFloatCalc(year uint6
 }
 
 func (c *coinbaseManager) calcMergedBlockReward(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	blockAcceptanceData *externalapi.BlockAcceptanceData, mergingBlockDAAAddedBlocksSet hashset.HashSet) (uint64, error) {
-
+	blockAcceptanceData *externalapi.BlockAcceptanceData, mergingBlockDAAAddedBlocksSet hashset.HashSet,
+) (uint64, error) {
 	if !blockHash.Equal(blockAcceptanceData.BlockHash) {
 		return 0, errors.Errorf("blockAcceptanceData.BlockHash is expected to be %s but got %s",
 			blockHash, blockAcceptanceData.BlockHash)
@@ -423,8 +423,8 @@ func New(
 	daaBlocksStore model.DAABlocksStore,
 	blockStore model.BlockStore,
 	pruningStore model.PruningStore,
-	blockHeaderStore model.BlockHeaderStore) model.CoinbaseManager {
-
+	blockHeaderStore model.BlockHeaderStore,
+) model.CoinbaseManager {
 	return &coinbaseManager{
 		databaseContext: databaseContext,
 

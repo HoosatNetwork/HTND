@@ -14,9 +14,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-var bucketChainBlockHashByIndexName = []byte("chain-block-hash-by-index")
-var bucketChainBlockIndexByHashName = []byte("chain-block-index-by-hash")
-var highestChainBlockIndexKeyName = []byte("highest-chain-block-index")
+var (
+	bucketChainBlockHashByIndexName = []byte("chain-block-hash-by-index")
+	bucketChainBlockIndexByHashName = []byte("chain-block-index-by-hash")
+	highestChainBlockIndexKeyName   = []byte("highest-chain-block-index")
+)
 
 type headersSelectedChainStore struct {
 	shardID                     model.StagingShardID

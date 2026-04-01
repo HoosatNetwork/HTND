@@ -6,10 +6,11 @@ package serialization
 
 import (
 	fmt "fmt"
+	io "io"
+
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	io "io"
 )
 
 const (
@@ -743,6 +744,7 @@ func (this *DbBlock) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockHeader) EqualVT(that *DbBlockHeader) bool {
 	if this == that {
 		return true
@@ -809,6 +811,7 @@ func (this *DbBlockHeader) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockLevelParents) EqualVT(that *DbBlockLevelParents) bool {
 	if this == that {
 		return true
@@ -842,6 +845,7 @@ func (this *DbBlockLevelParents) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbHash) EqualVT(that *DbHash) bool {
 	if this == that {
 		return true
@@ -861,6 +865,7 @@ func (this *DbHash) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbTransaction) EqualVT(that *DbTransaction) bool {
 	if this == that {
 		return true
@@ -926,6 +931,7 @@ func (this *DbTransaction) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbTransactionInput) EqualVT(that *DbTransactionInput) bool {
 	if this == that {
 		return true
@@ -954,6 +960,7 @@ func (this *DbTransactionInput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbOutpoint) EqualVT(that *DbOutpoint) bool {
 	if this == that {
 		return true
@@ -976,6 +983,7 @@ func (this *DbOutpoint) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbTransactionId) EqualVT(that *DbTransactionId) bool {
 	if this == that {
 		return true
@@ -995,6 +1003,7 @@ func (this *DbTransactionId) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbTransactionOutput) EqualVT(that *DbTransactionOutput) bool {
 	if this == that {
 		return true
@@ -1017,6 +1026,7 @@ func (this *DbTransactionOutput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbSubnetworkId) EqualVT(that *DbSubnetworkId) bool {
 	if this == that {
 		return true
@@ -1036,6 +1046,7 @@ func (this *DbSubnetworkId) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbAcceptanceData) EqualVT(that *DbAcceptanceData) bool {
 	if this == that {
 		return true
@@ -1069,6 +1080,7 @@ func (this *DbAcceptanceData) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockAcceptanceData) EqualVT(that *DbBlockAcceptanceData) bool {
 	if this == that {
 		return true
@@ -1105,6 +1117,7 @@ func (this *DbBlockAcceptanceData) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbTransactionAcceptanceData) EqualVT(that *DbTransactionAcceptanceData) bool {
 	if this == that {
 		return true
@@ -1147,6 +1160,7 @@ func (this *DbTransactionAcceptanceData) EqualMessageVT(thatMsg proto.Message) b
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockRelations) EqualVT(that *DbBlockRelations) bool {
 	if this == that {
 		return true
@@ -1197,6 +1211,7 @@ func (this *DbBlockRelations) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockStatus) EqualVT(that *DbBlockStatus) bool {
 	if this == that {
 		return true
@@ -1216,6 +1231,7 @@ func (this *DbBlockStatus) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockGhostdagData) EqualVT(that *DbBlockGhostdagData) bool {
 	if this == that {
 		return true
@@ -1292,6 +1308,7 @@ func (this *DbBlockGhostdagData) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBluesAnticoneSizes) EqualVT(that *DbBluesAnticoneSizes) bool {
 	if this == that {
 		return true
@@ -1314,6 +1331,7 @@ func (this *DbBluesAnticoneSizes) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbMultiset) EqualVT(that *DbMultiset) bool {
 	if this == that {
 		return true
@@ -1333,6 +1351,7 @@ func (this *DbMultiset) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbUtxoSet) EqualVT(that *DbUtxoSet) bool {
 	if this == that {
 		return true
@@ -1366,6 +1385,7 @@ func (this *DbUtxoSet) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbUtxoCollectionItem) EqualVT(that *DbUtxoCollectionItem) bool {
 	if this == that {
 		return true
@@ -1388,6 +1408,7 @@ func (this *DbUtxoCollectionItem) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbScriptPublicKey) EqualVT(that *DbScriptPublicKey) bool {
 	if this == that {
 		return true
@@ -1410,6 +1431,7 @@ func (this *DbScriptPublicKey) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbUtxoEntry) EqualVT(that *DbUtxoEntry) bool {
 	if this == that {
 		return true
@@ -1438,6 +1460,7 @@ func (this *DbUtxoEntry) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbReachabilityData) EqualVT(that *DbReachabilityData) bool {
 	if this == that {
 		return true
@@ -1494,6 +1517,7 @@ func (this *DbReachabilityData) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbReachabilityInterval) EqualVT(that *DbReachabilityInterval) bool {
 	if this == that {
 		return true
@@ -1516,6 +1540,7 @@ func (this *DbReachabilityInterval) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbUtxoDiff) EqualVT(that *DbUtxoDiff) bool {
 	if this == that {
 		return true
@@ -1566,6 +1591,7 @@ func (this *DbUtxoDiff) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbTips) EqualVT(that *DbTips) bool {
 	if this == that {
 		return true
@@ -1599,6 +1625,7 @@ func (this *DbTips) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockCount) EqualVT(that *DbBlockCount) bool {
 	if this == that {
 		return true
@@ -1618,6 +1645,7 @@ func (this *DbBlockCount) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockHeaderCount) EqualVT(that *DbBlockHeaderCount) bool {
 	if this == that {
 		return true
@@ -1637,6 +1665,7 @@ func (this *DbBlockHeaderCount) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+
 func (this *DbBlockGHOSTDAGDataHashPair) EqualVT(that *DbBlockGHOSTDAGDataHashPair) bool {
 	if this == that {
 		return true
@@ -1659,6 +1688,7 @@ func (this *DbBlockGHOSTDAGDataHashPair) EqualMessageVT(thatMsg proto.Message) b
 	}
 	return this.EqualVT(that)
 }
+
 func (m *DbBlock) MarshalVT() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -5554,6 +5584,7 @@ func (m *DbBlock) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockHeader) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5931,6 +5962,7 @@ func (m *DbBlockHeader) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockLevelParents) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6016,6 +6048,7 @@ func (m *DbBlockLevelParents) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbHash) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6101,6 +6134,7 @@ func (m *DbHash) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransaction) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6347,6 +6381,7 @@ func (m *DbTransaction) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionInput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6506,6 +6541,7 @@ func (m *DbTransactionInput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbOutpoint) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6612,6 +6648,7 @@ func (m *DbOutpoint) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionId) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6697,6 +6734,7 @@ func (m *DbTransactionId) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionOutput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6803,6 +6841,7 @@ func (m *DbTransactionOutput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbSubnetworkId) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6888,6 +6927,7 @@ func (m *DbSubnetworkId) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbAcceptanceData) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -6973,6 +7013,7 @@ func (m *DbAcceptanceData) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockAcceptanceData) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7094,6 +7135,7 @@ func (m *DbBlockAcceptanceData) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionAcceptanceData) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7254,6 +7296,7 @@ func (m *DbTransactionAcceptanceData) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockRelations) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7373,6 +7416,7 @@ func (m *DbBlockRelations) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockStatus) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7443,6 +7487,7 @@ func (m *DbBlockStatus) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockGhostdagData) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7685,6 +7730,7 @@ func (m *DbBlockGhostdagData) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBluesAnticoneSizes) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7791,6 +7837,7 @@ func (m *DbBluesAnticoneSizes) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbMultiset) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7876,6 +7923,7 @@ func (m *DbMultiset) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoSet) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -7961,6 +8009,7 @@ func (m *DbUtxoSet) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoCollectionItem) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8084,6 +8133,7 @@ func (m *DbUtxoCollectionItem) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8188,6 +8238,7 @@ func (m *DbScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoEntry) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8333,6 +8384,7 @@ func (m *DbUtxoEntry) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbReachabilityData) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8524,6 +8576,7 @@ func (m *DbReachabilityData) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbReachabilityInterval) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8613,6 +8666,7 @@ func (m *DbReachabilityInterval) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoDiff) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8732,6 +8786,7 @@ func (m *DbUtxoDiff) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTips) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8817,6 +8872,7 @@ func (m *DbTips) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockCount) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8887,6 +8943,7 @@ func (m *DbBlockCount) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockHeaderCount) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -8957,6 +9014,7 @@ func (m *DbBlockHeaderCount) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockGHOSTDAGDataHashPair) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9080,6 +9138,7 @@ func (m *DbBlockGHOSTDAGDataHashPair) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlock) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9201,6 +9260,7 @@ func (m *DbBlock) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockHeader) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9575,6 +9635,7 @@ func (m *DbBlockHeader) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockLevelParents) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9660,6 +9721,7 @@ func (m *DbBlockLevelParents) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbHash) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9742,6 +9804,7 @@ func (m *DbHash) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransaction) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -9985,6 +10048,7 @@ func (m *DbTransaction) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10141,6 +10205,7 @@ func (m *DbTransactionInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbOutpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10247,6 +10312,7 @@ func (m *DbOutpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionId) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10329,6 +10395,7 @@ func (m *DbTransactionId) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionOutput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10435,6 +10502,7 @@ func (m *DbTransactionOutput) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbSubnetworkId) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10517,6 +10585,7 @@ func (m *DbSubnetworkId) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbAcceptanceData) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10602,6 +10671,7 @@ func (m *DbAcceptanceData) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockAcceptanceData) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10723,6 +10793,7 @@ func (m *DbBlockAcceptanceData) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTransactionAcceptanceData) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10883,6 +10954,7 @@ func (m *DbTransactionAcceptanceData) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockRelations) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11002,6 +11074,7 @@ func (m *DbBlockRelations) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockStatus) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11072,6 +11145,7 @@ func (m *DbBlockStatus) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockGhostdagData) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11311,6 +11385,7 @@ func (m *DbBlockGhostdagData) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBluesAnticoneSizes) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11417,6 +11492,7 @@ func (m *DbBluesAnticoneSizes) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbMultiset) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11499,6 +11575,7 @@ func (m *DbMultiset) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoSet) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11584,6 +11661,7 @@ func (m *DbUtxoSet) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoCollectionItem) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11707,6 +11785,7 @@ func (m *DbUtxoCollectionItem) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11808,6 +11887,7 @@ func (m *DbScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11953,6 +12033,7 @@ func (m *DbUtxoEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbReachabilityData) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12144,6 +12225,7 @@ func (m *DbReachabilityData) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbReachabilityInterval) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12233,6 +12315,7 @@ func (m *DbReachabilityInterval) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbUtxoDiff) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12352,6 +12435,7 @@ func (m *DbUtxoDiff) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbTips) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12437,6 +12521,7 @@ func (m *DbTips) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockCount) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12507,6 +12592,7 @@ func (m *DbBlockCount) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockHeaderCount) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12577,6 +12663,7 @@ func (m *DbBlockHeaderCount) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *DbBlockGHOSTDAGDataHashPair) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0

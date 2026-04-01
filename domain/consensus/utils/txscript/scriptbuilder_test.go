@@ -6,8 +6,9 @@ package txscript
 
 import (
 	"bytes"
-	"github.com/pkg/errors"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 // TestScriptBuilderAddOp tests that pushing opcodes to a script via the
@@ -76,7 +77,6 @@ func TestScriptBuilderAddOp(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 // TestScriptBuilderAddInt64 tests that pushing signed integers to a script via

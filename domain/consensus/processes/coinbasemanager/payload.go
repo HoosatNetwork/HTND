@@ -8,16 +8,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-const uint64Len = 8
-const uint16Len = 2
-const lengthOfSubsidy = uint64Len
-const lengthOfScriptPubKeyLength = 1
-const lengthOfVersionScriptPubKey = uint16Len
+const (
+	uint64Len                   = 8
+	uint16Len                   = 2
+	lengthOfSubsidy             = uint64Len
+	lengthOfScriptPubKeyLength  = 1
+	lengthOfVersionScriptPubKey = uint16Len
+)
 
 // serializeCoinbasePayload builds the coinbase payload based on the provided scriptPubKey and extra data.
 func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
-	coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64) ([]byte, error) {
-
+	coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64,
+) ([]byte, error) {
 	scriptLengthOfScriptPubKey := len(coinbaseData.ScriptPublicKey.Script)
 	if scriptLengthOfScriptPubKey > int(c.coinbasePayloadScriptPublicKeyMaxLength) {
 		return nil, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen, "coinbase's payload script public key is "+
@@ -38,7 +40,6 @@ func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
 
 // ModifyCoinbasePayload modifies the coinbase payload based on the provided scriptPubKey and extra data.
 func ModifyCoinbasePayload(payload []byte, coinbaseData *externalapi.DomainCoinbaseData, coinbasePayloadScriptPublicKeyMaxLength uint8) ([]byte, error) {
-
 	scriptLengthOfScriptPubKey := len(coinbaseData.ScriptPublicKey.Script)
 	if scriptLengthOfScriptPubKey > int(coinbasePayloadScriptPublicKeyMaxLength) {
 		return nil, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen, "coinbase's payload script public key is "+
@@ -62,8 +63,8 @@ func ModifyCoinbasePayload(payload []byte, coinbaseData *externalapi.DomainCoinb
 
 // ExtractCoinbaseDataBlueScoreAndSubsidy deserializes the coinbase payload to its component (scriptPubKey, extra data, and subsidy).
 func (c *coinbaseManager) ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTx *externalapi.DomainTransaction) (
-	blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error) {
-
+	blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error,
+) {
 	minLength := uint64Len + lengthOfSubsidy + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength
 	if len(coinbaseTx.Payload) < minLength {
 		return 0, nil, 0, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen,

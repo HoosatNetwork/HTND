@@ -316,7 +316,8 @@ func TestOrphanTransactions(t *testing.T) {
 
 		block, _, err := miningManager.GetBlockTemplate(&externalapi.DomainCoinbaseData{
 			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0},
-			ExtraData:       nil})
+			ExtraData:       nil,
+		})
 		if err != nil {
 			t.Fatalf("Failed get a block template: %v", err)
 		}
@@ -362,7 +363,8 @@ func TestOrphanTransactions(t *testing.T) {
 		}
 		block, _, err = miningManager.GetBlockTemplate(&externalapi.DomainCoinbaseData{
 			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0},
-			ExtraData:       nil})
+			ExtraData:       nil,
+		})
 		if err != nil {
 			t.Fatalf("GetBlockTemplate: %v", err)
 		}
@@ -431,8 +433,7 @@ func TestHighPriorityTransactions(t *testing.T) {
 
 		// Submit all the parents.
 		// Low priority transaction will only accept the parent, since the child was evicted from orphanPool
-		lowPriorityAcceptedTransactions, err :=
-			miningManager.ValidateAndInsertTransaction(lowPriorityParentTransaction, false, true)
+		lowPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(lowPriorityParentTransaction, false, true)
 		if err != nil {
 			t.Fatalf("error submitting low-priority transaction: %+v", err)
 		}
@@ -449,13 +450,11 @@ func TestHighPriorityTransactions(t *testing.T) {
 		// Both high priority transactions should accept parent and child
 
 		// Insert firstHighPriorityParentTransaction
-		firstHighPriorityAcceptedTransactions, err :=
-			miningManager.ValidateAndInsertTransaction(firstHighPriorityParentTransaction, true, true)
+		firstHighPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(firstHighPriorityParentTransaction, true, true)
 		if err != nil {
 			t.Fatalf("error submitting first high-priority transaction: %+v", err)
 		}
-		expectedFirstHighPriorityAcceptedTransactions :=
-			[]*externalapi.DomainTransaction{firstHighPriorityParentTransaction, firstHighPriorityChildTransaction}
+		expectedFirstHighPriorityAcceptedTransactions := []*externalapi.DomainTransaction{firstHighPriorityParentTransaction, firstHighPriorityChildTransaction}
 		if !reflect.DeepEqual(
 			transactionIDsAsValues(firstHighPriorityAcceptedTransactions),
 			transactionIDsAsValues(expectedFirstHighPriorityAcceptedTransactions),
@@ -466,13 +465,11 @@ func TestHighPriorityTransactions(t *testing.T) {
 				consensushashing.TransactionIDs(firstHighPriorityAcceptedTransactions))
 		}
 		// Insert secondHighPriorityParentTransaction
-		secondHighPriorityAcceptedTransactions, err :=
-			miningManager.ValidateAndInsertTransaction(secondHighPriorityParentTransaction, true, true)
+		secondHighPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(secondHighPriorityParentTransaction, true, true)
 		if err != nil {
 			t.Fatalf("error submitting second high-priority transaction: %+v", err)
 		}
-		expectedSecondHighPriorityAcceptedTransactions :=
-			[]*externalapi.DomainTransaction{secondHighPriorityParentTransaction, secondHighPriorityChildTransaction}
+		expectedSecondHighPriorityAcceptedTransactions := []*externalapi.DomainTransaction{secondHighPriorityParentTransaction, secondHighPriorityChildTransaction}
 		if !reflect.DeepEqual(
 			transactionIDsAsValues(secondHighPriorityAcceptedTransactions),
 			transactionIDsAsValues(expectedSecondHighPriorityAcceptedTransactions),
@@ -702,7 +699,8 @@ func TestModifyBlockTemplate(t *testing.T) {
 
 		emptyCoinbaseData := &externalapi.DomainCoinbaseData{
 			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0},
-			ExtraData:       nil}
+			ExtraData:       nil,
+		}
 		block, _, err := miningManager.GetBlockTemplate(emptyCoinbaseData)
 		if err != nil {
 			t.Fatalf("Failed get a block template: %v", err)
@@ -828,7 +826,8 @@ func TestModifyBlockTemplate(t *testing.T) {
 }
 
 func sweepCompareModifiedTemplateToBuilt(
-	t *testing.T, consensusConfig *consensus.Config, builder model.BlockTemplateBuilder) {
+	t *testing.T, consensusConfig *consensus.Config, builder model.BlockTemplateBuilder,
+) {
 	for range 4 {
 		// Run a few times to get more randomness
 		compareModifiedTemplateToBuilt(t, consensusConfig, builder, opUsual, opUsual)
@@ -853,7 +852,8 @@ const (
 
 func compareModifiedTemplateToBuilt(
 	t *testing.T, consensusConfig *consensus.Config, builder model.BlockTemplateBuilder,
-	firstCoinbaseOp, secondCoinbaseOp opType) {
+	firstCoinbaseOp, secondCoinbaseOp opType,
+) {
 	coinbase1, err := generateNewCoinbase(consensusConfig.Params.Prefix, firstCoinbaseOp)
 	if err != nil {
 		t.Fatalf("Failed to generate new coinbase: %v", err)
@@ -966,14 +966,15 @@ func createTransactionWithUTXOEntry(t *testing.T, i int, daaScore uint64) *exter
 		Gas:          0,
 		Fee:          289,
 		Mass:         1,
-		LockTime:     0}
+		LockTime:     0,
+	}
 
 	return &tx
 }
 
 func createArraysOfParentAndChildrenTransactions(tc testapi.TestConsensus) ([]*externalapi.DomainTransaction,
-	[]*externalapi.DomainTransaction, error) {
-
+	[]*externalapi.DomainTransaction, error,
+) {
 	const numOfTransactions = 5
 	transactions := make([]*externalapi.DomainTransaction, numOfTransactions)
 	parentTransactions := make([]*externalapi.DomainTransaction, len(transactions))
@@ -988,8 +989,8 @@ func createArraysOfParentAndChildrenTransactions(tc testapi.TestConsensus) ([]*e
 }
 
 func createParentAndChildrenTransactions(tc testapi.TestConsensus) (txParent *externalapi.DomainTransaction,
-	txChild *externalapi.DomainTransaction, err error) {
-
+	txChild *externalapi.DomainTransaction, err error,
+) {
 	chain, err := createTxChain(tc, 2)
 	if err != nil {
 		return nil, nil, err

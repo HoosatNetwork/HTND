@@ -27,7 +27,6 @@ func (dbw *dbManager) Get(key model.DBKey) ([]byte, error) {
 
 	for attempt := range maxGetRetryAttempts {
 		data, err := dbw.db.Get(databaseKey)
-
 		// If there was an error, return it immediately (no retry for errors)
 		if err != nil {
 			return nil, err

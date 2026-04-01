@@ -6,7 +6,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
-func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection, buffer *memory.Block[*DbUtxoCollectionItem]) ([]*DbUtxoCollectionItem, error) {
+func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection, buffer *memory.Block[*DbUtxoCollectionItem]) ([]*DbUtxoCollectionItem, *memory.Block[*DbUtxoCollectionItem], error) {
 	count := utxoCollection.Len()
 	if buffer == nil || cap(buffer.Slice()) < count {
 		buffer = memory.Realloc(buffer, count)
@@ -17,7 +17,7 @@ func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection,
 	for ok := utxoIterator.First(); ok; ok = utxoIterator.Next() {
 		outpoint, entry, err := utxoIterator.Get()
 		if err != nil {
-			return nil, err
+			return nil, buffer, err
 		}
 
 		items = append(items, &DbUtxoCollectionItem{
@@ -26,7 +26,7 @@ func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection,
 		})
 	}
 
-	return items, nil
+	return items, buffer, nil
 }
 
 func dbUTXOCollectionToUTXOCollection(items []*DbUtxoCollectionItem) (externalapi.UTXOCollection, error) {

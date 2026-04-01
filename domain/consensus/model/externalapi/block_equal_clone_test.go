@@ -20,7 +20,6 @@ type TestBlockStruct struct {
 }
 
 func initTestBaseTransactions() []*externalapi.DomainTransaction {
-
 	testTx := []*externalapi.DomainTransaction{{
 		Version:      1,
 		Inputs:       []*externalapi.DomainTransactionInput{},
@@ -35,13 +34,13 @@ func initTestBaseTransactions() []*externalapi.DomainTransaction {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+		}),
 	}}
 	return testTx
 }
 
 func initTestAnotherTransactions() []*externalapi.DomainTransaction {
-
 	testTx := []*externalapi.DomainTransaction{{
 		Version:      1,
 		Inputs:       []*externalapi.DomainTransactionInput{},
@@ -56,13 +55,13 @@ func initTestAnotherTransactions() []*externalapi.DomainTransaction {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		}),
 	}}
 	return testTx
 }
 
 func initTestTwoTransactions() []*externalapi.DomainTransaction {
-
 	testTx := []*externalapi.DomainTransaction{{
 		Version:      1,
 		Inputs:       []*externalapi.DomainTransactionInput{},
@@ -77,7 +76,8 @@ func initTestTwoTransactions() []*externalapi.DomainTransaction {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		}),
 	}, {
 		Version:      1,
 		Inputs:       []*externalapi.DomainTransactionInput{},
@@ -92,7 +92,8 @@ func initTestTwoTransactions() []*externalapi.DomainTransaction {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		}),
 	}}
 	return testTx
 }
@@ -216,7 +217,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -236,7 +238,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: true,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -259,7 +262,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -279,7 +283,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -299,7 +304,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -319,7 +325,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -339,7 +346,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -359,7 +367,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -379,7 +388,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -399,7 +409,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -419,7 +430,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -439,7 +451,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -459,7 +472,8 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 						powHash,
 					},
 					expectedResult: false,
-				}, {
+				},
+				{
 					block: &externalapi.DomainBlock{
 						blockheader.NewImmutableBlockHeader(
 							0,
@@ -488,7 +502,6 @@ func initTestBlockStructsForEqual() *[]TestBlockStruct {
 }
 
 func TestDomainBlock_Equal(t *testing.T) {
-
 	blockTests := initTestBlockStructsForEqual()
 	for i, test := range *blockTests {
 		for j, subTest := range test.blocksToCompareTo {
@@ -502,11 +515,9 @@ func TestDomainBlock_Equal(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestDomainBlock_Clone(t *testing.T) {
-
 	blocks := initTestBlockStructsForClone()
 	for i, block := range blocks {
 		blockClone := block.Clone()

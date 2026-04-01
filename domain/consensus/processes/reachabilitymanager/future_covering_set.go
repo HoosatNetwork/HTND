@@ -82,8 +82,8 @@ func (rt *reachabilityManager) insertToFutureCoveringSet(stagingArea *model.Stag
 // binary search over this.FutureCoveringSet and answer the query in
 // O(log(|futureCoveringTreeNodeSet|)).
 func (rt *reachabilityManager) futureCoveringSetHasAncestorOf(stagingArea *model.StagingArea,
-	this, other *externalapi.DomainHash) (bool, error) {
-
+	this, other *externalapi.DomainHash,
+) (bool, error) {
 	futureCoveringSet, err := rt.futureCoveringSet(stagingArea, this)
 	if err != nil {
 		return false, err

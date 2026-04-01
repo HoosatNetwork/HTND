@@ -120,8 +120,8 @@ func NewFactory() Factory {
 // NewConsensus instantiates a new Consensus
 func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Database, dbPrefix *prefix.Prefix,
 	consensusEventsChan chan externalapi.ConsensusEvent) (
-	consensusInstance externalapi.Consensus, shouldMigrate bool, err error) {
-
+	consensusInstance externalapi.Consensus, shouldMigrate bool, err error,
+) {
 	// Set the global flag for using hoohash C library
 	pow.SetUseHoohashCLibrary(config.UseHoohashCLibrary)
 
@@ -596,7 +596,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 }
 
 func (f *factory) NewTestConsensus(config *Config, testName string) (
-	tc testapi.TestConsensus, teardown func(keepDataDir bool), err error) {
+	tc testapi.TestConsensus, teardown func(keepDataDir bool), err error,
+) {
 	datadir := f.dataDir
 	if datadir == "" {
 		datadir, err = os.MkdirTemp("", testName)
@@ -676,6 +677,7 @@ func (f *factory) SetTestDifficultyManager(difficultyConstructor DifficultyManag
 func (f *factory) SetTestLevelDBCacheSize(cacheSizeMiB int) {
 	f.cacheSizeMiB = &cacheSizeMiB
 }
+
 func (f *factory) SetTestPreAllocateCache(preallocateCaches bool) {
 	f.preallocateCaches = &preallocateCaches
 }
@@ -683,8 +685,8 @@ func (f *factory) SetTestPreAllocateCache(preallocateCaches bool) {
 func dagStores(config *Config,
 	prefixBucket model.DBBucket,
 	pruningWindowSizePlusFinalityDepthForCache, pruningWindowSizeForCaches int,
-	preallocateCaches bool) ([]model.BlockRelationStore, []model.ReachabilityDataStore, []model.GHOSTDAGDataStore) {
-
+	preallocateCaches bool,
+) ([]model.BlockRelationStore, []model.ReachabilityDataStore, []model.GHOSTDAGDataStore) {
 	blockRelationStores := make([]model.BlockRelationStore, config.MaxBlockLevel+1)
 	reachabilityDataStores := make([]model.ReachabilityDataStore, config.MaxBlockLevel+1)
 	ghostdagDataStores := make([]model.GHOSTDAGDataStore, config.MaxBlockLevel+1)
@@ -721,7 +723,6 @@ func (f *factory) dagProcesses(config *Config,
 	[]model.GHOSTDAGManager,
 	[]model.DAGTraversalManager,
 ) {
-
 	reachabilityManagers := make([]model.ReachabilityManager, config.MaxBlockLevel+1)
 	dagTopologyManagers := make([]model.DAGTopologyManager, config.MaxBlockLevel+1)
 	ghostdagManagers := make([]model.GHOSTDAGManager, config.MaxBlockLevel+1)

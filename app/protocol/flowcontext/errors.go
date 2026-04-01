@@ -12,10 +12,8 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 )
 
-var (
-	// ErrPingTimeout signifies that a ping operation timed out.
-	ErrPingTimeout = protocolerrors.New(false, "timeout expired on ping")
-)
+// ErrPingTimeout signifies that a ping operation timed out.
+var ErrPingTimeout = protocolerrors.New(false, "timeout expired on ping")
 
 // HandleError handles an error from a flow,
 // It sends the error to errChan if isStopping == 0 and increments isStopping

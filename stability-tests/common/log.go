@@ -13,8 +13,10 @@ import (
 // log is a logger that is initialized with no output filters. This
 // means the package will not perform any logging by default until the caller
 // requests it.
-var log *logger.Logger
-var spawn func(name string, spawnedFunction func())
+var (
+	log   *logger.Logger
+	spawn func(name string, spawnedFunction func())
+)
 
 const logSubsytem = "STCM"
 

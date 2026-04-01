@@ -30,8 +30,8 @@ func EmptyReachabilityData() model.MutableReachabilityData {
 func New(children []*externalapi.DomainHash,
 	parent *externalapi.DomainHash,
 	interval *model.ReachabilityInterval,
-	futureCoveringSet model.FutureCoveringTreeNodeSet) model.ReachabilityData {
-
+	futureCoveringSet model.FutureCoveringTreeNodeSet,
+) model.ReachabilityData {
 	return &reachabilityData{
 		children:          children,
 		parent:            parent,
@@ -57,7 +57,7 @@ func (rd *reachabilityData) FutureCoveringSet() model.FutureCoveringTreeNodeSet 
 }
 
 func (rd *reachabilityData) CloneMutable() model.MutableReachabilityData {
-	//return rd
+	// return rd
 	return &reachabilityData{
 		children:          externalapi.CloneHashes(rd.children),
 		parent:            rd.parent,

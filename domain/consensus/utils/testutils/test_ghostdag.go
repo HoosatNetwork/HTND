@@ -18,8 +18,8 @@ type testGhostDAGSorter struct {
 
 // NewTestGhostDAGSorter returns a sort.Interface over the slice, so you can sort it via GhostDAG ordering
 func NewTestGhostDAGSorter(stagingArea *model.StagingArea, slice []*externalapi.DomainHash, tc testapi.TestConsensus,
-	t testing.TB) sort.Interface {
-
+	t testing.TB,
+) sort.Interface {
 	return testGhostDAGSorter{
 		slice:       slice,
 		tc:          tc,
