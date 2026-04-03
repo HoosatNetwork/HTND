@@ -182,8 +182,9 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 		}
 
 		root := blockAtDepth2M
+		var blockAtDepthMAtNextLevel *externalapi.DomainHash
 		if blockLevel != maxLevel {
-			blockAtDepthMAtNextLevel, err := ppm.blockAtDepth(stagingArea, ppm.ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
+			blockAtDepthMAtNextLevel, err = ppm.blockAtDepth(stagingArea, ppm.ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
 			if err != nil {
 				return nil, err
 			}
@@ -244,12 +245,22 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 			}
 
 			visited.Add(current)
-			isAncestorOfSelectedTip, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, selectedTip)
+			isRelevantForProof, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, selectedTip)
 			if err != nil {
 				return nil, err
 			}
 
-			if !isAncestorOfSelectedTip {
+			// Proof levels above the pruning point must also include (and connect to) the block-at-depth-m
+			// of the selected tip in the next level, even when it's not on the selected tip cone of this
+			// level. This is required so the validator can link adjacent proof levels.
+			if !isRelevantForProof && blockAtDepthMAtNextLevel != nil {
+				isRelevantForProof, err = ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, blockAtDepthMAtNextLevel)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			if !isRelevantForProof {
 				continue
 			}
 
