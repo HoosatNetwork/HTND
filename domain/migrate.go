@@ -225,7 +225,7 @@ func syncConsensuses(syncer, syncee externalapi.Consensus) error {
 	}
 
 	err = syncer.ResolveVirtual(func(virtualDAAScoreStart uint64, virtualDAAScore uint64) {
-		if estimatedVirtualDAAScoreTarget-virtualDAAScoreStart <= 0 {
+		if estimatedVirtualDAAScoreTarget <= virtualDAAScoreStart {
 			percents = 100
 		} else {
 			percents = int(float64(virtualDAAScore-virtualDAAScoreStart) / float64(estimatedVirtualDAAScoreTarget-virtualDAAScoreStart) * 100)
