@@ -167,17 +167,15 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		return nil, false, err
 	}
 
-	if processingPointStatus == externalapi.StatusUTXOValid {
-		err = staging.CommitAllChanges(csm.databaseContext, resolveStagingArea)
+	err = staging.CommitAllChanges(csm.databaseContext, resolveStagingArea)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if processingPointStatus == externalapi.StatusUTXOValid && reversalData != nil {
+		err = csm.ReverseUTXODiffs(processingPoint, reversalData)
 		if err != nil {
 			return nil, false, err
-		}
-
-		if reversalData != nil {
-			err = csm.ReverseUTXODiffs(processingPoint, reversalData)
-			if err != nil {
-				return nil, false, err
-			}
 		}
 	}
 
