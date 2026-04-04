@@ -11,7 +11,7 @@ set -euo pipefail
 # Designed to work both when run normally:
 #   bash start-htnd.sh
 # and when piped from the internet (prompts use /dev/tty):
-#   curl -fsSL https://example.com/start-htnd.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/HoosatNetwork/HTND/master/start-htnd.sh | bash
 #
 # This script can DOWNLOAD+INSTALL HTND (optional), then start it.
 
@@ -233,7 +233,7 @@ resolve_htnd_bin() {
 print_usage() {
   cat <<'USAGE'
 Usage:
-  ./docs/start-htnd.sh
+  ./start-htnd.sh
 
 Optional environment variables:
   HTND_BIN       Path to HTND binary (e.g. /home/htnd/bin/HTND)
@@ -247,6 +247,9 @@ Optional environment variables:
   HTND_DETACH    yes|no (default: no)
   HTND_LOGLEVEL  trace|debug|info|warn|error|critical
   HTND_UTXOINDEX  yes|no (default: yes)
+
+One-liner (runs interactively):
+  curl -fsSL https://raw.githubusercontent.com/HoosatNetwork/HTND/master/start-htnd.sh | bash
 USAGE
 }
 
