@@ -132,6 +132,7 @@ type Flags struct {
 	UTXOIndex                       bool          `long:"utxoindex" description:"Enable the UTXO index"`
 	IsArchivalNode                  bool          `long:"archival" description:"Run as an archival node: don't delete old block data when moving the pruning point. (Warning: heavy disk usage)'"`
 	DataRetentionHours              uint64        `long:"data-retention-hours" description:"Minimum number of hours of chain data to keep before allowing pruning deletion. 0 means prune immediately as normal. (Warning: Setting a high value may significantly increase disk usage.)"`
+	PruningIntervalSeconds          uint64        `long:"pruning-interval-seconds" description:"Minimum number of seconds between pruning deletions. 0 means prune at every pruning point update as normal."`
 	DeletionDepth                   uint64        `long:"deletion-depth" hidden:"true" description:"The depth at which pruning deletes blocks, multiplies pruning depth. Defaults to 0, which uses the configured pruning depth. (Warning: Setting a custom depth may significantly increase disk usage.)"`
 	AllowSubmitBlockWhenNotSynced   bool          `long:"allow-submit-block-when-not-synced" hidden:"true" description:"Allow the node to accept blocks from RPC while not synced (this flag is mainly used for testing)"`
 	EnableSanityCheckPruningUTXOSet bool          `long:"enable-sanity-check-pruning-utxo" hidden:"true" description:"When moving the pruning point - check that the utxo set matches the utxo commitment"`
@@ -362,6 +363,15 @@ func LoadConfig() (*Config, error) {
 	if cfg.IsArchivalNode && cfg.DataRetentionHours > 0 {
 		str := "%s: archival and data-retention-hours cannot be used " +
 			"together -- archival mode already keeps all data"
+		err := errors.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, err
+	}
+
+	if cfg.IsArchivalNode && cfg.PruningIntervalSeconds > 0 {
+		str := "%s: archival and pruning-interval-seconds cannot be used " +
+			"together -- archival mode does not prune"
 		err := errors.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)

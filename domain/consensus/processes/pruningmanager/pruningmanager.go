@@ -45,12 +45,15 @@ type pruningManager struct {
 	finalityInterval                uint64
 	pruningDepth                    uint64
 	deletionDepth                   uint64
+	dataRetentionDuration           time.Duration
+	pruningInterval                 time.Duration
 	shouldSanityCheckPruningUTXOSet bool
 	k                               []externalapi.KType
 	difficultyAdjustmentWindowSize  []int
 
 	targetTimePerBlock []time.Duration
 
+	lastPruningTime            time.Time
 	cachedPruningPoint         *externalapi.DomainHash
 	cachedPruningPointAnticone []*externalapi.DomainHash
 }
@@ -83,6 +86,8 @@ func New(
 	finalityInterval uint64,
 	pruningDepth uint64,
 	deletionDepth uint64,
+	dataRetentionDuration time.Duration,
+	pruningInterval time.Duration,
 	shouldSanityCheckPruningUTXOSet bool,
 	k []externalapi.KType,
 	difficultyAdjustmentWindowSize []int,
@@ -113,6 +118,8 @@ func New(
 		genesisHash:                     genesisHash,
 		pruningDepth:                    pruningDepth,
 		deletionDepth:                   deletionDepth,
+		dataRetentionDuration:           dataRetentionDuration,
+		pruningInterval:                 pruningInterval,
 		finalityInterval:                finalityInterval,
 		shouldSanityCheckPruningUTXOSet: shouldSanityCheckPruningUTXOSet,
 		k:                               k,
@@ -1072,6 +1079,40 @@ func (pm *pruningManager) CheckIfShouldDeletePastBlocks(stagingArea *model.Stagi
 	return true, previousDeletionPoint
 }
 
+// shouldDeferDeletion returns true if block deletion should be skipped this time based on
+// data retention and pruning interval constraints. It is designed to be safe during IBD:
+// when the pruning point is far in the past (as it is during initial or partial IBD),
+// the retention check will not trigger, so deletion proceeds normally.
+func (pm *pruningManager) shouldDeferDeletion(stagingArea *model.StagingArea, pruningPoint *externalapi.DomainHash) bool {
+	// Check pruning interval: if configured and not enough time has passed since the last deletion, defer.
+	if pm.pruningInterval > 0 && !pm.lastPruningTime.IsZero() {
+		if time.Since(pm.lastPruningTime) < pm.pruningInterval {
+			log.Debugf("Pruning interval not reached: %s since last pruning, interval is %s",
+				time.Since(pm.lastPruningTime), pm.pruningInterval)
+			return true
+		}
+	}
+
+	// Check data retention: if configured, check whether the pruning point's blocks
+	// are still within the retention window (i.e., too recent to delete).
+	if pm.dataRetentionDuration > 0 {
+		pruningPointHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPoint)
+		if err != nil {
+			log.Warnf("Failed to get pruning point header for retention check: %s", err)
+			return false
+		}
+		pruningPointTime := time.UnixMilli(pruningPointHeader.TimeInMilliseconds())
+		blockAge := time.Since(pruningPointTime)
+		if blockAge < pm.dataRetentionDuration {
+			log.Debugf("Data retention constraint: pruning point age %s is less than retention duration %s",
+				blockAge, pm.dataRetentionDuration)
+			return true
+		}
+	}
+
+	return false
+}
+
 func (pm *pruningManager) updatePruningPoint() error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "updatePruningPoint")
 	defer onEnd()
@@ -1112,9 +1153,18 @@ func (pm *pruningManager) updatePruningPoint() error {
 		}
 	}
 	log.Infof("Deletion of past blocks")
-	err = pm.deletePastBlocks(stagingArea, pruningPoint)
-	if err != nil {
-		return err
+
+	// Check if block deletion should be deferred based on data retention and pruning interval settings.
+	// During IBD the pruning point timestamp will be far in the past, so the retention check
+	// naturally won't prevent deletion. This avoids the issues previous attempts had during IBD.
+	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
+		log.Infof("Skipping block deletion: data retention or pruning interval constraint not met")
+	} else {
+		err = pm.deletePastBlocks(stagingArea, pruningPoint)
+		if err != nil {
+			return err
+		}
+		pm.lastPruningTime = time.Now()
 	}
 
 	log.Info("Commit all changes")
