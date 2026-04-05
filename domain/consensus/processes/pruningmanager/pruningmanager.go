@@ -1049,7 +1049,7 @@ func (pm *pruningManager) UpdatePruningPointIfRequired() error {
 		return err
 	}
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
-		log.Infof("Pruning point UTXO set update deferred: data retention or pruning interval constraint not met")
+		// log.Infof("Pruning point UTXO set update deferred: data retention or pruning interval constraint not met")
 		return nil
 	}
 
