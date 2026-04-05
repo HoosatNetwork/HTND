@@ -1112,13 +1112,9 @@ func (pm *pruningManager) updatePruningPoint() error {
 		}
 	}
 	log.Infof("Deletion of past blocks")
-	// Actually pay attention to deletion-depth flag!
-	shouldDelete, effectivePruningPoint := pm.CheckIfShouldDeletePastBlocks(stagingArea, pruningPoint)
-    if shouldDelete {
-       err = pm.deletePastBlocks(stagingArea, effectivePruningPoint)
-	   if err != nil {
-		   return err
-	   }
+	err = pm.deletePastBlocks(stagingArea, pruningPoint)
+	if err != nil {
+		return err
 	}
 
 	log.Info("Commit all changes")
