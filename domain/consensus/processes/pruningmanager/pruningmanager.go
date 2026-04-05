@@ -1040,6 +1040,19 @@ func (pm *pruningManager) UpdatePruningPointIfRequired() error {
 		return nil
 	}
 
+	// Check deferral conditions BEFORE doing expensive UTXO diff work.
+	// When deferred, we leave the HadStartedUpdatingPruningPointUTXOSet flag set
+	// so the update will be retried on the next call.
+	stagingArea := model.NewStagingArea()
+	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
+		log.Infof("Pruning point UTXO set update deferred: data retention or pruning interval constraint not met")
+		return nil
+	}
+
 	log.Infof("Pruning point UTXO set update is required")
 	err = pm.updatePruningPoint()
 	if err != nil {
@@ -1153,19 +1166,11 @@ func (pm *pruningManager) updatePruningPoint() error {
 		}
 	}
 	log.Infof("Deletion of past blocks")
-
-	// Check if block deletion should be deferred based on data retention and pruning interval settings.
-	// During IBD the pruning point timestamp will be far in the past, so the retention check
-	// naturally won't prevent deletion. This avoids the issues previous attempts had during IBD.
-	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
-		log.Infof("Skipping block deletion: data retention or pruning interval constraint not met")
-	} else {
-		err = pm.deletePastBlocks(stagingArea, pruningPoint)
-		if err != nil {
-			return err
-		}
-		pm.lastPruningTime = time.Now()
+	err = pm.deletePastBlocks(stagingArea, pruningPoint)
+	if err != nil {
+		return err
 	}
+	pm.lastPruningTime = time.Now()
 
 	log.Info("Commit all changes")
 	err = staging.CommitAllChanges(pm.databaseContext, stagingArea)

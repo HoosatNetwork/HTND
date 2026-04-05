@@ -86,7 +86,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		IsArchival:                      cfg.IsArchivalNode,
 		DeletionDepth:                   cfg.DeletionDepth,
 		DataRetentionDuration:           time.Duration(cfg.DataRetentionHours) * time.Hour,
-		PruningInterval:                 time.Duration(cfg.PruningIntervalSeconds) * time.Second,
+		PruningInterval:                 time.Duration(cfg.PruningIntervalHours) * time.Hour,
 		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
 		UseHoohashCLibrary:              cfg.UseHoohashCLibrary,
 	}
