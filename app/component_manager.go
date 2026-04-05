@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 
@@ -84,6 +85,8 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		Params:                          *cfg.ActiveNetParams,
 		IsArchival:                      cfg.IsArchivalNode,
 		DeletionDepth:                   cfg.DeletionDepth,
+		DataRetentionDuration:           time.Duration(cfg.DataRetentionHours) * time.Hour,
+		PruningInterval:                 time.Duration(cfg.PruningIntervalSeconds) * time.Second,
 		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
 		UseHoohashCLibrary:              cfg.UseHoohashCLibrary,
 	}
