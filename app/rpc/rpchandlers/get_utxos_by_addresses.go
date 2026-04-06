@@ -11,6 +11,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/Hoosat-Oy/HTND/util/memory"
+	"github.com/pkg/errors"
 )
 
 func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
@@ -80,6 +81,11 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
+			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
+				errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
+				errorMessage.Error = appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
+				return errorMessage, nil
+			}
 			return nil, err
 		}
 		if len(utxoOutpointEntryPairs) == 0 {

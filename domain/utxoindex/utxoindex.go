@@ -1,7 +1,9 @@
 package utxoindex
 
 import (
+	"errors"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Hoosat-Oy/HTND/domain"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -10,13 +12,16 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/memory"
 )
 
+var ErrUTXOIndexSyncing = errors.New("utxo index is syncing")
+
 // UTXOIndex maintains an index between transaction scriptPublicKeys
 // and UTXOs
 type UTXOIndex struct {
 	domain domain.Domain
 	store  *utxoIndexStore
 
-	mutex sync.Mutex
+	mutex   sync.RWMutex
+	syncing atomic.Bool
 	// utxoIndexCache *utxoIndexLRUCache
 	// maxCacheSize   int
 }
@@ -153,6 +158,11 @@ func New(domain domain.Domain, database database.Database) (*UTXOIndex, error) {
 
 // Reset deletes the whole UTXO index and resyncs it from consensus.
 func (ui *UTXOIndex) Reset() error {
+	if !ui.syncing.CompareAndSwap(false, true) {
+		return ErrUTXOIndexSyncing
+	}
+	defer ui.syncing.Store(false)
+
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
 
@@ -201,6 +211,32 @@ func (ui *UTXOIndex) Reset() error {
 
 	log.Infof("Finished UTXO index reset")
 	return nil
+}
+
+func (ui *UTXOIndex) readLockOrSyncingError() (func(), error) {
+	if ui.syncing.Load() {
+		return nil, ErrUTXOIndexSyncing
+	}
+
+	if ui.mutex.TryRLock() {
+		if ui.syncing.Load() {
+			ui.mutex.RUnlock()
+			return nil, ErrUTXOIndexSyncing
+		}
+		return ui.mutex.RUnlock, nil
+	}
+
+	if ui.syncing.Load() {
+		return nil, ErrUTXOIndexSyncing
+	}
+
+	ui.mutex.RLock()
+	if ui.syncing.Load() {
+		ui.mutex.RUnlock()
+		return nil, ErrUTXOIndexSyncing
+	}
+
+	return ui.mutex.RUnlock, nil
 }
 
 func (ui *UTXOIndex) isSynced() (bool, error) {
@@ -296,8 +332,11 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
 func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
-	ui.mutex.Lock()
-	defer ui.mutex.Unlock()
+	unlock, err := ui.readLockOrSyncingError()
+	if err != nil {
+		return nil, buffer, err
+	}
+	defer unlock()
 
 	// if pair, ok := ui.utxoIndexCache.Get(scriptPublicKey.String()); ok {
 	// 	return pair, nil
@@ -310,8 +349,11 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit u
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
 func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
-	ui.mutex.Lock()
-	defer ui.mutex.Unlock()
+	unlock, err := ui.readLockOrSyncingError()
+	if err != nil {
+		return nil, buffer, err
+	}
+	defer unlock()
 
 	// if pair, ok := ui.utxoIndexCache.Get(scriptPublicKey.String()); ok {
 	// 	return pair, nil
@@ -324,8 +366,11 @@ func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey
 func (ui *UTXOIndex) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (bool, error) {
-	ui.mutex.Lock()
-	defer ui.mutex.Unlock()
+	unlock, err := ui.readLockOrSyncingError()
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 
 	usable, err := ui.store.HasUTXOs(scriptPublicKey)
 	return usable, err
@@ -333,8 +378,11 @@ func (ui *UTXOIndex) HasUTXOs(scriptPublicKey *externalapi.ScriptPublicKey) (boo
 
 // GetBalance returns the total balance for the given scriptPublicKey
 func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (uint64, error) {
-	ui.mutex.Lock()
-	defer ui.mutex.Unlock()
+	unlock, err := ui.readLockOrSyncingError()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
 
 	balance, err := ui.store.GetBalance(scriptPublicKey)
 	return balance, err
@@ -342,8 +390,11 @@ func (ui *UTXOIndex) GetBalance(scriptPublicKey *externalapi.ScriptPublicKey) (u
 
 // GetCirculatingSompiSupply returns the current circulating supply of sompis in the network
 func (ui *UTXOIndex) GetCirculatingSompiSupply() (uint64, error) {
-	ui.mutex.Lock()
-	defer ui.mutex.Unlock()
+	unlock, err := ui.readLockOrSyncingError()
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
 
 	return ui.store.getCirculatingSompiSupply()
 }

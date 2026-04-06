@@ -8,6 +8,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/Hoosat-Oy/HTND/util/memory"
+	"github.com/pkg/errors"
 )
 
 // HandleGetPaginatedUTXOsByAddresses handles the respectively named RPC command with 1-second cache
@@ -54,6 +55,11 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
+			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
+				errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
+				errorMessage.Error = appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
+				return errorMessage, nil
+			}
 			return nil, err
 		}
 		if len(utxoOutpointEntryPairs) == 0 {

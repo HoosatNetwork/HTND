@@ -6,6 +6,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
+	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/pkg/errors"
@@ -28,6 +29,9 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	}
 	hasUTXOs, err := context.UTXOIndex.HasUTXOs(scriptPublicKey)
 	if err != nil {
+		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
+			return false, appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
+		}
 		return false, err
 	}
 
@@ -73,7 +77,7 @@ func HandleGetUsableAddresses(context *rpccontext.Context, _ *router.Router, req
 			if !errors.As(err, &rpcError) {
 				return nil, err
 			}
-			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
+			errorMessage := &appmessage.GetUsableAddressesResponseMessage{}
 			errorMessage.Error = rpcError
 			return errorMessage, nil
 		}

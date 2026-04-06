@@ -7,6 +7,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
+	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/pkg/errors"
@@ -81,6 +82,9 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string) (uin
 
 	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey)
 	if err != nil {
+		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
+			return 0, appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
+		}
 		return 0, err
 	}
 	return balance, nil
