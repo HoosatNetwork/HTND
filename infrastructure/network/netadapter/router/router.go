@@ -20,6 +20,7 @@ type Router struct {
 	incomingRoutesLock sync.RWMutex
 
 	reusableIncomingRoutes []*Route
+	unmappedRoutes         map[*Route]struct{}
 
 	outgoingRoute *Route
 }
@@ -28,6 +29,7 @@ type Router struct {
 func NewRouter(name string) *Router {
 	router := Router{
 		incomingRoutes: make(map[appmessage.MessageCommand]*Route),
+		unmappedRoutes: make(map[*Route]struct{}),
 		outgoingRoute:  NewRouteWithCapacity(fmt.Sprintf("%s - outgoing", name), outgoingRouteMaxMessages),
 	}
 	return &router
@@ -45,6 +47,9 @@ func (r *Router) Reset(name string) {
 	for _, route := range r.incomingRoutes {
 		uniqueRoutes[route] = struct{}{}
 	}
+	for route := range r.unmappedRoutes {
+		uniqueRoutes[route] = struct{}{}
+	}
 	for route := range uniqueRoutes {
 		route.Close()
 		r.reusableIncomingRoutes = append(r.reusableIncomingRoutes, route)
@@ -53,6 +58,9 @@ func (r *Router) Reset(name string) {
 	// Clear the incoming routes map.
 	for messageType := range r.incomingRoutes {
 		delete(r.incomingRoutes, messageType)
+	}
+	for route := range r.unmappedRoutes {
+		delete(r.unmappedRoutes, route)
 	}
 
 	// Reset outgoing route in-place.
@@ -83,6 +91,7 @@ func (r *Router) AddIncomingRouteWithCapacity(name string, capacity int, message
 		} else {
 			route.Reset(routeName)
 		}
+		r.unmappedRoutes[route] = struct{}{}
 		return route, nil
 	}
 
@@ -175,6 +184,24 @@ func (r *Router) RemoveRoute(messageTypes []appmessage.MessageCommand) error {
 	return nil
 }
 
+// ReleaseRoute recycles a route that isn't mapped to any message type anymore.
+// This is primarily used for one-time flows that register with an empty
+// messageTypes slice.
+func (r *Router) ReleaseRoute(route *Route) {
+	r.incomingRoutesLock.Lock()
+	defer r.incomingRoutesLock.Unlock()
+
+	if route == nil {
+		return
+	}
+
+	if _, ok := r.unmappedRoutes[route]; ok {
+		delete(r.unmappedRoutes, route)
+		route.Close()
+		r.reusableIncomingRoutes = append(r.reusableIncomingRoutes, route)
+	}
+}
+
 // EnqueueIncomingMessage enqueues the given message to the
 // appropriate route
 func (r *Router) EnqueueIncomingMessage(message appmessage.Message) error {
@@ -198,6 +225,9 @@ func (r *Router) Close() {
 
 	incomingRoutes := make(map[*Route]struct{})
 	for _, route := range r.incomingRoutes {
+		incomingRoutes[route] = struct{}{}
+	}
+	for route := range r.unmappedRoutes {
 		incomingRoutes[route] = struct{}{}
 	}
 	for route := range incomingRoutes {
