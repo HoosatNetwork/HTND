@@ -23,8 +23,10 @@ type NetConnection struct {
 	ErrorMessage          error
 }
 
-func newNetConnection(connection server.Connection, routerInitializer RouterInitializer, name string) *NetConnection {
-	router := routerpkg.NewRouter(name)
+func newNetConnection(connection server.Connection, routerInitializer RouterInitializer, name string, router *routerpkg.Router) *NetConnection {
+	if router == nil {
+		router = routerpkg.NewRouter(name)
+	}
 
 	netConnection := &NetConnection{
 		connection:       connection,

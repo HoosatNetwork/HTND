@@ -1,6 +1,7 @@
 package netadapter
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -35,6 +36,12 @@ type NetAdapter struct {
 
 	p2pConnections     map[*NetConnection]struct{}
 	p2pConnectionsLock sync.RWMutex
+
+	// outboundP2PRouters caches routers for outbound peers so reconnects can
+	// reuse their buffered routes instead of allocating new ones.
+	// Inbound peers are intentionally not cached to avoid unbounded memory growth.
+	outboundP2PRouters     map[string]*routerpkg.Router
+	outboundP2PRoutersLock sync.Mutex
 }
 
 // NewNetAdapter creates and starts a new NetAdapter on the
@@ -58,7 +65,8 @@ func NewNetAdapter(cfg *config.Config) (*NetAdapter, error) {
 		p2pServer: p2pServer,
 		rpcServer: rpcServer,
 
-		p2pConnections: make(map[*NetConnection]struct{}),
+		p2pConnections:     make(map[*NetConnection]struct{}),
+		outboundP2PRouters: make(map[string]*routerpkg.Router),
 	}
 
 	adapter.p2pServer.SetOnConnectedHandler(adapter.onP2PConnectedHandler)
@@ -140,7 +148,25 @@ func (na *NetAdapter) P2PConnectionCount() int {
 }
 
 func (na *NetAdapter) onP2PConnectedHandler(connection server.Connection) error {
-	netConnection := newNetConnection(connection, na.p2pRouterInitializer, "on P2P connected")
+	peerAddress := connection.Address().String()
+	routerName := fmt.Sprintf("P2P %s", peerAddress)
+
+	var routerForConnection *routerpkg.Router
+	if connection.IsOutbound() {
+		na.outboundP2PRoutersLock.Lock()
+		routerForConnection = na.outboundP2PRouters[peerAddress]
+		if routerForConnection == nil {
+			routerForConnection = routerpkg.NewRouter(routerName)
+			na.outboundP2PRouters[peerAddress] = routerForConnection
+		} else {
+			routerForConnection.Reset(routerName)
+		}
+		na.outboundP2PRoutersLock.Unlock()
+	} else {
+		routerForConnection = routerpkg.NewRouter(routerName)
+	}
+
+	netConnection := newNetConnection(connection, na.p2pRouterInitializer, routerName, routerForConnection)
 	if netConnection.ErrorMessage != nil {
 		return nil // don't do anything further since handshake failed.
 	}
@@ -163,7 +189,7 @@ func (na *NetAdapter) onP2PConnectedHandler(connection server.Connection) error 
 }
 
 func (na *NetAdapter) onRPCConnectedHandler(connection server.Connection) error {
-	netConnection := newNetConnection(connection, na.rpcRouterInitializer, "on RPC connected")
+	netConnection := newNetConnection(connection, na.rpcRouterInitializer, "on RPC connected", nil)
 	if netConnection.ErrorMessage != nil {
 		return nil // don't do anything further since handshake failed.
 	}

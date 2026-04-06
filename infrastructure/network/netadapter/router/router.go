@@ -19,6 +19,8 @@ type Router struct {
 	incomingRoutes     map[appmessage.MessageCommand]*Route
 	incomingRoutesLock sync.RWMutex
 
+	reusableIncomingRoutes []*Route
+
 	outgoingRoute *Route
 }
 
@@ -31,35 +33,109 @@ func NewRouter(name string) *Router {
 	return &router
 }
 
+// Reset prepares the router for reuse. It clears all incoming routes (while retaining
+// their underlying buffers for reuse) and resets the outgoing route without reallocating
+// its buffered channel.
+func (r *Router) Reset(name string) {
+	r.incomingRoutesLock.Lock()
+	defer r.incomingRoutesLock.Unlock()
+
+	// Move unique incoming routes into the reusable pool.
+	uniqueRoutes := make(map[*Route]struct{})
+	for _, route := range r.incomingRoutes {
+		uniqueRoutes[route] = struct{}{}
+	}
+	for route := range uniqueRoutes {
+		route.Close()
+		r.reusableIncomingRoutes = append(r.reusableIncomingRoutes, route)
+	}
+
+	// Clear the incoming routes map.
+	for messageType := range r.incomingRoutes {
+		delete(r.incomingRoutes, messageType)
+	}
+
+	// Reset outgoing route in-place.
+	r.outgoingRoute.Reset(fmt.Sprintf("%s - outgoing", name))
+}
+
 // AddIncomingRoute registers the messages of types `messageTypes` to
 // be routed to the given `route`
 func (r *Router) AddIncomingRoute(name string, messageTypes []appmessage.MessageCommand) (*Route, error) {
-	route := NewRoute(fmt.Sprintf("%s - incoming", name))
-	err := r.initializeIncomingRoute(route, messageTypes)
-	if err != nil {
-		return nil, err
-	}
-	return route, nil
+	return r.AddIncomingRouteWithCapacity(name, DefaultMaxMessages, messageTypes)
 }
 
 // AddIncomingRouteWithCapacity registers the messages of types `messageTypes` to
 // be routed to the given `route` with a capacity of `capacity`
 func (r *Router) AddIncomingRouteWithCapacity(name string, capacity int, messageTypes []appmessage.MessageCommand) (*Route, error) {
-	route := NewRouteWithCapacity(fmt.Sprintf("%s - incoming", name), capacity)
-	err := r.initializeIncomingRoute(route, messageTypes)
-	if err != nil {
-		return nil, err
-	}
-	return route, nil
-}
+	routeName := fmt.Sprintf("%s - incoming", name)
 
-func (r *Router) initializeIncomingRoute(route *Route, messageTypes []appmessage.MessageCommand) error {
+	r.incomingRoutesLock.Lock()
+	defer r.incomingRoutesLock.Unlock()
+
+	// Some one-time flows don't expect to receive any messages and therefore
+	// register with an empty messageTypes slice. Historically this was valid and
+	// returned a route that isn't mapped to any message command.
+	if len(messageTypes) == 0 {
+		route := r.getReusableIncomingRoute(routeName, capacity)
+		if route == nil {
+			route = NewRouteWithCapacity(routeName, capacity)
+		} else {
+			route.Reset(routeName)
+		}
+		return route, nil
+	}
+
+	// If all messageTypes already have routes, return the first existing one
+	// without allocating anything.
+	var existingRoute *Route
+	allExist := true
 	for _, messageType := range messageTypes {
-		if r.doesIncomingRouteExist(messageType) {
+		if route, ok := r.incomingRoutes[messageType]; ok {
+			if existingRoute == nil {
+				existingRoute = route
+			}
+			continue
+		}
+		allExist = false
+	}
+	if allExist {
+		return existingRoute, nil
+	}
+
+	route := r.getReusableIncomingRoute(routeName, capacity)
+	if route == nil {
+		route = NewRouteWithCapacity(routeName, capacity)
+	} else {
+		route.Reset(routeName)
+	}
+
+	for _, messageType := range messageTypes {
+		if _, ok := r.incomingRoutes[messageType]; ok {
 			log.Debugf("a route for '%s' already exists", messageType)
 			continue
 		}
-		r.setIncomingRoute(messageType, route)
+		r.incomingRoutes[messageType] = route
+	}
+
+	return route, nil
+}
+
+func (r *Router) getReusableIncomingRoute(name string, minCapacity int) *Route {
+	// NOTE: caller must hold incomingRoutesLock.
+	for i := len(r.reusableIncomingRoutes) - 1; i >= 0; i-- {
+		candidate := r.reusableIncomingRoutes[i]
+		if candidate == nil {
+			continue
+		}
+		if candidate.capacity < minCapacity {
+			continue
+		}
+		// Remove from slice.
+		r.reusableIncomingRoutes[i] = r.reusableIncomingRoutes[len(r.reusableIncomingRoutes)-1]
+		r.reusableIncomingRoutes = r.reusableIncomingRoutes[:len(r.reusableIncomingRoutes)-1]
+		candidate.name = name
+		return candidate
 	}
 	return nil
 }
@@ -67,12 +143,34 @@ func (r *Router) initializeIncomingRoute(route *Route, messageTypes []appmessage
 // RemoveRoute unregisters the messages of types `messageTypes` from
 // the router
 func (r *Router) RemoveRoute(messageTypes []appmessage.MessageCommand) error {
+	r.incomingRoutesLock.Lock()
+	defer r.incomingRoutesLock.Unlock()
+
+	// Track routes that might have become unused after we delete messageType mappings.
+	possiblyUnused := make(map[*Route]struct{})
 	for _, messageType := range messageTypes {
-		if !r.doesIncomingRouteExist(messageType) {
+		route, ok := r.incomingRoutes[messageType]
+		if !ok {
 			log.Debugf("a route for '%s' does not exist", messageType)
 			continue
 		}
-		r.deleteIncomingRoute(messageType)
+		delete(r.incomingRoutes, messageType)
+		possiblyUnused[route] = struct{}{}
+	}
+
+	// If a route is no longer referenced by any message type, close and recycle it.
+	for route := range possiblyUnused {
+		stillUsed := false
+		for _, existingRoute := range r.incomingRoutes {
+			if existingRoute == route {
+				stillUsed = true
+				break
+			}
+		}
+		if !stillUsed {
+			route.Close()
+			r.reusableIncomingRoutes = append(r.reusableIncomingRoutes, route)
+		}
 	}
 	return nil
 }
