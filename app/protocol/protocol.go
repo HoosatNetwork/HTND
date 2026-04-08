@@ -206,6 +206,11 @@ func (m *Manager) RegisterOneTimeFlow(name string, router *routerpkg.Router, mes
 		Name: name,
 		ExecuteFunc: func(peer *peerpkg.Peer) {
 			defer func() {
+				if len(messageTypes) == 0 {
+					router.ReleaseRoute(route)
+					return
+				}
+
 				err := router.RemoveRoute(messageTypes)
 				if err != nil {
 					panic(err)

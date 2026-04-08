@@ -838,7 +838,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64) error {
 	err := flow.Domain().Consensus().ResolveVirtual(func(virtualDAAScoreStart uint64, virtualDAAScore uint64) {
 		var percents int
-		if estimatedVirtualDAAScoreTarget-virtualDAAScoreStart <= 0 {
+		if estimatedVirtualDAAScoreTarget <= virtualDAAScoreStart {
 			percents = 100
 		} else {
 			percents = int(float64(virtualDAAScore-virtualDAAScoreStart) / float64(estimatedVirtualDAAScoreTarget-virtualDAAScoreStart) * 100)

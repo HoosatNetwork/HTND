@@ -33,8 +33,9 @@ func defaultOnRouteCapacityReachedHandler(route *Route, message appmessage.Messa
 
 // Route represents an incoming or outgoing Router route
 type Route struct {
-	name    string
-	channel chan appmessage.Message
+	name       string
+	channel    chan appmessage.Message
+	closedChan chan struct{}
 	// closed and closeLock are used to protect us from writing to a closed channel
 	// reads use the channel's built-in mechanism to check if the channel is closed
 	closed                   bool
@@ -58,10 +59,35 @@ func NewRouteWithCapacity(name string, capacity int) *Route {
 	return &Route{
 		name:                     name,
 		channel:                  make(chan appmessage.Message, capacity),
+		closedChan:               make(chan struct{}),
 		closed:                   false,
 		capacity:                 capacity,
 		onCapacityReachedHandler: defaultOnRouteCapacityReachedHandler,
 	}
+}
+
+// Reset prepares a route for reuse without reallocating the underlying channel.
+// It drains any queued messages, reopens the route, and resets its name and capacity handler.
+func (r *Route) Reset(name string) {
+	r.closeLock.Lock()
+	defer r.closeLock.Unlock()
+
+	r.name = name
+
+	// Drain any leftover messages.
+	for {
+		select {
+		case <-r.channel:
+			continue
+		default:
+			goto drained
+		}
+	}
+
+drained:
+	r.closed = false
+	r.closedChan = make(chan struct{})
+	r.onCapacityReachedHandler = defaultOnRouteCapacityReachedHandler
 }
 
 // Enqueue enqueues a message to the Route
@@ -102,23 +128,30 @@ func (r *Route) MaybeEnqueue(message appmessage.Message) error {
 
 // Dequeue dequeues a message from the Route
 func (r *Route) Dequeue() (appmessage.Message, error) {
-	message, isOpen := <-r.channel
-	if !isOpen {
+	// Fast-path: if closed, don't dequeue any pending messages.
+	select {
+	case <-r.closedChan:
 		return nil, errors.Wrapf(ErrRouteClosed, "route '%s' is closed", r.name)
+	default:
 	}
-	return message, nil
+
+	select {
+	case <-r.closedChan:
+		return nil, errors.Wrapf(ErrRouteClosed, "route '%s' is closed", r.name)
+	case message := <-r.channel:
+		return message, nil
+	}
 }
 
 // DequeueWithTimeout attempts to dequeue a message from the Route
 // and returns an error if the given timeout expires first.
 func (r *Route) DequeueWithTimeout(timeout time.Duration) (appmessage.Message, error) {
 	select {
+	case <-r.closedChan:
+		return nil, errors.WithStack(ErrRouteClosed)
 	case <-time.After(timeout):
 		return nil, errors.Wrapf(ErrTimeout, "route '%s' got timeout after %s", r.name, timeout)
-	case message, isOpen := <-r.channel:
-		if !isOpen {
-			return nil, errors.WithStack(ErrRouteClosed)
-		}
+	case message := <-r.channel:
 		return message, nil
 	}
 }
@@ -126,12 +159,11 @@ func (r *Route) DequeueWithTimeout(timeout time.Duration) (appmessage.Message, e
 func (r *Route) DequeueWithTimeoutAndRetry(timeout time.Duration, maxRetries int) (appmessage.Message, error) {
 	for range maxRetries {
 		select {
+		case <-r.closedChan:
+			return nil, errors.WithStack(ErrRouteClosed)
 		case <-time.After(timeout):
 			continue
-		case message, isOpen := <-r.channel:
-			if !isOpen {
-				return nil, errors.WithStack(ErrRouteClosed)
-			}
+		case message := <-r.channel:
 			return message, nil
 		}
 	}
@@ -148,7 +180,7 @@ func (r *Route) Close() {
 	}
 
 	r.closed = true
-	close(r.channel)
+	close(r.closedChan)
 }
 
 // Name returns the route name.
