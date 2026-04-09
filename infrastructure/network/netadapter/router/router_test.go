@@ -18,6 +18,14 @@ func TestAddIncomingRouteWithEmptyMessageTypesReturnsRoute(t *testing.T) {
 	}
 }
 
+func TestNewRouterOutgoingRouteUsesMessageCapacity(t *testing.T) {
+	router := NewRouter("test")
+
+	if got, want := router.OutgoingRoute().Capacity(), outgoingRouteMaxMessages; got != want {
+		t.Fatalf("expected outgoing route capacity %d, got %d", want, got)
+	}
+}
+
 func TestReleaseRouteReusesUnmappedRoute(t *testing.T) {
 	router := NewRouter("test")
 

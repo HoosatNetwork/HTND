@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const outgoingRouteMaxMessages = appmessage.MaxInvPerMsg + DefaultMaxMessages
+const outgoingRouteMaxMessages = DefaultMaxMessages
 
 // OnRouteCapacityReachedHandler is called when a route cannot accept another message.
 type OnRouteCapacityReachedHandler func(route *Route, message appmessage.Message)
