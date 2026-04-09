@@ -532,6 +532,13 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 	}
 	pm.pruningStore.StageStartUpdatingPruningPointUTXOSet(stagingArea)
 
+	// Call UpdatePruningPointIfRequired immediately after setting the flag
+	// Rather than after every single validate_and_insert_block
+    	err = pm.UpdatePruningPointIfRequired()
+    	if err != nil {
+        	return err
+    	}
+
 	return nil
 }
 
@@ -1049,7 +1056,7 @@ func (pm *pruningManager) UpdatePruningPointIfRequired() error {
 		return err
 	}
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
-		// log.Infof("Pruning point UTXO set update deferred: data retention or pruning interval constraint not met")
+		log.Infof("Pruning point UTXO set update deferred: data retention or pruning interval constraint not met")
 		return nil
 	}
 
