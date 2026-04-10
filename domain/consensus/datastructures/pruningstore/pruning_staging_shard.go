@@ -12,6 +12,9 @@ type pruningStagingShard struct {
 	currentPruningPointIndex         *uint64
 	newPruningPointCandidate         *externalapi.DomainHash
 	startUpdatingPruningPointUTXOSet bool
+
+	lastPruningTime *time.Time
+
 }
 
 func (ps *pruningStore) stagingShard(stagingArea *model.StagingArea) *pruningStagingShard {
@@ -21,6 +24,7 @@ func (ps *pruningStore) stagingShard(stagingArea *model.StagingArea) *pruningSta
 			pruningPointByIndex:              map[uint64]*externalapi.DomainHash{},
 			newPruningPointCandidate:         nil,
 			startUpdatingPruningPointUTXOSet: false,
+			lastPruningTime:                  nil,
 		}
 	}).(*pruningStagingShard)
 }
@@ -33,6 +37,13 @@ func (mss *pruningStagingShard) Commit(dbTx model.DBTransaction) error {
 			return err
 		}
 		err = dbTx.Put(mss.store.indexAsKey(index), hashBytes)
+		if err != nil {
+			return err
+		}
+		if mss.lastPruningTime != nil {
+		// Serialize time as an int64 
+		timeBytes := mss.store.serializeTime(*mss.lastPruningTime)
+		err := dbTx.Put(mss.store.lastPruningTimeKey, timeBytes)
 		if err != nil {
 			return err
 		}
@@ -77,7 +88,10 @@ func (mss *pruningStagingShard) Commit(dbTx model.DBTransaction) error {
 }
 
 func (mss *pruningStagingShard) isStaged() bool {
-	return len(mss.pruningPointByIndex) > 0 || mss.newPruningPointCandidate != nil || mss.startUpdatingPruningPointUTXOSet
+	return len(mss.pruningPointByIndex) > 0 || 
+		mss.newPruningPointCandidate != nil || 
+		mss.startUpdatingPruningPointUTXOSet || 
+		mss.lastPruningTime != nil
 }
 
 func (mss *pruningStagingShard) UnstageAll() {
