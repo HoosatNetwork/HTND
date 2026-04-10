@@ -31,7 +31,6 @@ type pruningStore struct {
 	pruningPointCandidateCache    *externalapi.DomainHash
 	lastPruningTimeCache          *time.Time
 
-
 	currentPruningPointIndexKey     model.DBKey
 	candidatePruningPointHashKey    model.DBKey
 	pruningPointUTXOSetBucket       model.DBBucket
@@ -381,7 +380,6 @@ func (ps *pruningStore) CurrentPruningPointIndex(dbContext model.DBReader, stagi
 func (ps *pruningStore) CacheLen() int {
 	return ps.pruningPointByIndexCache.Len()
 }
-
 
 func (ps *pruningStore) StageLastPruningTime(stagingArea *model.StagingArea, lastPruningTime time.Time) {
 	stagingShard := ps.stagingShard(stagingArea)
