@@ -1056,19 +1056,6 @@ func (pm *pruningManager) UpdatePruningPointIfRequired() error {
 		return nil
 	}
 
-	// Check deferral conditions BEFORE doing expensive UTXO diff work.
-	// When deferred, we leave the HadStartedUpdatingPruningPointUTXOSet flag set
-	// so the update will be retried on the next call.
-	stagingArea := model.NewStagingArea()
-	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
-	if err != nil {
-		return err
-	}
-	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
-		log.Infof("Pruning point UTXO set update deferred: data retention or pruning interval constraint not met")
-		return nil
-	}
-
 	log.Infof("Pruning point UTXO set update is required")
 	err = pm.updatePruningPoint()
 	if err != nil {
@@ -1181,15 +1168,21 @@ func (pm *pruningManager) updatePruningPoint() error {
 			return err
 		}
 	}
-	log.Infof("Deletion of past blocks")
-	err = pm.deletePastBlocks(stagingArea, pruningPoint)
-	if err != nil {
-		return err
-	}
+	var newPruningTime *time.Time
+	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
+		log.Infof("Pruning point advanced, but block deletion deferred (data retention/interval not met)")
+	} else {
+		log.Infof("Deletion of past blocks")
+		err = pm.deletePastBlocks(stagingArea, pruningPoint)
+		if err != nil {
+			return err
+		}
 
-	newPruningTime := time.Now()
-	// Stage the durable timestamp to the database in the same transaction
-	pm.pruningStore.StageLastPruningTime(stagingArea, newPruningTime)
+		t := time.Now()
+		newPruningTime = &t
+		// Stage the durable timestamp to the database in the same transaction
+		pm.pruningStore.StageLastPruningTime(stagingArea, *newPruningTime)
+	}
 
 	log.Info("Commit all changes")
 	err = staging.CommitAllChanges(pm.databaseContext, stagingArea)
@@ -1197,7 +1190,10 @@ func (pm *pruningManager) updatePruningPoint() error {
 		return err
 	}
 
-	pm.lastPruningTime = newPruningTime
+	if newPruningTime != nil {
+		pm.lastPruningTime = *newPruningTime
+	}
+
 	// Invalidate the cached pruning point and anticone since the pruning point just moved
 	pm.cachedPruningPoint = nil
 	pm.cachedPruningPointAnticone = nil
