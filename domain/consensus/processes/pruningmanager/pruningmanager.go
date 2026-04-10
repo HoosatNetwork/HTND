@@ -93,7 +93,7 @@ func New(
 	difficultyAdjustmentWindowSize []int,
 	targetTimePerBlock []time.Duration,
 ) model.PruningManager {
-	return &pruningManager{
+	pm := &pruningManager{
 		databaseContext:       databaseContext,
 		dagTraversalManager:   dagTraversalManager,
 		dagTopologyManager:    dagTopologyManager,
@@ -126,6 +126,15 @@ func New(
 		difficultyAdjustmentWindowSize:  difficultyAdjustmentWindowSize,
 		targetTimePerBlock:              targetTimePerBlock,
 	}
+	// Reload the durable timestamp at startup
+	// lastTime, err := pruningStore.LastPruningTime(databaseContext)
+	// if err == nil {
+	// 	pm.lastPruningTime = lastTime
+	// } else if !database.IsNotFoundError(err) {
+	// 	log.Errorf("Failed to load last pruning time: %s", err)
+	// }
+
+	return pm
 }
 
 func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.StagingArea) error {
@@ -1177,13 +1186,24 @@ func (pm *pruningManager) updatePruningPoint() error {
 	if err != nil {
 		return err
 	}
-	pm.lastPruningTime = time.Now()
+
+	newPruningTime := time.Now()
+	// Stage the durable timestamp to the database in the same transaction
+	err = pm.pruningStore.StageLastPruningTime(stagingArea, newPruningTime)
+	 if err != nil {
+	 	return err
+	 }
 
 	log.Info("Commit all changes")
 	err = staging.CommitAllChanges(pm.databaseContext, stagingArea)
 	if err != nil {
 		return err
 	}
+
+	pm.lastPruningTime = time.Now()
+	// Invalidate the cached pruning point and anticone since the pruning point just moved
+	pm.cachedPruningPoint = nil
+	pm.cachedPruningPointAnticone = nil
 
 	log.Info("Finishing updating the pruning point UTXO set")
 	return pm.pruningStore.FinishUpdatingPruningPointUTXOSet(pm.databaseContext)

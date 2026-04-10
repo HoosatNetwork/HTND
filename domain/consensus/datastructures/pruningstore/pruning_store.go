@@ -2,6 +2,7 @@ package pruningstore
 
 import (
 	"encoding/binary"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
@@ -19,6 +20,7 @@ var (
 	pruningPointUTXOSetBucketName      = []byte("pruning-point-utxo-set")
 	updatingPruningPointUTXOSetKeyName = []byte("updating-pruning-point-utxo-set")
 	pruningPointByIndexBucketName      = []byte("pruning-point-by-index")
+	lastPruningTimeKeyName             = []byte("last-pruning-time")
 )
 
 // pruningStore represents a store for the current pruning state
@@ -27,6 +29,8 @@ type pruningStore struct {
 	pruningPointByIndexCache      *lrucacheuint64tohash.LRUCache
 	currentPruningPointIndexCache *uint64
 	pruningPointCandidateCache    *externalapi.DomainHash
+	lastPruningTimeCache          *time.Time
+
 
 	currentPruningPointIndexKey     model.DBKey
 	candidatePruningPointHashKey    model.DBKey
@@ -35,6 +39,7 @@ type pruningStore struct {
 	importedPruningPointUTXOsBucket model.DBBucket
 	importedPruningPointMultisetKey model.DBKey
 	pruningPointByIndexBucket       model.DBBucket
+	lastPruningTimeKey              model.DBKey
 }
 
 // New instantiates a new PruningStore
@@ -49,6 +54,7 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.Pru
 		updatingPruningPointUTXOSetKey:  prefixBucket.Key(updatingPruningPointUTXOSetKeyName),
 		importedPruningPointMultisetKey: prefixBucket.Key(importedPruningPointMultisetKeyName),
 		pruningPointByIndexBucket:       prefixBucket.Bucket(pruningPointByIndexBucketName),
+		lastPruningTimeKey:              prefixBucket.Key(lastPruningTimeKeyName),
 	}
 }
 
@@ -374,4 +380,48 @@ func (ps *pruningStore) CurrentPruningPointIndex(dbContext model.DBReader, stagi
 
 func (ps *pruningStore) CacheLen() int {
 	return ps.pruningPointByIndexCache.Len()
+}
+
+
+func (ps *pruningStore) StageLastPruningTime(stagingArea *model.StagingArea, lastPruningTime time.Time) {
+	stagingShard := ps.stagingShard(stagingArea)
+	stagingShard.lastPruningTime = &lastPruningTime
+}
+
+func (ps *pruningStore) LastPruningTime(dbContext model.DBReader) (time.Time, error) {
+	// Check the cache first
+	if ps.lastPruningTimeCache != nil {
+		return *ps.lastPruningTimeCache, nil
+	}
+
+	// Otherwise hit the database
+	timeBytes, err := dbContext.Get(ps.lastPruningTimeKey)
+	if errors.Is(err, database.ErrNotFound) {
+		return time.Time{}, err // Expected error on brand new nodes
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Deserialize it
+	lastPruningTime, err := ps.deserializeTime(timeBytes)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	ps.lastPruningTimeCache = &lastPruningTime
+	return lastPruningTime, nil
+}
+
+// Helper methods to serialize time
+func (ps *pruningStore) serializeTime(t time.Time) []byte {
+	return binaryserialization.SerializeUint64(uint64(t.UnixNano()))
+}
+
+func (ps *pruningStore) deserializeTime(timeBytes []byte) (time.Time, error) {
+	nano, err := binaryserialization.DeserializeUint64(timeBytes)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(0, int64(nano)), nil
 }
