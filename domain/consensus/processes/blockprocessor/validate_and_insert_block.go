@@ -174,13 +174,6 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 		}
 	}
 
-	// The idea is that only do this now when the pruning point _MOVES_
-	// Testing will proove if this is entirely safe or not.....
-	// err = bp.pruningManager.UpdatePruningPointIfRequired()
-	// if err != nil {
-		// return nil, externalapi.StatusInvalid, err
-	// }
-
 	log.Debug(logger.NewLogClosure(func() string {
 		hashrate := difficulty.GetHashrateString(difficulty.CompactToBig(block.Header.Bits()), bp.targetTimePerBlock[constants.GetBlockVersion()-1])
 		return fmt.Sprintf("Block %s validated and inserted, network hashrate: %s", blockHash, hashrate)
