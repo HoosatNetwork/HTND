@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -226,7 +227,8 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 // For more details please refer to the Bech32 Address Serialization section
 // of the spec.
 func calculateChecksum(prefix string, payload []byte) []byte {
-	prefixLower5Bits := prefixToUint5Array(prefix)
+	prefixLower5Bitsbuffer := memory.Malloc[int](len(prefix))
+	prefixLower5Bits := prefixToUint5Array(prefix, prefixLower5Bitsbuffer)
 	payloadInts := ints(payload)
 	templateZeroes := []int{0, 0, 0, 0, 0, 0, 0, 0}
 
@@ -241,24 +243,27 @@ func calculateChecksum(prefix string, payload []byte) []byte {
 		res = append(res, byte((polyModResult>>uint(5*(checksumLength-1-i)))&31))
 	}
 
+	memory.Free(prefixLower5Bitsbuffer)
 	return res
 }
 
 // For more details please refer to the Bech32 Address Serialization section
 // of the spec.
 func verifyChecksum(prefix string, payload []byte) bool {
-	prefixLower5Bits := prefixToUint5Array(prefix)
+	prefixLower5Bitsbuffer := memory.Malloc[int](len(prefix))
+	prefixLower5Bits := prefixToUint5Array(prefix, prefixLower5Bitsbuffer)
 	payloadInts := ints(payload)
 
 	// prefixLower5Bits + 0 + payloadInts
 	dataToVerify := append(prefixLower5Bits, 0)
 	dataToVerify = append(dataToVerify, payloadInts...)
+	memory.Free(prefixLower5Bitsbuffer)
 
 	return polyMod(dataToVerify) == 0
 }
 
-func prefixToUint5Array(prefix string) []int {
-	prefixLower5Bits := make([]int, len(prefix))
+func prefixToUint5Array(prefix string, prefixLower5Bitsbuffer *memory.Block[int]) []int {
+	prefixLower5Bits := prefixLower5Bitsbuffer.Slice()
 	for i := 0; i < len(prefix); i++ {
 		char := prefix[i]
 		charLower5Bits := int(char & 31)
