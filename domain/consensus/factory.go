@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/blockwindowheapslicestore"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/daawindowstore"
@@ -78,6 +79,14 @@ type Config struct {
 
 	// DeletionDepth specifies the depth for block deletion during pruning
 	DeletionDepth uint64
+
+	// DataRetentionDuration specifies the minimum duration of chain data to keep
+	// before allowing pruning deletion. Zero means prune immediately as normal.
+	DataRetentionDuration time.Duration
+
+	// PruningInterval specifies the minimum duration between pruning deletions.
+	// Zero means prune at every pruning point update as normal.
+	PruningInterval time.Duration
 
 	// UseHoohashCLibrary indicates whether to use the hoohash C library for block versions >= 5
 	UseHoohashCLibrary bool
@@ -362,6 +371,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.FinalityDepth(),
 		config.PruningDepth(),
 		config.DeletionDepth,
+		config.DataRetentionDuration,
+		config.PruningInterval,
 		config.EnableSanityCheckPruningUTXOSet,
 		config.K,
 		config.DifficultyAdjustmentWindowSize,

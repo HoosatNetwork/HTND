@@ -1,6 +1,8 @@
 package pruningstore
 
 import (
+	"time"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
@@ -12,6 +14,8 @@ type pruningStagingShard struct {
 	currentPruningPointIndex         *uint64
 	newPruningPointCandidate         *externalapi.DomainHash
 	startUpdatingPruningPointUTXOSet bool
+
+	lastPruningTime *time.Time
 }
 
 func (ps *pruningStore) stagingShard(stagingArea *model.StagingArea) *pruningStagingShard {
@@ -21,6 +25,7 @@ func (ps *pruningStore) stagingShard(stagingArea *model.StagingArea) *pruningSta
 			pruningPointByIndex:              map[uint64]*externalapi.DomainHash{},
 			newPruningPointCandidate:         nil,
 			startUpdatingPruningPointUTXOSet: false,
+			lastPruningTime:                  nil,
 		}
 	}).(*pruningStagingShard)
 }
@@ -37,6 +42,17 @@ func (mss *pruningStagingShard) Commit(dbTx model.DBTransaction) error {
 			return err
 		}
 		mss.store.pruningPointByIndexCache.Add(index, hashCopy)
+	}
+
+	// This block is now safely OUTSIDE the for loop
+	if mss.lastPruningTime != nil {
+		// Serialize time as an int64
+		timeBytes := mss.store.serializeTime(*mss.lastPruningTime)
+		err := dbTx.Put(mss.store.lastPruningTimeKey, timeBytes)
+		if err != nil {
+			return err
+		}
+		mss.store.lastPruningTimeCache = mss.lastPruningTime
 	}
 
 	if mss.currentPruningPointIndex != nil {
@@ -77,7 +93,10 @@ func (mss *pruningStagingShard) Commit(dbTx model.DBTransaction) error {
 }
 
 func (mss *pruningStagingShard) isStaged() bool {
-	return len(mss.pruningPointByIndex) > 0 || mss.newPruningPointCandidate != nil || mss.startUpdatingPruningPointUTXOSet
+	return len(mss.pruningPointByIndex) > 0 ||
+		mss.newPruningPointCandidate != nil ||
+		mss.startUpdatingPruningPointUTXOSet ||
+		mss.lastPruningTime != nil
 }
 
 func (mss *pruningStagingShard) UnstageAll() {
@@ -85,4 +104,5 @@ func (mss *pruningStagingShard) UnstageAll() {
 	mss.currentPruningPointIndex = nil
 	mss.newPruningPointCandidate = nil
 	mss.startUpdatingPruningPointUTXOSet = false
+	mss.lastPruningTime = nil
 }
