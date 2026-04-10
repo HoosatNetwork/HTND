@@ -127,12 +127,12 @@ func New(
 		targetTimePerBlock:              targetTimePerBlock,
 	}
 	// Reload the durable timestamp at startup
-	// lastTime, err := pruningStore.LastPruningTime(databaseContext)
-	// if err == nil {
-	// 	pm.lastPruningTime = lastTime
-	// } else if !database.IsNotFoundError(err) {
-	// 	log.Errorf("Failed to load last pruning time: %s", err)
-	// }
+	lastTime, err := pruningStore.LastPruningTime(databaseContext)
+	if err == nil {
+		pm.lastPruningTime = lastTime
+	} else if !database.IsNotFoundError(err) {
+		log.Errorf("Failed to load last pruning time: %s", err)
+	}
 
 	return pm
 }
@@ -543,10 +543,10 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 
 	// Call UpdatePruningPointIfRequired immediately after setting the flag
 	// Rather than after every single validate_and_insert_block
-    	err = pm.UpdatePruningPointIfRequired()
-    	if err != nil {
-        	return err
-    	}
+	err = pm.UpdatePruningPointIfRequired()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1189,10 +1189,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 
 	newPruningTime := time.Now()
 	// Stage the durable timestamp to the database in the same transaction
-	err = pm.pruningStore.StageLastPruningTime(stagingArea, newPruningTime)
-	 if err != nil {
-	 	return err
-	 }
+	pm.pruningStore.StageLastPruningTime(stagingArea, newPruningTime)
 
 	log.Info("Commit all changes")
 	err = staging.CommitAllChanges(pm.databaseContext, stagingArea)
@@ -1200,7 +1197,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 		return err
 	}
 
-	pm.lastPruningTime = time.Now()
+	pm.lastPruningTime = newPruningTime
 	// Invalidate the cached pruning point and anticone since the pruning point just moved
 	pm.cachedPruningPoint = nil
 	pm.cachedPruningPointAnticone = nil
