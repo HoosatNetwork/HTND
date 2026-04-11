@@ -24,6 +24,12 @@ const (
 	// PubKey addresses always have the version byte set to 1.
 	pubKeyECDSAAddrID = 0x01
 
+	// PubKeyHash addresses always have the version byte set to 2.
+	pubKeyHashAddrID = 0x02
+
+	// PubKeyHash ECDSA addresses always have the version byte set to 3.
+	pubKeyHashECDSAAddrID = 0x03
+
 	// ScriptHash addresses always have the version byte set to 8.
 	scriptHashAddrID = 0x08
 )
@@ -145,6 +151,10 @@ func DecodeAddress(addr string, expectedPrefix Bech32Prefix) (Address, error) {
 		return newAddressPubKey(prefix, decoded)
 	case pubKeyECDSAAddrID:
 		return newAddressPubKeyECDSA(prefix, decoded)
+	case pubKeyHashAddrID:
+		return newAddressPubKeyHashFromHash(prefix, decoded)
+	case pubKeyHashECDSAAddrID:
+		return newAddressPubKeyHashECDSAFromHash(prefix, decoded)
 	case scriptHashAddrID:
 		return newAddressScriptHashFromHash(prefix, decoded)
 	default:
@@ -274,6 +284,126 @@ func (a *AddressPublicKeyECDSA) Prefix() Bech32Prefix {
 // be used as a fmt.Stringer.
 func (a *AddressPublicKeyECDSA) String() string {
 	return a.EncodeAddress()
+}
+
+// AddressPublicKeyHash is an Address for a pay-to-pubkey-hash (P2PKH)
+// Schnorr transaction.
+//
+// On Hoosat, P2PKH typically corresponds to the script template:
+// OP_DUP OP_BLAKE2B <32-byte hash> OP_EQUALVERIFY OP_CHECKSIG
+type AddressPublicKeyHash struct {
+	prefix Bech32Prefix
+	hash   [blake2b.Size256]byte
+}
+
+// NewAddressPublicKeyHash returns a new AddressPublicKeyHash derived from the
+// given Schnorr public key (32 bytes).
+func NewAddressPublicKeyHash(publicKey []byte, prefix Bech32Prefix) (*AddressPublicKeyHash, error) {
+	if len(publicKey) != PublicKeySize {
+		return nil, errors.Errorf("publicKey must be %d bytes", PublicKeySize)
+	}
+	return newAddressPubKeyHashFromHash(prefix, HashBlake2b(publicKey))
+}
+
+// NewAddressPublicKeyHashFromHash returns a new AddressPublicKeyHash.
+// pubKeyHash must be 32 bytes.
+func NewAddressPublicKeyHashFromHash(pubKeyHash []byte, prefix Bech32Prefix) (*AddressPublicKeyHash, error) {
+	return newAddressPubKeyHashFromHash(prefix, pubKeyHash)
+}
+
+func newAddressPubKeyHashFromHash(prefix Bech32Prefix, pubKeyHash []byte) (*AddressPublicKeyHash, error) {
+	if len(pubKeyHash) != blake2b.Size256 {
+		return nil, errors.Errorf("pubKeyHash must be %d bytes", blake2b.Size256)
+	}
+
+	addr := &AddressPublicKeyHash{prefix: prefix}
+	copy(addr.hash[:], pubKeyHash)
+	return addr, nil
+}
+
+func (a *AddressPublicKeyHash) EncodeAddress() string {
+	return encodeAddress(a.prefix, a.hash[:], pubKeyHashAddrID)
+}
+
+func (a *AddressPublicKeyHash) ScriptAddress() []byte {
+	return a.hash[:]
+}
+
+func (a *AddressPublicKeyHash) IsForPrefix(prefix Bech32Prefix) bool {
+	return a.prefix == prefix
+}
+
+func (a *AddressPublicKeyHash) Prefix() Bech32Prefix {
+	return a.prefix
+}
+
+func (a *AddressPublicKeyHash) String() string {
+	return a.EncodeAddress()
+}
+
+// HashBlake2b returns the underlying array of the pubkey hash.
+func (a *AddressPublicKeyHash) HashBlake2b() *[blake2b.Size256]byte {
+	return &a.hash
+}
+
+// AddressPublicKeyHashECDSA is an Address for a pay-to-pubkey-hash (P2PKH)
+// ECDSA transaction.
+//
+// On Hoosat, P2PKH ECDSA typically corresponds to the script template:
+// OP_DUP OP_BLAKE2B <32-byte hash> OP_EQUALVERIFY OP_CHECKSIGECDSA
+type AddressPublicKeyHashECDSA struct {
+	prefix Bech32Prefix
+	hash   [blake2b.Size256]byte
+}
+
+// NewAddressPublicKeyHashECDSA returns a new AddressPublicKeyHashECDSA derived
+// from the given ECDSA public key (33 bytes).
+func NewAddressPublicKeyHashECDSA(publicKey []byte, prefix Bech32Prefix) (*AddressPublicKeyHashECDSA, error) {
+	if len(publicKey) != PublicKeySizeECDSA {
+		return nil, errors.Errorf("publicKey must be %d bytes", PublicKeySizeECDSA)
+	}
+	return newAddressPubKeyHashECDSAFromHash(prefix, HashBlake2b(publicKey))
+}
+
+// NewAddressPublicKeyHashECDSAFromHash returns a new AddressPublicKeyHashECDSA.
+// pubKeyHash must be 32 bytes.
+func NewAddressPublicKeyHashECDSAFromHash(pubKeyHash []byte, prefix Bech32Prefix) (*AddressPublicKeyHashECDSA, error) {
+	return newAddressPubKeyHashECDSAFromHash(prefix, pubKeyHash)
+}
+
+func newAddressPubKeyHashECDSAFromHash(prefix Bech32Prefix, pubKeyHash []byte) (*AddressPublicKeyHashECDSA, error) {
+	if len(pubKeyHash) != blake2b.Size256 {
+		return nil, errors.Errorf("pubKeyHash must be %d bytes", blake2b.Size256)
+	}
+
+	addr := &AddressPublicKeyHashECDSA{prefix: prefix}
+	copy(addr.hash[:], pubKeyHash)
+	return addr, nil
+}
+
+func (a *AddressPublicKeyHashECDSA) EncodeAddress() string {
+	return encodeAddress(a.prefix, a.hash[:], pubKeyHashECDSAAddrID)
+}
+
+func (a *AddressPublicKeyHashECDSA) ScriptAddress() []byte {
+	return a.hash[:]
+}
+
+func (a *AddressPublicKeyHashECDSA) IsForPrefix(prefix Bech32Prefix) bool {
+	return a.prefix == prefix
+}
+
+func (a *AddressPublicKeyHashECDSA) Prefix() Bech32Prefix {
+	return a.prefix
+}
+
+func (a *AddressPublicKeyHashECDSA) String() string {
+	return a.EncodeAddress()
+}
+
+// HashBlake2b returns the underlying array of the pubkey hash.
+func (a *AddressPublicKeyHashECDSA) HashBlake2b() *[blake2b.Size256]byte {
+	return &a.hash
 }
 
 // AddressScriptHash is an Address for a pay-to-script-publicKey (P2SH)

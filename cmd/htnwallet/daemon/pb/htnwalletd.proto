@@ -60,6 +60,8 @@ message CreateUnsignedCompoundTransactionResponse {
 }
 
 message ShowAddressesRequest {
+  AddressType addressType = 1;
+  bool includeBoth = 2;
 }
 
 message ShowAddressesResponse {
@@ -67,10 +69,23 @@ message ShowAddressesResponse {
 }
 
 message NewAddressRequest {
+  AddressType addressType = 1;
 }
 
 message NewAddressResponse {
+  // address is the primary address string returned by the daemon.
+  // When addressType is unspecified it defaults to P2PK.
   string address = 1;
+  // p2pkAddress and p2pkhAddress are returned for single-sig wallets.
+  // For multisig wallets (P2SH), these fields are empty.
+  string p2pkAddress = 2;
+  string p2pkhAddress = 3;
+}
+
+enum AddressType {
+  ADDRESS_TYPE_UNSPECIFIED = 0;
+  ADDRESS_TYPE_P2PKH = 1;
+  ADDRESS_TYPE_P2PK = 2;
 }
 
 message BroadcastRequest {

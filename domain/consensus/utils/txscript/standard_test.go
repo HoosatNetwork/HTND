@@ -336,6 +336,12 @@ func TestPayToAddrScript(t *testing.T) {
 		t.Fatalf("Unable to create script hash address: %v", err)
 	}
 
+	p2pkhMain, err := util.NewAddressPublicKeyHashFromHash(hexToBytes("e34cce70c86"+
+		"373273efcc54ce7d2a491bb4a0e84e34cce70c86373273efcc54c"), util.Bech32PrefixHoosat)
+	if err != nil {
+		t.Fatalf("Unable to create public key hash address: %v", err)
+	}
+
 	// Errors used in the tests below defined here for convenience and to
 	// keep the horizontal test size shorter.
 	errUnsupportedAddress := scriptError(ErrUnsupportedAddress, "")
@@ -362,9 +368,18 @@ func TestPayToAddrScript(t *testing.T) {
 			0,
 			nil,
 		},
+		// pay-to-pubkey-hash address on mainnet
+		{
+			p2pkhMain,
+			"DUP BLAKE2B DATA_32 0xe34cce70c86373273efcc54ce7d2a4" +
+				"91bb4a0e84e34cce70c86373273efcc54c EQUALVERIFY CHECKSIG",
+			0,
+			nil,
+		},
 
 		// Supported address types with nil pointers.
 		{(*util.AddressPublicKey)(nil), "", 0, errUnsupportedAddress},
+		{(*util.AddressPublicKeyHash)(nil), "", 0, errUnsupportedAddress},
 		{(*util.AddressScriptHash)(nil), "", 0, errUnsupportedAddress},
 
 		// Unsupported address type.
@@ -427,7 +442,13 @@ var scriptClassTests = []struct {
 		name: "Pay PubkeyHash",
 		script: "DUP BLAKE2B DATA_32 0x660d4ef3a743e3e696ad990364e55543e3e696ad990364e555e555" +
 			"c271ad504b EQUALVERIFY CHECKSIG",
-		class: NonStandardTy,
+		class: PubKeyHashTy,
+	},
+	{
+		name: "Pay PubkeyHash ECDSA",
+		script: "DUP BLAKE2B DATA_32 0x660d4ef3a743e3e696ad990364e55543e3e696ad990364e555e555" +
+			"c271ad504b EQUALVERIFY CHECKSIGECDSA",
+		class: PubKeyHashECDSATy,
 	},
 	// mutlisig
 	{
@@ -546,6 +567,16 @@ func TestStringifyClass(t *testing.T) {
 			name:     "pubkeyecdsa",
 			class:    PubKeyECDSATy,
 			stringed: "pubkeyecdsa",
+		},
+		{
+			name:     "pubkeyhash",
+			class:    PubKeyHashTy,
+			stringed: "pubkeyhash",
+		},
+		{
+			name:     "pubkeyhashecdsa",
+			class:    PubKeyHashECDSATy,
+			stringed: "pubkeyhashecdsa",
 		},
 		{
 			name:     "scripthash",

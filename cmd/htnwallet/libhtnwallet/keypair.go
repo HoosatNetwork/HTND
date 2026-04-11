@@ -95,6 +95,51 @@ func Address(params *dagconfig.Params, extendedPublicKeys []string, minimumSigna
 	return util.NewAddressScriptHash(redeemScript, params.Prefix)
 }
 
+// SingleSigAddressType controls which address template is used for a single-sig wallet.
+//
+// Note: Multisig wallets always return P2SH addresses, regardless of this value.
+type SingleSigAddressType uint8
+
+const (
+	SingleSigAddressTypeP2PK SingleSigAddressType = iota
+	SingleSigAddressTypeP2PKH
+)
+
+// AddressWithSingleSigAddressType is like Address, but allows choosing between P2PK and P2PKH
+// for single-sig wallets.
+func AddressWithSingleSigAddressType(
+	params *dagconfig.Params,
+	extendedPublicKeys []string,
+	minimumSignatures uint32,
+	path string,
+	ecdsa bool,
+	singleSigType SingleSigAddressType,
+) (util.Address, error) {
+	sortPublicKeys(extendedPublicKeys)
+	if uint32(len(extendedPublicKeys)) < minimumSignatures {
+		return nil, errors.Errorf("The minimum amount of signatures (%d) is greater than the amount of "+
+			"provided public keys (%d)", minimumSignatures, len(extendedPublicKeys))
+	}
+
+	if len(extendedPublicKeys) == 1 {
+		switch singleSigType {
+		case SingleSigAddressTypeP2PK:
+			return p2pkAddress(params, extendedPublicKeys[0], path, ecdsa)
+		case SingleSigAddressTypeP2PKH:
+			return p2pkhAddress(params, extendedPublicKeys[0], path, ecdsa)
+		default:
+			return nil, errors.Errorf("unknown singleSigType %d", singleSigType)
+		}
+	}
+
+	redeemScript, err := multiSigRedeemScript(extendedPublicKeys, minimumSignatures, path, ecdsa)
+	if err != nil {
+		return nil, err
+	}
+
+	return util.NewAddressScriptHash(redeemScript, params.Prefix)
+}
+
 func p2pkAddress(params *dagconfig.Params, extendedPublicKey string, path string, ecdsa bool) (util.Address, error) {
 	extendedKey, err := bip32.DeserializeExtendedKey(extendedPublicKey)
 	if err != nil {
@@ -130,6 +175,43 @@ func p2pkAddress(params *dagconfig.Params, extendedPublicKey string, path string
 	}
 
 	return util.NewAddressPublicKey(serializedSchnorrPublicKey[:], params.Prefix)
+}
+
+func p2pkhAddress(params *dagconfig.Params, extendedPublicKey string, path string, ecdsa bool) (util.Address, error) {
+	extendedKey, err := bip32.DeserializeExtendedKey(extendedPublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	derivedKey, err := extendedKey.DeriveFromPath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKey, err := derivedKey.PublicKey()
+	if err != nil {
+		return nil, err
+	}
+
+	if ecdsa {
+		serializedECDSAPublicKey, err := publicKey.Serialize()
+		if err != nil {
+			return nil, err
+		}
+		return util.NewAddressPublicKeyHashECDSA(serializedECDSAPublicKey[:], params.Prefix)
+	}
+
+	schnorrPublicKey, err := publicKey.ToSchnorr()
+	if err != nil {
+		return nil, err
+	}
+
+	serializedSchnorrPublicKey, err := schnorrPublicKey.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	return util.NewAddressPublicKeyHash(serializedSchnorrPublicKey[:], params.Prefix)
 }
 
 func sortPublicKeys(extendedPublicKeys []string) {

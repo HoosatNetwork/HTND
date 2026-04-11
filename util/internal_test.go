@@ -36,6 +36,20 @@ func TstAddressPubKeyECDSA(prefix Bech32Prefix, hash [PublicKeySizeECDSA]byte) *
 	}
 }
 
+func TstAddressPubKeyHash(prefix Bech32Prefix, hash [blake2b.Size256]byte) *AddressPublicKeyHash {
+	return &AddressPublicKeyHash{
+		prefix: prefix,
+		hash:   hash,
+	}
+}
+
+func TstAddressPubKeyHashECDSA(prefix Bech32Prefix, hash [blake2b.Size256]byte) *AddressPublicKeyHashECDSA {
+	return &AddressPublicKeyHashECDSA{
+		prefix: prefix,
+		hash:   hash,
+	}
+}
+
 // TstAddressScriptHash makes an AddressScriptHash, setting the
 // unexported fields with the parameters hash and netID.
 func TstAddressScriptHash(prefix Bech32Prefix, hash [blake2b.Size256]byte) *AddressScriptHash {
@@ -57,6 +71,20 @@ func TstAddressSAddrP2PK(addr string) []byte {
 func TstAddressSAddrP2PKECDSA(addr string) []byte {
 	_, decoded, _, _ := bech32.Decode(addr)
 	return decoded[:PublicKeySizeECDSA]
+}
+
+// TstAddressSAddrP2PKH returns the expected script address bytes for
+// P2PKH hoosat addresses.
+func TstAddressSAddrP2PKH(addr string) []byte {
+	_, decoded, _, _ := bech32.Decode(addr)
+	return decoded[:blake2b.Size256]
+}
+
+// TstAddressSAddrP2PKHECDSA returns the expected script address bytes for
+// P2PKH ECDSA hoosat addresses.
+func TstAddressSAddrP2PKHECDSA(addr string) []byte {
+	_, decoded, _, _ := bech32.Decode(addr)
+	return decoded[:blake2b.Size256]
 }
 
 // TstAddressSAddrP2SH returns the expected script address bytes for

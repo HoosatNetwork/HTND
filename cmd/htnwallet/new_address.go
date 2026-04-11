@@ -18,11 +18,20 @@ func newAddress(conf *newAddressConfig) error {
 	ctx, cancel := context.WithTimeout(context.Background(), daemonTimeout)
 	defer cancel()
 
-	response, err := daemonClient.NewAddress(ctx, &pb.NewAddressRequest{})
+	addressType, err := parseAddressTypeFlag(conf.AddressType)
+	if err != nil {
+		return err
+	}
+
+	response, err := daemonClient.NewAddress(ctx, &pb.NewAddressRequest{AddressType: addressType})
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("New address:\n%s\n", response.Address)
+	if conf.IncludeBoth && (response.P2PkAddress != "" || response.P2PkhAddress != "") {
+		fmt.Printf("\nP2PK:\n%s\n", response.P2PkAddress)
+		fmt.Printf("P2PKH:\n%s\n", response.P2PkhAddress)
+	}
 	return nil
 }

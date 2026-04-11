@@ -53,19 +53,39 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	addresses := make([]string, s.keysFile.LastUsedExternalIndex())
+	addresses := make([]string, 0)
 	for i := uint32(1); i <= s.keysFile.LastUsedExternalIndex(); i++ {
 		walletAddr := &walletAddress{
 			index:         i,
 			cosignerIndex: s.keysFile.CosignerIndex,
 			keyChain:      libhtnwallet.ExternalKeychain,
 		}
+		if request.GetIncludeBoth() && !s.isMultisig() {
+			addressStrings, err := s.walletAddressStringsForScan(walletAddr)
+			if err != nil {
+				return nil, err
+			}
+			addresses = append(addresses, addressStrings...)
+			continue
+		}
+
 		path := s.walletAddressPath(walletAddr)
-		address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+		// Default to P2PK for single-sig; multisig always returns P2SH.
+		singleSigType := libhtnwallet.SingleSigAddressTypeP2PK
+		switch request.GetAddressType() {
+		case pb.AddressType_ADDRESS_TYPE_P2PK:
+			singleSigType = libhtnwallet.SingleSigAddressTypeP2PK
+		case pb.AddressType_ADDRESS_TYPE_P2PKH:
+			singleSigType = libhtnwallet.SingleSigAddressTypeP2PKH
+		default:
+			singleSigType = libhtnwallet.SingleSigAddressTypeP2PK
+		}
+
+		address, err := libhtnwallet.AddressWithSingleSigAddressType(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA, singleSigType)
 		if err != nil {
 			return nil, err
 		}
-		addresses[i-1] = address.String()
+		addresses = append(addresses, address.String())
 	}
 
 	return &pb.ShowAddressesResponse{Address: addresses}, nil
@@ -95,12 +115,39 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		keyChain:      libhtnwallet.ExternalKeychain,
 	}
 	path := s.walletAddressPath(walletAddr)
-	address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+	if s.isMultisig() {
+		address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+		if err != nil {
+			return nil, err
+		}
+		return &pb.NewAddressResponse{Address: address.String()}, nil
+	}
+
+	addrP2PK, err := libhtnwallet.AddressWithSingleSigAddressType(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA, libhtnwallet.SingleSigAddressTypeP2PK)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.NewAddressResponse{Address: address.String()}, nil
+	addrP2PKH, err := libhtnwallet.AddressWithSingleSigAddressType(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA, libhtnwallet.SingleSigAddressTypeP2PKH)
+	if err != nil {
+		return nil, err
+	}
+
+	primary := addrP2PK.String()
+	switch request.GetAddressType() {
+	case pb.AddressType_ADDRESS_TYPE_P2PK:
+		primary = addrP2PK.String()
+	case pb.AddressType_ADDRESS_TYPE_P2PKH:
+		primary = addrP2PKH.String()
+	default:
+		primary = addrP2PK.String()
+	}
+
+	return &pb.NewAddressResponse{
+		Address:      primary,
+		P2PkAddress:  addrP2PK.String(),
+		P2PkhAddress: addrP2PKH.String(),
+	}, nil
 }
 
 func (s *server) walletAddressString(wAddr *walletAddress) (string, error) {
@@ -111,6 +158,49 @@ func (s *server) walletAddressString(wAddr *walletAddress) (string, error) {
 	}
 
 	return addr.String(), nil
+}
+
+// walletAddressStringsForScan returns all address encodings that should be queried
+// for a given wallet derivation path.
+//
+// For single-sig wallets, this includes both legacy P2PK and modern P2PKH encodings
+// so that upgrading the wallet does not "lose" old funds.
+func (s *server) walletAddressStringsForScan(wAddr *walletAddress) ([]string, error) {
+	path := s.walletAddressPath(wAddr)
+
+	if s.isMultisig() {
+		addr, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+		if err != nil {
+			return nil, err
+		}
+		return []string{addr.String()}, nil
+	}
+
+	addrP2PK, err := libhtnwallet.AddressWithSingleSigAddressType(
+		s.params,
+		s.keysFile.ExtendedPublicKeys,
+		s.keysFile.MinimumSignatures,
+		path,
+		s.keysFile.ECDSA,
+		libhtnwallet.SingleSigAddressTypeP2PK,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	addrP2PKH, err := libhtnwallet.AddressWithSingleSigAddressType(
+		s.params,
+		s.keysFile.ExtendedPublicKeys,
+		s.keysFile.MinimumSignatures,
+		path,
+		s.keysFile.ECDSA,
+		libhtnwallet.SingleSigAddressTypeP2PKH,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{addrP2PK.String(), addrP2PKH.String()}, nil
 }
 
 func (s *server) walletAddressPath(wAddr *walletAddress) string {

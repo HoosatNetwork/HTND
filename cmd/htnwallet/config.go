@@ -135,11 +135,15 @@ type parseConfig struct {
 
 type showAddressesConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
+	AddressType   string `long:"address-type" description:"Address type to show: p2pk (default) or p2pkh"`
+	IncludeBoth   bool   `long:"include-both" description:"Include both p2pk and p2pkh forms (single-sig only). Overrides --address-type"`
 	config.NetworkFlags
 }
 
 type newAddressConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
+	AddressType   string `long:"address-type" description:"Address type to create as primary: p2pk (default) or p2pkh"`
+	IncludeBoth   bool   `long:"include-both" description:"Also print both p2pk and p2pkh forms when available"`
 	config.NetworkFlags
 }
 
