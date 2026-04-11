@@ -61,6 +61,6 @@ coverage.txt
 
 testdbs/
 coverage.tmp
-HTND
-htnwallet
+/HTND
+/htnwallet
 esscapes_summary.txt
