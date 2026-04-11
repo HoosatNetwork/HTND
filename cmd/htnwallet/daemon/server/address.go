@@ -133,7 +133,7 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		return nil, err
 	}
 
-	primary := addrP2PK.String()
+	var primary string
 	switch request.GetAddressType() {
 	case pb.AddressType_ADDRESS_TYPE_P2PK:
 		primary = addrP2PK.String()

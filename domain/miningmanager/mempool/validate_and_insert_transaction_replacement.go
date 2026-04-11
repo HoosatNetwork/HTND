@@ -35,7 +35,7 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 		return acceptedTransactions, nil, err
 	}
 
-	parentsInPool, missingOutpoints, err := mp.fillInputsAndGetMissingParents(transaction)
+	_, missingOutpoints, err := mp.fillInputsAndGetMissingParents(transaction)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -82,7 +82,7 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 	}
 
 	// Recompute parents-in-pool after removals to avoid stale references.
-	parentsInPool = mp.transactionsPool.getParentTransactionsInPool(transaction)
+	parentsInPool := mp.transactionsPool.getParentTransactionsInPool(transaction)
 
 	mempoolTransaction, err := mp.transactionsPool.addTransaction(transaction, parentsInPool, isHighPriority)
 	if err != nil {
