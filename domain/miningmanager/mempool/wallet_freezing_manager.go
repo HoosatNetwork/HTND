@@ -34,30 +34,39 @@ func newWalletFreezingManager(config *Config) *walletFreezingManager {
 
 // extractAddressesFromTransaction extracts all addresses involved in a transaction
 func (wfm *walletFreezingManager) extractAddressesFromTransaction(transaction *externalapi.DomainTransaction) []string {
+	if wfm == nil || wfm.config == nil || wfm.config.DAGParams == nil || transaction == nil {
+		return nil
+	}
+
 	addresses := make(map[string]bool) // Use map to avoid duplicates
 
 	// Extract addresses from inputs (sender addresses)
 	for _, input := range transaction.Inputs {
-		if input.UTXOEntry != nil && input.UTXOEntry.ScriptPublicKey() != nil {
-			_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(
-				input.UTXOEntry.ScriptPublicKey(), wfm.config.DAGParams)
-			if err != nil {
-				continue
-			}
-			addresses[extractedAddress.EncodeAddress()] = true
+		if input.UTXOEntry == nil {
+			continue
 		}
+		scriptPublicKey := input.UTXOEntry.ScriptPublicKey()
+		if scriptPublicKey == nil {
+			continue
+		}
+
+		_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, wfm.config.DAGParams)
+		if err != nil || extractedAddress == nil {
+			continue
+		}
+		addresses[extractedAddress.EncodeAddress()] = true
 	}
 
 	// Extract addresses from outputs (recipient addresses)
 	for _, output := range transaction.Outputs {
-		if output.ScriptPublicKey != nil {
-			_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(
-				output.ScriptPublicKey, wfm.config.DAGParams)
-			if err != nil {
-				continue
-			}
-			addresses[extractedAddress.EncodeAddress()] = true
+		if output.ScriptPublicKey == nil {
+			continue
 		}
+		_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(output.ScriptPublicKey, wfm.config.DAGParams)
+		if err != nil || extractedAddress == nil {
+			continue
+		}
+		addresses[extractedAddress.EncodeAddress()] = true
 	}
 
 	// Convert map keys to slice
@@ -70,7 +79,7 @@ func (wfm *walletFreezingManager) extractAddressesFromTransaction(transaction *e
 
 // isWalletFrozen checks if any address in the transaction is frozen
 func (wfm *walletFreezingManager) isWalletFrozen(transaction *externalapi.DomainTransaction) (bool, []string) {
-	if !wfm.config.WalletFreezingEnabled {
+	if wfm == nil || wfm.config == nil || !wfm.config.WalletFreezingEnabled {
 		return false, nil
 	}
 
