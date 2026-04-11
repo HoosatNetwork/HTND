@@ -52,6 +52,15 @@ func (mp *mempool) ValidateAndInsertTransaction(transaction *externalapi.DomainT
 	return mp.validateAndInsertTransaction(transaction, isHighPriority, allowOrphan)
 }
 
+func (mp *mempool) ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
+	acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error,
+) {
+	mp.mtx.Lock()
+	defer mp.mtx.Unlock()
+
+	return mp.validateAndInsertTransactionReplacement(transaction, isHighPriority)
+}
+
 func (mp *mempool) GetTransaction(transactionID *externalapi.DomainTransactionID,
 	includeTransactionPool bool,
 	includeOrphanPool bool) (

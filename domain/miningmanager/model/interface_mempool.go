@@ -12,6 +12,8 @@ type Mempool interface {
 	BlockCandidateTransactions() []*externalapi.DomainTransaction
 	ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, err error)
+	ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
+		acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error)
 	RemoveInvalidTransactions(err *ruleerrors.ErrInvalidTransactionsInNewBlock) error
 	GetTransaction(
 		transactionID *externalapi.DomainTransactionID,

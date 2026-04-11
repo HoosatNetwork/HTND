@@ -1269,6 +1269,42 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) CloneVT() isHoosat
 	return r
 }
 
+func (m *HoosatdMessage_SubmitTransactionReplacementRequest) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_SubmitTransactionReplacementRequest)(nil)
+	}
+	r := new(HoosatdMessage_SubmitTransactionReplacementRequest)
+	r.SubmitTransactionReplacementRequest = m.SubmitTransactionReplacementRequest.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementResponse) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_SubmitTransactionReplacementResponse)(nil)
+	}
+	r := new(HoosatdMessage_SubmitTransactionReplacementResponse)
+	r.SubmitTransactionReplacementResponse = m.SubmitTransactionReplacementResponse.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_GetFeeEstimateRequest) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetFeeEstimateRequest)(nil)
+	}
+	r := new(HoosatdMessage_GetFeeEstimateRequest)
+	r.GetFeeEstimateRequest = m.GetFeeEstimateRequest.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_GetFeeEstimateResponse) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetFeeEstimateResponse)(nil)
+	}
+	r := new(HoosatdMessage_GetFeeEstimateResponse)
+	r.GetFeeEstimateResponse = m.GetFeeEstimateResponse.CloneVT()
+	return r
+}
+
 func (this *HoosatdMessage) EqualVT(that *HoosatdMessage) bool {
 	if this == that {
 		return true
@@ -4698,6 +4734,106 @@ func (this *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) EqualVT(thatIfa
 	return true
 }
 
+func (this *HoosatdMessage_SubmitTransactionReplacementRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_SubmitTransactionReplacementRequest)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.SubmitTransactionReplacementRequest, that.SubmitTransactionReplacementRequest; p != q {
+		if p == nil {
+			p = &SubmitTransactionReplacementRequestMessage{}
+		}
+		if q == nil {
+			q = &SubmitTransactionReplacementRequestMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_SubmitTransactionReplacementResponse) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_SubmitTransactionReplacementResponse)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.SubmitTransactionReplacementResponse, that.SubmitTransactionReplacementResponse; p != q {
+		if p == nil {
+			p = &SubmitTransactionReplacementResponseMessage{}
+		}
+		if q == nil {
+			q = &SubmitTransactionReplacementResponseMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_GetFeeEstimateRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetFeeEstimateRequest)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetFeeEstimateRequest, that.GetFeeEstimateRequest; p != q {
+		if p == nil {
+			p = &GetFeeEstimateRequestMessage{}
+		}
+		if q == nil {
+			q = &GetFeeEstimateRequestMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_GetFeeEstimateResponse) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetFeeEstimateResponse)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetFeeEstimateResponse, that.GetFeeEstimateResponse; p != q {
+		if p == nil {
+			p = &GetFeeEstimateResponseMessage{}
+		}
+		if q == nil {
+			q = &GetFeeEstimateResponseMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
 // Requires gRPC-Go v1.32.0 or later.
@@ -7951,6 +8087,94 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToSizedBuff
 	return len(dAtA) - i, nil
 }
 
+func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.SubmitTransactionReplacementRequest != nil {
+		size, err := m.SubmitTransactionReplacementRequest.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xe2
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.SubmitTransactionReplacementResponse != nil {
+		size, err := m.SubmitTransactionReplacementResponse.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xea
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetFeeEstimateRequest != nil {
+		size, err := m.GetFeeEstimateRequest.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0x92
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetFeeEstimateResponse != nil {
+		size, err := m.GetFeeEstimateResponse.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0x9a
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *HoosatdMessage) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -7980,6 +8204,34 @@ func (m *HoosatdMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) 
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateResponse); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateRequest); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementResponse); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementRequest); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
 	}
 	if msg, ok := m.Payload.(*HoosatdMessage_GetPaginatedUtxosByAddressesResponse); ok {
 		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
@@ -11908,6 +12160,94 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToSizedBuff
 	return len(dAtA) - i, nil
 }
 
+func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.SubmitTransactionReplacementRequest != nil {
+		size, err := m.SubmitTransactionReplacementRequest.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xe2
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.SubmitTransactionReplacementResponse != nil {
+		size, err := m.SubmitTransactionReplacementResponse.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xea
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetFeeEstimateRequest != nil {
+		size, err := m.GetFeeEstimateRequest.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0x92
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetFeeEstimateResponse != nil {
+		size, err := m.GetFeeEstimateResponse.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0x9a
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *HoosatdMessage) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13684,6 +14024,58 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) SizeVT() (n int) {
 	_ = l
 	if m.GetPaginatedUtxosByAddressesResponse != nil {
 		l = m.GetPaginatedUtxosByAddressesResponse.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SubmitTransactionReplacementRequest != nil {
+		l = m.SubmitTransactionReplacementRequest.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+
+func (m *HoosatdMessage_SubmitTransactionReplacementResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SubmitTransactionReplacementResponse != nil {
+		l = m.SubmitTransactionReplacementResponse.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+
+func (m *HoosatdMessage_GetFeeEstimateRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetFeeEstimateRequest != nil {
+		l = m.GetFeeEstimateRequest.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+
+func (m *HoosatdMessage_GetFeeEstimateResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetFeeEstimateResponse != nil {
+		l = m.GetFeeEstimateResponse.SizeVT()
 		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	return n
@@ -19292,6 +19684,170 @@ func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesResponse{GetPaginatedUtxosByAddressesResponse: v}
+			}
+			iNdEx = postIndex
+		case 1100:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubmitTransactionReplacementRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementRequest); ok {
+				if err := oneof.SubmitTransactionReplacementRequest.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &SubmitTransactionReplacementRequestMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_SubmitTransactionReplacementRequest{SubmitTransactionReplacementRequest: v}
+			}
+			iNdEx = postIndex
+		case 1101:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubmitTransactionReplacementResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementResponse); ok {
+				if err := oneof.SubmitTransactionReplacementResponse.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &SubmitTransactionReplacementResponseMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_SubmitTransactionReplacementResponse{SubmitTransactionReplacementResponse: v}
+			}
+			iNdEx = postIndex
+		case 1106:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetFeeEstimateRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateRequest); ok {
+				if err := oneof.GetFeeEstimateRequest.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetFeeEstimateRequestMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetFeeEstimateRequest{GetFeeEstimateRequest: v}
+			}
+			iNdEx = postIndex
+		case 1107:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetFeeEstimateResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateResponse); ok {
+				if err := oneof.GetFeeEstimateResponse.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetFeeEstimateResponseMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetFeeEstimateResponse{GetFeeEstimateResponse: v}
 			}
 			iNdEx = postIndex
 		default:
@@ -24920,6 +25476,170 @@ func (m *HoosatdMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesResponse{GetPaginatedUtxosByAddressesResponse: v}
+			}
+			iNdEx = postIndex
+		case 1100:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubmitTransactionReplacementRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementRequest); ok {
+				if err := oneof.SubmitTransactionReplacementRequest.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &SubmitTransactionReplacementRequestMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_SubmitTransactionReplacementRequest{SubmitTransactionReplacementRequest: v}
+			}
+			iNdEx = postIndex
+		case 1101:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubmitTransactionReplacementResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementResponse); ok {
+				if err := oneof.SubmitTransactionReplacementResponse.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &SubmitTransactionReplacementResponseMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_SubmitTransactionReplacementResponse{SubmitTransactionReplacementResponse: v}
+			}
+			iNdEx = postIndex
+		case 1106:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetFeeEstimateRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateRequest); ok {
+				if err := oneof.GetFeeEstimateRequest.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetFeeEstimateRequestMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetFeeEstimateRequest{GetFeeEstimateRequest: v}
+			}
+			iNdEx = postIndex
+		case 1107:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetFeeEstimateResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateResponse); ok {
+				if err := oneof.GetFeeEstimateResponse.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetFeeEstimateResponseMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetFeeEstimateResponse{GetFeeEstimateResponse: v}
 			}
 			iNdEx = postIndex
 		default:

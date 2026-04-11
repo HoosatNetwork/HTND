@@ -304,6 +304,23 @@ message SubmitTransactionResponseMessage{
   RPCError error = 1000;
 }
 
+// SubmitTransactionReplacementRequestMessage submits a replacement transaction to the mempool.
+// If the transaction conflicts with an existing mempool transaction, it may replace it if it pays a higher fee.
+message SubmitTransactionReplacementRequestMessage{
+  RpcTransaction transaction = 1;
+  optional bool isHighPriority = 2;
+}
+
+message SubmitTransactionReplacementResponseMessage{
+  // The transaction ID of the submitted transaction
+  string transactionId = 1;
+
+  // The replaced transaction (if any). Filled only on successful replacement.
+  RpcTransaction replacedTransaction = 2;
+
+  RPCError error = 1000;
+}
+
 // NotifyVirtualSelectedParentChainChangedRequestMessage registers this connection for virtualSelectedParentChainChanged notifications.
 //
 // See: VirtualSelectedParentChainChangedNotificationMessage
@@ -762,5 +779,39 @@ message GetCoinSupplyResponseMessage{
   uint64 maxSompi = 1; // note: this is a hard coded maxSupply, actual maxSupply is expected to deviate by upto -5%, but cannot be measured exactly.
   uint64 circulatingSompi = 2;
 
+  RPCError error = 1000;
+}
+
+message RpcFeerateBucket {
+  // Fee/mass of a transaction in `sompi/gram` units
+  double feerate = 1;
+  double estimatedSeconds = 2;
+}
+
+// Data required for making fee estimates.
+//
+// Feerate values represent fee/mass of a transaction in `sompi/gram` units.
+// Given a feerate value recommendation, calculate the required fee by taking
+// the transaction mass and multiplying it by feerate: `fee = feerate * mass(tx)`
+message RpcFeeEstimate {
+  // Top-priority feerate bucket. Provides an estimation of the feerate required
+  // for sub-second DAG inclusion.
+  RpcFeerateBucket priority_bucket = 1;
+
+  // A vector of *normal* priority feerate values. The first value of this
+  // vector is guaranteed to exist and provide an estimation for sub-*minute*
+  // DAG inclusion.
+  repeated RpcFeerateBucket normalBuckets = 2;
+
+  // A vector of *low* priority feerate values. The first value of this vector
+  // is guaranteed to exist and provide an estimation for sub-*hour* DAG
+  // inclusion.
+  repeated RpcFeerateBucket lowBuckets = 3;
+}
+
+message GetFeeEstimateRequestMessage {}
+
+message GetFeeEstimateResponseMessage {
+  RpcFeeEstimate estimate = 1;
   RPCError error = 1000;
 }

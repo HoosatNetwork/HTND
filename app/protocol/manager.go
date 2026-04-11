@@ -73,6 +73,16 @@ func (m *Manager) AddTransactionWithPriority(tx *externalapi.DomainTransaction, 
 	return m.context.AddTransactionWithPriority(tx, allowOrphan, isHighPriority)
 }
 
+// AddTransactionReplacement adds transaction to the mempool as a replacement (RBF) and propagates it.
+func (m *Manager) AddTransactionReplacement(tx *externalapi.DomainTransaction) (*externalapi.DomainTransaction, error) {
+	return m.context.AddTransactionReplacementWithPriority(tx, true)
+}
+
+// AddTransactionReplacementWithPriority adds transaction to the mempool as a replacement (RBF) and propagates it.
+func (m *Manager) AddTransactionReplacementWithPriority(tx *externalapi.DomainTransaction, isHighPriority bool) (*externalapi.DomainTransaction, error) {
+	return m.context.AddTransactionReplacementWithPriority(tx, isHighPriority)
+}
+
 // AddBlock adds the given block to the DAG and propagates it.
 func (m *Manager) AddBlock(block *externalapi.DomainBlock) error {
 	return m.context.AddBlock(block)

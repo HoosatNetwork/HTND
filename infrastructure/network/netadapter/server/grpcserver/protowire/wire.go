@@ -513,6 +513,34 @@ func toRPCPayload(message appmessage.Message) (isHoosatdMessage_Payload, error) 
 			return nil, err
 		}
 		return payload, nil
+	case *appmessage.SubmitTransactionReplacementRequestMessage:
+		payload := new(HoosatdMessage_SubmitTransactionReplacementRequest)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	case *appmessage.SubmitTransactionReplacementResponseMessage:
+		payload := new(HoosatdMessage_SubmitTransactionReplacementResponse)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	case *appmessage.GetFeeEstimateRequestMessage:
+		payload := new(HoosatdMessage_GetFeeEstimateRequest)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	case *appmessage.GetFeeEstimateResponseMessage:
+		payload := new(HoosatdMessage_GetFeeEstimateResponse)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case *appmessage.NotifyVirtualSelectedParentChainChangedRequestMessage:
 		payload := new(HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest)
 		err := payload.fromAppMessage(message)

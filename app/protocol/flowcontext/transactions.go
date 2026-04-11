@@ -27,6 +27,24 @@ func (f *FlowContext) AddTransactionWithPriority(tx *externalapi.DomainTransacti
 	return f.EnqueueTransactionIDsForPropagation(acceptedTransactionIDs)
 }
 
+// AddTransactionReplacementWithPriority adds transaction to the mempool as a replacement (RBF) and propagates it.
+//
+// Note: replacement submission does not allow orphans.
+func (f *FlowContext) AddTransactionReplacementWithPriority(tx *externalapi.DomainTransaction, isHighPriority bool) (*externalapi.DomainTransaction, error) {
+	acceptedTransactions, replacedTransaction, err := f.Domain().MiningManager().ValidateAndInsertTransactionReplacement(tx, isHighPriority)
+	if err != nil {
+		return nil, err
+	}
+
+	acceptedTransactionIDs := consensushashing.TransactionIDs(acceptedTransactions)
+	err = f.EnqueueTransactionIDsForPropagation(acceptedTransactionIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return replacedTransaction, nil
+}
+
 func (f *FlowContext) shouldRebroadcastTransactions() bool {
 	const rebroadcastInterval = 30 * time.Second
 	return time.Since(f.lastRebroadcastTime) > rebroadcastInterval
