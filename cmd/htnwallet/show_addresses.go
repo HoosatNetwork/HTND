@@ -18,12 +18,26 @@ func showAddresses(conf *showAddressesConfig) error {
 	ctx, cancel := context.WithTimeout(context.Background(), daemonTimeout)
 	defer cancel()
 
-	response, err := daemonClient.ShowAddresses(ctx, &pb.ShowAddressesRequest{})
+	addressType, err := parseAddressTypeFlag(conf.AddressType)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Addresses (%d):\n", len(response.Address))
+	request := &pb.ShowAddressesRequest{AddressType: addressType}
+	if conf.IncludeBoth {
+		request.IncludeBoth = true
+	}
+
+	response, err := daemonClient.ShowAddresses(ctx, request)
+	if err != nil {
+		return err
+	}
+
+	header := "Addresses"
+	if conf.IncludeBoth {
+		header = "Addresses (both P2PK and P2PKH)"
+	}
+	fmt.Printf("%s (%d):\n", header, len(response.Address))
 	for _, address := range response.Address {
 		fmt.Println(address)
 	}

@@ -245,13 +245,58 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 				return nil, errors.Errorf("missing signature")
 			}
 
-			sigScript, err := txscript.NewScriptBuilder().
-				AddData(input.PubKeySignaturePairs[0].Signature).
-				Script()
-			if err != nil {
-				return nil, err
+			prevScriptClass := txscript.GetScriptClass(input.PrevOutput.ScriptPublicKey.Script)
+			switch prevScriptClass {
+			case txscript.PubKeyTy, txscript.PubKeyECDSATy:
+				sigScript, err := txscript.NewScriptBuilder().
+					AddData(input.PubKeySignaturePairs[0].Signature).
+					Script()
+				if err != nil {
+					return nil, err
+				}
+				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+			case txscript.PubKeyHashTy, txscript.PubKeyHashECDSATy:
+				derivedPublicKey, err := bip32.DeserializeExtendedKey(input.PubKeySignaturePairs[0].ExtendedPublicKey)
+				if err != nil {
+					return nil, err
+				}
+
+				publicKey, err := derivedPublicKey.PublicKey()
+				if err != nil {
+					return nil, err
+				}
+
+				var serializedPublicKey []byte
+				switch prevScriptClass {
+				case txscript.PubKeyHashECDSATy:
+					serializedECDSAPublicKey, err := publicKey.Serialize()
+					if err != nil {
+						return nil, err
+					}
+					serializedPublicKey = serializedECDSAPublicKey[:]
+				case txscript.PubKeyHashTy:
+					schnorrPublicKey, err := publicKey.ToSchnorr()
+					if err != nil {
+						return nil, err
+					}
+					serializedSchnorrPublicKey, err := schnorrPublicKey.Serialize()
+					if err != nil {
+						return nil, err
+					}
+					serializedPublicKey = serializedSchnorrPublicKey[:]
+				}
+
+				sigScript, err := txscript.NewScriptBuilder().
+					AddData(input.PubKeySignaturePairs[0].Signature).
+					AddData(serializedPublicKey).
+					Script()
+				if err != nil {
+					return nil, err
+				}
+				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+			default:
+				return nil, errors.Errorf("unsupported prev output script class %s", prevScriptClass)
 			}
-			partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
 		}
 	}
 	return partiallySignedTransaction.Tx, nil

@@ -69,6 +69,29 @@ func SignatureScript(tx *externalapi.DomainTransaction, idx int, hashType consen
 	return NewScriptBuilder().AddData(sig).Script()
 }
 
+// SignatureScriptPubKeyHash creates an input signature script for tx to spend HTN sent
+// to a Schnorr pay-to-pubkey-hash (P2PKH) output.
+// The returned script pushes: <sig> <pubkey>.
+func SignatureScriptPubKeyHash(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
+	privKey *secp256k1.SchnorrKeyPair, sighashReusedValues *consensushashing.SighashReusedValues,
+) ([]byte, error) {
+	sig, err := RawTxInSignature(tx, idx, hashType, privKey, sighashReusedValues)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKey, err := privKey.SchnorrPublicKey()
+	if err != nil {
+		return nil, err
+	}
+	publicKeySerialized, err := publicKey.Serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	return NewScriptBuilder().AddData(sig).AddData(publicKeySerialized[:]).Script()
+}
+
 // SignatureScriptECDSA creates an input signature script for tx to spend HTN sent
 // from a previous output to the owner of an ECDSA private key. tx must include all
 // transaction inputs and outputs, however txin scripts are allowed to be filled
@@ -107,6 +130,18 @@ func sign(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction, idx in
 		}
 
 		signedScript, err := SignatureScript(tx, idx, hashType, key, sighashReusedValues)
+		if err != nil {
+			return nil, class, nil, err
+		}
+
+		return signedScript, class, address, nil
+	case PubKeyHashTy:
+		key, err := kdb.GetKey(address)
+		if err != nil {
+			return nil, class, nil, err
+		}
+
+		signedScript, err := SignatureScriptPubKeyHash(tx, idx, hashType, key, sighashReusedValues)
 		if err != nil {
 			return nil, class, nil, err
 		}

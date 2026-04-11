@@ -92,11 +92,13 @@ func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 					cosignerIndex: cosignerIndex,
 					keyChain:      keychain,
 				}
-				addressString, err := s.walletAddressString(address)
+				addressStrings, err := s.walletAddressStringsForScan(address)
 				if err != nil {
 					return nil, err
 				}
-				addresses[addressString] = address
+				for _, addressString := range addressStrings {
+					addresses[addressString] = address
+				}
 			}
 		}
 	}
