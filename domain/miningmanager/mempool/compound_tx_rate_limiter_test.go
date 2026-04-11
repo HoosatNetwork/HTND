@@ -1,9 +1,12 @@
 package mempool
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 )
 
@@ -76,5 +79,45 @@ func TestCompoundTxRateLimiter_RecordAtPastTime(t *testing.T) {
 	rtl.cleanupOldSubmissions(tracker)
 	if ok := rtl.checkRateLimit(addr); !ok {
 		t.Fatalf("expected address to be allowed after past submissions expired, but it was rate-limited")
+	}
+}
+
+func TestCompoundTxRateLimiterExtractSenderAddresses_FallbackToScriptHash(t *testing.T) {
+	config := &Config{
+		CompoundTxRateLimitEnabled: true,
+		DAGParams:                  &dagconfig.MainnetParams,
+	}
+	rtl := newCompoundTxRateLimiter(config)
+
+	// Construct a malformed P2PKH script: it parses and is recognized as P2PKH,
+	// but contains a pubkey-hash of invalid length, so ExtractScriptPubKeyAddress
+	// returns (PubKeyHashTy, nil, nil).
+	malformedPubKeyHash := make([]byte, 31)
+	script, err := txscript.NewScriptBuilder().
+		AddOp(txscript.OpDup).
+		AddOp(txscript.OpBlake2b).
+		AddData(malformedPubKeyHash).
+		AddOp(txscript.OpEqualVerify).
+		AddOp(txscript.OpCheckSig).
+		Script()
+	if err != nil {
+		t.Fatalf("unexpected script builder error: %v", err)
+	}
+
+	tx := &externalapi.DomainTransaction{
+		Inputs: []*externalapi.DomainTransactionInput{
+			nil, // ensure nil inputs are ignored safely
+			{
+				UTXOEntry: &testUTXOEntry{scriptPublicKey: &externalapi.ScriptPublicKey{Script: script, Version: 0}},
+			},
+		},
+	}
+
+	ids := rtl.extractSenderAddresses(tx)
+	if len(ids) != 1 {
+		t.Fatalf("expected exactly 1 sender identifier, got %d (%v)", len(ids), ids)
+	}
+	if !strings.HasPrefix(ids[0], "spkblake2b:") {
+		t.Fatalf("expected fallback identifier with prefix 'spkblake2b:', got %q", ids[0])
 	}
 }
