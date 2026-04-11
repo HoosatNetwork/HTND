@@ -145,6 +145,12 @@ message HoosatdMessage {
     GetUsableAddressesResponseMessage getUsableAddressesResponse = 1091;
     GetPaginatedUtxosByAddressesRequestMessage getPaginatedUtxosByAddressesRequest = 1092;
     GetPaginatedUtxosByAddressesResponseMessage getPaginatedUtxosByAddressesResponse = 1093;
+
+    SubmitTransactionReplacementRequestMessage submitTransactionReplacementRequest = 1100;
+    SubmitTransactionReplacementResponseMessage submitTransactionReplacementResponse = 1101;
+
+    GetFeeEstimateRequestMessage getFeeEstimateRequest = 1106;
+    GetFeeEstimateResponseMessage getFeeEstimateResponse = 1107;
   }
 }
 

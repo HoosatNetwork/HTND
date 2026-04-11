@@ -45,6 +45,8 @@ type MiningManager interface {
 	HandleNewBlockTransactions(txs []*externalapi.DomainTransaction) ([]*externalapi.DomainTransaction, error)
 	ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, err error)
+	ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
+		acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error)
 	RevalidateHighPriorityTransactions() (validTransactions []*externalapi.DomainTransaction, err error)
 }
 
@@ -129,6 +131,14 @@ func (mm *miningManager) ValidateAndInsertTransaction(transaction *externalapi.D
 	isHighPriority bool, allowOrphan bool,
 ) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
 	return mm.mempool.ValidateAndInsertTransaction(transaction, isHighPriority, allowOrphan)
+}
+
+// ValidateAndInsertTransactionReplacement validates the given transaction and attempts to insert it as a replacement (RBF)
+// for one or more transactions that it conflicts with in the mempool.
+func (mm *miningManager) ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction,
+	isHighPriority bool,
+) (acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error) {
+	return mm.mempool.ValidateAndInsertTransactionReplacement(transaction, isHighPriority)
 }
 
 func (mm *miningManager) GetTransaction(

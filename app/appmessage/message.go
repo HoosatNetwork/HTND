@@ -169,6 +169,10 @@ const (
 	CmdGetUsableAddressesResponseMessage
 	CmdGetPaginatedUTXOsByAddressesRequestMessage
 	CmdGetPaginatedUTXOsByAddressesResponseMessage
+	CmdSubmitTransactionReplacementRequestMessage
+	CmdSubmitTransactionReplacementResponseMessage
+	CmdGetFeeEstimateRequestMessage
+	CmdGetFeeEstimateResponseMessage
 )
 
 // ProtocolMessageCommandToString maps all MessageCommands to their string representation
@@ -242,6 +246,10 @@ var RPCMessageCommandToString = map[MessageCommand]string{
 	CmdAddPeerResponseMessage:                                     "AddPeerResponse",
 	CmdSubmitTransactionRequestMessage:                            "SubmitTransactionRequest",
 	CmdSubmitTransactionResponseMessage:                           "SubmitTransactionResponse",
+	CmdSubmitTransactionReplacementRequestMessage:                 "SubmitTransactionReplacementRequest",
+	CmdSubmitTransactionReplacementResponseMessage:                "SubmitTransactionReplacementResponse",
+	CmdGetFeeEstimateRequestMessage:                               "GetFeeEstimateRequest",
+	CmdGetFeeEstimateResponseMessage:                              "GetFeeEstimateResponse",
 	CmdNotifyVirtualSelectedParentChainChangedRequestMessage:      "NotifyVirtualSelectedParentChainChangedRequest",
 	CmdNotifyVirtualSelectedParentChainChangedResponseMessage:     "NotifyVirtualSelectedParentChainChangedResponse",
 	CmdVirtualSelectedParentChainChangedNotificationMessage:       "VirtualSelectedParentChainChangedNotification",
