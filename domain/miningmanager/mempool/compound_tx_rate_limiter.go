@@ -1,11 +1,14 @@
 package mempool
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"sync"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
+	"github.com/Hoosat-Oy/HTND/util"
 )
 
 // compoundTxSubmission represents a single compound transaction submission
@@ -59,15 +62,34 @@ func (rtl *compoundTxRateLimiter) isCompoundTransaction(transaction *externalapi
 // extractSenderAddresses extracts sender addresses from transaction inputs
 func (rtl *compoundTxRateLimiter) extractSenderAddresses(transaction *externalapi.DomainTransaction) []string {
 	addresses := make(map[string]bool) // Use map to avoid duplicates
+	if transaction == nil {
+		return nil
+	}
 
 	for _, input := range transaction.Inputs {
-		if input.UTXOEntry != nil && input.UTXOEntry.ScriptPublicKey() != nil {
-			_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(
-				input.UTXOEntry.ScriptPublicKey(), rtl.config.DAGParams)
-			if err != nil {
+		if input == nil || input.UTXOEntry == nil {
+			continue
+		}
+
+		scriptPublicKey := input.UTXOEntry.ScriptPublicKey()
+		if scriptPublicKey == nil {
+			continue
+		}
+
+		// Prefer standard address extraction (when possible) so the limiter groups by human-readable address.
+		if rtl.config != nil && rtl.config.DAGParams != nil {
+			_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, rtl.config.DAGParams)
+			if err == nil && extractedAddress != nil {
+				addresses[extractedAddress.EncodeAddress()] = true
 				continue
 			}
-			addresses[extractedAddress.EncodeAddress()] = true
+		}
+
+		// Fallback: if we can't extract an address (e.g. malformed P2PKH or missing DAG params),
+		// use a stable hash of the ScriptPublicKey as the sender identifier.
+		fallbackID := scriptPublicKeyIdentifier(scriptPublicKey)
+		if fallbackID != "" {
+			addresses[fallbackID] = true
 		}
 	}
 
@@ -77,6 +99,19 @@ func (rtl *compoundTxRateLimiter) extractSenderAddresses(transaction *externalap
 		result = append(result, addr)
 	}
 	return result
+}
+
+func scriptPublicKeyIdentifier(scriptPublicKey *externalapi.ScriptPublicKey) string {
+	if scriptPublicKey == nil {
+		return ""
+	}
+
+	buf := make([]byte, 2+len(scriptPublicKey.Script))
+	binary.LittleEndian.PutUint16(buf[:2], scriptPublicKey.Version)
+	copy(buf[2:], scriptPublicKey.Script)
+
+	h := util.HashBlake2b(buf)
+	return "spkblake2b:" + hex.EncodeToString(h)
 }
 
 // getOrCreateTracker gets or creates an address tracker for the given address
