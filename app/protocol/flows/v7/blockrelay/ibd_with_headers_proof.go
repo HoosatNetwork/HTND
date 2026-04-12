@@ -213,7 +213,10 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 	}
 	if !syncedPruningPointUTXOSetSuccessfully {
 		log.Debugf("Aborting IBD because the pruning point UTXO set failed to sync")
-		return nil
+		// Returning nil here would cause the caller to treat IBD as successful and commit the
+		// staging consensus, even though critical pruning-point data is missing.
+		// This must be a recoverable error so the staging consensus is deleted and IBD can retry.
+		return protocolerrors.New(false, "pruning point UTXO set failed to sync")
 	}
 	log.Debugf("Finished syncing the current pruning point UTXO set")
 

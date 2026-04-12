@@ -21,20 +21,22 @@ func HandleGetBlockDAGInfo(context *rpccontext.Context, rpcRouter *router.Router
 	params := context.Config.ActiveNetParams
 	consensus := context.Domain.Consensus()
 
-	syncInfo, err := consensus.GetSyncInfo()
-	if err != nil {
-		return nil, err
-	}
-
 	response := appmessage.NewGetBlockDAGInfoResponseMessage()
 	response.NetworkName = params.Name
+
+	syncInfo, err := consensus.GetSyncInfo()
+	if err != nil {
+		response.Error = appmessage.RPCErrorf("Could not get sync info: %s", err)
+		return response, nil
+	}
 
 	response.BlockCount = syncInfo.BlockCount
 	response.HeaderCount = syncInfo.HeaderCount
 
 	tipHashes, err := consensus.Tips()
 	if err != nil {
-		return nil, err
+		response.Error = appmessage.RPCErrorf("Could not get tips: %s", err)
+		return response, nil
 	}
 	response.TipHashes = hashes.ToStrings(tipHashes)
 
@@ -57,11 +59,15 @@ func HandleGetBlockDAGInfo(context *rpccontext.Context, rpcRouter *router.Router
 
 	pruningPoint, err := context.Domain.Consensus().PruningPoint()
 	if err != nil {
-		return nil, err
+		response.Error = appmessage.RPCErrorf("Could not get pruning point: %s", err)
+		response.PruningPointHash = ""
+		return response, nil
 	}
 	response.PruningPointHash = pruningPoint.String()
 
-	context.GetBlockDAGInfoCache.Set(response, getBlockDAGInfoCacheTTL, now)
+	if response.Error == nil {
+		context.GetBlockDAGInfoCache.Set(response, getBlockDAGInfoCacheTTL, now)
+	}
 
 	return response, nil
 }
