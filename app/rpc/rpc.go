@@ -96,7 +96,7 @@ func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *r
 		}
 		handler, ok := handlers[request.Command()]
 		if !ok {
-			return err
+			return errors.Errorf("unknown RPC command %s", request.Command())
 		}
 
 		// Record the RPC request for statistics
@@ -114,6 +114,9 @@ func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *r
 }
 
 func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection) {
+	if err == nil {
+		return
+	}
 	if errors.Is(err, router.ErrTimeout) {
 		log.Warnf("Got timeout from %s. Disconnecting...", netConnection)
 		netConnection.Disconnect()
@@ -127,5 +130,8 @@ func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection
 		netConnection.Disconnect()
 		return
 	}
-	panic(err)
+	// Any other error came from request handling. Treat it as a per-connection failure
+	// rather than crashing the entire node.
+	log.Errorf("RPC client %s disconnected due to handler error: %v", netConnection, err)
+	netConnection.Disconnect()
 }
