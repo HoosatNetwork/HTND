@@ -2,6 +2,7 @@ package rpchandlers
 
 import (
 	"sync"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
@@ -13,9 +14,23 @@ import (
 )
 
 var (
-	usableAddressesCache      = make(map[string][]string)
+	usableAddressesCache      = make(map[string]usableAddressCacheEntry)
 	usableAddressesCacheMutex sync.Mutex
 )
+
+const (
+	// usableAddressesCacheTTL trades slight staleness for vastly reduced disk IO when
+	// clients repeatedly query the same derived addresses (e.g. wallet sync loop).
+	usableAddressesCacheTTL = 30 * time.Second
+	// usableAddressesCacheMaxEntries is a safety bound to avoid unbounded memory growth
+	// in case clients continuously query unique addresses.
+	usableAddressesCacheMaxEntries = 200_000
+)
+
+type usableAddressCacheEntry struct {
+	usable    bool
+	checkedAt time.Time
+}
 
 func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (bool, error) {
 	address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
@@ -27,6 +42,18 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	if err != nil {
 		return false, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 	}
+	// Cache the result for a short time to avoid repeated DB lookups.
+	// NOTE: We intentionally do not cache syncing errors (ErrUTXOIndexSyncing).
+	now := time.Now()
+	usableAddressesCacheMutex.Lock()
+	if entry, ok := usableAddressesCache[addressString]; ok {
+		if now.Sub(entry.checkedAt) <= usableAddressesCacheTTL {
+			usableAddressesCacheMutex.Unlock()
+			return entry.usable, nil
+		}
+	}
+	usableAddressesCacheMutex.Unlock()
+
 	hasUTXOs, err := context.UTXOIndex.HasUTXOs(scriptPublicKey)
 	if err != nil {
 		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -34,6 +61,14 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 		}
 		return false, err
 	}
+
+	usableAddressesCacheMutex.Lock()
+	// Simple safety bound: if the cache grows too big (e.g. scanning huge ranges), clear it.
+	if len(usableAddressesCache) >= usableAddressesCacheMaxEntries {
+		usableAddressesCache = make(map[string]usableAddressCacheEntry)
+	}
+	usableAddressesCache[addressString] = usableAddressCacheEntry{usable: hasUTXOs, checkedAt: now}
+	usableAddressesCacheMutex.Unlock()
 
 	return hasUTXOs, nil
 }
