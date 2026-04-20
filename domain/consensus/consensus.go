@@ -78,6 +78,14 @@ type consensus struct {
 // where UpdatePruningPointByVirtual skips a pruning point.
 const virtualResolveChunk = 100
 
+// resolveVirtualChunkSlowLogThreshold is the minimum duration before we log chunk timing at INFO.
+// This helps diagnose cases where resolving virtual appears to stall after IBD.
+const resolveVirtualChunkSlowLogThreshold = 5 * time.Second
+
+// resolveVirtualChunkHeartbeat is an INFO log emitted while a single resolve-virtual chunk is still running.
+// This helps distinguish a very slow chunk from a hard deadlock.
+const resolveVirtualChunkHeartbeat = 30 * time.Second
+
 func (s *consensus) ValidateAndInsertBlockWithTrustedData(block *externalapi.BlockWithTrustedData, validateUTXO bool) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -1102,11 +1110,35 @@ func (s *consensus) ResolveVirtual(progressReportCallback func(uint64, uint64)) 
 	return nil
 }
 
-func (s *consensus) resolveVirtualChunkWithLock(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error) {
+func (s *consensus) resolveVirtualChunkWithLock(maxBlocksToResolve uint64) (virtualChangeSet *externalapi.VirtualChangeSet, isCompletelyResolved bool, err error) {
+	lockWaitStart := time.Now()
 	s.lock.Lock()
-	defer s.lock.Unlock()
+	lockWait := time.Since(lockWaitStart)
+	chunkStart := time.Now()
 
-	return s.resolveVirtualChunkNoLock(maxBlocksToResolve)
+	chunkDone := make(chan struct{})
+	heartbeat := time.AfterFunc(resolveVirtualChunkHeartbeat, func() {
+		select {
+		case <-chunkDone:
+			return
+		default:
+			log.Infof("ResolveVirtual chunk still running (elapsed=%s, maxBlocks=%d, lockWait=%s)", time.Since(chunkStart), maxBlocksToResolve, lockWait)
+		}
+	})
+	defer func() {
+		close(chunkDone)
+		heartbeat.Stop()
+
+		chunkDuration := time.Since(chunkStart)
+		if lockWait >= resolveVirtualChunkSlowLogThreshold || chunkDuration >= resolveVirtualChunkSlowLogThreshold {
+			log.Infof("ResolveVirtual chunk finished (maxBlocks=%d, lockWait=%s, duration=%s, complete=%t, err=%v)", maxBlocksToResolve, lockWait, chunkDuration, isCompletelyResolved, err)
+		}
+
+		s.lock.Unlock()
+	}()
+
+	virtualChangeSet, isCompletelyResolved, err = s.resolveVirtualChunkNoLock(maxBlocksToResolve)
+	return virtualChangeSet, isCompletelyResolved, err
 }
 
 func (s *consensus) resolveVirtualChunkNoLock(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error) {
