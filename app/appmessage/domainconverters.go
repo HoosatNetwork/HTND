@@ -26,11 +26,6 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 		// Defensive: block header should not be nil
 		return nil
 	}
-	if domainBlock.PoWHash == "" {
-		state := pow.NewState(domainBlock.Header.ToMutable())
-		_, powHash := state.CalculateProofOfWorkValue()
-		domainBlock.PoWHash = powHash.String()
-	}
 	var transactions []*MsgTx
 	if len(domainBlock.Transactions) > 0 {
 		transactions = make([]*MsgTx, len(domainBlock.Transactions))
@@ -617,11 +612,6 @@ func DomainBlockWithTrustedDataToBlockWithTrustedData(block *externalapi.BlockWi
 			Hash:         datum.Hash,
 			GHOSTDAGData: domainGHOSTDAGDataGHOSTDAGData(datum.GHOSTDAGData),
 		}
-	}
-	if block.Block.PoWHash == "" {
-		state := pow.NewState(block.Block.Header.ToMutable())
-		_, powHash := state.CalculateProofOfWorkValue()
-		block.Block.PoWHash = powHash.String()
 	}
 
 	return &MsgBlockWithTrustedData{

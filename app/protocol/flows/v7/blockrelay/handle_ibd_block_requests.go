@@ -9,7 +9,6 @@ import (
 	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
 	"github.com/Hoosat-Oy/HTND/domain"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 )
 
@@ -63,11 +62,6 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				}
 
 				// TODO (Partial nodes): Convert block to partial block if needed
-				if block.PoWHash == "" {
-					state := pow.NewState(block.Header.ToMutable())
-					_, powHash := state.CalculateProofOfWorkValue()
-					block.PoWHash = powHash.String()
-				}
 				log.Debugf("Relaying IBD block %s to peer %s", hash, peer.Address())
 				ibdBlockMessage := appmessage.NewMsgIBDBlock(appmessage.DomainBlockToMsgBlock(block))
 				err = outgoingRoute.Enqueue(ibdBlockMessage)

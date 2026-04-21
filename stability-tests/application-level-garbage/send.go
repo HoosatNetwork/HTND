@@ -38,11 +38,6 @@ func sendBlocks(address string, minimalNetAdapter *standalone.MinimalNetAdapter,
 		}
 
 		// Recalculate PoW hash if it's missing for whatever reason before submitting.
-		if block.PoWHash == "" {
-			state := pow.NewState(block.Header.ToMutable())
-			_, powHash := state.CalculateProofOfWorkValue()
-			block.PoWHash = powHash.String()
-		}
 
 		err = routes.OutgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))
 		if err != nil {

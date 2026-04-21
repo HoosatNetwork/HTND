@@ -76,11 +76,5 @@ func waitForRequestAndSend(routes *standalone.Routes, block *externalapi.DomainB
 			blockHash, requestRelayBlockMessage.Hashes)
 	}
 
-	if block.PoWHash == "" {
-		state := pow.NewState(block.Header.ToMutable())
-		_, powHash := state.CalculateProofOfWorkValue()
-		block.PoWHash = powHash.String()
-	}
-
 	return routes.OutgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))
 }
