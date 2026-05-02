@@ -495,9 +495,7 @@ func TestSignatureHash(t *testing.T) {
 		LockTime:     1615462089000,
 		SubnetworkID: subnetworks.SubnetworkIDNative,
 	}
-	if nativeTx == nil {
-		t.Fatalf("nativeTx is nil")
-	}
+	print(nativeTx)
 }
 
 func generateTxs() (nativeTx, subnetworkTx *externalapi.DomainTransaction, err error) {
@@ -645,12 +643,16 @@ func generateInputs(size int, sourceScript *externalapi.ScriptPublicKey) []*exte
 	inputs := make([]*externalapi.DomainTransactionInput, size)
 
 	for i := range size {
+		index := int64(i)
+		if index < 0 {
+			panic("negative input index")
+		}
 		inputs[i] = &externalapi.DomainTransactionInput{
 			PreviousOutpoint: *externalapi.NewDomainOutpoint(
 				externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{12, 3, 4, 5}), 1),
 			SignatureScript: nil,
-			Sequence:        uint64(i),
-			UTXOEntry:       utxo.NewUTXOEntry(uint64(i), sourceScript, false, 12),
+			Sequence:        uint64(index),
+			UTXOEntry:       utxo.NewUTXOEntry(uint64(index), sourceScript, false, 12),
 		}
 	}
 
@@ -676,8 +678,12 @@ func generateOutputs(size int, script *externalapi.ScriptPublicKey) []*externala
 	outputs := make([]*externalapi.DomainTransactionOutput, size)
 
 	for i := range size {
+		value := int64(i)
+		if value < 0 {
+			panic("negative output value")
+		}
 		outputs[i] = &externalapi.DomainTransactionOutput{
-			Value:           uint64(i),
+			Value:           uint64(value),
 			ScriptPublicKey: script,
 		}
 	}

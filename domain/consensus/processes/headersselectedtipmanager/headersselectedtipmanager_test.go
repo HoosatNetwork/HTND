@@ -24,7 +24,11 @@ func TestAddHeaderTip(t *testing.T) {
 		stagingArea := model.NewStagingArea()
 		checkExpectedSelectedChain := func(expectedSelectedChain []*externalapi.DomainHash) {
 			for i, blockHash := range expectedSelectedChain {
-				chainBlockHash, err := tc.HeadersSelectedChainStore().GetHashByIndex(tc.DatabaseContext(), stagingArea, uint64(i))
+				if i < 0 {
+					t.Fatalf("negative chain index %d", i)
+				}
+				chainIndex := uint64(uint(i))
+				chainBlockHash, err := tc.HeadersSelectedChainStore().GetHashByIndex(tc.DatabaseContext(), stagingArea, chainIndex)
 				if err != nil {
 					t.Fatalf("GetHashByIndex: %+v", err)
 				}
@@ -38,15 +42,20 @@ func TestAddHeaderTip(t *testing.T) {
 					t.Fatalf("GetIndexByHash: %+v", err)
 				}
 
-				if uint64(i) != index {
+				if chainIndex != index {
 					t.Fatalf("chain block %s is expected to be %d but got %d", blockHash, i, index)
 				}
 			}
 
-			_, err := tc.HeadersSelectedChainStore().GetHashByIndex(tc.DatabaseContext(), stagingArea, uint64(len(expectedSelectedChain)+1))
+			nextExpectedIndexInt := len(expectedSelectedChain) + 1
+			if nextExpectedIndexInt < 0 {
+				t.Fatalf("negative next chain index %d", nextExpectedIndexInt)
+			}
+			nextExpectedIndex := uint64(uint(nextExpectedIndexInt))
+			_, err := tc.HeadersSelectedChainStore().GetHashByIndex(tc.DatabaseContext(), stagingArea, nextExpectedIndex)
 			if !errors.Is(err, database.ErrNotFound) {
 				t.Fatalf("index %d is not expected to exist, but instead got error: %+v",
-					uint64(len(expectedSelectedChain)+1), err)
+					nextExpectedIndex, err)
 			}
 		}
 

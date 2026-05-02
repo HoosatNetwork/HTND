@@ -41,7 +41,7 @@ func main() {
 	case getDaemonVersionSubCmd:
 		err = getDaemonVersion(config.(*getDaemonVersionConfig))
 	default:
-		err = errors.Errorf("Unknown sub-command '%s'\n", subCmd)
+		err = errors.Errorf("unknown sub-command '%s'", subCmd)
 	}
 
 	if err != nil {

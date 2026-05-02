@@ -67,34 +67,38 @@ func HighComplexNonLinear(x float64) float64 {
 
 func ComplexNonLinear(x float64) float64 {
 	transformFactor := math.Mod(x, 1.0)
-	if x < 1 {
-		if transformFactor < 0.25 {
+	switch {
+	case x < 1:
+		switch {
+		case transformFactor < 0.25:
 			return MediumComplexNonLinear(x + (1 + transformFactor))
-		} else if transformFactor < 0.5 {
+		case transformFactor < 0.5:
 			return MediumComplexNonLinear(x - (1 + transformFactor))
-		} else if transformFactor < 0.75 {
+		case transformFactor < 0.75:
 			return MediumComplexNonLinear(x * (1 + transformFactor))
-		} else {
+		default:
 			return MediumComplexNonLinear(x / (1 + transformFactor))
 		}
-	} else if x < 10 {
-		if transformFactor < 0.25 {
+	case x < 10:
+		switch {
+		case transformFactor < 0.25:
 			return IntermediateComplexNonLinear(x + (1 + transformFactor))
-		} else if transformFactor < 0.5 {
+		case transformFactor < 0.5:
 			return IntermediateComplexNonLinear(x - (1 + transformFactor))
-		} else if transformFactor < 0.75 {
+		case transformFactor < 0.75:
 			return IntermediateComplexNonLinear(x * (1 + transformFactor))
-		} else {
+		default:
 			return IntermediateComplexNonLinear(x / (1 + transformFactor))
 		}
-	} else {
-		if transformFactor < 0.25 {
+	default:
+		switch {
+		case transformFactor < 0.25:
 			return HighComplexNonLinear(x + (1 + transformFactor))
-		} else if transformFactor < 0.5 {
+		case transformFactor < 0.5:
 			return HighComplexNonLinear(x - (1 + transformFactor))
-		} else if transformFactor < 0.75 {
+		case transformFactor < 0.75:
 			return HighComplexNonLinear(x * (1 + transformFactor))
-		} else {
+		default:
 			return HighComplexNonLinear(x / (1 + transformFactor))
 		}
 	}
@@ -143,22 +147,56 @@ func generateHoohashMatrix(hash *externalapi.DomainHash) *matrix {
 		for i := range mat {
 			for j := 0; j < 64; j += 16 {
 				val := generator.Uint64()
-				mat[i][j] = uint16(val & 0x0F)
-				mat[i][j+1] = uint16((val >> 4) & 0x0F)
-				mat[i][j+2] = uint16((val >> 8) & 0x0F)
-				mat[i][j+3] = uint16((val >> 12) & 0x0F)
-				mat[i][j+4] = uint16((val >> 16) & 0x0F)
-				mat[i][j+5] = uint16((val >> 20) & 0x0F)
-				mat[i][j+6] = uint16((val >> 24) & 0x0F)
-				mat[i][j+7] = uint16((val >> 28) & 0x0F)
-				mat[i][j+8] = uint16((val >> 32) & 0x0F)
-				mat[i][j+9] = uint16((val >> 36) & 0x0F)
-				mat[i][j+10] = uint16((val >> 40) & 0x0F)
-				mat[i][j+11] = uint16((val >> 44) & 0x0F)
-				mat[i][j+12] = uint16((val >> 48) & 0x0F)
-				mat[i][j+13] = uint16((val >> 52) & 0x0F)
-				mat[i][j+14] = uint16((val >> 56) & 0x0F)
-				mat[i][j+15] = uint16((val >> 60) & 0x0F)
+				v0 := val & 0x0F
+				v1 := (val >> 4) & 0x0F
+				v2 := (val >> 8) & 0x0F
+				if v0 > uint64(^uint16(0)) || v1 > uint64(^uint16(0)) || v2 > uint64(^uint16(0)) {
+					panic("value overflows uint16")
+				}
+				mat[i][j] = uint16(v0)
+				mat[i][j+1] = uint16(v1)
+				mat[i][j+2] = uint16(v2)
+				v3 := (val >> 12) & 0x0F
+				v4 := (val >> 16) & 0x0F
+				v5 := (val >> 20) & 0x0F
+				if v3 > 0xFFFF || v4 > 0xFFFF || v5 > 0xFFFF {
+					panic("value overflows uint16")
+				}
+				mat[i][j+3] = uint16(v3)
+				mat[i][j+4] = uint16(v4)
+				mat[i][j+5] = uint16(v5)
+				v6 := (val >> 24) & 0x0F
+				v7 := (val >> 28) & 0x0F
+				v8 := (val >> 32) & 0x0F
+				if v6 > 0xFFFF || v7 > 0xFFFF || v8 > 0xFFFF {
+					panic("value overflows uint16")
+				}
+				mat[i][j+6] = uint16(v6)
+				mat[i][j+7] = uint16(v7)
+				mat[i][j+8] = uint16(v8)
+				v9 := (val >> 36) & 0x0F
+				v10 := (val >> 40) & 0x0F
+				v11 := (val >> 44) & 0x0F
+				if v9 > 0xFFFF || v10 > 0xFFFF || v11 > 0xFFFF {
+					panic("value overflows uint16")
+				}
+				mat[i][j+9] = uint16(v9)
+				mat[i][j+10] = uint16(v10)
+				mat[i][j+11] = uint16(v11)
+				v12 := (val >> 48) & 0x0F
+				v13 := (val >> 52) & 0x0F
+				v14 := (val >> 56) & 0x0F
+				if v12 > 0xFFFF || v13 > 0xFFFF || v14 > 0xFFFF {
+					panic("value overflows uint16")
+				}
+				mat[i][j+12] = uint16(v12)
+				mat[i][j+13] = uint16(v13)
+				mat[i][j+14] = uint16(v14)
+				v15 := (val >> 60) & 0x0F
+				if v15 > 0xFFFF {
+					panic("value overflows uint16")
+				}
+				mat[i][j+15] = uint16(v15)
 			}
 		}
 		rank := mat.computeHoohashRank()
@@ -206,6 +244,12 @@ func generateHoohashLookupTable() {
 	var seed [32]byte
 	for i := range lookupTable {
 		// Use SHA-256 to generate deterministic values
+		if i < 0 {
+			continue
+		}
+		if i > int(^uint32(0)) {
+			panic("i overflows uint32")
+		}
 		binary.BigEndian.PutUint32(seed[:], uint32(i))
 		hash := sha256.Sum256(seed[:])
 		lookupTable[i] = binary.BigEndian.Uint64(hash[:8])
@@ -296,7 +340,8 @@ func BenchmarkHoohashRev2() *externalapi.DomainHash {
 	memoryHardResult := memoryHardFunction(hash.ByteSlice())
 	tradeoffResult := timeMemoryTradeoff(binary.BigEndian.Uint64(memoryHardResult))
 	vdfResult := verifiableDelayFunction(memoryHardResult)
-	combined := append(memoryHardResult, vdfResult...)
+	combined := append([]byte{}, memoryHardResult...)
+	combined = append(combined, vdfResult...)
 	combined = append(combined, byte(tradeoffResult))
 	matrix := generateHoohashMatrix(hash)
 	multiplied := matrix.HoohashMatrixMultiplication(externalapi.NewDomainHashFromByteArray((*[32]byte)(combined)))

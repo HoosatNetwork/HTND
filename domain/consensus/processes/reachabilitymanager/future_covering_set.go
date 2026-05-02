@@ -65,7 +65,8 @@ func (rt *reachabilityManager) insertToFutureCoveringSet(stagingArea *model.Stag
 		// Note that ancestorIndex might be equal to len(futureCoveringTreeNodeSet)
 		left := futureCoveringSet[:ancestorIndex+1]
 		right := append([]*externalapi.DomainHash{futureNode}, futureCoveringSet[ancestorIndex+1:]...)
-		newSet = append(left, right...)
+		left = append(left, right...)
+		newSet = left
 	}
 	reachabilityData.SetFutureCoveringSet(newSet)
 	rt.stageData(stagingArea, node, reachabilityData)

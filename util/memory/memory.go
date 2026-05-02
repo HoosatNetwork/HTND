@@ -24,7 +24,7 @@ type allocationInfo struct {
 }
 
 var (
-	logLeaks      uint64 = 0
+	logLeaks      uint64
 	allocationSeq uint64
 	allocationsMu sync.Mutex
 	allocations   = make(map[uint64]allocationInfo)

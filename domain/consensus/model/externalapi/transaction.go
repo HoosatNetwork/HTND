@@ -277,8 +277,8 @@ func (spk *ScriptPublicKey) String() string {
 }
 
 // NewScriptPublicKeyFromString converts the given string to a scriptPublicKey
-func NewScriptPublicKeyFromString(ScriptPublicKeyString string) *ScriptPublicKey {
-	bytes := []byte(ScriptPublicKeyString)
+func NewScriptPublicKeyFromString(scriptPublicKeyString string) *ScriptPublicKey {
+	bytes := []byte(scriptPublicKeyString)
 	version := binary.LittleEndian.Uint16(bytes[:2])
 	script := bytes[2:]
 	return &ScriptPublicKey{Script: script, Version: version}

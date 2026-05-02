@@ -11,6 +11,11 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 )
 
+func newMiningRand() *rand.Rand {
+	// #nosec G404 -- mining.SolveBlock requires math/rand and this helper is used only in integration tests.
+	return rand.New(rand.NewSource(time.Now().UnixNano()))
+}
+
 func mineNextBlock(t *testing.T, harness *appHarness) *externalapi.DomainBlock {
 	blockTemplate, err := harness.rpcClient.GetBlockTemplate(harness.miningAddress, "integration")
 	if err != nil {
@@ -27,8 +32,7 @@ func mineNextBlock(t *testing.T, harness *appHarness) *externalapi.DomainBlock {
 		_, powHash := pow.NewState(block.Header.ToMutable()).CalculateProofOfWorkValue()
 		block.PoWHash = powHash.String()
 	} else {
-		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-		_, powHash := mining.SolveBlock(block, rd)
+		_, powHash := mining.SolveBlock(block, newMiningRand())
 		block.PoWHash = powHash
 	}
 	_, err = harness.rpcClient.SubmitBlockAlsoIfNonDAA(block, block.PoWHash)

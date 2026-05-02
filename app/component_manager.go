@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/id"
 	"github.com/Hoosat-Oy/HTND/util/panics"
 )
+
+func checkedDurationFromHours(value uint64) (time.Duration, error) {
+	parsedValue, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(parsedValue) * time.Hour, nil
+}
 
 // ComponentManager is a wrapper for all the htnd services
 type ComponentManager struct {
@@ -81,12 +90,20 @@ func (a *ComponentManager) Stop() {
 func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database, interrupt chan<- struct{}) (
 	*ComponentManager, error,
 ) {
+	dataRetentionDuration, err := checkedDurationFromHours(cfg.DataRetentionHours)
+	if err != nil {
+		return nil, err
+	}
+	pruningInterval, err := checkedDurationFromHours(cfg.PruningIntervalHours)
+	if err != nil {
+		return nil, err
+	}
 	consensusConfig := consensus.Config{
 		Params:                          *cfg.ActiveNetParams,
 		IsArchival:                      cfg.IsArchivalNode,
 		DeletionDepth:                   cfg.DeletionDepth,
-		DataRetentionDuration:           time.Duration(cfg.DataRetentionHours) * time.Hour,
-		PruningInterval:                 time.Duration(cfg.PruningIntervalHours) * time.Hour,
+		DataRetentionDuration:           dataRetentionDuration,
+		PruningInterval:                 pruningInterval,
 		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
 		UseHoohashCLibrary:              cfg.UseHoohashCLibrary,
 	}

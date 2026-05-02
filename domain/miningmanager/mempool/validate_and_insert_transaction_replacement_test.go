@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
@@ -12,6 +13,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensusreference"
 	"github.com/pkg/errors"
 )
+
+func checkedUint64FromInt(value int) uint64 {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsedValue
+}
 
 func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
@@ -148,7 +157,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			additionalInputsCount := 49
 			additionalBootstraps := make([]*externalapi.DomainTransaction, 0, additionalInputsCount)
 			for i := 0; i < additionalInputsCount; i++ {
-				tx := testutils.CreateTransactionWithOutput(1_000_000 + uint64(i+1))
+				tx := testutils.CreateTransactionWithOutput(1_000_000 + checkedUint64FromInt(i+1))
 				if err := testutils.StageTransactionOutputsToVirtual(tc, tx, 0); err != nil {
 					t.Fatalf("StageTransactionOutputsToVirtual(additional): %+v", err)
 				}

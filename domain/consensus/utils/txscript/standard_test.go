@@ -305,7 +305,7 @@ func (b *bogusAddress) ScriptAddress() []byte {
 }
 
 // IsForPrefix lies blatantly to satisfy the util.Address interface.
-func (b *bogusAddress) IsForPrefix(prefix util.Bech32Prefix) bool {
+func (b *bogusAddress) IsForPrefix(_ util.Bech32Prefix) bool {
 	return true // why not?
 }
 

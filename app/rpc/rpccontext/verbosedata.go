@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"math"
 	"math/big"
+	"strconv"
 
 	difficultyPackage "github.com/Hoosat-Oy/HTND/util/difficulty"
 	"github.com/pkg/errors"
@@ -142,7 +143,11 @@ func (ctx *Context) PopulateTransactionWithVerboseData(
 	}
 	if domainBlockHeader != nil {
 		transaction.VerboseData.BlockHash = consensushashing.HeaderHash(domainBlockHeader).String()
-		transaction.VerboseData.BlockTime = uint64(domainBlockHeader.TimeInMilliseconds())
+		blockTime, err := strconv.ParseUint(strconv.FormatInt(domainBlockHeader.TimeInMilliseconds(), 10), 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		transaction.VerboseData.BlockTime = blockTime
 	}
 	for _, input := range transaction.Inputs {
 		ctx.populateTransactionInputWithVerboseData(input)

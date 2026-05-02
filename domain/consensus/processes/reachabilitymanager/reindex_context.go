@@ -294,9 +294,9 @@ func (rc *reindexContext) reindexIntervalsEarlierThanRoot(stagingArea *model.Sta
 func (rc *reindexContext) reclaimIntervalBefore(stagingArea *model.StagingArea,
 	allocationNode, commonAncestor, chosenChild, reindexRoot *externalapi.DomainHash, requiredAllocation uint64,
 ) error {
-	var slackSum uint64 = 0
-	var pathLen uint64 = 0
-	var pathSlackAlloc uint64 = 0
+	var slackSum uint64
+	var pathLen uint64
+	var pathSlackAlloc uint64
 
 	var err error
 	current := chosenChild
@@ -466,9 +466,9 @@ func (rc *reindexContext) offsetSiblingsBefore(stagingArea *model.StagingArea,
 func (rc *reindexContext) reclaimIntervalAfter(stagingArea *model.StagingArea,
 	allocationNode, commonAncestor, chosenChild, reindexRoot *externalapi.DomainHash, requiredAllocation uint64,
 ) error {
-	var slackSum uint64 = 0
-	var pathLen uint64 = 0
-	var pathSlackAlloc uint64 = 0
+	var slackSum uint64
+	var pathLen uint64
+	var pathSlackAlloc uint64
 
 	var err error
 	current := chosenChild

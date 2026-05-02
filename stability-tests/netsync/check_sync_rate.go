@@ -24,7 +24,11 @@ func checkSyncRate(syncerClient, syncedClient *rpc.Client) error {
 	syncerBlockCount := syncerBlockCountResponse.BlockCount
 	log.Infof("SYNCER block count: %d headers and %d blocks", syncerHeadersCount, syncerBlockCount)
 	// We give 5 seconds for IBD to start and then 100 milliseconds for each block.
-	expectedTime := time.Now().Add(5*time.Second + time.Duration(syncerHeadersCount)*100*time.Millisecond)
+	headerSyncDuration, err := checkedDurationFromCount(syncerHeadersCount, 100*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	expectedTime := time.Now().Add(5*time.Second + headerSyncDuration)
 	start := time.Now()
 	const tickDuration = 10 * time.Second
 	ticker := time.NewTicker(tickDuration)

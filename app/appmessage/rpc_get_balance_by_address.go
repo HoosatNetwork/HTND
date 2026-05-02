@@ -34,8 +34,8 @@ func (msg *GetBalanceByAddressResponseMessage) Command() MessageCommand {
 }
 
 // NewGetBalanceByAddressResponse returns an instance of the message
-func NewGetBalanceByAddressResponse(Balance uint64) *GetBalanceByAddressResponseMessage {
+func NewGetBalanceByAddressResponse(balance uint64) *GetBalanceByAddressResponseMessage {
 	return &GetBalanceByAddressResponseMessage{
-		Balance: Balance,
+		Balance: balance,
 	}
 }

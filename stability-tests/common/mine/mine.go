@@ -1,8 +1,9 @@
 package mine
 
 import (
+	cryptorand "crypto/rand"
 	"math/big"
-	"math/rand"
+	rand "math/rand"
 	"path/filepath"
 	"strings"
 	"time"
@@ -150,9 +151,25 @@ func mineOrFetchBlock(blockData JSONBlock, mdb *miningDB, testConsensus testapi.
 	return block, nil
 }
 
-var random = rand.New(rand.NewSource(time.Now().UnixNano()))
-
 // SolveBlock increments the given block's nonce until it matches the difficulty requirements in its bits field
 func SolveBlock(block *externalapi.DomainBlock) (*big.Int, string) {
-	return mining.SolveBlock(block, random)
+	// Use a cryptographically secure random seed for math/rand
+	seed := cryptoRandSeed()
+	// #nosec G404 -- math/rand is required by mining.SolveBlock; the seed is generated with crypto/rand.
+	r := rand.New(rand.NewSource(seed))
+	return mining.SolveBlock(block, r)
+}
+
+// cryptoRandSeed returns a cryptographically secure random int64 seed
+func cryptoRandSeed() int64 {
+	b := make([]byte, 8)
+	if _, err := cryptorand.Read(b); err != nil {
+		panic(err)
+	}
+	// Convert bytes to int64
+	var seed int64
+	for i := 0; i < 8; i++ {
+		seed = (seed << 8) | int64(b[i])
+	}
+	return seed
 }

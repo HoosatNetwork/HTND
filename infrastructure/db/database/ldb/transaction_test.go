@@ -135,11 +135,9 @@ func TestTransactionCloseErrors(t *testing.T) {
 							"returned wrong error. Want: %s, got: %s",
 							test.name, expectedErrContainsString, err)
 					}
-				} else {
-					if err != nil {
-						t.Fatalf("TestTransactionCloseErrors: %s "+
-							"unexpectedly failed: %s", test.name, err)
-					}
+				} else if err != nil {
+					t.Fatalf("TestTransactionCloseErrors: %s "+
+						"unexpectedly failed: %s", test.name, err)
 				}
 			}
 		}()

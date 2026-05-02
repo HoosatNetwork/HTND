@@ -22,18 +22,27 @@ var (
 
 // GetBlockVersion returns the current block version (atomic load).
 func GetBlockVersion() uint16 {
-	return uint16(atomic.LoadUint32(&blockVersion))
+	v := atomic.LoadUint32(&blockVersion)
+	if v > math.MaxUint16 {
+		return math.MaxUint16
+	}
+	return uint16(v)
 }
 
 // SetBlockVersion sets the current block version (atomic store).
 func SetBlockVersion(v uint16) {
-	if v > uint16(atomic.LoadUint32(&blockVersion)) {
+	current := atomic.LoadUint32(&blockVersion)
+	if uint32(v) > current {
 		log.Infof("Set block version to %d", v)
 		atomic.StoreUint32(&blockVersion, uint32(v))
 	}
 }
 
 func ForceSetBlockVersion(v uint) {
+	// Prevent overflow: only store if v fits in uint32
+	if v > uint(^uint32(0)) {
+		panic("ForceSetBlockVersion: value overflows uint32")
+	}
 	atomic.StoreUint32(&blockVersion, uint32(v))
 }
 

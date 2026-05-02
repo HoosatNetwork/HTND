@@ -59,7 +59,7 @@ func TestStack(t *testing.T) {
 		{
 			"noop",
 			[][]byte{{1}, {2}, {3}, {4}, {5}},
-			func(s *stack) error {
+			func(_ *stack) error {
 				return nil
 			},
 			nil,
@@ -837,7 +837,8 @@ func TestStack(t *testing.T) {
 		}
 
 		// Ensure the resulting stack is the expected length.
-		if int32(len(test.after)) != s.Depth() {
+		expectedDepth := checkedStackSize(len(test.after))
+		if expectedDepth != s.Depth() {
 			t.Errorf("%s: stack depth doesn't match expected: %v "+
 				"vs %v", test.name, len(test.after),
 				s.Depth())
@@ -847,7 +848,7 @@ func TestStack(t *testing.T) {
 		// Ensure all items of the resulting stack are the expected
 		// values.
 		for i := range test.after {
-			val, err := s.PeekByteArray(s.Depth() - int32(i) - 1)
+			val, err := s.PeekByteArray(s.Depth() - checkedStackSize(i) - 1)
 			if err != nil {
 				t.Errorf("%s: can't peek %dth stack entry: %v",
 					test.name, i, err)

@@ -8,9 +8,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// PebbleDBCursor is a thin wrapper around Pebble iterators.
-type PebbleDBCursor struct {
-	db          *PebbleDB
+// DBCursor is a thin wrapper around Pebble iterators.
+type DBCursor struct {
+	db          *DB
 	iterator    *pebble.Iterator
 	firstCalled bool
 	bucket      *database.Bucket
@@ -40,14 +40,14 @@ func BytesPrefix(prefix []byte) *pebble.IterOptions {
 }
 
 // Cursor begins a new cursor over the given prefix.
-func (db *PebbleDB) Cursor(bucket *database.Bucket) (database.Cursor, error) {
+func (db *DB) Cursor(bucket *database.Bucket) (database.Cursor, error) {
 	// log.Infof("Bucket path = %x", bucket.Path())
 	// log.Infof("Opening cursor for bucket path: %x", bucket.Path())
 	iterator, err := db.db.NewIter(BytesPrefix(bucket.Path()))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create iterator")
 	}
-	cursor := &PebbleDBCursor{
+	cursor := &DBCursor{
 		db:          db,
 		iterator:    iterator,
 		bucket:      bucket,
@@ -60,7 +60,7 @@ func (db *PebbleDB) Cursor(bucket *database.Bucket) (database.Cursor, error) {
 
 // Next moves the iterator to the next key/value pair. It returns whether the iterator is exhausted.
 // Panics if the cursor is closed.
-func (c *PebbleDBCursor) Next() bool {
+func (c *DBCursor) Next() bool {
 	if c.isClosed {
 		panic("cannot call next on a closed cursor")
 	}
@@ -78,7 +78,7 @@ func (c *PebbleDBCursor) Next() bool {
 
 // First moves the iterator to the first key/value pair. It returns false if such a pair does not exist.
 // Panics if the cursor is closed.
-func (c *PebbleDBCursor) First() bool {
+func (c *DBCursor) First() bool {
 	if c.isClosed {
 		panic("cannot call First on a closed cursor")
 	}
@@ -90,7 +90,7 @@ func (c *PebbleDBCursor) First() bool {
 
 // Seek moves the iterator to the first key/value pair whose key is greater
 // than or equal to the given key. It returns ErrNotFound if such pair does not exist.
-func (c *PebbleDBCursor) Seek(key *database.Key) error {
+func (c *DBCursor) Seek(key *database.Key) error {
 	if c.isClosed {
 		return errors.New("cannot seek a closed cursor")
 	}
@@ -107,7 +107,7 @@ func (c *PebbleDBCursor) Seek(key *database.Key) error {
 // Note that the key is trimmed to not include the prefix the cursor was opened with.
 // The caller should not modify the contents of the returned slice, and its contents may change
 // on the next call to Next.
-func (c *PebbleDBCursor) Key() (*database.Key, error) {
+func (c *DBCursor) Key() (*database.Key, error) {
 	if c.isClosed {
 		return nil, errors.New("cannot get the key of a closed cursor")
 	}
@@ -129,7 +129,7 @@ func (c *PebbleDBCursor) Key() (*database.Key, error) {
 // Value returns the value of the current key/value pair, or ErrNotFound if done.
 // The caller should not modify the contents of the returned slice, and its contents may change
 // on the next call to Next.
-func (c *PebbleDBCursor) Value() ([]byte, error) {
+func (c *DBCursor) Value() ([]byte, error) {
 	if c.isClosed {
 		return nil, errors.New("cannot get the value of a closed cursor")
 	}
@@ -148,7 +148,7 @@ func (c *PebbleDBCursor) Value() ([]byte, error) {
 }
 
 // Close releases associated resources.
-func (c *PebbleDBCursor) Close() error {
+func (c *DBCursor) Close() error {
 	if c.isClosed {
 		return errors.New("cannot close an already closed cursor")
 	}

@@ -13,6 +13,15 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
 
+const maxScriptInt = int(^uint(0) >> 1)
+
+func checkedUintToInt(value uint) (int, bool) {
+	if value > uint(maxScriptInt) {
+		return 0, false
+	}
+	return int(value), true
+}
+
 // These are the constants specified for maximums in individual scripts.
 const (
 	MaxOpsPerScript       = 201 // Max number of non-push operations.
@@ -135,16 +144,17 @@ func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, e
 
 			// Disallow entries that do not fit script or were
 			// sign extended.
-			if int(l) > len(script[off:]) || int(l) < 0 {
+			dataLen, ok := checkedUintToInt(l)
+			if !ok || dataLen > len(script[off:]) || dataLen < 0 {
 				str := fmt.Sprintf("opcode %s pushes %d bytes, "+
 					"but script only has %d remaining",
-					op.name, int(l), len(script[off:]))
+					op.name, dataLen, len(script[off:]))
 				return retScript, scriptError(ErrMalformedPush,
 					str)
 			}
 
-			pop.data = script[off : off+int(l)]
-			i += 1 - op.length + int(l)
+			pop.data = script[off : off+dataLen]
+			i += 1 - op.length + dataLen
 		}
 
 		retScript = append(retScript, pop)
@@ -155,6 +165,8 @@ func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, e
 
 // parseScript preparses the script in bytes into a list of parsedOpcodes while
 // applying a number of sanity checks.
+//
+//nolint:revive // ParseScript intentionally exposes parsed opcodes for internal txscript callers.
 func ParseScript(script []byte) ([]parsedOpcode, error) {
 	return parseScriptTemplate(script, &opcodeArray)
 }

@@ -132,6 +132,9 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 func (csm *consensusStateManager) ImportPruningPoints(stagingArea *model.StagingArea, pruningPoints []externalapi.BlockHeader) error {
 	for i, header := range pruningPoints {
 		blockHash := consensushashing.HeaderHash(header)
+		if i < 0 {
+			return errors.Errorf("index %d is negative, cannot convert to uint64", i)
+		}
 		err := csm.pruningStore.StagePruningPointByIndex(csm.databaseContext, stagingArea, blockHash, uint64(i))
 		if err != nil {
 			return err

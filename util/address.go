@@ -13,7 +13,7 @@ import (
 
 // ErrUnknownAddressType describes an error where an address can not
 // decoded as a specific address type due to the string encoding
-// begining with an identifier byte unknown to any standard or
+// beginning with an identifier byte unknown to any standard or
 // registered (via dagconfig.Register) network.
 var ErrUnknownAddressType = errors.New("unknown address type")
 
@@ -428,7 +428,7 @@ func NewAddressScriptHashFromHash(scriptHash []byte, prefix Bech32Prefix) (*Addr
 // newAddressScriptHashFromHash is the internal API to create a script hash
 // address with a known leading identifier byte for a network, rather than
 // looking it up through its parameters. This is useful when creating a new
-// address structure from a string encoding where the identifer byte is already
+// address structure from a string encoding where the identifier byte is already
 // known.
 func newAddressScriptHashFromHash(prefix Bech32Prefix, scriptHash []byte) (*AddressScriptHash, error) {
 	// Check for a valid script hash length.
@@ -472,7 +472,7 @@ func (a *AddressScriptHash) String() string {
 }
 
 // HashBlake2b returns the underlying array of the script hash. This can be useful
-// when an array is more appropiate than a slice (for example, when used as map
+// when an array is more appropriate than a slice (for example, when used as map
 // keys).
 func (a *AddressScriptHash) HashBlake2b() *[blake2b.Size256]byte {
 	return &a.hash

@@ -2,6 +2,7 @@ package difficultymanager_test
 
 import (
 	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
 )
+
+func checkedUint64FromInt(value int) uint64 {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsedValue
+}
 
 func TestDifficulty(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
@@ -278,7 +287,8 @@ func TestDAAScore(t *testing.T) {
 
 		split2Hash := tipHash
 		split2DAAScore := tipDAAScore
-		for i := uint64(0); i < uint64(consensusConfig.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])-1; i++ {
+		windowSize := checkedUint64FromInt(consensusConfig.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+		for i := uint64(0); i < windowSize-1; i++ {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("AddBlock: %+v", err)

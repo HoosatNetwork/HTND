@@ -35,6 +35,10 @@ func main() {
 	}
 	defer func() { _ = client.Disconnect() }()
 
+	const maxTimeoutSeconds = uint64(1<<63-1) / uint64(time.Second)
+	if cfg.Timeout > maxTimeoutSeconds {
+		printErrorAndExit(fmt.Sprintf("timeout %d seconds exceeds the maximum supported duration", cfg.Timeout))
+	}
 	timeout := time.Duration(cfg.Timeout) * time.Second
 
 	if !cfg.AllowConnectionToDifferentVersions {

@@ -1,6 +1,8 @@
 package rpchandlers
 
 import (
+	"strconv"
+
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
@@ -13,10 +15,14 @@ func HandleGetInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.M
 	if err != nil {
 		return nil, err
 	}
+	transactionCount, err := strconv.ParseUint(strconv.Itoa(context.Domain.MiningManager().TransactionCount(true, false)), 10, 64)
+	if err != nil {
+		return nil, err
+	}
 
 	response := appmessage.NewGetInfoResponseMessage(
 		context.NetAdapter.ID().String(),
-		uint64(context.Domain.MiningManager().TransactionCount(true, false)),
+		transactionCount,
 		version.Version(),
 		context.Config.UTXOIndex,
 		context.ProtocolManager.Context().HasPeers() && isNearlySynced,

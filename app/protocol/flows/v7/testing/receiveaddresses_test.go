@@ -21,7 +21,7 @@ func (f fakeReceiveAddressesContext) AddressManager() *addressmanager.AddressMan
 }
 
 func TestReceiveAddressesErrors(t *testing.T) {
-	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+	testutils.ForAllNets(t, true, func(t *testing.T, _ *consensus.Config) {
 		incomingRoute := router.NewRoute("incoming")
 		outgoingRoute := router.NewRoute("outgoing")
 		peer := peerpkg.New(nil)

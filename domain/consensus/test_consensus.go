@@ -187,7 +187,7 @@ func (tc *testConsensus) MineJSON(r io.Reader, blockType testapi.MineJSONBlockTy
 				return nil, err
 			}
 		default:
-			return nil, errors.Errorf("unknwon block type %v", blockType)
+			return nil, errors.Errorf("unknown block type %v", blockType)
 		}
 
 		parentsMap[block.ID] = blockHash

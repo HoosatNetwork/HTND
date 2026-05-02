@@ -48,30 +48,23 @@ func (p *p2pServer) MessageStream(stream protowire.P2P_MessageStreamServer) erro
 func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	log.Debugf("%s Dialing to %s", p.name, address)
 
-	const dialTimeout = 5 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
-	defer cancel()
+	// Use modern gRPC client with better connection management and backoff
+	connectParams := grpc.ConnectParams{
+		Backoff: backoff.Config{
+			BaseDelay:  1.0 * time.Second,
+			Multiplier: 1.6,
+			Jitter:     0.2,
+			MaxDelay:   120 * time.Second,
+		},
+		MinConnectTimeout: 5 * time.Second,
+	}
 
-	gRPCClientConnection, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock())
+	gRPCClientConnection, err := grpc.NewClient(address,
+		grpc.WithConnectParams(connectParams),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		// Use modern gRPC client with better connection management and backoff
-		connectParams := grpc.ConnectParams{
-			Backoff: backoff.Config{
-				BaseDelay:  1.0 * time.Second,
-				Multiplier: 1.6,
-				Jitter:     0.2,
-				MaxDelay:   120 * time.Second,
-			},
-			MinConnectTimeout: 5 * time.Second,
-		}
-
-		gRPCClientConnection, err = grpc.NewClient(address,
-			grpc.WithConnectParams(connectParams),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
-		if err != nil {
-			return nil, errors.Wrapf(err, "%s error connecting to %s", p.name, address)
-		}
+		return nil, errors.Wrapf(err, "%s error connecting to %s", p.name, address)
 	}
 
 	client := protowire.NewP2PClient(gRPCClientConnection)

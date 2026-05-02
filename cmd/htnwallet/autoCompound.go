@@ -113,14 +113,15 @@ func compoundOnce(
 	if err != nil {
 		errString := err.Error()
 		// Handle rate limit gracefully
-		if strings.Contains(errString, "Compound transaction rate limit exceeded") {
+		switch {
+		case strings.Contains(errString, "Compound transaction rate limit exceeded"):
 			fmt.Printf("[%s] RATE LIMITED, backing off for 30s\n", time.Now().Format("15:04:05"))
 			return errRateLimited
-		} else if strings.Contains(errString, "already spent by transaction") {
+		case strings.Contains(errString, "already spent by transaction"):
 			fmt.Printf("[%s] COMPOUND INPUTS WENT STALE, refreshing UTXOs and retrying in 5s\n", time.Now().Format("15:04:05"))
 			time.Sleep(5 * time.Second)
 			return nil
-		} else {
+		default:
 			fmt.Printf("[%s] COMPOUND SUBMIT FAILED, backing off for 30s, err: %s\n", time.Now().Format("15:04:05"), err)
 		}
 		time.Sleep(30 * time.Second)

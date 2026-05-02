@@ -190,6 +190,6 @@ func (x *GhostdagData) fromAppMessage(ghostdagData *appmessage.BlockGHOSTDAGData
 
 func maxKType() uint32 {
 	zero := externalapi.KType(0)
-	max := zero - 1
-	return uint32(max)
+	maxKTypeVal := zero - 1
+	return uint32(maxKTypeVal)
 }

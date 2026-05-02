@@ -21,6 +21,14 @@ const feePerInput = 10000
 // should succeed (at most 50K storage mass for each output, thus overall lower than standard mass upper bound which is 100K gram)
 const minChangeTarget = constants.SompiPerHoosat / 5
 
+func checkedUint64FromInt(value int) (uint64, error) {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return parsedValue, nil
+}
+
 func (s *server) CreateUnsignedTransactions(_ context.Context, request *pb.CreateUnsignedTransactionsRequest) (
 	*pb.CreateUnsignedTransactionsResponse, error,
 ) {
@@ -99,7 +107,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	}
 
 	if len(selectedUTXOs) < 2 {
-		return nil, errors.Errorf("Nothing to compound.")
+		return nil, errors.Errorf("nothing to compound")
 	}
 
 	// Mark the selected UTXOs as used to prevent respending in case of submission failure
@@ -213,7 +221,19 @@ func (s *server) selectCompoundUTXOs(feePerInput int, fromAddresses []*walletAdd
 	}
 
 	// Calculate fees based on the actual number of selected inputs
-	fee := uint64(len(selectedUTXOs)) * uint64(feePerInput)
+	selectedUTXOCount := len(selectedUTXOs)
+	if selectedUTXOCount < 0 {
+		return nil, 0, 0, errors.Errorf("selected UTXO count %d cannot be negative", selectedUTXOCount)
+	}
+	selectedUTXOCountUint64, err := checkedUint64FromInt(selectedUTXOCount)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	feePerInputUint64, err := checkedUint64FromInt(feePerInput)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	fee := selectedUTXOCountUint64 * feePerInputUint64
 	if totalValue <= fee {
 		return nil, 0, 0, errors.Errorf("not enough funds: total %d sompi < fee %d sompi", totalValue, fee)
 	}

@@ -44,8 +44,9 @@ func New(
 	headersSelectedChainStore model.HeadersSelectedChainStore,
 ) model.SyncManager {
 	return &syncManager{
-		databaseContext:  databaseContext,
-		genesisBlockHash: genesisBlockHash,
+		databaseContext:   databaseContext,
+		genesisBlockHash:  genesisBlockHash,
+		mergeSetSizeLimit: mergeSetSizeLimit,
 
 		dagTraversalManager:       dagTraversalManager,
 		dagTopologyManager:        dagTopologyManager,

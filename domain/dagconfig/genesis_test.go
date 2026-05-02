@@ -5,8 +5,10 @@
 package dagconfig
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -92,10 +94,14 @@ func BigToCompact(target *big.Int) uint32 {
 	var mant uint32
 	if size <= 3 {
 		// Cast to uint32 after shifting the value to prevent overflow
-		mant = uint32(new(big.Int).SetBytes(bytes).Uint64() >> (8 * (3 - size)))
+		var mantBytes [8]byte
+		binary.BigEndian.PutUint64(mantBytes[:], new(big.Int).SetBytes(bytes).Uint64()>>(8*(3-size)))
+		mant = binary.BigEndian.Uint32(mantBytes[4:])
 	} else {
 		// Only use the first 3 bytes to avoid overflow
-		mant = uint32(new(big.Int).SetBytes(bytes[:3]).Uint64())
+		var mantBytes [8]byte
+		binary.BigEndian.PutUint64(mantBytes[:], new(big.Int).SetBytes(bytes[:3]).Uint64())
+		mant = binary.BigEndian.Uint32(mantBytes[4:])
 	}
 
 	if mant&0x00800000 != 0 {
@@ -103,7 +109,14 @@ func BigToCompact(target *big.Int) uint32 {
 		size++
 	}
 
-	return uint32(size<<24) | (mant & 0x007fffff)
+	sizeUint64, err := strconv.ParseUint(strconv.Itoa(size), 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	var compactSizeBytes [8]byte
+	binary.BigEndian.PutUint64(compactSizeBytes[:], sizeUint64<<24)
+	compactSize := binary.BigEndian.Uint32(compactSizeBytes[4:])
+	return compactSize | (mant & 0x007fffff)
 }
 
 // DifficultyToBits computes compact bits for desired difficulty

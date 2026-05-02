@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
@@ -94,7 +95,11 @@ func syncConsensuses(syncer, syncee externalapi.Consensus) error {
 		}
 
 		for i, daaBlockHash := range blockDAAWindowHashes {
-			trustedDataDataDAAHeader, err := syncer.TrustedDataDataDAAHeader(blockHash, daaBlockHash, uint64(i))
+			index, err := strconv.ParseUint(strconv.Itoa(i), 10, 64)
+			if err != nil {
+				return err
+			}
+			trustedDataDataDAAHeader, err := syncer.TrustedDataDataDAAHeader(blockHash, daaBlockHash, index)
 			if err != nil {
 				return err
 			}

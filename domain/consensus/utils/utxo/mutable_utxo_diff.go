@@ -2,6 +2,7 @@ package utxo
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
@@ -134,6 +135,9 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 	isCoinbase := transactionhelper.IsCoinBase(transaction)
 	transactionID := *consensushashing.TransactionID(transaction)
 	for i, output := range transaction.Outputs {
+		if i < 0 || i > math.MaxUint32 {
+			return errors.Errorf("output index %d cannot be represented as uint32", i)
+		}
 		outpoint := &externalapi.DomainOutpoint{
 			TransactionID: transactionID,
 			Index:         uint32(i),
@@ -150,22 +154,24 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 }
 
 func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-	if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
+	switch {
+	case mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()):
 		mud.toRemove.remove(outpoint)
-	} else if mud.toAdd.Contains(outpoint) {
+	case mud.toAdd.Contains(outpoint):
 		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
-	} else {
+	default:
 		mud.toAdd.add(outpoint, entry)
 	}
 	return nil
 }
 
 func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-	if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
+	switch {
+	case mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()):
 		mud.toAdd.remove(outpoint)
-	} else if mud.toRemove.Contains(outpoint) {
+	case mud.toRemove.Contains(outpoint):
 		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)
-	} else {
+	default:
 		mud.toRemove.add(outpoint, entry)
 	}
 	return nil

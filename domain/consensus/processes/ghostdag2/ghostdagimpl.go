@@ -27,7 +27,7 @@ func New(
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	headerStore model.BlockHeaderStore,
 	k []externalapi.KType,
-	genesisHash *externalapi.DomainHash,
+	_ *externalapi.DomainHash,
 ) model.GHOSTDAGManager {
 	return &ghostdagHelper{
 		dbAccess:           databaseContext,
@@ -149,7 +149,7 @@ func ismoreHash(parent *externalapi.DomainHash, selectedParent *externalapi.Doma
 
 /* ---------------divideBluesReds--------------------- */
 func (gh *ghostdagHelper) divideBlueRed(stagingArea *model.StagingArea,
-	selectedParent *externalapi.DomainHash, desiredBlock *externalapi.DomainHash,
+	_ *externalapi.DomainHash, desiredBlock *externalapi.DomainHash,
 	blues *[]*externalapi.DomainHash, reds *[]*externalapi.DomainHash, blueSet *[]*externalapi.DomainHash,
 ) error {
 	k := int(gh.k[constants.GetBlockVersion()-1])
@@ -341,21 +341,21 @@ func (gh *ghostdagHelper) findBlueSet(stagingArea *model.StagingArea, blueSet *[
 
 /* ----------------sortByBlueScore------------------- */
 func (gh *ghostdagHelper) sortByBlueWork(stagingArea *model.StagingArea, arr []*externalapi.DomainHash) error {
-	var err error = nil
+	var err error
 	sort.Slice(arr, func(i, j int) bool {
-		blockLeft, error := gh.dataStore.Get(gh.dbAccess, stagingArea, arr[i], false)
-		if error != nil {
-			err = error
+		blockLeft, getErr := gh.dataStore.Get(gh.dbAccess, stagingArea, arr[i], false)
+		if getErr != nil {
+			err = getErr
 			return false
 		}
 
-		blockRight, error := gh.dataStore.Get(gh.dbAccess, stagingArea, arr[j], false)
-		if database.IsNotFoundError(err) {
+		blockRight, getErr := gh.dataStore.Get(gh.dbAccess, stagingArea, arr[j], false)
+		if database.IsNotFoundError(getErr) {
 			log.Infof("sortByBlueWork failed to retrieve with %s\n", arr[j])
 			return false
 		}
-		if error != nil {
-			err = error
+		if getErr != nil {
+			err = getErr
 			return false
 		}
 
@@ -376,11 +376,11 @@ func (gh *ghostdagHelper) BlockData(stagingArea *model.StagingArea, blockHash *e
 	return gh.dataStore.Get(gh.dbAccess, stagingArea, blockHash, false)
 }
 
-func (gh *ghostdagHelper) ChooseSelectedParent(stagingArea *model.StagingArea, blockHashes ...*externalapi.DomainHash) (*externalapi.DomainHash, error) {
+func (gh *ghostdagHelper) ChooseSelectedParent(_ *model.StagingArea, _ ...*externalapi.DomainHash) (*externalapi.DomainHash, error) {
 	panic("implement me")
 }
 
-func (gh *ghostdagHelper) Less(blockHashA *externalapi.DomainHash, ghostdagDataA *externalapi.BlockGHOSTDAGData, blockHashB *externalapi.DomainHash, ghostdagDataB *externalapi.BlockGHOSTDAGData) bool {
+func (gh *ghostdagHelper) Less(_ *externalapi.DomainHash, _ *externalapi.BlockGHOSTDAGData, _ *externalapi.DomainHash, _ *externalapi.BlockGHOSTDAGData) bool {
 	panic("implement me")
 }
 

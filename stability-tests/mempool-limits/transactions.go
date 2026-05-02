@@ -2,6 +2,7 @@ package mempoollimits
 
 import (
 	"encoding/hex"
+	"math"
 	"strings"
 	"testing"
 
@@ -127,6 +128,9 @@ func generateTransactionsWithMultipleOutputs(t *testing.T,
 		outputValue := (fundingTransactionOutput.Value - transactionFee) / outputsPerTransaction
 
 		fundingTransactionID := consensushashing.TransactionID(fundingTransaction)
+		if fundingTransactionOutputIndex < 0 || fundingTransactionOutputIndex > math.MaxUint32 {
+			t.Fatalf("funding transaction output index %d exceeds uint32", fundingTransactionOutputIndex)
+		}
 		spendingTransactionInputs := []*externalapi.DomainTransactionInput{
 			{
 				PreviousOutpoint: externalapi.DomainOutpoint{

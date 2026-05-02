@@ -12,7 +12,7 @@ func (x *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) toAppMessage() (appm
 	return &appmessage.MsgIBDBlockLocatorHighestHashNotFound{}, nil
 }
 
-func (x *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) fromAppMessage(message *appmessage.MsgIBDBlockLocatorHighestHashNotFound) error {
+func (x *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) fromAppMessage(_ *appmessage.MsgIBDBlockLocatorHighestHashNotFound) error {
 	x.IbdBlockLocatorHighestHashNotFound = &IbdBlockLocatorHighestHashNotFoundMessage{}
 	return nil
 }

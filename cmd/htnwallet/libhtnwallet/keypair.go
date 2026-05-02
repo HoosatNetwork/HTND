@@ -1,8 +1,10 @@
 package libhtnwallet
 
 import (
+	"encoding/binary"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/bip32"
@@ -11,6 +13,26 @@ import (
 	"github.com/kaspanet/go-secp256k1"
 	"github.com/pkg/errors"
 )
+
+func checkedUint32ToInt(value uint32) (int, error) {
+	if strconv.IntSize == 32 && value > math.MaxInt32 {
+		return 0, errors.Errorf("value %d exceeds int", value)
+	}
+	return int(value), nil
+}
+
+func checkedIntToUint32(value int) (uint32, error) {
+	if value < 0 {
+		return 0, errors.Errorf("value %d cannot be negative", value)
+	}
+	valueUint64, err := strconv.ParseUint(strconv.Itoa(value), 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	var valueBytes [8]byte
+	binary.BigEndian.PutUint64(valueBytes[:], valueUint64)
+	return binary.BigEndian.Uint32(valueBytes[4:]), nil
+}
 
 // CreateKeyPair generates a private-public key pair
 func CreateKeyPair(ecdsa bool) ([]byte, []byte, error) {
@@ -78,7 +100,11 @@ func PublicKeyFromPrivateKey(privateKeyBytes []byte) ([]byte, error) {
 // Address returns the address associated with the given public keys and minimum signatures parameters.
 func Address(params *dagconfig.Params, extendedPublicKeys []string, minimumSignatures uint32, path string, ecdsa bool) (util.Address, error) {
 	sortPublicKeys(extendedPublicKeys)
-	if uint32(len(extendedPublicKeys)) < minimumSignatures {
+	minimumSignaturesInt, err := checkedUint32ToInt(minimumSignatures)
+	if err != nil {
+		return nil, err
+	}
+	if len(extendedPublicKeys) < minimumSignaturesInt {
 		return nil, errors.Errorf("The minimum amount of signatures (%d) is greater than the amount of "+
 			"provided public keys (%d)", minimumSignatures, len(extendedPublicKeys))
 	}
@@ -116,7 +142,11 @@ func AddressWithSingleSigAddressType(
 	singleSigType SingleSigAddressType,
 ) (util.Address, error) {
 	sortPublicKeys(extendedPublicKeys)
-	if uint32(len(extendedPublicKeys)) < minimumSignatures {
+	minimumSignaturesInt, err := checkedUint32ToInt(minimumSignatures)
+	if err != nil {
+		return nil, err
+	}
+	if len(extendedPublicKeys) < minimumSignaturesInt {
 		return nil, errors.Errorf("The minimum amount of signatures (%d) is greater than the amount of "+
 			"provided public keys (%d)", minimumSignatures, len(extendedPublicKeys))
 	}
@@ -225,8 +255,15 @@ func cosignerIndex(extendedPublicKey string, sortedExtendedPublicKeys []string) 
 	if cosignerIndex == len(sortedExtendedPublicKeys) {
 		return 0, errors.Errorf("couldn't find extended public key %s", extendedPublicKey)
 	}
+	if cosignerIndex < 0 {
+		return 0, errors.Errorf("cosigner index %d cannot be negative", cosignerIndex)
+	}
+	cosignerIndexUint32, err := checkedIntToUint32(cosignerIndex)
+	if err != nil {
+		return 0, err
+	}
 
-	return uint32(cosignerIndex), nil
+	return cosignerIndexUint32, nil
 }
 
 // MinimumCosignerIndex returns the minimum index for the cosigner from the set of all extended public keys.
@@ -235,17 +272,17 @@ func MinimumCosignerIndex(cosignerExtendedPublicKeys, allExtendedPublicKeys []st
 	copy(allExtendedPublicKeysCopy, allExtendedPublicKeys)
 	sortPublicKeys(allExtendedPublicKeysCopy)
 
-	min := uint32(math.MaxUint32)
+	minIndex := uint32(math.MaxUint32)
 	for _, extendedPublicKey := range cosignerExtendedPublicKeys {
 		cosignerIndex, err := cosignerIndex(extendedPublicKey, allExtendedPublicKeysCopy)
 		if err != nil {
 			return 0, err
 		}
 
-		if cosignerIndex < min {
-			min = cosignerIndex
+		if cosignerIndex < minIndex {
+			minIndex = cosignerIndex
 		}
 	}
 
-	return min, nil
+	return minIndex, nil
 }

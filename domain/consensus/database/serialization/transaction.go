@@ -73,7 +73,7 @@ func DbTransactionToDomainTransaction(dbTransaction *DbTransaction) (*externalap
 	}
 
 	if dbTransaction.Version > math.MaxUint16 {
-		return nil, errors.Errorf("The transaction version is bigger then uint16.")
+		return nil, errors.Errorf("transaction version is bigger than uint16")
 	}
 	return &externalapi.DomainTransaction{
 		Version:      uint16(dbTransaction.Version),

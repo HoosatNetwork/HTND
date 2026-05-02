@@ -10,8 +10,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	_ "net/http/pprof"
-
 	"github.com/Hoosat-Oy/HTND/infrastructure/os/signal"
 	"github.com/Hoosat-Oy/HTND/util/panics"
 	"github.com/Hoosat-Oy/HTND/util/profiling"

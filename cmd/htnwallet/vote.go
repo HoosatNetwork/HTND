@@ -42,7 +42,7 @@ func vote(conf *voteConfig) error {
 	votePayload := map[string]any{
 		"type":   "vote_cast",
 		"v":      1,
-		"pollId": conf.PollId,
+		"pollId": conf.PollID,
 		"votes":  conf.Votes,
 	}
 	payloadBytes, err := json.Marshal(votePayload)
@@ -66,7 +66,7 @@ retry:
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")
-				attempt = attempt - 1
+				attempt--
 			} else {
 				fmt.Printf("Failed to create unsigned transactions after %d attempts: %s\n", attempt, err)
 				time.Sleep(retryDelay)

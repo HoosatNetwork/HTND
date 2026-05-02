@@ -2,6 +2,7 @@ package mempool
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 
@@ -18,6 +19,17 @@ type mempoolUTXOSet struct {
 	transactionByPreviousOutpoint model.OutpointToTransactionMap
 }
 
+func checkedOutpointIndex(index int) uint32 {
+	if index < 0 {
+		panic(fmt.Sprintf("outpoint index %d cannot be negative", index))
+	}
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(index), 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	return uint32(parsedValue)
+}
+
 func newMempoolUTXOSet(mp *mempool) *mempoolUTXOSet {
 	return &mempoolUTXOSet{
 		mempool:                       mp,
@@ -30,7 +42,7 @@ func (mpus *mempoolUTXOSet) addTransaction(transaction *model.MempoolTransaction
 	outpoint := &externalapi.DomainOutpoint{TransactionID: *transaction.TransactionID()}
 
 	for i, input := range transaction.Transaction().Inputs {
-		outpoint.Index = uint32(i)
+		outpoint.Index = checkedOutpointIndex(i)
 
 		// Delete the output this input spends, in case it was created by mempool.
 		// If the outpoint doesn't exist in mpus.poolUnspentOutputs - this means
@@ -41,7 +53,7 @@ func (mpus *mempoolUTXOSet) addTransaction(transaction *model.MempoolTransaction
 	}
 
 	for i, output := range transaction.Transaction().Outputs {
-		outpoint := externalapi.DomainOutpoint{TransactionID: *transaction.TransactionID(), Index: uint32(i)}
+		outpoint := externalapi.DomainOutpoint{TransactionID: *transaction.TransactionID(), Index: checkedOutpointIndex(i)}
 
 		mpus.poolUnspentOutputs[outpoint] = utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, false, constants.UnacceptedDAAScore)
 	}
@@ -58,7 +70,7 @@ func (mpus *mempoolUTXOSet) removeTransaction(transaction *model.MempoolTransact
 
 	outpoint := externalapi.DomainOutpoint{TransactionID: *transaction.TransactionID()}
 	for i := range transaction.Transaction().Outputs {
-		outpoint.Index = uint32(i)
+		outpoint.Index = checkedOutpointIndex(i)
 
 		delete(mpus.poolUnspentOutputs, outpoint)
 	}
@@ -68,7 +80,7 @@ func (mpus *mempoolUTXOSet) checkDoubleSpends(transaction *externalapi.DomainTra
 	outpoint := externalapi.DomainOutpoint{TransactionID: *consensushashing.TransactionID(transaction)}
 
 	for i, input := range transaction.Inputs {
-		outpoint.Index = uint32(i)
+		outpoint.Index = checkedOutpointIndex(i)
 
 		if existingTransaction, exists := mpus.transactionByPreviousOutpoint[input.PreviousOutpoint]; exists {
 			str := fmt.Sprintf("output %s already spent by transaction %s in the memory pool",

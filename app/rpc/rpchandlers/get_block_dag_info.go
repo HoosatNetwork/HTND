@@ -12,7 +12,7 @@ import (
 const getBlockDAGInfoCacheTTL = 250 * time.Millisecond
 
 // HandleGetBlockDAGInfo handles the respectively named RPC command
-func HandleGetBlockDAGInfo(context *rpccontext.Context, rpcRouter *router.Router, _ appmessage.Message) (appmessage.Message, error) {
+func HandleGetBlockDAGInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.Message) (appmessage.Message, error) {
 	now := time.Now()
 	if cached, ok := context.GetBlockDAGInfoCache.Get(now); ok {
 		return cached, nil

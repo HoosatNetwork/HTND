@@ -118,7 +118,6 @@ type UTXOIndex struct {
 //
 // NOTE: While this is called no new blocks can be added to the consensus.
 func New(domain domain.Domain, database database.Database) (*UTXOIndex, error) {
-	const defaultCacheSize = 10000
 	utxoIndex := &UTXOIndex{
 		domain: domain,
 		store:  newUTXOIndexStore(database),

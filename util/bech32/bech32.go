@@ -126,7 +126,8 @@ func decode(encoded string) (string, []byte, error) {
 func encode(prefix string, data []byte) string {
 	// Calculate the checksum of the data and append it at the end.
 	checksum := calculateChecksum(prefix, data)
-	combined := append(data, checksum...)
+	data = append(data, checksum...)
+	combined := data
 
 	// The resulting bech32 string is the concatenation of the prefix, the
 	// separator ':', data and checksum. Everything after the separator is
@@ -180,7 +181,7 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 
 	for _, b := range data {
 		// Discard unused bits.
-		b = b << (8 - conversionType.fromBits)
+		b <<= 8 - conversionType.fromBits
 
 		// How many bits remaining to extract from the input data.
 		remainingFromBits := conversionType.fromBits
@@ -198,7 +199,7 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 
 			// Discard the bits we just extracted and get ready for
 			// next iteration.
-			b = b << toExtract
+			b <<= toExtract
 			remainingFromBits -= toExtract
 			filledBits += toExtract
 
@@ -214,7 +215,7 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 
 	// We pad any unfinished group if specified.
 	if conversionType.pad && filledBits > 0 {
-		nextByte = nextByte << (conversionType.toBits - filledBits)
+		nextByte <<= (conversionType.toBits - filledBits)
 		regrouped = append(regrouped, nextByte)
 	}
 
@@ -233,14 +234,20 @@ func calculateChecksum(prefix string, payload []byte) []byte {
 	templateZeroes := []int{0, 0, 0, 0, 0, 0, 0, 0}
 
 	// prefixLower5Bits + 0 + payloadInts + templateZeroes
-	concat := append(prefixLower5Bits, 0)
+	prefixLower5Bits = append(prefixLower5Bits, 0)
+	concat := prefixLower5Bits
 	concat = append(concat, payloadInts...)
 	concat = append(concat, templateZeroes...)
 
 	polyModResult := polyMod(concat)
 	var res []byte
 	for i := range checksumLength {
-		res = append(res, byte((polyModResult>>uint(5*(checksumLength-1-i)))&31))
+		shift := 5 * (checksumLength - 1 - i)
+		if shift < 0 {
+			res = append(res, 0)
+			continue
+		}
+		res = append(res, byte((polyModResult>>uint(shift))&31))
 	}
 
 	memory.Free(prefixLower5Bitsbuffer)
@@ -255,7 +262,8 @@ func verifyChecksum(prefix string, payload []byte) bool {
 	payloadInts := ints(payload)
 
 	// prefixLower5Bits + 0 + payloadInts
-	dataToVerify := append(prefixLower5Bits, 0)
+	dataToVerify := append([]int{}, prefixLower5Bits...)
+	dataToVerify = append(dataToVerify, 0)
 	dataToVerify = append(dataToVerify, payloadInts...)
 	memory.Free(prefixLower5Bitsbuffer)
 
@@ -290,6 +298,9 @@ func polyMod(values []int) int {
 		topBits := checksum >> 35
 		checksum = ((checksum & 0x07ffffffff) << 5) ^ value
 		for i := range generator {
+			if i < 0 {
+				continue
+			}
 			if ((topBits >> uint(i)) & 1) == 1 {
 				checksum ^= generator[i]
 			}

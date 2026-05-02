@@ -84,8 +84,8 @@ func (x *VirtualSelectedParentChainChangedNotificationMessage) toAppMessage() (a
 		AcceptedTransactionIDs:  make([]*appmessage.AcceptedTransactionIDs, len(x.AcceptedTransactionIds)),
 	}
 
-	for i, acceptedTransactionIds := range x.AcceptedTransactionIds {
-		message.AcceptedTransactionIDs[i] = acceptedTransactionIds.toAppMessage()
+	for i, acceptedTransactionIDs := range x.AcceptedTransactionIds {
+		message.AcceptedTransactionIDs[i] = acceptedTransactionIDs.toAppMessage()
 	}
 	return message, nil
 }

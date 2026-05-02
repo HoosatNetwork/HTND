@@ -2,12 +2,21 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/stability-tests/common/rpc"
 	"github.com/pkg/errors"
 )
+
+func checkedDurationFromCount(count uint64, unit time.Duration) (time.Duration, error) {
+	parsedCount, err := strconv.ParseInt(strconv.FormatUint(count, 10), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(parsedCount) * unit, nil
+}
 
 func checkResolveVirtual(syncerClient, syncedClient *rpc.Client) error {
 	err := syncedClient.RegisterForBlockAddedNotifications()
@@ -28,7 +37,10 @@ func checkResolveVirtual(syncerClient, syncedClient *rpc.Client) error {
 		panic(fmt.Sprintf("mined block rejected: %s", rejectReason))
 	}
 
-	expectedDuration := time.Duration(syncedBlockCountResponse.BlockCount) * 100 * time.Millisecond
+	expectedDuration, err := checkedDurationFromCount(syncedBlockCountResponse.BlockCount, 100*time.Millisecond)
+	if err != nil {
+		return err
+	}
 	start := time.Now()
 	select {
 	case <-time.After(expectedDuration):

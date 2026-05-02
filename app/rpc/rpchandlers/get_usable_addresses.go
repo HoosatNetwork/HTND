@@ -11,11 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	usableAddressesCache      = make(map[string][]string)
-	usableAddressesCacheMutex sync.Mutex
-)
-
 func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (bool, error) {
 	address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 	if err != nil {

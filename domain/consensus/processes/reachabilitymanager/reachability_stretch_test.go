@@ -32,9 +32,17 @@ func initializeTest(t *testing.T, testName string) (tc testapi.TestConsensus, te
 	return tc, teardown
 }
 
-func buildJsonDAG(t *testing.T, tc testapi.TestConsensus, attackJson bool) (tips []*externalapi.DomainHash) {
+func checkedIntFromUint64(t *testing.T, value uint64) int {
+	t.Helper()
+	if value > math.MaxInt {
+		t.Fatalf("value %d exceeds int", value)
+	}
+	return int(value)
+}
+
+func buildJSONDAG(t *testing.T, tc testapi.TestConsensus, attackJSON bool) (tips []*externalapi.DomainHash) {
 	filePrefix := "noattack"
-	if attackJson {
+	if attackJSON {
 		filePrefix = "attack"
 	}
 	fileName := fmt.Sprintf(
@@ -79,6 +87,7 @@ func addArbitraryBlocks(t *testing.T, tc testapi.TestConsensus) {
 	maxBlocksInChain := 20
 	validationFreq := int(math.Max(1, float64(numChainsToAdd/100)))
 
+	// #nosec G404 -- deterministic seeded RNG is used here to make the test reproducible.
 	randSource := rand.New(rand.NewSource(33233))
 
 	for i := range numChainsToAdd {
@@ -168,7 +177,7 @@ func addAlternatingReorgBlocks(t *testing.T, tc testapi.TestConsensus, tips []*e
 	// Get both chains close to each other (we care about blue score and not
 	// blue work because we have SkipProofOfWork=true)
 	if chainTipGHOSTDAGData.BlueScore() > reorgTipGHOSTDAGData.BlueScore() {
-		blueScoreDiff := int(chainTipGHOSTDAGData.BlueScore() - reorgTipGHOSTDAGData.BlueScore())
+		blueScoreDiff := checkedIntFromUint64(t, chainTipGHOSTDAGData.BlueScore()-reorgTipGHOSTDAGData.BlueScore())
 		for i := 0; i < blueScoreDiff+5; i++ {
 			reorgTip, _, err = tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{reorgTip})
 			if err != nil {
@@ -176,7 +185,7 @@ func addAlternatingReorgBlocks(t *testing.T, tc testapi.TestConsensus, tips []*e
 			}
 		}
 	} else {
-		blueScoreDiff := int(reorgTipGHOSTDAGData.BlueScore() - chainTipGHOSTDAGData.BlueScore())
+		blueScoreDiff := checkedIntFromUint64(t, reorgTipGHOSTDAGData.BlueScore()-chainTipGHOSTDAGData.BlueScore())
 		for i := 0; i < blueScoreDiff+5; i++ {
 			chainTip, _, err = tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{chainTip})
 			if err != nil {
@@ -215,7 +224,7 @@ func addAlternatingReorgBlocks(t *testing.T, tc testapi.TestConsensus, tips []*e
 	}
 
 	// Since current logic switches reindex root chain with reindex slack threshold - at last make the switch happen
-	for i := 0; i < int(tc.ReachabilityManager().ReachabilityReindexSlack())+10; i++ {
+	for i := 0; i < checkedIntFromUint64(t, tc.ReachabilityManager().ReachabilityReindexSlack())+10; i++ {
 		reorgTip, _, err = tc.AddUTXOInvalidHeader([]*externalapi.DomainHash{reorgTip})
 		if err != nil {
 			t.Fatal(err)
@@ -231,20 +240,20 @@ func addAlternatingReorgBlocks(t *testing.T, tc testapi.TestConsensus, tips []*e
 func TestNoAttack(t *testing.T) {
 	tc, teardown := initializeTest(t, "TestNoAttack")
 	defer teardown(false)
-	buildJsonDAG(t, tc, false)
+	buildJSONDAG(t, tc, false)
 }
 
 func TestAttack(t *testing.T) {
 	tc, teardown := initializeTest(t, "TestAttack")
 	defer teardown(false)
-	buildJsonDAG(t, tc, true)
+	buildJSONDAG(t, tc, true)
 }
 
 func TestNoAttackFuzzy(t *testing.T) {
 	tc, teardown := initializeTest(t, "TestNoAttackFuzzy")
 	defer teardown(false)
 	tc.ReachabilityManager().SetReachabilityReindexSlack(10)
-	buildJsonDAG(t, tc, false)
+	buildJSONDAG(t, tc, false)
 	addArbitraryBlocks(t, tc)
 }
 
@@ -252,7 +261,7 @@ func TestAttackFuzzy(t *testing.T) {
 	tc, teardown := initializeTest(t, "TestAttackFuzzy")
 	defer teardown(false)
 	tc.ReachabilityManager().SetReachabilityReindexSlack(10)
-	buildJsonDAG(t, tc, true)
+	buildJSONDAG(t, tc, true)
 	addArbitraryBlocks(t, tc)
 }
 
@@ -260,6 +269,6 @@ func TestAttackAlternateReorg(t *testing.T) {
 	tc, teardown := initializeTest(t, "TestAttackAlternateReorg")
 	defer teardown(false)
 	tc.ReachabilityManager().SetReachabilityReindexSlack(256)
-	tips := buildJsonDAG(t, tc, true)
+	tips := buildJSONDAG(t, tc, true)
 	addAlternatingReorgBlocks(t, tc, tips)
 }

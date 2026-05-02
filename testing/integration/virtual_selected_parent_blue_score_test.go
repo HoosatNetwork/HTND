@@ -52,17 +52,18 @@ func TestVirtualSelectedParentBlueScoreAndVirtualDAAScore(t *testing.T) {
 	// Mine some blocks and make sure that the notifications
 	// report correct values
 	const blockAmountToMine = 100
-	for i := range blockAmountToMine {
+	for i := uint64(0); i < blockAmountToMine; i++ {
 		mineNextBlock(t, htnd)
 		blueScoreChangedNotification := <-onVirtualSelectedParentBlueScoreChangedChan
-		if blueScoreChangedNotification.VirtualSelectedParentBlueScore != 1+uint64(i) {
+		expectedBlueScore := 1 + i
+		if blueScoreChangedNotification.VirtualSelectedParentBlueScore != expectedBlueScore {
 			t.Fatalf("Unexpected virtual selected parent blue score. Want: %d, got: %d",
-				1+uint64(i), blueScoreChangedNotification.VirtualSelectedParentBlueScore)
+				expectedBlueScore, blueScoreChangedNotification.VirtualSelectedParentBlueScore)
 		}
 		daaScoreChangedNotification := <-onVirtualDaaScoreChangedChan
-		if daaScoreChangedNotification.VirtualDaaScore > 1+uint64(i) {
+		if daaScoreChangedNotification.VirtualDaaScore > expectedBlueScore {
 			t.Fatalf("Unexpected virtual DAA score. Want: %d, got: %d",
-				1+uint64(i), daaScoreChangedNotification.VirtualDaaScore)
+				expectedBlueScore, daaScoreChangedNotification.VirtualDaaScore)
 		}
 	}
 

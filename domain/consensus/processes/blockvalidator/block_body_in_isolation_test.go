@@ -1046,7 +1046,7 @@ func CheckBlockHashMerkleRoot(t *testing.T, tc testapi.TestConsensus, consensusC
 		t.Fatalf("BuildBlockWithParents: %+v", err)
 	}
 	blockWithInvalidMerkleRoot := block.Clone()
-	blockWithInvalidMerkleRoot.Transactions[0].Version += 1
+	blockWithInvalidMerkleRoot.Transactions[0].Version++
 
 	err = tc.ValidateAndInsertBlock(blockWithInvalidMerkleRoot, true, true)
 	if !errors.Is(err, ruleerrors.ErrBadMerkleRoot) {

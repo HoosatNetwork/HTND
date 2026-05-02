@@ -8,7 +8,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 )
 
-func prepareDatabaseForTest(t *testing.T, testName string) (ldb *PebbleDB, teardownFunc func()) {
+func prepareDatabaseForTest(t *testing.T, testName string) (ldb *DB, teardownFunc func()) {
 	// Create a temp db to run tests against
 	path, err := os.MkdirTemp("", testName)
 	if err != nil {

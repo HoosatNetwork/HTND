@@ -221,8 +221,6 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	}
 
 	// Add other stores if needed
-	readStagingArea = nil
-	updateVirtualStagingArea = nil
 
 	return &externalapi.VirtualChangeSet{
 		VirtualSelectedParentChainChanges: selectedParentChainChanges,

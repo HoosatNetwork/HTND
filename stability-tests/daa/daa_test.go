@@ -1,8 +1,9 @@
 package daa
 
 import (
+	cryptorand "crypto/rand"
 	"math"
-	"math/rand"
+	"math/big"
 	"os"
 	"testing"
 	"time"
@@ -15,6 +16,17 @@ import (
 	"github.com/Hoosat-Oy/HTND/internal/ci"
 	"github.com/Hoosat-Oy/HTND/stability-tests/common"
 )
+
+// cryptoRandUint64 returns a cryptographically secure random uint64
+
+// cryptoRandUint64 returns a cryptographically secure random uint64
+func cryptoRandUint64() uint64 {
+	n, err := cryptorand.Int(cryptorand.Reader, big.NewInt(0).SetUint64(^uint64(0)))
+	if err != nil {
+		panic(err)
+	}
+	return n.Uint64()
+}
 
 const (
 	rpcAddress                  = "localhost:9000"
@@ -45,7 +57,7 @@ func TestDAA(t *testing.T) {
 		{
 			name:        "constant hash rate",
 			runDuration: 10 * time.Minute,
-			targetHashNanosecondsFunction: func(totalElapsedDuration time.Duration) int64 {
+			targetHashNanosecondsFunction: func(_ time.Duration) int64 {
 				return machineHashNanoseconds * 2
 			},
 		},
@@ -169,8 +181,8 @@ func measureMachineHashNanoseconds(t *testing.T) int64 {
 
 	machineHashesPerSecondMeasurementDuration := 10 * time.Second
 	hashes := int64(0)
-	state.Nonce = rand.Uint64()
-	loopForDuration(machineHashesPerSecondMeasurementDuration, func(isFinished *bool) {
+	state.Nonce = cryptoRandUint64()
+	loopForDuration(machineHashesPerSecondMeasurementDuration, func(_ *bool) {
 		state.CheckProofOfWork(genesisBlock, true)
 		hashes++
 		state.IncrementNonce()
@@ -208,7 +220,8 @@ func runDAATest(t *testing.T, testName string, runDuration time.Duration,
 
 		// Try hashes until we find a valid block
 		miningStartTime := time.Now()
-		minerState.Nonce = rand.Uint64()
+		minerState.Nonce = cryptoRandUint64()
+
 		for {
 			hashStartTime := time.Now()
 			powNum, powHash := minerState.CalculateProofOfWorkValue()

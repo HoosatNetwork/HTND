@@ -5,7 +5,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
@@ -104,23 +103,6 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	return nil
 }
 
-func (v *blockValidator) updateBlockVersion(header externalapi.BlockHeader) {
-	var version uint16 = 1
-	daaScore := header.DAAScore()
-	if daaScore <= 0 {
-		return
-	}
-	if len(v.POWScores) <= 0 {
-		return
-	}
-	for _, powScore := range v.POWScores {
-		if daaScore >= powScore {
-			version = version + 1
-		}
-	}
-	constants.SetBlockVersion(version)
-}
-
 func (v *blockValidator) hasValidatedHeader(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	exists, err := v.blockStatusStore.Exists(v.databaseContext, stagingArea, blockHash)
 	if err != nil {
@@ -194,10 +176,16 @@ func (v *blockValidator) validateMedianTime(stagingArea *model.StagingArea, head
 	return nil
 }
 
-func (v *blockValidator) checkMergeSizeLimit(stagingArea *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData) error {
+func (v *blockValidator) checkMergeSizeLimit(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData) error {
 	mergeSetSize := len(ghostdagData.MergeSetBlues()) + len(ghostdagData.MergeSetReds())
+	mergeSetSizeInt64 := int64(mergeSetSize)
+	if mergeSetSizeInt64 < 0 {
+		return errors.Wrapf(ruleerrors.ErrViolatingMergeLimit,
+			"block merge set size %d cannot be negative", mergeSetSize)
+	}
+	mergeSetSizeUint64 := uint64(mergeSetSizeInt64)
 
-	if uint64(mergeSetSize) > v.mergeSetSizeLimit {
+	if mergeSetSizeUint64 > v.mergeSetSizeLimit {
 		return errors.Wrapf(ruleerrors.ErrViolatingMergeLimit,
 			"The block merges %d blocks > %d merge set size limit", mergeSetSize, v.mergeSetSizeLimit)
 	}
@@ -231,7 +219,7 @@ func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash
 	return nil
 }
 
-func (v *blockValidator) checkBlueWork(stagingArea *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
+func (v *blockValidator) checkBlueWork(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
 	header externalapi.BlockHeader,
 ) error {
 	expectedBlueWork := ghostdagData.BlueWork()
@@ -245,7 +233,7 @@ func (v *blockValidator) checkBlueWork(stagingArea *model.StagingArea, ghostdagD
 	return nil
 }
 
-func (v *blockValidator) checkHeaderBlueScore(stagingArea *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
+func (v *blockValidator) checkHeaderBlueScore(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
 	header externalapi.BlockHeader,
 ) error {
 	expectedBlueScore := ghostdagData.BlueScore()

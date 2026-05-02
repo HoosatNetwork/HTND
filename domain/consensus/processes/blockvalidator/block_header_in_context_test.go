@@ -3,6 +3,7 @@ package blockvalidator_test
 import (
 	"errors"
 	"math/big"
+	"strconv"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
@@ -16,6 +17,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
 )
+
+func checkedIntFromUint64(value uint64) int {
+	parsedValue, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return int(parsedValue)
+}
 
 func TestValidateMedianTime(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
@@ -245,7 +254,7 @@ func TestVirtualSelectionViolatingMergeSizeLimit(t *testing.T) {
 
 		// Test if Virtual's mergeset is too large
 		// Note: the selected parent itself is also counted in the mergeset limit
-		if len(selectedParentAnticone)+1 > (int)(consensusConfig.MergeSetSizeLimit) {
+		if len(selectedParentAnticone)+1 > checkedIntFromUint64(consensusConfig.MergeSetSizeLimit) {
 			t.Fatalf("Virtual's mergset size (%d) exeeds merge set limit (%d)",
 				len(selectedParentAnticone)+1, consensusConfig.MergeSetSizeLimit)
 		}

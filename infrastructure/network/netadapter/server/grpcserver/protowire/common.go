@@ -164,7 +164,7 @@ func (x *ScriptPublicKey) toAppMessage() (*externalapi.ScriptPublicKey, error) {
 		return nil, errors.Wrapf(errorNil, "ScriptPublicKey is nil")
 	}
 	if x.Version > math.MaxUint16 {
-		return nil, errors.Errorf("ScriptPublicKey version is bigger then uint16.")
+		return nil, errors.Errorf("script public key version is bigger than uint16")
 	}
 	return &externalapi.ScriptPublicKey{
 		Script:  x.Script,

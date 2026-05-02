@@ -1,6 +1,7 @@
 package miningmanager_test
 
 import (
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -229,13 +230,13 @@ func TestHandleNewBlockTransactions(t *testing.T) {
 		}
 		mempoolTransactions, _ = miningManager.AllTransactions(true, false)
 		if len(mempoolTransactions) != 0 {
-			blockIDs := domainBlocksToBlockIds(mempoolTransactions)
+			blockIDs := domainBlocksToBlockIDs(mempoolTransactions)
 			t.Fatalf("The mempool contains unexpected transactions: %s", blockIDs)
 		}
 	})
 }
 
-func domainBlocksToBlockIds(blocks []*externalapi.DomainTransaction) []*externalapi.DomainTransactionID {
+func domainBlocksToBlockIDs(blocks []*externalapi.DomainTransaction) []*externalapi.DomainTransactionID {
 	blockIDs := make([]*externalapi.DomainTransactionID, len(blocks))
 	for i := range blockIDs {
 		blockIDs[i] = consensushashing.TransactionID(blocks[i])
@@ -938,6 +939,9 @@ func generateNewCoinbase(addressPrefix util.Bech32Prefix, op opType) (*externala
 
 func createTransactionWithUTXOEntry(t *testing.T, i int, daaScore uint64) *externalapi.DomainTransaction {
 	prevOutTxID := externalapi.DomainTransactionID{}
+	if i < 0 || i > math.MaxUint32 {
+		t.Fatalf("output index %d exceeds uint32", i)
+	}
 	prevOutPoint := externalapi.DomainOutpoint{TransactionID: prevOutTxID, Index: uint32(i)}
 	scriptPublicKey, redeemScript := testutils.OpTrueScript()
 	signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)

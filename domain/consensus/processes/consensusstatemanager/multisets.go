@@ -1,11 +1,14 @@
 package consensusstatemanager
 
 import (
+	"math"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+	"github.com/pkg/errors"
 )
 
 func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingArea,
@@ -73,6 +76,9 @@ func addTransactionToMultiset(multiset model.Multiset, transaction *externalapi.
 	}
 
 	for i, output := range transaction.Outputs {
+		if i < 0 || i > math.MaxUint32 {
+			return errors.Errorf("output index %d cannot be represented as uint32", i)
+		}
 		outpoint := &externalapi.DomainOutpoint{
 			TransactionID: *transactionID,
 			Index:         uint32(i),

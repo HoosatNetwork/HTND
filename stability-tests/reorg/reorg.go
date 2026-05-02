@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -15,6 +16,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 )
+
+func checkedUint64FromInt63(value int64) uint64 {
+	parsedValue, err := strconv.ParseUint(strconv.FormatInt(value, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsedValue
+}
 
 func testReorg(cfg *configFlags) {
 	consensusConfig := consensus.Config{Params: dagconfig.DevnetParams}
@@ -82,7 +91,7 @@ func testReorg(cfg *configFlags) {
 		// as well.
 		if i == 0 {
 			mutableHeader := block.Header.ToMutable()
-			mutableHeader.SetNonce(uint64(rand.NewSource(84147).Int63()))
+			mutableHeader.SetNonce(checkedUint64FromInt63(rand.NewSource(84147).Int63()))
 			block.Header = mutableHeader.ToImmutable()
 		}
 

@@ -75,7 +75,7 @@ func sweep(conf *sweepConfig) error {
 	}
 
 	for _, UTXO := range UTXOs {
-		paymentAmount = paymentAmount + UTXO.UTXOEntry.Amount()
+		paymentAmount += UTXO.UTXOEntry.Amount()
 	}
 
 	newAddressResponse, err := daemonClient.NewAddress(ctx, &pb.NewAddressRequest{})
@@ -116,7 +116,7 @@ func sweep(conf *sweepConfig) error {
 	for i, txID := range response.TxIDs {
 		fmt.Printf("\t%s\n", txID)
 		fmt.Println("\tSwept:\t", utils.FomatHSAT(splitTransactions[i].Outputs[0].Value), " HTN")
-		totalExtracted = totalExtracted + splitTransactions[i].Outputs[0].Value
+		totalExtracted += splitTransactions[i].Outputs[0].Value
 	}
 
 	fmt.Println("\nTotal Funds swept (including transaction fees):")
@@ -143,6 +143,9 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 	toAddress util.Address,
 	feePerInput int,
 ) ([]*externalapi.DomainTransaction, error) {
+	if feePerInput < 0 {
+		return nil, errors.Errorf("fee per input %d cannot be negative", feePerInput)
+	}
 	var splitTransactions []*externalapi.DomainTransaction
 
 	extraMass := uint64(7000) // Account for future signatures.
@@ -162,7 +165,7 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 	// loop through utxos commit segments that don't violate max mass
 	for i, currentUTXO := range selectedUTXOs {
 
-		totalSplitAmount = totalSplitAmount + currentUTXO.UTXOEntry.Amount()
+		totalSplitAmount += currentUTXO.UTXOEntry.Amount()
 
 		currentTx.Inputs = append(
 			currentTx.Inputs,
@@ -178,8 +181,11 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 			},
 		)
 
+		inputCount := uint64(uint(len(currentTx.Inputs)))
+		fee := inputCount * uint64(uint(feePerInput))
+
 		currentTx.Outputs[0] = &externalapi.DomainTransactionOutput{
-			Value:           totalSplitAmount - uint64(len(currentTx.Inputs)*feePerInput),
+			Value:           totalSplitAmount - fee,
 			ScriptPublicKey: scriptPublicKey,
 		}
 
@@ -211,7 +217,7 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 	return splitTransactions, nil
 }
 
-func signWithSchnorrPrivateKey(params *dagconfig.Params, privateKeyBytes []byte, domainTransactions []*externalapi.DomainTransaction) ([][]byte, error) {
+func signWithSchnorrPrivateKey(_ *dagconfig.Params, privateKeyBytes []byte, domainTransactions []*externalapi.DomainTransaction) ([][]byte, error) {
 	schnorrkeyPair, err := secp256k1.DeserializeSchnorrPrivateKeyFromSlice(privateKeyBytes)
 	if err != nil {
 		return nil, err

@@ -2,7 +2,6 @@ package main
 
 import (
 	nativeerrors "errors"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util"
+	utilrandom "github.com/Hoosat-Oy/HTND/util/random"
 	"github.com/pkg/errors"
 )
 
@@ -145,7 +145,10 @@ func handleFoundBlock(client *minerClient, block *externalapi.DomainBlock) error
 }
 
 func mineNextBlock(mineWhenNotSynced bool) *externalapi.DomainBlock {
-	nonce := rand.Uint64() // Use the global concurrent-safe random source.
+	nonce, err := utilrandom.Uint64()
+	if err != nil {
+		panic(err)
+	}
 	for {
 		nonce++
 		// For each nonce we try to build a block from the most up to date

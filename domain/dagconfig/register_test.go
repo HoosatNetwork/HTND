@@ -3,13 +3,13 @@ package dagconfig_test
 import (
 	"testing"
 
-	. "github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 )
 
 // Define some of the required parameters for a user-registered
 // network. This is necessary to test the registration of and
 // lookup of encoding magics from the network.
-var mockNetParams = Params{
+var mockNetParams = dagconfig.Params{
 	Name: "mocknet",
 	Net:  1<<32 - 1,
 }
@@ -17,7 +17,7 @@ var mockNetParams = Params{
 func TestRegister(t *testing.T) {
 	type registerTest struct {
 		name   string
-		params *Params
+		params *dagconfig.Params
 		err    error
 	}
 
@@ -30,18 +30,18 @@ func TestRegister(t *testing.T) {
 			register: []registerTest{
 				{
 					name:   "duplicate mainnet",
-					params: &MainnetParams,
-					err:    ErrDuplicateNet,
+					params: &dagconfig.MainnetParams,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 				{
 					name:   "duplicate testnet",
-					params: &TestnetParams,
-					err:    ErrDuplicateNet,
+					params: &dagconfig.TestnetParams,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 				{
 					name:   "duplicate simnet",
-					params: &SimnetParams,
-					err:    ErrDuplicateNet,
+					params: &dagconfig.SimnetParams,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 			},
 		},
@@ -60,23 +60,23 @@ func TestRegister(t *testing.T) {
 			register: []registerTest{
 				{
 					name:   "duplicate mainnet",
-					params: &MainnetParams,
-					err:    ErrDuplicateNet,
+					params: &dagconfig.MainnetParams,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 				{
 					name:   "duplicate testnet",
-					params: &TestnetParams,
-					err:    ErrDuplicateNet,
+					params: &dagconfig.TestnetParams,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 				{
 					name:   "duplicate simnet",
-					params: &SimnetParams,
-					err:    ErrDuplicateNet,
+					params: &dagconfig.SimnetParams,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 				{
 					name:   "duplicate mocknet",
 					params: &mockNetParams,
-					err:    ErrDuplicateNet,
+					err:    dagconfig.ErrDuplicateNet,
 				},
 			},
 		},
@@ -84,7 +84,7 @@ func TestRegister(t *testing.T) {
 
 	for _, test := range tests {
 		for _, network := range test.register {
-			err := Register(network.params)
+			err := dagconfig.Register(network.params)
 
 			if err != network.err {
 				t.Errorf("%s:%s: Registered network with unexpected error: got %v expected %v",

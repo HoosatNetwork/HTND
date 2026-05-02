@@ -86,7 +86,7 @@ func ghostdagLess(blueWorkA *big.Int, hashA *externalapi.DomainHash, blueWorkB *
 	}
 }
 
-func (window blockWindow) minMaxTimestamps() (min, max int64, minIndex int) {
+func (window blockWindow) minMaxTimestamps() (minTimestamp, maxTimestamp int64, minIndex int) {
 	return window.minTimestamp, window.maxTimestamp, window.minTimestampIndex
 }
 

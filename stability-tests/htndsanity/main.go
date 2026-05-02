@@ -12,12 +12,16 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	defer panics.HandlePanic(log, "htndsanity-main", nil)
 	err := parseConfig()
 	if err != nil {
 		panic(errors.Wrap(err, "error in parseConfig"))
 	}
-	defer backendLog.Close()
+	// backendLog.Close() is called explicitly before os.Exit(1) in all error paths.
 	common.UseLogger(backendLog, log.Level())
 
 	cfg := activeConfig()
@@ -36,9 +40,12 @@ func main() {
 		for _, failure := range failures {
 			fmt.Fprintln(os.Stderr, failure)
 		}
-		backendLog.Close()
-		os.Exit(1)
+		if backendLog != nil {
+			backendLog.Close()
+		}
+		return 1
 	}
 
 	log.Infof("All tests have passed")
+	return 0
 }

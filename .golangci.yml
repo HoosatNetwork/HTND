@@ -1,0 +1,18 @@
+linters:
+  default: none  # Start minimal and add
+  enable:
+    - staticcheck
+    - govet
+    - errcheck
+    - gosimple
+    - ineffassign
+    - revive
+    - gosec     # Security (off by default)
+    - gocritic
+    - misspell
+  exclusions:
+    paths: 
+      - "domain/consensus/utils/pow"
+
+run:
+  timeout: 5m

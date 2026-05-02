@@ -1,6 +1,8 @@
 package server
 
 import (
+	"strconv"
+
 	"github.com/kaspanet/go-secp256k1"
 	"github.com/pkg/errors"
 
@@ -13,6 +15,22 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/miningmanager/mempool"
 	"github.com/Hoosat-Oy/HTND/util"
 )
+
+func checkedIntFromUint64(value uint64) (int, error) {
+	parsedValue, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int(parsedValue), nil
+}
+
+func checkedUint32FromInt(value int) (uint32, error) {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint32(parsedValue), nil
+}
 
 // maybeAutoCompoundTransaction checks if a transaction's mass is higher that what is allowed for a standard
 // transaction.
@@ -180,7 +198,10 @@ func (s *server) splitAndInputPerSplitCounts(transaction *serialization.Partiall
 	massForEverythingExceptInputsInSplitTransaction := s.txMassCalculator.CalculateTransactionMass(splitTransactionWithoutInputs.Tx)
 	massForInputsInSplitTransaction := mempool.MaximumStandardTransactionMass - massForEverythingExceptInputsInSplitTransaction
 
-	inputsPerSplitCount = int(massForInputsInSplitTransaction / massPerInput)
+	inputsPerSplitCount, err = checkedIntFromUint64(massForInputsInSplitTransaction / massPerInput)
+	if err != nil {
+		return 0, 0, err
+	}
 	splitCount = inputCount / inputsPerSplitCount
 	if inputCount%inputsPerSplitCount > 0 {
 		splitCount++
@@ -232,7 +253,11 @@ func (s *server) estimateMassAfterSignatures(transaction *serialization.Partiall
 
 	for i, input := range transaction.PartiallySignedInputs {
 		for j, pubKeyPair := range input.PubKeySignaturePairs {
-			if uint32(j) >= s.keysFile.MinimumSignatures {
+			index, err := checkedUint32FromInt(j)
+			if err != nil {
+				return 0, err
+			}
+			if index >= s.keysFile.MinimumSignatures {
 				break
 			}
 			pubKeyPair.Signature = make([]byte, signatureSize+1) // +1 for SigHashType

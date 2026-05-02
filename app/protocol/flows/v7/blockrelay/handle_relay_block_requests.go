@@ -17,8 +17,6 @@ type RelayBlockRequestsContext interface {
 	Domain() domain.Domain
 }
 
-const getBlockRetryInterval = 10 * time.Millisecond
-
 // HandleRelayBlockRequests listens to appmessage.MsgRequestRelayBlocks messages and sends
 // their corresponding blocks to the requesting peer.
 func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *router.Route,

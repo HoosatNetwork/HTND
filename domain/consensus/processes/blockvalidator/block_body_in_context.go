@@ -185,7 +185,7 @@ func (v *blockValidator) checkCoinbaseSubsidy(stagingArea *model.StagingArea, bl
 	return subsidy, nil
 }
 
-func IsDevFeeOutput(reward uint64, block *externalapi.DomainBlock, output *externalapi.DomainTransactionOutput) bool {
+func IsDevFeeOutput(reward uint64, _ *externalapi.DomainBlock, output *externalapi.DomainTransactionOutput) bool {
 	_, address, err := txscript.ExtractScriptPubKeyAddress(output.ScriptPublicKey, &dagconfig.MainnetParams)
 	if err != nil {
 		return false
@@ -197,7 +197,7 @@ func IsDevFeeOutput(reward uint64, block *externalapi.DomainBlock, output *exter
 	return isDevFeeAddressEqual && isValueEqual
 }
 
-func (v *blockValidator) checkDevFee(stagingArea *model.StagingArea, block *externalapi.DomainBlock, reward uint64) error {
+func (v *blockValidator) checkDevFee(_ *model.StagingArea, block *externalapi.DomainBlock, reward uint64) error {
 	if block.Header.Version() < 2 || block.Transactions[0].Version == 0 {
 		return nil
 	}

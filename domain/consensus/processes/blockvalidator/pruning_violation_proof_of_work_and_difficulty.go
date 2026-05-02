@@ -261,7 +261,7 @@ func (v *blockValidator) checkPruningPointViolation(stagingArea *model.StagingAr
 
 	if !isAncestorOfAny {
 		return errors.Wrapf(ruleerrors.ErrPruningPointViolation,
-			"expected pruning point %s to be in block %s past.", pruningPoint, blockHash)
+			"expected pruning point %s to be in block %s past", pruningPoint, blockHash)
 	}
 	return nil
 }

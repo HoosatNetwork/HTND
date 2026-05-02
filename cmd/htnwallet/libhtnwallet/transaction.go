@@ -1,6 +1,8 @@
 package libhtnwallet
 
 import (
+	"strconv"
+
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/bip32"
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -10,6 +12,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/pkg/errors"
 )
+
+func checkedUint32FromInt(value int) (uint32, error) {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint32(parsedValue), nil
+}
 
 // Payment contains a recipient payment details
 type Payment struct {
@@ -186,7 +196,11 @@ func isTransactionFullySigned(partiallySignedTransaction *serialization.Partiall
 				numSignatures++
 			}
 		}
-		if uint32(numSignatures) < input.MinimumSignatures {
+		numSignaturesUint32, err := checkedUint32FromInt(numSignatures)
+		if err != nil {
+			return false
+		}
+		if numSignaturesUint32 < input.MinimumSignatures {
 			return false
 		}
 	}
@@ -220,8 +234,12 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 					signatureCount++
 				}
 			}
-			if uint32(signatureCount) < input.MinimumSignatures {
-				return nil, errors.Errorf("missing %d signatures", input.MinimumSignatures-uint32(signatureCount))
+			signatureCountUint32, err := checkedUint32FromInt(signatureCount)
+			if err != nil {
+				return nil, err
+			}
+			if signatureCountUint32 < input.MinimumSignatures {
+				return nil, errors.Errorf("missing %d signatures", input.MinimumSignatures-signatureCountUint32)
 			}
 
 			redeemScript, err := partiallySignedInputMultisigRedeemScript(input, ecdsa)

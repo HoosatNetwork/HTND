@@ -1,6 +1,7 @@
 package consensusstatemanager_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -58,6 +59,12 @@ func TestVirtualDiff(t *testing.T) {
 		}
 
 		for i, output := range expectedOutputs {
+			if i < 0 {
+				t.Fatalf("negative output index %d", i)
+			}
+			if i > math.MaxUint32 {
+				t.Fatalf("output index %d exceeds uint32", i)
+			}
 			outpoint := &externalapi.DomainOutpoint{
 				TransactionID: *consensushashing.TransactionID(blockB.Transactions[0]),
 				Index:         uint32(i),

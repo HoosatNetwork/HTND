@@ -243,7 +243,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 		// This is a sanity check that validates that a blue
 		// block's blue anticone is not already larger than K.
 		if candidateBluesAnticoneSizes[*block] > gm.k[constants.GetBlockVersion()-1] {
-			return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], gm.k[constants.GetBlockVersion()-1]))
+			return false, false, fmt.Errorf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], gm.k[constants.GetBlockVersion()-1])
 		}
 	}
 

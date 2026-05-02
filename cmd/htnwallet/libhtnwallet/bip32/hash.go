@@ -1,3 +1,5 @@
+//lint:file-ignore SA1019 RIPEMD-160 is required here for legacy BIP32-compatible hash160 behavior.
+//nolint:staticcheck // RIPEMD-160 is required here for legacy BIP32-compatible hash160 behavior.
 package bip32
 
 import (
@@ -7,8 +9,12 @@ import (
 	"crypto/sha512"
 	"hash"
 
+	// WARNING: RIPEMD-160 is deprecated and considered weak. It is used here for legacy compatibility (e.g., Bitcoin address generation).
+	// For new applications, prefer SHA-256 or SHA-3. See: https://github.com/golang/go/issues/44205
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
+	//lint:ignore SA1019 RIPEMD-160 is required here for legacy BIP32-compatible hash160 behavior.
+	// #nosec G507 -- RIPEMD-160 is required here for legacy BIP32/BTC-compatible hash160 behavior.
+	"golang.org/x/crypto/ripemd160"
 )
 
 func newHMACWriter(key []byte) hmacWriter {
@@ -50,10 +56,12 @@ func validateChecksum(data []byte) error {
 	return nil
 }
 
+// hash160 returns RIPEMD-160(SHA-256(data)).
+// WARNING: RIPEMD-160 is deprecated and considered weak. Used only for legacy compatibility (e.g., Bitcoin address generation).
 func hash160(data []byte) []byte {
-	sha := sha256.New()
+	sha := sha256.Sum256(data)
+	// #nosec G406 -- RIPEMD-160 is intentionally retained for legacy-compatible hash160 derivation.
 	ripe := ripemd160.New()
-	sha.Write(data)
-	ripe.Write(sha.Sum(nil))
+	ripe.Write(sha[:])
 	return ripe.Sum(nil)
 }

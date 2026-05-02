@@ -1,6 +1,8 @@
 package blockprocessor
 
 import (
+	"fmt"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
@@ -12,8 +14,12 @@ func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *mod
 ) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
 	blockHash := consensushashing.BlockHash(block.Block)
 	for i, daaBlock := range block.DAAWindow {
+		if i < 0 {
+			return nil, externalapi.StatusInvalid, fmt.Errorf("index overflow in DAAWindow: %d", i)
+		}
+		index := uint64(uint(i))
 		hash := consensushashing.HeaderHash(daaBlock.Header)
-		bp.blocksWithTrustedDataDAAWindowStore.Stage(stagingArea, blockHash, uint64(i), &externalapi.BlockGHOSTDAGDataHashPair{
+		bp.blocksWithTrustedDataDAAWindowStore.Stage(stagingArea, blockHash, index, &externalapi.BlockGHOSTDAGDataHashPair{
 			Hash:         hash,
 			GHOSTDAGData: daaBlock.GHOSTDAGData,
 		})

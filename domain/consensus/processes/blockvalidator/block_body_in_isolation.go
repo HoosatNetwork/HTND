@@ -213,7 +213,7 @@ func (v *blockValidator) checkBlockHasNoChainedTransactions(block *externalapi.D
 	return nil
 }
 
-func (v *blockValidator) validateGasLimit(block *externalapi.DomainBlock) error {
+func (v *blockValidator) validateGasLimit(_ *externalapi.DomainBlock) error {
 	// TODO: implement this
 	return nil
 }

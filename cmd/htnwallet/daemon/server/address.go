@@ -71,7 +71,7 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 
 		path := s.walletAddressPath(walletAddr)
 		// Default to P2PK for single-sig; multisig always returns P2SH.
-		singleSigType := libhtnwallet.SingleSigAddressTypeP2PK
+		var singleSigType libhtnwallet.SingleSigAddressType
 		switch request.GetAddressType() {
 		case pb.AddressType_ADDRESS_TYPE_P2PK:
 			singleSigType = libhtnwallet.SingleSigAddressTypeP2PK
@@ -148,16 +148,6 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		P2PkAddress:  addrP2PK.String(),
 		P2PkhAddress: addrP2PKH.String(),
 	}, nil
-}
-
-func (s *server) walletAddressString(wAddr *walletAddress) (string, error) {
-	path := s.walletAddressPath(wAddr)
-	addr, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
-	if err != nil {
-		return "", err
-	}
-
-	return addr.String(), nil
 }
 
 // walletAddressStringsForScan returns all address encodings that should be queried

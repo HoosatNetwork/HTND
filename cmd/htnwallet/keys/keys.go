@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/gofrs/flock"
@@ -345,7 +346,11 @@ func (d *File) numThreads(password []byte) (uint8, error) {
 func (d *File) detectNumThreads(password []byte, encryptedMnemonic *EncryptedMnemonic) (uint8, error) {
 	firstGuessNumThreads := d.NumThreads
 	if d.NumThreads == 0 {
-		firstGuessNumThreads = uint8(runtime.NumCPU())
+		numThreads, err := strconv.ParseUint(strconv.Itoa(runtime.NumCPU()), 10, 8)
+		if err != nil {
+			return 0, err
+		}
+		firstGuessNumThreads = uint8(numThreads)
 	}
 	_, err := decryptMnemonic(firstGuessNumThreads, encryptedMnemonic, password)
 	if err != nil {
@@ -425,7 +430,7 @@ func (d *File) TryLock() error {
 	}
 
 	if !success {
-		return errors.Errorf("%s is locked and cannot be used. Make sure that no other active wallet command is using it.", d.path)
+		return errors.Errorf("%s is locked and cannot be used; make sure that no other active wallet command is using it", d.path)
 	}
 	return nil
 }

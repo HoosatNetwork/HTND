@@ -47,6 +47,13 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			memTableBytes = int64(mb) << 20
 		}
 	}
+	if memTableBytes < 0 {
+		memTableBytes = 0
+	}
+	memTableBytesUint64, err := strconv.ParseUint(strconv.FormatInt(memTableBytes, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
 
 	memTableStopThreshold := defaultMemTablesBeforeStall
 	if v := os.Getenv("HTND_MEMTABLE_STOP_THRESHOLD"); v != "" {
@@ -96,7 +103,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		Cache: pebble.NewCache(cacheBytes),
 
-		MemTableSize:                uint64(memTableBytes),
+		MemTableSize:                memTableBytesUint64,
 		MemTableStopWritesThreshold: memTableStopThreshold,
 
 		FlushSplitBytes: baseFileSize,

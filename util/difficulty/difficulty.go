@@ -1,6 +1,7 @@
 package difficulty
 
 import (
+	"math"
 	"math/big"
 	"time"
 )
@@ -89,12 +90,33 @@ func BigToCompact(n *big.Int) uint32 {
 	var mantissa uint32
 	exponent := uint(len(n.Bytes()))
 	if exponent <= 3 {
-		mantissa = uint32(n.Bits()[0])
+		bits := n.Bits()
+		if len(bits) > 0 {
+			word := uint64(bits[0])
+			if word <= math.MaxUint32 {
+				mantissa = uint32(word)
+			} else {
+				mantissa = math.MaxUint32
+			}
+		} else {
+			mantissa = 0
+		}
 		mantissa <<= 8 * (3 - exponent)
 	} else {
 		// Use a copy to avoid modifying the caller's original number.
 		tn := new(big.Int).Set(n)
-		mantissa = uint32(tn.Rsh(tn, 8*(exponent-3)).Bits()[0])
+		tn.Rsh(tn, 8*(exponent-3))
+		bits := tn.Bits()
+		if len(bits) > 0 {
+			word := uint64(bits[0])
+			if word <= math.MaxUint32 {
+				mantissa = uint32(word)
+			} else {
+				mantissa = math.MaxUint32
+			}
+		} else {
+			mantissa = 0
+		}
 	}
 
 	// When the mantissa already has the sign bit set, the number is too
@@ -107,7 +129,12 @@ func BigToCompact(n *big.Int) uint32 {
 
 	// Pack the exponent, sign bit, and mantissa into an unsigned 32-bit
 	// int and return it.
-	compact := uint32(exponent<<24) | mantissa
+	exponentUint64 := uint64(exponent)
+	exponentUint32 := uint32(math.MaxUint32)
+	if exponentUint64 <= math.MaxUint32 {
+		exponentUint32 = uint32(exponentUint64)
+	}
+	compact := (exponentUint32 << 24) | mantissa
 	if n.Sign() < 0 {
 		compact |= 0x00800000
 	}
@@ -137,7 +164,7 @@ func CalcWork(bits uint32) *big.Int {
 	return new(big.Int).Div(oneLsh256, denominator)
 }
 
-func getHashrate(target *big.Int, TargetTimePerBlock time.Duration) *big.Int {
+func getHashrate(target *big.Int, targetTimePerBlock time.Duration) *big.Int {
 	// From: https://bitcoin.stackexchange.com/a/5557/40800
 	// difficulty = hashrate / (2^256 / max_target / seconds_per_block)
 	// hashrate = difficulty * (2^256 / max_target / seconds_per_block)
@@ -147,15 +174,15 @@ func getHashrate(target *big.Int, TargetTimePerBlock time.Duration) *big.Int {
 
 	tmp := new(big.Int)
 	divisor := new(big.Int).Set(target)
-	divisor.Mul(divisor, tmp.SetInt64(TargetTimePerBlock.Milliseconds()))
+	divisor.Mul(divisor, tmp.SetInt64(targetTimePerBlock.Milliseconds()))
 	divisor.Div(divisor, tmp.SetInt64(int64(time.Second/time.Millisecond))) // Scale it up to seconds.
 	divisor.Div(oneLsh256, divisor)
 	return divisor
 }
 
 // GetHashrateString returns the expected hashrate of the network on a certain difficulty target.
-func GetHashrateString(target *big.Int, TargetTimePerBlock time.Duration) string {
-	hashrate := getHashrate(target, TargetTimePerBlock)
+func GetHashrateString(target *big.Int, targetTimePerBlock time.Duration) string {
+	hashrate := getHashrate(target, targetTimePerBlock)
 	in := hashrate.Text(10)
 	var postfix string
 	switch {

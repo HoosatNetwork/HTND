@@ -54,8 +54,20 @@ func parseIndex(indexString string) (uint32, error) {
 	}
 
 	if isHardened {
+		if index < 0 {
+			return 0, errors.Errorf("index cannot be negative: %d", index)
+		}
+		if uint64(index)+uint64(hardenedIndexStart) > uint64(^uint32(0)) {
+			return 0, errors.Errorf("index + hardenedIndexStart overflows uint32: %d + %d", index, hardenedIndexStart)
+		}
 		return uint32(index) + hardenedIndexStart, nil
 	}
 
+	if index < 0 {
+		return 0, errors.Errorf("index cannot be negative: %d", index)
+	}
+	if index > int(^uint32(0)) {
+		return 0, errors.Errorf("index overflows uint32: %d", index)
+	}
 	return uint32(index), nil
 }

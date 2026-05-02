@@ -11,19 +11,19 @@ import (
 func TestTransactionCloseErrors(t *testing.T) {
 	tests := []struct {
 		name              string
-		function          func(dbTx *PebbleDBTransaction) error
+		function          func(dbTx *DBTransaction) error
 		shouldReturnError bool
 	}{
 		{
 			name: "Put",
-			function: func(dbTx *PebbleDBTransaction) error {
+			function: func(dbTx *DBTransaction) error {
 				return dbTx.Put(database.MakeBucket(nil).Key([]byte("key")), []byte("value"))
 			},
 			shouldReturnError: true,
 		},
 		{
 			name: "Get",
-			function: func(dbTx *PebbleDBTransaction) error {
+			function: func(dbTx *DBTransaction) error {
 				_, err := dbTx.Get(database.MakeBucket(nil).Key([]byte("key")))
 				return err
 			},
@@ -31,7 +31,7 @@ func TestTransactionCloseErrors(t *testing.T) {
 		},
 		{
 			name: "Has",
-			function: func(dbTx *PebbleDBTransaction) error {
+			function: func(dbTx *DBTransaction) error {
 				_, err := dbTx.Has(database.MakeBucket(nil).Key([]byte("key")))
 				return err
 			},
@@ -39,14 +39,14 @@ func TestTransactionCloseErrors(t *testing.T) {
 		},
 		{
 			name: "Delete",
-			function: func(dbTx *PebbleDBTransaction) error {
+			function: func(dbTx *DBTransaction) error {
 				return dbTx.Delete(database.MakeBucket(nil).Key([]byte("key")))
 			},
 			shouldReturnError: true,
 		},
 		{
 			name: "Cursor",
-			function: func(dbTx *PebbleDBTransaction) error {
+			function: func(dbTx *DBTransaction) error {
 				_, err := dbTx.Cursor(database.MakeBucket([]byte("bucket")))
 				return err
 			},
@@ -54,17 +54,17 @@ func TestTransactionCloseErrors(t *testing.T) {
 		},
 		{
 			name:              "Rollback",
-			function:          (*PebbleDBTransaction).Rollback,
+			function:          (*DBTransaction).Rollback,
 			shouldReturnError: true,
 		},
 		{
 			name:              "Commit",
-			function:          (*PebbleDBTransaction).Commit,
+			function:          (*DBTransaction).Commit,
 			shouldReturnError: true,
 		},
 		{
 			name:              "RollbackUnlessClosed",
-			function:          (*PebbleDBTransaction).RollbackUnlessClosed,
+			function:          (*DBTransaction).RollbackUnlessClosed,
 			shouldReturnError: false,
 		},
 	}
@@ -115,7 +115,7 @@ func TestTransactionCloseErrors(t *testing.T) {
 			// Make sure that the test function returns a "closed transaction" error
 			// for both the commitTx and the rollbackTx
 			for _, closedTx := range []database.Transaction{commitTx, rollbackTx} {
-				err = test.function(closedTx.(*PebbleDBTransaction))
+				err = test.function(closedTx.(*DBTransaction))
 				if test.shouldReturnError {
 					if err == nil {
 						t.Fatalf("TestTransactionCloseErrors: %s unexpectedly succeeded", test.name)
@@ -124,10 +124,8 @@ func TestTransactionCloseErrors(t *testing.T) {
 						t.Fatalf("TestTransactionCloseErrors: %s returned wrong error. Want: %s, got: %s",
 							test.name, expectedErrContainsString, err)
 					}
-				} else {
-					if err != nil {
-						t.Fatalf("TestTransactionCloseErrors: %s unexpectedly failed: %s", test.name, err)
-					}
+				} else if err != nil {
+					t.Fatalf("TestTransactionCloseErrors: %s unexpectedly failed: %s", test.name, err)
 				}
 			}
 		}()

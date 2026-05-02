@@ -41,7 +41,7 @@ func registerAddressFlows(m protocolManager, router *routerpkg.Router, isStoppin
 
 	return []*common.Flow{
 		m.RegisterFlow("SendAddresses", router, []appmessage.MessageCommand{appmessage.CmdRequestAddresses}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return addressexchange.SendAddresses(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
@@ -59,7 +59,7 @@ func registerBlockRelayFlows(m protocolManager, netConnection *netadapter.NetCon
 
 	return []*common.Flow{
 		m.RegisterOneTimeFlow("SendVirtualSelectedParentInv", router, []appmessage.MessageCommand{},
-			isStopping, errChan, func(route *routerpkg.Route, peer *peerpkg.Peer) error {
+			isStopping, errChan, func(_ *routerpkg.Route, peer *peerpkg.Peer) error {
 				return blockrelay.SendVirtualSelectedParentInv(m.Context(), outgoingRoute, peer)
 			}),
 
@@ -95,7 +95,7 @@ func registerBlockRelayFlows(m protocolManager, netConnection *netadapter.NetCon
 
 		m.RegisterFlow("HandleRequestBlockLocator", router,
 			[]appmessage.MessageCommand{appmessage.CmdRequestBlockLocator}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return blockrelay.HandleRequestBlockLocator(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
@@ -119,7 +119,7 @@ func registerBlockRelayFlows(m protocolManager, netConnection *netadapter.NetCon
 				appmessage.CmdRequestPruningPointUTXOSet,
 				appmessage.CmdRequestNextPruningPointUTXOSetChunk,
 			}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return blockrelay.HandleRequestPruningPointUTXOSet(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
@@ -140,7 +140,7 @@ func registerBlockRelayFlows(m protocolManager, netConnection *netadapter.NetCon
 
 		m.RegisterFlow("HandleRequestIBDChainBlockLocator", router,
 			[]appmessage.MessageCommand{appmessage.CmdRequestIBDChainBlockLocator}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return blockrelay.HandleRequestIBDChainBlockLocator(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
@@ -166,7 +166,7 @@ func registerPingFlows(m protocolManager, router *routerpkg.Router, isStopping *
 
 	return []*common.Flow{
 		m.RegisterFlow("ReceivePings", router, []appmessage.MessageCommand{appmessage.CmdPing}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return ping.ReceivePings(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
@@ -185,13 +185,13 @@ func registerTransactionRelayFlow(m protocolManager, router *routerpkg.Router, i
 	return []*common.Flow{
 		m.RegisterFlowWithCapacity("HandleRelayedTransactions", 10_000, router,
 			[]appmessage.MessageCommand{appmessage.CmdInvTransaction, appmessage.CmdTx, appmessage.CmdTransactionNotFound}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return transactionrelay.HandleRelayedTransactions(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
 		m.RegisterFlow("HandleRequestTransactions", router,
 			[]appmessage.MessageCommand{appmessage.CmdRequestTransactions}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return transactionrelay.HandleRequestedTransactions(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),
@@ -204,7 +204,7 @@ func registerRejectsFlow(m protocolManager, router *routerpkg.Router, isStopping
 	return []*common.Flow{
 		m.RegisterFlow("HandleRejects", router,
 			[]appmessage.MessageCommand{appmessage.CmdReject}, isStopping, errChan,
-			func(incomingRoute *routerpkg.Route, peer *peerpkg.Peer) error {
+			func(incomingRoute *routerpkg.Route, _ *peerpkg.Peer) error {
 				return rejects.HandleRejects(m.Context(), incomingRoute, outgoingRoute)
 			},
 		),

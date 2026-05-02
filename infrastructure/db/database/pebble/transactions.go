@@ -8,11 +8,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// PebbleDBTransaction is a thin wrapper around Pebble batches.
+// DBTransaction is a thin wrapper around Pebble batches.
 // It supports both get and put.
 // Tracks modified keys to support Has within the transaction.
-type PebbleDBTransaction struct {
-	db               *PebbleDB
+type DBTransaction struct {
+	db               *DB
 	batch            *pebble.Batch
 	cursors          []database.Cursor
 	isClosed         bool
@@ -20,9 +20,9 @@ type PebbleDBTransaction struct {
 }
 
 // Begin begins a new transaction.
-func (db *PebbleDB) Begin() (database.Transaction, error) {
+func (db *DB) Begin() (database.Transaction, error) {
 	batch := db.db.NewIndexedBatch() // Use indexed batch for read support
-	transaction := &PebbleDBTransaction{
+	transaction := &DBTransaction{
 		db:               db,
 		batch:            batch,
 		isClosed:         false,
@@ -32,7 +32,7 @@ func (db *PebbleDB) Begin() (database.Transaction, error) {
 }
 
 // Commit commits whatever changes were made to the database within this transaction.
-func (tx *PebbleDBTransaction) Commit() error {
+func (tx *DBTransaction) Commit() error {
 	if tx.isClosed {
 		return errors.New("cannot commit a closed transaction")
 	}
@@ -49,7 +49,7 @@ func (tx *PebbleDBTransaction) Commit() error {
 }
 
 // Rollback rolls back whatever changes were made to the database within this transaction.
-func (tx *PebbleDBTransaction) Rollback() error {
+func (tx *DBTransaction) Rollback() error {
 	if tx.isClosed {
 		return errors.New("cannot rollback a closed transaction")
 	}
@@ -68,7 +68,7 @@ func (tx *PebbleDBTransaction) Rollback() error {
 
 // RollbackUnlessClosed rolls back changes that were made to the database within the transaction,
 // unless the transaction had already been closed using either Rollback or Commit.
-func (tx *PebbleDBTransaction) RollbackUnlessClosed() error {
+func (tx *DBTransaction) RollbackUnlessClosed() error {
 	if tx.isClosed {
 		return nil
 	}
@@ -76,7 +76,7 @@ func (tx *PebbleDBTransaction) RollbackUnlessClosed() error {
 }
 
 // Put sets the value for the given key. It overwrites any previous value for that key.
-func (tx *PebbleDBTransaction) Put(key *database.Key, value []byte) error {
+func (tx *DBTransaction) Put(key *database.Key, value []byte) error {
 	if tx.isClosed {
 		return errors.New("cannot put into a closed transaction")
 	}
@@ -87,7 +87,7 @@ func (tx *PebbleDBTransaction) Put(key *database.Key, value []byte) error {
 	return errors.WithStack(err)
 }
 
-func (tx *PebbleDBTransaction) BatchPut(pairs map[*database.Key][]byte) error {
+func (tx *DBTransaction) BatchPut(pairs map[*database.Key][]byte) error {
 	for key, value := range pairs {
 		if err := tx.batch.Set(key.Bytes(), value, pebble.NoSync); err != nil {
 			return errors.Wrapf(err, "failed to set key %s in batch", key)
@@ -97,7 +97,7 @@ func (tx *PebbleDBTransaction) BatchPut(pairs map[*database.Key][]byte) error {
 }
 
 // Get gets the value for the given key. It returns ErrNotFound if the given key does not exist.
-func (tx *PebbleDBTransaction) Get(key *database.Key) ([]byte, error) {
+func (tx *DBTransaction) Get(key *database.Key) ([]byte, error) {
 	if tx.isClosed {
 		return nil, errors.New("cannot get from a closed transaction")
 	}
@@ -123,7 +123,7 @@ func (tx *PebbleDBTransaction) Get(key *database.Key) ([]byte, error) {
 }
 
 // Has returns true if the database or batch contains the given key.
-func (tx *PebbleDBTransaction) Has(key *database.Key) (bool, error) {
+func (tx *DBTransaction) Has(key *database.Key) (bool, error) {
 	if tx.isClosed {
 		return false, errors.New("cannot has from a closed transaction")
 	}
@@ -136,7 +136,7 @@ func (tx *PebbleDBTransaction) Has(key *database.Key) (bool, error) {
 }
 
 // Delete deletes the value for the given key. Will not return an error if the key doesn't exist.
-func (tx *PebbleDBTransaction) Delete(key *database.Key) error {
+func (tx *DBTransaction) Delete(key *database.Key) error {
 	if tx.isClosed {
 		return errors.New("cannot delete from a closed transaction")
 	}
@@ -148,7 +148,7 @@ func (tx *PebbleDBTransaction) Delete(key *database.Key) error {
 }
 
 // Cursor begins a new cursor over the given bucket.
-func (tx *PebbleDBTransaction) Cursor(bucket *database.Bucket) (database.Cursor, error) {
+func (tx *DBTransaction) Cursor(bucket *database.Bucket) (database.Cursor, error) {
 	if tx.isClosed {
 		return nil, errors.New("cannot open a cursor from a closed transaction")
 	}

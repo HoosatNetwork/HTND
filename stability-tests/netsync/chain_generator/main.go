@@ -25,7 +25,12 @@ func main() {
 }
 
 func generateBlocks() []mine.JSONBlock {
-	numBlocks := int(activeConfig().NumberOfBlocks)
+	const maxInt = int(^uint(0) >> 1)
+	numberOfBlocks := activeConfig().NumberOfBlocks
+	if numberOfBlocks > uint64(maxInt) {
+		panic(errors.Errorf("number of blocks %d exceeds int capacity", numberOfBlocks))
+	}
+	numBlocks := int(numberOfBlocks)
 	blocks := make([]mine.JSONBlock, 0, numBlocks)
 	blocks = append(blocks, mine.JSONBlock{
 		ID: "0",

@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -73,7 +74,22 @@ func TestPruning(t *testing.T) {
 				t.Fatalf("TestPruning: failed decoding json: %v", err)
 			}
 
-			consensusConfig.FinalityDuration = []time.Duration{time.Duration(test.FinalityDepth) * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}
+			targetTimePerBlock := consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]
+			if targetTimePerBlock <= 0 {
+				t.Fatalf("TestPruning: invalid target time per block %s", targetTimePerBlock)
+			}
+			if test.FinalityDepth > math.MaxInt64 {
+				t.Fatalf("TestPruning: finality depth %d exceeds int64", test.FinalityDepth)
+			}
+			finalityDepth, err := strconv.ParseInt(strconv.FormatUint(test.FinalityDepth, 10), 10, 64)
+			if err != nil {
+				t.Fatalf("TestPruning: failed converting finality depth %d: %v", test.FinalityDepth, err)
+			}
+			maxFinalityDepth := math.MaxInt64 / int64(targetTimePerBlock)
+			if finalityDepth > maxFinalityDepth {
+				t.Fatalf("TestPruning: finality depth %d overflows duration", test.FinalityDepth)
+			}
+			consensusConfig.FinalityDuration = []time.Duration{time.Duration(finalityDepth) * targetTimePerBlock}
 			consensusConfig.MergeSetSizeLimit = test.MergeSetSizeLimit
 			consensusConfig.DifficultyAdjustmentWindowSize = []int{400}
 

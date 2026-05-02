@@ -243,25 +243,3 @@ func (r *Router) incomingRoute(messageType appmessage.MessageCommand) (*Route, b
 	route, ok := r.incomingRoutes[messageType]
 	return route, ok
 }
-
-func (r *Router) doesIncomingRouteExist(messageType appmessage.MessageCommand) bool {
-	r.incomingRoutesLock.RLock()
-	defer r.incomingRoutesLock.RUnlock()
-
-	_, ok := r.incomingRoutes[messageType]
-	return ok
-}
-
-func (r *Router) setIncomingRoute(messageType appmessage.MessageCommand, route *Route) {
-	r.incomingRoutesLock.Lock()
-	defer r.incomingRoutesLock.Unlock()
-
-	r.incomingRoutes[messageType] = route
-}
-
-func (r *Router) deleteIncomingRoute(messageType appmessage.MessageCommand) {
-	r.incomingRoutesLock.Lock()
-	defer r.incomingRoutesLock.Unlock()
-
-	delete(r.incomingRoutes, messageType)
-}

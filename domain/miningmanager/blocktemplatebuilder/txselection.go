@@ -2,13 +2,13 @@ package blocktemplatebuilder
 
 import (
 	"math"
-	"math/rand"
 	"sort"
 
 	consensusexternalapi "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/subnetworks"
+	"github.com/Hoosat-Oy/HTND/util/random"
 )
 
 const (
@@ -89,7 +89,11 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		}
 
 		// Select a candidate tx at random
-		r := rand.Float64()
+		randomUint64, err := random.Uint64()
+		if err != nil {
+			panic(err)
+		}
+		r := float64(randomUint64) / float64(^uint64(0))
 		r *= totalP
 		selectedTx := findTx(candidateTxs, r)
 
@@ -208,16 +212,16 @@ func rebalanceCandidates(oldCandidateTxs []*candidateTx, isFirstRun bool) (
 // * tx3: start 105, end 2000
 // And r=102, then findTx will return tx2.
 func findTx(candidateTxs []*candidateTx, r float64) *candidateTx {
-	min := 0
-	max := len(candidateTxs) - 1
+	low := 0
+	high := len(candidateTxs) - 1
 	for {
-		i := (min + max) / 2
+		i := (low + high) / 2
 		candidateTx := candidateTxs[i]
 		if candidateTx.end < r {
-			min = i + 1
+			low = i + 1
 			continue
 		} else if candidateTx.start > r {
-			max = i - 1
+			high = i - 1
 			continue
 		}
 		return candidateTx

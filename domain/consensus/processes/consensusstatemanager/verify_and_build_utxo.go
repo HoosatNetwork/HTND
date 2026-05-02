@@ -192,7 +192,7 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 	return merkle.CalculateIDMerkleRoot(acceptedTransactions)
 }
 
-func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
+func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, _ *externalapi.DomainBlock,
 	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
 ) error {
 	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)

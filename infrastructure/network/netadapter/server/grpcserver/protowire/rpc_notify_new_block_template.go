@@ -53,7 +53,7 @@ func (x *HoosatdMessage_NewBlockTemplateNotification) toAppMessage() (appmessage
 	return x.NewBlockTemplateNotification.toAppMessage()
 }
 
-func (x *HoosatdMessage_NewBlockTemplateNotification) fromAppMessage(message *appmessage.NewBlockTemplateNotificationMessage) error {
+func (x *HoosatdMessage_NewBlockTemplateNotification) fromAppMessage(_ *appmessage.NewBlockTemplateNotificationMessage) error {
 	x.NewBlockTemplateNotification = &NewBlockTemplateNotificationMessage{}
 	return nil
 }

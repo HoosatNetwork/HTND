@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
@@ -140,7 +141,7 @@ func GetScriptClassFromParsedScript(pops []parsedOpcode) ScriptClass {
 // then -1 is returned. We are an internal function and thus assume that class
 // is the real class of pops (and we can thus assume things that were determined
 // while finding out the type).
-func expectedInputs(pops []parsedOpcode, class ScriptClass) int {
+func expectedInputs(_ []parsedOpcode, class ScriptClass) int {
 	switch class {
 
 	case PubKeyTy:
@@ -496,7 +497,7 @@ type AtomicSwapDataPushes struct {
 //
 // This function is only defined in the txscript package due to API limitations
 // which prevent callers using txscript to parse nonstandard scripts.
-func ExtractAtomicSwapDataPushes(version uint16, scriptPubKey []byte) (*AtomicSwapDataPushes, error) {
+func ExtractAtomicSwapDataPushes(_ uint16, scriptPubKey []byte) (*AtomicSwapDataPushes, error) {
 	pops, err := ParseScript(scriptPubKey)
 	if err != nil {
 		return nil, err
@@ -548,9 +549,20 @@ func ExtractAtomicSwapDataPushes(version uint16, scriptPubKey []byte) (*AtomicSw
 		if err != nil {
 			return nil, nil
 		}
-		pushes.LockTime = uint64(locktime)
+		if locktime < 0 {
+			return nil, nil
+		}
+		lockTimeUint64, err := strconv.ParseUint(strconv.FormatInt(int64(locktime), 10), 10, 64)
+		if err != nil {
+			return nil, nil
+		}
+		pushes.LockTime = lockTimeUint64
 	} else if op := pops[11].opcode; isSmallInt(op) {
-		pushes.LockTime = uint64(asSmallInt(op))
+		lockTimeUint64, err := strconv.ParseUint(strconv.Itoa(asSmallInt(op)), 10, 64)
+		if err != nil {
+			return nil, nil
+		}
+		pushes.LockTime = lockTimeUint64
 	} else {
 		return nil, nil
 	}

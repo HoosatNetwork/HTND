@@ -41,7 +41,7 @@ func (m *mocTransactionsRelayContext) SharedRequestedTransactions() *flowcontext
 	return m.sharedRequestedTransactions
 }
 
-func (m *mocTransactionsRelayContext) EnqueueTransactionIDsForPropagation(transactionIDs []*externalapi.DomainTransactionID) error {
+func (m *mocTransactionsRelayContext) EnqueueTransactionIDsForPropagation(_ []*externalapi.DomainTransactionID) error {
 	return nil
 }
 

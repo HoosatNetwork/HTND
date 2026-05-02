@@ -38,7 +38,13 @@ func HandleEstimateNetworkHashesPerSecond(
 		}
 	}
 
-	if uint64(windowSize) > context.Config.ActiveNetParams.PruningDepth() {
+	if windowSize < 0 {
+		response := &appmessage.EstimateNetworkHashesPerSecondResponseMessage{}
+		response.Error = appmessage.RPCErrorf("Requested window size %d is invalid", windowSize)
+		return response, nil
+	}
+	windowSizeUint64 := uint64(windowSize)
+	if windowSizeUint64 > context.Config.ActiveNetParams.PruningDepth() {
 		response := &appmessage.EstimateNetworkHashesPerSecondResponseMessage{}
 		response.Error = appmessage.RPCErrorf(
 			"Requested window size %d is larger than pruning point depth %d",

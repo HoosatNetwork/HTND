@@ -303,6 +303,7 @@ func TestBIP32SpecVectors(t *testing.T) {
 // TestExtendedKey_DeriveFromPath checks that path that derive from extended private key and extended
 // public key lead to the same public keys.
 func TestExtendedKey_DeriveFromPath(t *testing.T) {
+	// #nosec G404 -- deterministic RNG keeps this derivation test reproducible.
 	r := rand.New(rand.NewSource(0))
 	seed, err := GenerateSeed()
 	if err != nil {
