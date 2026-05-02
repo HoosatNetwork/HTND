@@ -22,7 +22,7 @@ import (
 
 func mkGetKey(keys map[string]*secp256k1.SchnorrKeyPair) KeyDB {
 	if keys == nil {
-		return KeyClosure(func(addr util.Address) (*secp256k1.SchnorrKeyPair, error) {
+		return KeyClosure(func(_ util.Address) (*secp256k1.SchnorrKeyPair, error) {
 			return nil, errors.New("nope")
 		})
 	}
@@ -37,7 +37,7 @@ func mkGetKey(keys map[string]*secp256k1.SchnorrKeyPair) KeyDB {
 
 func mkGetScript(scripts map[string][]byte) ScriptDB {
 	if scripts == nil {
-		return ScriptClosure(func(addr util.Address) ([]byte, error) {
+		return ScriptClosure(func(_ util.Address) ([]byte, error) {
 			return nil, errors.New("nope")
 		})
 	}
@@ -182,7 +182,6 @@ func TestSignTxOutput(t *testing.T) {
 			if err != nil {
 				t.Fatalf("twice signed script invalid for "+
 					"%s: %v", msg, err)
-				break
 			}
 		}
 	}

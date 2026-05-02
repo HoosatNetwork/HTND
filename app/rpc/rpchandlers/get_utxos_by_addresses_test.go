@@ -2,16 +2,15 @@ package rpchandlers
 
 import (
 	"math"
-	"reflect"
 	"testing"
 	"unsafe"
 )
 
 func TestEncodeHexStringRejectsOversizedSlice(t *testing.T) {
 	var value []byte
-	header := (*reflect.SliceHeader)(unsafe.Pointer(&value))
-	header.Len = math.MaxInt/2 + 1
-	header.Cap = header.Len
+	// Use unsafe to create a slice with a huge length/capacity (Go 1.17+)
+	data := unsafe.SliceData(value)
+	value = unsafe.Slice(data, math.MaxInt/2+1)
 
 	buffer, encoded := encodeHexString(nil, value)
 	if encoded != "" {

@@ -243,7 +243,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	isSelectedParent bool,
 	accumulatedUTXODiff externalapi.MutableUTXODiff,
 	accumulatedMassBefore uint64,
-	selectedParentPastMedianTime int64,
+	_ int64,
 	blockDAAScore uint64,
 ) (isAccepted bool, accumulatedMassAfter uint64, err error) {
 	if transaction == nil {
@@ -315,7 +315,7 @@ func (csm *consensusStateManager) RestorePastUTXOSetIterator(stagingArea *model.
 	}
 	if blockStatus != externalapi.StatusUTXOValid {
 		return nil, errors.Errorf(
-			"block %s, has status '%s', and therefore can't restore it's UTXO set. Only blocks with status '%s' can be restored.",
+			"block %s has status '%s' and therefore can't restore its UTXO set; only blocks with status '%s' can be restored",
 			blockHash, blockStatus, externalapi.StatusUTXOValid)
 	}
 

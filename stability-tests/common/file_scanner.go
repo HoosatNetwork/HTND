@@ -10,7 +10,7 @@ import (
 )
 
 // ScanFile opens the file in the specified path, and returns a channel that
-// sends the contents of the file line-by-line, ignoring lines beggining with //
+// sends the contents of the file line-by-line, ignoring lines beginning with //
 func ScanFile(filePath string) <-chan []byte {
 	c := make(chan []byte)
 
@@ -42,7 +42,7 @@ func ScanFile(filePath string) <-chan []byte {
 }
 
 // ScanHexFile opens the file in the specified path, and returns a channel that
-// sends the contents of the file line-by-line, ignoring lines beggining with //,
+// sends the contents of the file line-by-line, ignoring lines beginning with //,
 // parsing the hex data in all other lines
 func ScanHexFile(filePath string) <-chan []byte {
 	c := make(chan []byte)

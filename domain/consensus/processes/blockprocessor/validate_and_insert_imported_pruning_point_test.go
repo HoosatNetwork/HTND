@@ -140,7 +140,11 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 				}
 
 				for i, daaBlockHash := range blockDAAWindowHashes {
-					trustedDataDataDAAHeader, err := tcSyncer.TrustedDataDataDAAHeader(blockHash, daaBlockHash, uint64(i))
+					if i < 0 {
+						t.Fatalf("negative DAA window index %d", i)
+					}
+					trustedDataIndex := uint64(uint(i))
+					trustedDataDataDAAHeader, err := tcSyncer.TrustedDataDataDAAHeader(blockHash, daaBlockHash, trustedDataIndex)
 					if err != nil {
 						t.Fatalf("TrustedDataDataDAAHeader: %+v", err)
 					}
@@ -648,10 +652,17 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 		// Make sure all spendingTransaction.Outputs are in the returned UTXOs
 		spendingTransactionID := consensushashing.TransactionID(spendingTransaction)
 		for i := range outputs {
+			if i < 0 {
+				t.Fatalf("negative output index %d", i)
+			}
+			if i > math.MaxUint32 {
+				t.Fatalf("output index %d exceeds uint32", i)
+			}
+			outputIndex := uint32(i)
 			found := false
 			for _, outpointAndUTXOEntryPair := range allOutpointAndUTXOEntryPairs {
 				outpoint := outpointAndUTXOEntryPair.Outpoint
-				if outpoint.TransactionID == *spendingTransactionID && outpoint.Index == uint32(i) {
+				if outpoint.TransactionID == *spendingTransactionID && outpoint.Index == outputIndex {
 					found = true
 					break
 				}

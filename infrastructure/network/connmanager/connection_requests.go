@@ -136,6 +136,6 @@ func (c *ConnectionManager) addConnectionRequest(address string, isPermanent boo
 
 // RemoveConnection disconnects the connection for the given address
 // and removes it entirely from the connection manager.
-func (c *ConnectionManager) RemoveConnection(address string) {
+func (c *ConnectionManager) RemoveConnection(_ string) {
 	panic("unimplemented")
 }

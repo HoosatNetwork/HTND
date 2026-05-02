@@ -19,7 +19,7 @@ import (
 )
 
 // ValidateTransactionInIsolation validates the parts of the transaction that can be validated context-free
-func (v *transactionValidator) ValidateTransactionInIsolation(tx *externalapi.DomainTransaction, povDAAScore uint64) error {
+func (v *transactionValidator) ValidateTransactionInIsolation(tx *externalapi.DomainTransaction, povdaaScore uint64) error {
 	err := v.checkTransactionInputCount(tx)
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func (v *transactionValidator) ValidateTransactionInIsolation(tx *externalapi.Do
 		return err
 	}
 
-	err = v.checkDataTransactionPayload(tx, povDAAScore)
+	err = v.checkDataTransactionPayload(tx, povdaaScore)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (v *transactionValidator) ValidateTransactionInIsolation(tx *externalapi.Do
 		return err
 	}
 
-	err = v.checkTransactionSubnetwork(tx, nil, povDAAScore)
+	err = v.checkTransactionSubnetwork(tx, nil, povdaaScore)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (v *transactionValidator) checkNativeTransactionPayload(tx *externalapi.Dom
 	return nil
 }
 
-func IsValidJSONObject(data []byte, DAAScore uint64) (bool, error) {
+func IsValidJSONObject(data []byte, daaScore uint64) (bool, error) {
 	if len(data) == 0 {
 		return false, fmt.Errorf("empty input data")
 	}
@@ -214,7 +214,7 @@ func IsValidJSONObject(data []byte, DAAScore uint64) (bool, error) {
 	}
 
 	// Optimized binary/file detection with early termination
-	err = hasEncodedFileContent(obj, 0, DAAScore)
+	err = hasEncodedFileContent(obj, 0, daaScore)
 	if err != nil {
 		return false, fmt.Errorf("contains encoded file or binary data %v", err)
 	}
@@ -263,7 +263,7 @@ func containsSuspiciousBinarySignatures(data []byte) bool {
 }
 
 // hasEncodedFileContent recursively checks JSON object for encoded binary content with depth limit
-func hasEncodedFileContent(data any, depth int, DAAScore uint64) error {
+func hasEncodedFileContent(data any, depth int, daaScore uint64) error {
 	// Prevent deep recursion that could cause stack overflow
 	const maxDepth = 10
 	if depth > maxDepth {
@@ -286,7 +286,7 @@ func hasEncodedFileContent(data any, depth int, DAAScore uint64) error {
 				return errors.New("suspicious key name found")
 			}
 
-			if err := hasEncodedFileContent(val, depth+1, DAAScore); err != nil {
+			if err := hasEncodedFileContent(val, depth+1, daaScore); err != nil {
 				return err
 			}
 		}
@@ -298,12 +298,12 @@ func hasEncodedFileContent(data any, depth int, DAAScore uint64) error {
 		}
 
 		for _, val := range v {
-			if err := hasEncodedFileContent(val, depth+1, DAAScore); err != nil {
+			if err := hasEncodedFileContent(val, depth+1, daaScore); err != nil {
 				return err
 			}
 		}
 	case string:
-		return isEncodedBinaryString(v, DAAScore)
+		return isEncodedBinaryString(v, daaScore)
 	case []byte:
 		return errors.New("direct byte slices are binary")
 	}
@@ -328,7 +328,7 @@ func isSuspiciousKey(key string) bool {
 }
 
 // isEncodedBinaryString optimized check for encoded binary content
-func isEncodedBinaryString(s string, DAAScore uint64) error {
+func isEncodedBinaryString(s string, daaScore uint64) error {
 	// Quick length checks for performance
 	if len(s) == 0 {
 		return nil
@@ -338,7 +338,7 @@ func isEncodedBinaryString(s string, DAAScore uint64) error {
 	const suspiciousLength = 64
 	if len(s) > suspiciousLength {
 		// Check entropy - high entropy suggests encoded binary
-		if hasHighEntropy(s, DAAScore) {
+		if hasHighEntropy(s, daaScore) {
 			return errors.New("high entropy string detected")
 		}
 	}
@@ -375,7 +375,7 @@ func isEncodedBinaryString(s string, DAAScore uint64) error {
 }
 
 // hasHighEntropy checks if string has high entropy (indicating encoded data)
-func hasHighEntropy(s string, DAAScore uint64) bool {
+func hasHighEntropy(s string, daaScore uint64) bool {
 	if len(s) < 16 {
 		return false
 	}
@@ -398,11 +398,10 @@ func hasHighEntropy(s string, DAAScore uint64) bool {
 
 	// High entropy threshold (close to random) - adjusted for more realistic detection
 	// TODO: update current DAA Score when doing release.
-	if DAAScore >= 110_996_218+12_960_000 {
+	if daaScore >= 110_996_218+12_960_000 {
 		return entropy > 4.5
-	} else {
-		return entropy > 2
 	}
+	return entropy > 2
 }
 
 // isLikelyBase64 fast check for base64 patterns
@@ -469,16 +468,16 @@ func isLikelyHexString(s string) bool {
 	return true
 }
 
-func (v *transactionValidator) checkDataTransactionPayload(tx *externalapi.DomainTransaction, DAAScore uint64) error {
-	if tx.SubnetworkID != subnetworks.SubnetworkIDData || len(tx.Payload) <= 0 {
+func (v *transactionValidator) checkDataTransactionPayload(tx *externalapi.DomainTransaction, daaScore uint64) error {
+	if tx.SubnetworkID != subnetworks.SubnetworkIDData || len(tx.Payload) == 0 {
 		return nil
 	}
 
 	if len(tx.Payload) > 10_000 {
-		return errors.Wrapf(ruleerrors.ErrTooLargePayload, "data subnetwork transaction payload is too large!")
+		return errors.Wrapf(ruleerrors.ErrTooLargePayload, "data subnetwork transaction payload is too large")
 	}
 
-	if isValid, err := IsValidJSONObject(tx.Payload, DAAScore); !isValid {
+	if isValid, err := IsValidJSONObject(tx.Payload, daaScore); !isValid {
 		return errors.Wrapf(ruleerrors.ErrInvalidPayload, "data subnetwork transaction payload is not valid JSON: %v", err)
 	}
 
@@ -486,7 +485,7 @@ func (v *transactionValidator) checkDataTransactionPayload(tx *externalapi.Domai
 }
 
 func (v *transactionValidator) checkTransactionSubnetwork(tx *externalapi.DomainTransaction,
-	localNodeSubnetworkID *externalapi.DomainSubnetworkID, DAAScore uint64,
+	localNodeSubnetworkID *externalapi.DomainSubnetworkID, daaScore uint64,
 ) error {
 	if !v.enableNonNativeSubnetworks &&
 		tx.SubnetworkID != subnetworks.SubnetworkIDNative &&
@@ -495,7 +494,7 @@ func (v *transactionValidator) checkTransactionSubnetwork(tx *externalapi.Domain
 		return errors.Wrapf(ruleerrors.ErrSubnetworksDisabled, "transaction has non native or coinbase "+
 			"subnetwork ID")
 	}
-	if DAAScore <= (89_872_005+2_592_000) && tx.SubnetworkID == subnetworks.SubnetworkIDData {
+	if daaScore <= (89_872_005+2_592_000) && tx.SubnetworkID == subnetworks.SubnetworkIDData {
 		return errors.Wrapf(ruleerrors.ErrSubnetworksDisabled, "transaction has non native or coinbase "+
 			"subnetwork ID")
 	}

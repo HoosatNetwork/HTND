@@ -3,6 +3,7 @@ package rpchandlers
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -84,8 +85,16 @@ func expectedBlockVersionForDAAScore(daaScore uint64, powScores []uint64) uint32
 	return version
 }
 
+func checkedUint64FromInt(value int) (uint64, error) {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return parsedValue, nil
+}
+
 // validatePoW checks if the Proof of Work is valid for the block
-func validatePoW(context *rpccontext.Context, req *appmessage.SubmitBlockRequestMessage) error {
+func validatePoW(_ *rpccontext.Context, req *appmessage.SubmitBlockRequestMessage) error {
 	if constants.GetBlockVersion() < constants.PoWIntegrityMinVersion {
 		return nil
 	}
@@ -143,7 +152,10 @@ func validateDAAScore(context *rpccontext.Context, block *externalapi.DomainBloc
 		return fmt.Errorf("failed to get virtual DAA score: %w", err)
 	}
 
-	daaWindowSize := uint64(context.Config.NetParams().DifficultyAdjustmentWindowSize[int(constants.GetBlockVersion())-1])
+	daaWindowSize, err := checkedUint64FromInt(context.Config.NetParams().DifficultyAdjustmentWindowSize[int(constants.GetBlockVersion())-1])
+	if err != nil {
+		return err
+	}
 	if virtualDAAScore > daaWindowSize && block.Header.DAAScore() < virtualDAAScore-daaWindowSize {
 		return fmt.Errorf("block DAA score %d is too far behind virtual's DAA score %d",
 			block.Header.DAAScore(), virtualDAAScore)

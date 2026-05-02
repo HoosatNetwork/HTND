@@ -20,7 +20,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error parsing config: %+v", err)
 		os.Exit(1)
 	}
-	defer backendLog.Close()
+	// backendLog.Close() is called explicitly before os.Exit(1) in all error paths.
 	common.UseLogger(backendLog, log.Level())
 	cfg := activeConfig()
 	if cfg.Profile != "" {
@@ -30,7 +30,9 @@ func main() {
 	blocks, topBlock, err := prepareBlocks()
 	if err != nil {
 		log.Errorf("Error preparing blocks: %+v", err)
-		backendLog.Close()
+		if backendLog != nil {
+			backendLog.Close()
+		}
 		os.Exit(1)
 	}
 
@@ -41,10 +43,12 @@ func main() {
 		panic(errors.Wrap(err, "error connecting to JSON-RPC server"))
 	}
 
-	defer func() { _ = rpcClient.Disconnect() }()
 	err = sendBlocks(routes, blocks, topBlock)
 	if err != nil {
-		backendLog.Close()
+		if backendLog != nil {
+			backendLog.Close()
+		}
+		_ = rpcClient.Disconnect()
 		log.Errorf("Error sending blocks: %+v", err)
 		os.Exit(1)
 	}
@@ -55,7 +59,10 @@ func main() {
 	err = checkTopBlockIsTip(rpcClient, topBlock)
 	if err != nil {
 		log.Errorf("Error in checkTopBlockIsTip: %+v", err)
-		backendLog.Close()
+		if backendLog != nil {
+			backendLog.Close()
+		}
+		_ = rpcClient.Disconnect()
 		os.Exit(1)
 	}
 }

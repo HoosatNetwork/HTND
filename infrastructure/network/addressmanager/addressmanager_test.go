@@ -208,7 +208,7 @@ func TestAddressManager(t *testing.T) {
 		t.Fatalf("IsBanned() failed: %s", err)
 	}
 	if !isBanned {
-		t.Fatalf("Adderss %s is unexpectedly not banned", addressToBan.IP)
+		t.Fatalf("Address %s is unexpectedly not banned", addressToBan.IP)
 	}
 
 	// Check that BannedAddresses() returns the banned address

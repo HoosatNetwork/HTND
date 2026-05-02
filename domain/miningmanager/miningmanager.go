@@ -98,23 +98,6 @@ func (mm *miningManager) ClearBlockTemplate() {
 	mm.cacheLock.Unlock()
 }
 
-func (mm *miningManager) getImmutableCachedTemplate() *externalapi.DomainBlockTemplate {
-	if time.Since(mm.cachingTime) > (50 * time.Millisecond) {
-		// No point in cache optimizations if queries are more than a 50 milliseconds apart -- we prefer rechecking the mempool.
-		// Full explanation: On the one hand this is a sub-millisecond optimization, so there is no harm in doing the full block building
-		// every 50 millisecond. Additionally, we would like to refresh the mempool access even if virtual info was
-		// unmodified for a while. All in all, caching for max 50 millisecond is a good compromise to allow 20 block
-		// templates per second in 5 blocks per second network.
-		mm.cachedBlockTemplate = nil
-	}
-	return mm.cachedBlockTemplate
-}
-
-func (mm *miningManager) setImmutableCachedTemplate(blockTemplate *externalapi.DomainBlockTemplate) {
-	mm.cachingTime = time.Now()
-	mm.cachedBlockTemplate = blockTemplate
-}
-
 func (mm *miningManager) GetBlockTemplateBuilder() miningmanagermodel.BlockTemplateBuilder {
 	return mm.blockTemplateBuilder
 }

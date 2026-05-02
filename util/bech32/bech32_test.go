@@ -41,13 +41,14 @@ func TestBech32(t *testing.T) {
 
 		// test decoding
 		prefix, decoded, version, err := bech32.Decode(test.out)
-		if err != nil {
+		switch {
+		case err != nil:
 			t.Errorf("Decode test #%d failed with err: %v", x, err)
-		} else if prefix != test.prefix {
+		case prefix != test.prefix:
 			t.Errorf("Decode test #%d failed: got prefix: %s want: %s", x, prefix, test.prefix)
-		} else if version != test.version {
+		case version != test.version:
 			t.Errorf("Decode test #%d failed: got version: %d want: %d", x, version, test.version)
-		} else if string(decoded) != test.in {
+		case string(decoded) != test.in:
 			t.Errorf("Decode test #%d failed: got: %s want: %s", x, decoded, test.in)
 		}
 	}

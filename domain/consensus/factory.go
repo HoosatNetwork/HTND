@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"math"
 	"os"
 	"strconv"
 	"sync"
@@ -137,7 +138,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	dbManager := consensusdatabase.New(db)
 	prefixBucket := consensusdatabase.MakeBucket(dbPrefix.Serialize())
 
-	var largeCacheDivisor int = 1
+	largeCacheDivisor := 1
 	if v := os.Getenv("HTND_LARGE_CACHE_DIVISOR"); v != "" {
 		if divisor, err := strconv.Atoi(v); err == nil && divisor > 0 {
 			if divisor > 50 {
@@ -147,8 +148,17 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		}
 	}
 
-	pruningWindowSizeForCaches := int(config.PruningDepth()) / largeCacheDivisor
-	finalityWindowSizeForCaches := int(config.FinalityDepth()) / largeCacheDivisor
+	pruningDepth := config.PruningDepth()
+	if pruningDepth > uint64(math.MaxInt) {
+		panic("PruningDepth overflows int")
+	}
+	pruningWindowSizeForCaches := int(pruningDepth) / largeCacheDivisor
+
+	finalityDepth := config.FinalityDepth()
+	if finalityDepth > uint64(math.MaxInt) {
+		panic("FinalityDepth overflows int")
+	}
+	finalityWindowSizeForCaches := int(finalityDepth) / largeCacheDivisor
 	// This is used for caches that are used as part of deletePastBlocks that need to traverse until
 	// the previous pruning point.
 	pruningWindowSizePlusFinalityDepthForCache := int(pruningWindowSizeForCaches + finalityWindowSizeForCaches)

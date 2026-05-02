@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"strconv"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
@@ -13,6 +14,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	miningmanagermodel "github.com/Hoosat-Oy/HTND/domain/miningmanager/model"
 )
+
+func checkedUint64FromExtraOutputs(value int) uint64 {
+	parsedValue, err := strconv.ParseUint(strconv.Itoa(value), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsedValue
+}
 
 type mempool struct {
 	mtx sync.RWMutex
@@ -238,41 +247,40 @@ func (mp *mempool) BlockCandidateTransactions() []*externalapi.DomainTransaction
 		if len(readyTxs[i].Outputs) <= 2 {
 			candidateTxs = append(candidateTxs, readyTxs[i])
 			continue
+		}
+		hasCoinbaseInput := false
+		for x := 0; x < len(readyTxs[i].Inputs); x++ {
+			if readyTxs[i].Inputs[x].UTXOEntry.IsCoinbase() {
+				hasCoinbaseInput = true
+				break
+			}
+		}
+
+		numExtraOuts := len(readyTxs[i].Outputs) - len(readyTxs[i].Inputs)
+		if !hasCoinbaseInput && numExtraOuts > 2 && readyTxs[i].Fee < uint64(numExtraOuts)*constants.SompiPerHoosat {
+			log.Debugf("Filtered spam tx %s", consensushashing.TransactionID(readyTxs[i]))
+			continue
+		}
+
+		if hasCoinbaseInput || readyTxs[i].Fee > checkedUint64FromExtraOutputs(numExtraOuts)*constants.SompiPerHoosat {
+			candidateTxs = append(candidateTxs, readyTxs[i])
 		} else {
-			hasCoinbaseInput := false
+			txNewestUTXODaaScore := readyTxs[i].Inputs[0].UTXOEntry.BlockDAAScore()
+
 			for x := 0; x < len(readyTxs[i].Inputs); x++ {
-				if readyTxs[i].Inputs[x].UTXOEntry.IsCoinbase() {
-					hasCoinbaseInput = true
-					break
+				if readyTxs[i].Inputs[x].UTXOEntry.BlockDAAScore() > txNewestUTXODaaScore {
+					txNewestUTXODaaScore = readyTxs[i].Inputs[x].UTXOEntry.BlockDAAScore()
 				}
 			}
 
-			numExtraOuts := len(readyTxs[i].Outputs) - len(readyTxs[i].Inputs)
-			if !hasCoinbaseInput && numExtraOuts > 2 && readyTxs[i].Fee < uint64(numExtraOuts)*constants.SompiPerHoosat {
-				log.Debugf("Filtered spam tx %s", consensushashing.TransactionID(readyTxs[i]))
-				continue
-			}
-
-			if hasCoinbaseInput || readyTxs[i].Fee > uint64(numExtraOuts)*constants.SompiPerHoosat {
-				candidateTxs = append(candidateTxs, readyTxs[i])
-			} else {
-				txNewestUTXODaaScore := readyTxs[i].Inputs[0].UTXOEntry.BlockDAAScore()
-
-				for x := 0; x < len(readyTxs[i].Inputs); x++ {
-					if readyTxs[i].Inputs[x].UTXOEntry.BlockDAAScore() > txNewestUTXODaaScore {
-						txNewestUTXODaaScore = readyTxs[i].Inputs[x].UTXOEntry.BlockDAAScore()
-					}
-				}
-
-				if spamTx != nil {
-					if txNewestUTXODaaScore < spamTxNewestUTXODaaScore {
-						spamTx = readyTxs[i]
-						spamTxNewestUTXODaaScore = txNewestUTXODaaScore
-					}
-				} else {
+			if spamTx != nil {
+				if txNewestUTXODaaScore < spamTxNewestUTXODaaScore {
 					spamTx = readyTxs[i]
 					spamTxNewestUTXODaaScore = txNewestUTXODaaScore
 				}
+			} else {
+				spamTx = readyTxs[i]
+				spamTxNewestUTXODaaScore = txNewestUTXODaaScore
 			}
 		}
 	}

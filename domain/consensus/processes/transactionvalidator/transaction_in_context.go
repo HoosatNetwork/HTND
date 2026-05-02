@@ -29,6 +29,9 @@ func (v *transactionValidator) IsFinalizedTransaction(tx *externalapi.DomainTran
 	if lockTime < constants.LockTimeThreshold {
 		blockTimeOrBlueScore = blockDAAScore
 	} else {
+		if blockTime < 0 {
+			return false
+		}
 		blockTimeOrBlueScore = uint64(blockTime)
 	}
 	if lockTime < blockTimeOrBlueScore {
@@ -47,8 +50,8 @@ func (v *transactionValidator) IsFinalizedTransaction(tx *externalapi.DomainTran
 }
 
 // ValidateTransactionInContextIgnoringUTXO validates the transaction with consensus context but ignoring UTXO
-func (v *transactionValidator) ValidateTransactionInContextIgnoringUTXO(stagingArea *model.StagingArea, tx *externalapi.DomainTransaction,
-	povBlockHash *externalapi.DomainHash, povBlockPastMedianTime int64, povDAAScore uint64,
+func (v *transactionValidator) ValidateTransactionInContextIgnoringUTXO(_ *model.StagingArea, tx *externalapi.DomainTransaction,
+	_ *externalapi.DomainHash, povBlockPastMedianTime int64, povDAAScore uint64,
 ) error {
 	if isFinalized := v.IsFinalizedTransaction(tx, povDAAScore, povBlockPastMedianTime); !isFinalized {
 		return errors.Wrapf(ruleerrors.ErrUnfinalizedTx, "unfinalized transaction %v", tx)
@@ -116,8 +119,8 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 	return firstErr
 }
 
-func (v *transactionValidator) checkTransactionCoinbaseMaturity(stagingArea *model.StagingArea,
-	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction, povDAAScore uint64,
+func (v *transactionValidator) checkTransactionCoinbaseMaturity(_ *model.StagingArea,
+	_ *externalapi.DomainHash, tx *externalapi.DomainTransaction, povDAAScore uint64,
 ) error {
 	var missingOutpoints []*externalapi.DomainOutpoint
 	for i := 0; i < len(tx.Inputs); i++ {
@@ -275,8 +278,8 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 	return nil
 }
 
-func (v *transactionValidator) calcTxSequenceLockFromReferencedUTXOEntries(stagingArea *model.StagingArea,
-	povBlockHash *externalapi.DomainHash, tx *externalapi.DomainTransaction,
+func (v *transactionValidator) calcTxSequenceLockFromReferencedUTXOEntries(_ *model.StagingArea,
+	_ *externalapi.DomainHash, tx *externalapi.DomainTransaction,
 ) (*sequenceLock, error) {
 	// A value of -1 represents a relative timelock value that will allow a transaction to be
 	// included in a block at any given DAA score.
@@ -303,11 +306,18 @@ func (v *transactionValidator) calcTxSequenceLockFromReferencedUTXOEntries(stagi
 		// mask in order to obtain the time lock delta required before
 		// this input can be spent.
 		sequenceNum := tx.Inputs[i].Sequence
-		relativeLock := int64(sequenceNum & constants.SequenceLockTimeMask)
+		relativeLockUnsigned := sequenceNum & constants.SequenceLockTimeMask
+		if relativeLockUnsigned > math.MaxInt64 {
+			return nil, errors.Errorf("relative lock %d exceeds int64", relativeLockUnsigned)
+		}
+		relativeLock := int64(relativeLockUnsigned)
 
 		// Relative time locks are disabled for this input, so we can
 		// skip any further calculation.
 		if sequenceNum&constants.SequenceLockTimeDisabled == constants.SequenceLockTimeDisabled {
+			continue
+		}
+		if inputDAAScore == constants.UnacceptedDAAScore {
 			continue
 		}
 		// The relative lock-time for this input is expressed
@@ -315,6 +325,9 @@ func (v *transactionValidator) calcTxSequenceLockFromReferencedUTXOEntries(stagi
 		// the input's DAA score as its converted absolute
 		// lock-time. We subtract one from the relative lock in
 		// order to maintain the original lockTime semantics.
+		if inputDAAScore > math.MaxInt64 {
+			return nil, errors.Errorf("input DAA score %d exceeds int64", inputDAAScore)
+		}
 		blockDAAScore := int64(inputDAAScore) + relativeLock - 1
 		if blockDAAScore > sequenceLock.BlockDAAScore {
 			sequenceLock.BlockDAAScore = blockDAAScore
@@ -343,6 +356,9 @@ func (v *transactionValidator) sequenceLockActive(sequenceLock *sequenceLock, bl
 	// If (DAA score) relative-lock time has not yet
 	// reached, then the transaction is not yet mature according to its
 	// sequence locks.
+	if blockDAAScore > math.MaxInt64 {
+		return true
+	}
 	if sequenceLock.BlockDAAScore >= int64(blockDAAScore) {
 		return false
 	}

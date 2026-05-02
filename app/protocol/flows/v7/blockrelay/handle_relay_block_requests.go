@@ -9,7 +9,6 @@ import (
 	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
 	"github.com/Hoosat-Oy/HTND/domain"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 )
 
@@ -17,8 +16,6 @@ import (
 type RelayBlockRequestsContext interface {
 	Domain() domain.Domain
 }
-
-const getBlockRetryInterval = 10 * time.Millisecond
 
 // HandleRelayBlockRequests listens to appmessage.MsgRequestRelayBlocks messages and sends
 // their corresponding blocks to the requesting peer.
@@ -63,11 +60,6 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 					return
 				}
 
-				if block.PoWHash == "" {
-					state := pow.NewState(block.Header.ToMutable())
-					_, powHash := state.CalculateProofOfWorkValue()
-					block.PoWHash = powHash.String()
-				}
 				log.Debugf("Relaying block %s to peer %s", hash, peer.Address())
 				err = outgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))
 				if err != nil {

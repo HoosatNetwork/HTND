@@ -5,7 +5,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/app/protocol/common"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/standalone"
 	"github.com/pkg/errors"
 )
@@ -38,11 +37,6 @@ func sendBlocks(address string, minimalNetAdapter *standalone.MinimalNetAdapter,
 		}
 
 		// Recalculate PoW hash if it's missing for whatever reason before submitting.
-		if block.PoWHash == "" {
-			state := pow.NewState(block.Header.ToMutable())
-			_, powHash := state.CalculateProofOfWorkValue()
-			block.PoWHash = powHash.String()
-		}
 
 		err = routes.OutgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))
 		if err != nil {

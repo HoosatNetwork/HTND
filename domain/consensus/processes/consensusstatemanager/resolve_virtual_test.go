@@ -418,7 +418,7 @@ func verifyUtxoDiffPaths(t *testing.T, tc testapi.TestConsensus, hashes []*exter
 	}
 }
 
-func printfDebug(format string, a ...any) {
+func printfDebug(_ string, _ ...any) {
 	// Uncomment below when debugging the test
 	// fmt.Printf(format, a...)
 }

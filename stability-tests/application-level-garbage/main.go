@@ -12,13 +12,13 @@ import (
 )
 
 func main() {
-	defer panics.HandlePanic(log, "applicationLevelGarbage-main", nil)
+	// panics.HandlePanic is called explicitly before os.Exit(1) in all error paths.
 	err := parseConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing config: %+v", err)
+		panics.HandlePanic(log, "applicationLevelGarbage-main", nil)
 		os.Exit(1)
 	}
-	defer backendLog.Close()
 	common.UseLogger(backendLog, log.Level())
 	cfg := activeConfig()
 	if cfg.Profile != "" {
@@ -32,6 +32,7 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating minimalNetAdapter: %+v", err)
 		backendLog.Close()
+		panics.HandlePanic(log, "applicationLevelGarbage-main", nil)
 		os.Exit(1)
 	}
 
@@ -39,6 +40,7 @@ func main() {
 	if err != nil {
 		log.Errorf("Error reading blocks: %+v", err)
 		backendLog.Close()
+		panics.HandlePanic(log, "applicationLevelGarbage-main", nil)
 		os.Exit(1)
 	}
 
@@ -48,4 +50,5 @@ func main() {
 		backendLog.Close()
 		os.Exit(1)
 	}
+	backendLog.Close()
 }

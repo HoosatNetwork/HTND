@@ -140,6 +140,6 @@ func TestBuildSubsidyTable(t *testing.T) {
 	}
 	tableStr.WriteString("\n}")
 	t.Logf("%s", tableStr.String())
-	len := len(subsidyTable)
-	t.Logf("Length: %d", len)
+	tableLen := len(subsidyTable)
+	t.Logf("Length: %d", tableLen)
 }

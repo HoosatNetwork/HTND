@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 )
+
+func checkedIntFromUint64(value uint64) int {
+	parsedValue, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return int(parsedValue)
+}
 
 // Test that exactly MaxCompoundTxPerAddressPerMinute submissions within the 1-minute window
 // cause the next (11th) to be rate-limited, and that when one falls out of the window,
@@ -27,7 +36,7 @@ func TestCompoundTxRateLimiter_WindowAndLimit(t *testing.T) {
 
 	// Seed 10 submissions within the last minute
 	tracker.mutex.Lock()
-	for i := 0; i < int(cfg.MaxCompoundTxPerAddressPerMinute); i++ {
+	for i := 0; i < checkedIntFromUint64(cfg.MaxCompoundTxPerAddressPerMinute); i++ {
 		tracker.submissions = append(tracker.submissions, compoundTxSubmission{
 			timestamp: base.Add(-30*time.Second + time.Duration(i)*time.Second),
 			txID:      "txid",
@@ -44,7 +53,7 @@ func TestCompoundTxRateLimiter_WindowAndLimit(t *testing.T) {
 
 	// Move the oldest one beyond the 1-minute window
 	tracker.mutex.Lock()
-	if len(tracker.submissions) != int(cfg.MaxCompoundTxPerAddressPerMinute) {
+	if len(tracker.submissions) != checkedIntFromUint64(cfg.MaxCompoundTxPerAddressPerMinute) {
 		t.Fatalf("unexpected seeded submissions count: got %d, want %d", len(tracker.submissions), cfg.MaxCompoundTxPerAddressPerMinute)
 	}
 	tracker.submissions[0].timestamp = base.Add(-61 * time.Second)

@@ -29,7 +29,7 @@ func (ad *averageDuration) add(duration time.Duration) {
 		return
 	}
 
-	ad.average = ad.average + ((durationNanoseconds - ad.average) / float64(ad.count))
+	ad.average += ((durationNanoseconds - ad.average) / float64(ad.count))
 }
 
 func (ad *averageDuration) toDuration() time.Duration {

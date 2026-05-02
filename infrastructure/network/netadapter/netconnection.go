@@ -107,6 +107,6 @@ func (c *NetConnection) ShouldWeBan(banLimit uint32) bool {
 	if c.shouldBanCounter > banLimit {
 		return true
 	}
-	c.shouldBanCounter += 1
+	c.shouldBanCounter++
 	return false
 }

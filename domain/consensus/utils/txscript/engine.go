@@ -6,6 +6,7 @@ package txscript
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
@@ -283,10 +284,11 @@ func (vm *Engine) Step() (done bool, err error) {
 
 		vm.numOps = 0 // number of ops is per script.
 		vm.scriptOff = 0
-		if vm.scriptIdx == 0 && vm.isP2SH {
+		switch {
+		case vm.scriptIdx == 0 && vm.isP2SH:
 			vm.scriptIdx++
 			vm.savedFirstStack = vm.GetStack()
-		} else if vm.scriptIdx == 1 && vm.isP2SH {
+		case vm.scriptIdx == 1 && vm.isP2SH:
 			// Put us past the end for CheckErrorCondition()
 			vm.scriptIdx++
 			// Check script ran successfully and pull the script
@@ -306,7 +308,7 @@ func (vm *Engine) Step() (done bool, err error) {
 			// Set stack to be the stack from first script minus the
 			// script itself
 			vm.SetStack(vm.savedFirstStack[:len(vm.savedFirstStack)-1])
-		} else {
+		default:
 			vm.scriptIdx++
 		}
 		// there are zero length scripts in the wild
@@ -399,8 +401,13 @@ func (vm *Engine) checkSignatureLengthECDSA(sig []byte) error {
 func getStack(stack *stack) [][]byte {
 	array := make([][]byte, stack.Depth())
 	for i := range array {
+		if i > math.MaxInt32 {
+			panic("stack depth exceeds int32")
+		}
+		//nolint:gosec // bounded by the explicit MaxInt32 check above
+		stackIndex := int32(i)
 		// PeekByteArry can't fail due to overflow, already checked
-		array[len(array)-i-1], _ = stack.PeekByteArray(int32(i))
+		array[len(array)-i-1], _ = stack.PeekByteArray(stackIndex)
 	}
 	return array
 }

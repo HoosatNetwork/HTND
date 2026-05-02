@@ -1,7 +1,9 @@
 package serialization
 
 import (
+	"fmt"
 	"io"
+	"math"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/util/binaryserializer"
@@ -29,6 +31,9 @@ func WriteElement(w io.Writer, element any) error {
 		}
 		return nil
 	case int16:
+		if e < 0 {
+			return fmt.Errorf("int16 value %d is negative, cannot convert to uint16", e)
+		}
 		err := binaryserializer.PutUint16(w, uint16(e))
 		if err != nil {
 			return err
@@ -41,6 +46,9 @@ func WriteElement(w io.Writer, element any) error {
 		}
 		return nil
 	case int32:
+		if e < 0 {
+			return fmt.Errorf("int32 value %d is negative, cannot convert to uint32", e)
+		}
 		err := binaryserializer.PutUint32(w, uint32(e))
 		if err != nil {
 			return err
@@ -55,6 +63,9 @@ func WriteElement(w io.Writer, element any) error {
 		return nil
 
 	case int64:
+		if e < 0 {
+			return fmt.Errorf("int64 value %d is negative, cannot convert to uint64", e)
+		}
 		err := binaryserializer.PutUint64(w, uint64(e))
 		if err != nil {
 			return err
@@ -149,6 +160,9 @@ func ReadElement(r io.Reader, element any) error {
 		if err != nil {
 			return err
 		}
+		if rv > uint16(math.MaxInt16) {
+			return fmt.Errorf("uint16 value %d overflows int16", rv)
+		}
 		*e = int16(rv)
 		return nil
 
@@ -163,6 +177,9 @@ func ReadElement(r io.Reader, element any) error {
 		rv, err := binaryserializer.Uint32(r)
 		if err != nil {
 			return err
+		}
+		if rv > uint32(math.MaxInt32) {
+			return fmt.Errorf("uint32 value %d overflows int32", rv)
 		}
 		*e = int32(rv)
 		return nil
@@ -179,6 +196,9 @@ func ReadElement(r io.Reader, element any) error {
 		rv, err := binaryserializer.Uint64(r)
 		if err != nil {
 			return err
+		}
+		if rv > uint64(math.MaxInt64) {
+			return fmt.Errorf("uint64 value %d overflows int64", rv)
 		}
 		*e = int64(rv)
 		return nil
@@ -204,13 +224,13 @@ func ReadElement(r io.Reader, element any) error {
 		if err != nil {
 			return err
 		}
-		if rv == 0x00 {
+		switch rv {
+		case 0x00:
 			*e = false
-		} else if rv == 0x01 {
+		case 0x01:
 			*e = true
-		} else {
-			return errors.Wrapf(errMalformed, "in order to keep serialization canonical, true has to"+
-				" always be 0x01")
+		default:
+			return errors.Wrapf(errMalformed, "in order to keep serialization canonical, true has to always be 0x01")
 		}
 		return nil
 	}

@@ -1,6 +1,7 @@
 package blockvalidator_test
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -14,6 +15,14 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
 	"github.com/pkg/errors"
 )
+
+func checkedUint64FromInt64(value int64) uint64 {
+	parsedValue, err := strconv.ParseUint(strconv.FormatInt(value, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsedValue
+}
 
 func TestCheckBlockIsNotPruned(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
@@ -236,12 +245,13 @@ func TestIsFinalizedTransaction(t *testing.T) {
 		checkForLockTimeAndSequence(candidateBlockDAAScore-1, 0, true)
 
 		// Check that the same pastMedianTime or higher fails, but lower passes.
-		checkForLockTimeAndSequence(uint64(candidatePastMedianTime)+1, 0, false)
-		checkForLockTimeAndSequence(uint64(candidatePastMedianTime), 0, false)
-		checkForLockTimeAndSequence(uint64(candidatePastMedianTime)-1, 0, true)
+		candidatePastMedianTimeUint64 := checkedUint64FromInt64(candidatePastMedianTime)
+		checkForLockTimeAndSequence(candidatePastMedianTimeUint64+1, 0, false)
+		checkForLockTimeAndSequence(candidatePastMedianTimeUint64, 0, false)
+		checkForLockTimeAndSequence(candidatePastMedianTimeUint64-1, 0, true)
 
 		// We check that if the transaction is marked as finalized it'll pass for any lock time.
-		checkForLockTimeAndSequence(uint64(candidatePastMedianTime), constants.MaxTxInSequenceNum, true)
+		checkForLockTimeAndSequence(candidatePastMedianTimeUint64, constants.MaxTxInSequenceNum, true)
 		checkForLockTimeAndSequence(2, constants.MaxTxInSequenceNum, true)
 	})
 }

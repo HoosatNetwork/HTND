@@ -66,11 +66,11 @@ func (csm *consensusStateManager) tipsInDecreasingGHOSTDAGParentSelectionOrder(s
 func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingArea) (*externalapi.DomainHash, externalapi.BlockStatus, error) {
 	var orderedTips []*externalapi.DomainHash
 	var err error
-	// DAGKnight TODO: modify blockversions before mainnet release.
-	if constants.GetBlockVersion() < 0 {
-		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
-	} else if constants.GetBlockVersion() > 0 {
+	// TODO: decide DAA Score for hard fork
+	if constants.GetBlockVersion() >= 5 {
 		orderedTips, err = csm.tipsInDecreasingDAGKnightOrder(stagingArea)
+	} else {
+		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	}
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
@@ -255,8 +255,6 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	}
 
 	// Add other stores if needed
-	readStagingArea = nil
-	updateVirtualStagingArea = nil
 
 	return &externalapi.VirtualChangeSet{
 		VirtualSelectedParentChainChanges: selectedParentChainChanges,

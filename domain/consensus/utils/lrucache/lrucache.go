@@ -176,19 +176,6 @@ func (c *LRUCache[V]) Remove(key *externalapi.DomainHash) {
 	c.putEntry(e)
 }
 
-// evict removes the least recently used item
-func (c *LRUCache[V]) evict() {
-	if c.tail == nil {
-		return
-	}
-
-	e := c.tail
-	c.unlink(e)
-	delete(c.cache, hash(e.key))
-	c.length--
-	c.putEntry(e)
-}
-
 // unlink removes node from the linked list (does not free or delete from map)
 func (c *LRUCache[V]) unlink(e *entry[V]) {
 	if e.prev != nil {

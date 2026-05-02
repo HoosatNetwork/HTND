@@ -149,9 +149,8 @@ func (flow *handleRelayInvsFlow) start() error {
 			if database.IsNotFoundError(err) {
 				log.Debugf("GetBlockInfo returned not-found for %s; treating as non-existing block", inv.Hash)
 				continue
-			} else {
-				return err
 			}
+			return err
 		}
 		if blockInfo.Exists && blockInfo.BlockStatus != externalapi.StatusHeaderOnly {
 			if blockInfo.BlockStatus == externalapi.StatusInvalid {
@@ -214,7 +213,7 @@ func (flow *handleRelayInvsFlow) start() error {
 		var version uint16 = 1
 		for _, powScore := range flow.Config().ActiveNetParams.POWScores {
 			if daaScore >= powScore {
-				version = version + 1
+				version++
 			}
 		}
 		constants.SetBlockVersion(version)
@@ -275,7 +274,8 @@ func (flow *handleRelayInvsFlow) start() error {
 		err = flow.processBlock(inv.Hash, block, false)
 		if err != nil {
 			missingParentsError := &ruleerrors.ErrMissingParents{}
-			if errors.As(err, missingParentsError) {
+			switch {
+			case errors.As(err, missingParentsError):
 				if len(missingParentsError.MissingParentHashes) > 0 {
 					err := flow.processOrphan(block)
 					if err != nil {
@@ -283,12 +283,12 @@ func (flow *handleRelayInvsFlow) start() error {
 					}
 					continue
 				}
-			} else if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
+			case errors.Is(err, ruleerrors.ErrDuplicateBlock):
 				continue
-			} else if database.IsNotFoundError(err) {
+			case database.IsNotFoundError(err):
 				flow.addToRelayInv(inv.Hash)
 				continue
-			} else {
+			default:
 				log.Infof("Error processing block %s from %s: %s", inv.Hash, flow.netConnection.Address(), err)
 				continue
 			}
@@ -433,7 +433,7 @@ func (flow *handleRelayInvsFlow) addToRelayInv(hash *externalapi.DomainHash) {
 	log.Debugf("Re-queued block %s to relay INV queue (missing data in DB)", hash)
 }
 
-func (flow *handleRelayInvsFlow) processBlock(hash *externalapi.DomainHash, block *externalapi.DomainBlock, powSkip bool) error {
+func (flow *handleRelayInvsFlow) processBlock(_ *externalapi.DomainHash, block *externalapi.DomainBlock, powSkip bool) error {
 	err := flow.Domain().Consensus().ValidateAndInsertBlock(block, true, powSkip)
 	if err != nil {
 		return err

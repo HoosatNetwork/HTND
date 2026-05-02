@@ -21,7 +21,7 @@ func (h HashWriter) InfallibleWrite(p []byte) {
 	// This write can never return an error, this is part of the hash.Hash interface contract.
 	_, err := h.Write(p)
 	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. hash.Hash interface promises to not return errors."))
+		panic(errors.Wrap(err, "this should never happen: hash.Hash interface promises to not return errors"))
 	}
 }
 
@@ -43,7 +43,7 @@ func (h *ShakeHashWriter) InfallibleWrite(p []byte) {
 	// This write can never return an error, this is part of the hash.Hash interface contract.
 	_, err := h.Write(p)
 	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. sha3.ShakeHash interface promises to not return errors."))
+		panic(errors.Wrap(err, "this should never happen: sha3.ShakeHash interface promises to not return errors"))
 	}
 }
 
@@ -53,7 +53,7 @@ func (h *ShakeHashWriter) Finalize() *externalapi.DomainHash {
 	// This should prevent `Sum` for allocating an output buffer, by using the DomainHash buffer. we still copy because we don't want to rely on that.
 	_, err := h.Read(sum[:])
 	if err != nil {
-		panic(errors.Wrap(err, "this should never happen. sha3.ShakeHash interface promises to not return errors."))
+		panic(errors.Wrap(err, "this should never happen: sha3.ShakeHash interface promises to not return errors"))
 	}
 	h.ShakeHash = nil // prevent double reading as it will return a different hash
 	return externalapi.NewDomainHashFromByteArray(&sum)

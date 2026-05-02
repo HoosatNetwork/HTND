@@ -4,8 +4,6 @@
 
 package appmessage
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
-
 // MsgIBDBlock implements the Message interface and represents a hoosat
 // ibdblock message. It is used to deliver block and transaction information in
 // response to a RequestIBDBlocks message (MsgRequestIBDBlocks).
@@ -22,7 +20,7 @@ func (msg *MsgIBDBlock) Command() MessageCommand {
 
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver. This is part of the Message interface implementation.
-func (msg *MsgIBDBlock) MaxPayloadLength(pver uint32) uint32 {
+func (msg *MsgIBDBlock) MaxPayloadLength(_ uint32) uint32 {
 	return MaxMessagePayload
 }
 
@@ -31,12 +29,6 @@ func (msg *MsgIBDBlock) MaxPayloadLength(pver uint32) uint32 {
 func NewMsgIBDBlock(msgBlock *MsgBlock) *MsgIBDBlock {
 	if msgBlock == nil {
 		return nil
-	}
-	if msgBlock.PoWHash == "" {
-		header := BlockHeaderToDomainBlockHeader(&msgBlock.Header)
-		state := pow.NewState(header.ToMutable())
-		_, powHash := state.CalculateProofOfWorkValue()
-		msgBlock.PoWHash = powHash.String()
 	}
 	return &MsgIBDBlock{MsgBlock: msgBlock}
 }

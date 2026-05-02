@@ -123,10 +123,13 @@ func TestUTXOsReturnsReallocatedBufferForCallerCleanup(t *testing.T) {
 		t.Fatalf("initializing circulating supply unexpectedly failed: %s", err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for _, testOutpoint := range []struct {
+		transactionIDByte byte
+		index             uint32
+	}{{transactionIDByte: 1, index: 0}, {transactionIDByte: 2, index: 1}} {
 		outpoint := &externalapi.DomainOutpoint{
-			TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i + 1)}),
-			Index:         uint32(i),
+			TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{testOutpoint.transactionIDByte}),
+			Index:         testOutpoint.index,
 		}
 		if err := store.add(scriptPublicKey, outpoint, entry); err != nil {
 			t.Fatalf("add unexpectedly failed: %s", err)

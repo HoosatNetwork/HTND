@@ -2,7 +2,8 @@ package utxoindex
 
 import (
 	"encoding/binary"
-	"slices"
+	"math"
+	"strconv"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
@@ -21,10 +22,11 @@ var (
 	utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
 )
 
-var utxoPairPool = sync.Pool{
-	New: func() interface{} {
-		return make([]UTXOPair, 0, 16)
-	},
+func checkedLimitToInt(limit uint32) (int, error) {
+	if strconv.IntSize == 32 && limit > math.MaxInt32 {
+		return 0, errors.Errorf("limit %d exceeds int", limit)
+	}
+	return int(limit), nil
 }
 
 type utxoIndexStore struct {
@@ -39,7 +41,6 @@ type utxoIndexStore struct {
 
 func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 	// Default cache size, can be made configurable
-	const defaultCacheSize = 1000
 	return &utxoIndexStore{
 		database: database,
 		toAdd:    make(map[ScriptPublicKeyString]UTXOOutpointEntryPairs),
@@ -163,18 +164,6 @@ func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 // 	delete(c.items, key)
 // }
 
-// copyUTXOPairs creates a copy of UTXOPair slice to prevent slice mutation.
-// Note: This performs a shallow copy of the slice structure. The individual
-// UTXOPair elements are copied by value, but nested pointers (e.g., UTXOEntry
-// interface implementations) are shared. This is safe because UTXOEntry
-// implementations are treated as immutable in the codebase.
-func copyUTXOPairs(pairs []UTXOPair) []UTXOPair {
-	if pairs == nil {
-		return nil
-	}
-	return slices.Clone(pairs)
-}
-
 func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
 	key := ScriptPublicKeyString(scriptPublicKey.String())
 	log.Tracef("Adding outpoint %s:%d to scriptPublicKey %s",
@@ -291,7 +280,7 @@ func (uis *utxoIndexStore) commit() error {
 			if err != nil {
 				return err
 			}
-			toRemoveSompiSupply = toRemoveSompiSupply + utxoEntryToRemove.Amount()
+			toRemoveSompiSupply += utxoEntryToRemove.Amount()
 		}
 	}
 
@@ -316,7 +305,7 @@ func (uis *utxoIndexStore) commit() error {
 			if err != nil {
 				return err
 			}
-			toAddSompiSupply = toAddSompiSupply + utxoEntryToAdd.Amount()
+			toAddSompiSupply += utxoEntryToAdd.Amount()
 		}
 	}
 
@@ -546,8 +535,14 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 				return nil, buffer, err
 			}
 			slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-			if limit > 0 && uint32(len(slice)) >= limit {
-				break
+			if limit > 0 {
+				limitInt, err := checkedLimitToInt(limit)
+				if err != nil {
+					return nil, buffer, err
+				}
+				if len(slice) >= limitInt {
+					break
+				}
 			}
 		}
 		iterator++
@@ -609,8 +604,14 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 			return nil, buffer, err
 		}
 		slice = append(slice, UTXOPair{Outpoint: *outpoint, Entry: utxoEntry})
-		if limit > 0 && uint32(len(slice)) >= limit {
-			break
+		if limit > 0 {
+			limitInt, err := checkedLimitToInt(limit)
+			if err != nil {
+				return nil, buffer, err
+			}
+			if len(slice) >= limitInt {
+				break
+			}
 		}
 	}
 
@@ -748,7 +749,7 @@ func (uis *utxoIndexStore) initializeCirculatingSompiSupply() error {
 			return err
 		}
 
-		circulatingSompiSupplyInDatabase = circulatingSompiSupplyInDatabase + utxoAmount
+		circulatingSompiSupplyInDatabase += utxoAmount
 	}
 
 	err = uis.database.Put(
@@ -854,6 +855,9 @@ func (uis *utxoIndexStore) applyUTXOCountDeltasToAccessor(accessor database.Data
 			}
 		}
 
+		if currentCount > math.MaxInt64 {
+			return errors.Errorf("utxo count %d exceeds int64", currentCount)
+		}
 		newCount := int64(currentCount) + delta
 		if newCount < 0 {
 			return errors.Errorf("utxo count for scriptPublicKey %s became negative", scriptPublicKeyString)

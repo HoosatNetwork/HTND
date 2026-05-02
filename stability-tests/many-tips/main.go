@@ -23,6 +23,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+func newMiningRand() *rand.Rand {
+	// #nosec G404 -- mining.SolveBlock requires math/rand and this helper is used only in stability tests.
+	return rand.New(rand.NewSource(time.Now().UnixNano()))
+}
+
 const rpcAddress = "localhost:9000"
 
 func main() {
@@ -77,7 +82,7 @@ func realMain() error {
 	genesisTimestamp := activeConfig().NetParams().GenesisBlock.Header.TimeInMilliseconds()
 	mutableHeader.SetTimeInMilliseconds(genesisTimestamp + 1000)
 	block.Header = mutableHeader.ToImmutable()
-	_, powHash := mining.SolveBlock(block, rand.New(rand.NewSource(time.Now().UnixNano())))
+	_, powHash := mining.SolveBlock(block, newMiningRand())
 	block.PoWHash = powHash
 	_, err = rpcClient.SubmitBlockAlsoIfNonDAA(block, block.PoWHash)
 	if err != nil {
@@ -184,7 +189,7 @@ func mineBlock(rpcClient *rpc.Client, miningAddress util.Address) error {
 	if err != nil {
 		return err
 	}
-	_, powHash := mining.SolveBlock(block, rand.New(rand.NewSource(time.Now().UnixNano())))
+	_, powHash := mining.SolveBlock(block, newMiningRand())
 	block.PoWHash = powHash
 	_, err = rpcClient.SubmitBlockAlsoIfNonDAA(block, block.PoWHash)
 	if err != nil {
@@ -202,7 +207,7 @@ func mineTips(numOfTips int, miningAddress util.Address, rpcClient *rpc.Client) 
 	if err != nil {
 		return err
 	}
-	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rd := newMiningRand()
 	for i := range numOfTips {
 		_, powHash := mining.SolveBlock(block, rd)
 		block.PoWHash = powHash
@@ -276,7 +281,7 @@ func mineLoopUntilHavingOnlyOneTipInDAG(rpcClient *rpc.Client, miningAddress uti
 	}
 
 	if hasTimedOut {
-		return errors.Errorf("Out of time - the graph still has more than one tip.")
+		return errors.Errorf("out of time - the graph still has more than one tip")
 	}
 	duration := time.Since(startMiningTime)
 	log.Infof("It took %s until there was only one tip in the DAG after having 10k tips.", duration)

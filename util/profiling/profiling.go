@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	httppprof "net/http/pprof"
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/pprof"
+	runtimepprof "runtime/pprof"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-
-	// Required for profiling
-	_ "net/http/pprof"
 
 	"github.com/Hoosat-Oy/HTND/util/panics"
 )
@@ -24,14 +22,29 @@ import (
 var heapDumpFileName = fmt.Sprintf("heap-%s.pprof", time.Now().Format("01-02-2006T15.04.05"))
 
 // Start starts the profiling server
+// WARNING: The pprof endpoint is exposed on /debug/pprof. Do not use in production environments without proper access controls. (gosec G108)
 func Start(port string, log *logger.Logger) {
 	spawn := panics.GoroutineWrapperFunc(log)
 	spawn("profiling.Start", func() {
 		listenAddr := net.JoinHostPort("", port)
 		log.Infof("Profile server listening on %s", listenAddr)
+		mux := http.NewServeMux()
 		profileRedirect := http.RedirectHandler("/debug/pprof", http.StatusSeeOther)
-		http.Handle("/", profileRedirect)
-		log.Error(http.ListenAndServe(listenAddr, nil))
+		mux.Handle("/", profileRedirect)
+		mux.HandleFunc("/debug/pprof/", httppprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", httppprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", httppprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", httppprof.Trace)
+
+		srv := &http.Server{
+			Addr:         listenAddr,
+			Handler:      mux,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
+		log.Error(srv.ListenAndServe())
 	})
 }
 
@@ -72,7 +85,7 @@ func dumpHeapProfile(heapLimit uint64, dumpFolder string, memStats *runtime.MemS
 		return
 	}
 	defer f.Close()
-	if err := pprof.WriteHeapProfile(f); err != nil {
+	if err := runtimepprof.WriteHeapProfile(f); err != nil {
 		log.Infof("Could not write heap profile: %s", err)
 	}
 }

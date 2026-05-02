@@ -60,7 +60,7 @@ retry:
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")
-				attempt = attempt - 1
+				attempt--
 			} else {
 				fmt.Printf("Failed to create unsigned transactions after %d attempts: %s\n", attempt, err)
 				time.Sleep(retryDelay)

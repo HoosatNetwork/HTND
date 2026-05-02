@@ -2,6 +2,7 @@ package difficultymanager
 
 import (
 	"math/big"
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
@@ -108,7 +109,7 @@ func (dm *difficultyManager) RequiredDifficulty(stagingArea *model.StagingArea, 
 	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockHash)
 }
 
-func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow blockWindow, blockHash *externalapi.DomainHash) (uint32, error) {
+func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow blockWindow, _ *externalapi.DomainHash) (uint32, error) {
 	if dm.disableDifficultyAdjustment {
 		return dm.genesisBits, nil
 	}
@@ -137,8 +138,16 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 	newTarget.
 		// We need to clamp the timestamp difference to 1 so that we'll never get a 0 target.
 		Mul(newTarget, div.SetInt64(math.MaxInt64(windowMaxTimeStamp-windowMinTimestamp, 1))).
-		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds())).
-		Div(newTarget, div.SetUint64(uint64(targetsWindow.len())))
+		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds()))
+	l := targetsWindow.len()
+	if l < 0 {
+		l = 0
+	}
+	windowLength, err := strconv.ParseUint(strconv.Itoa(l), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	newTarget.Div(newTarget, div.SetUint64(windowLength))
 	// Check that newTarget is not above maximums possible target.
 	if newTarget.Cmp(dm.powMax) > 0 {
 		return difficulty.BigToCompact(dm.powMax), nil

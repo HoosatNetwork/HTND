@@ -159,7 +159,12 @@ func (n scriptNum) Int32() int32 {
 		return minInt32
 	}
 
-	return int32(n)
+	if n >= 0 {
+		//nolint:gosec // bounded to int32 range by the checks above
+		return int32(uint32(n))
+	}
+	//nolint:gosec // bounded to int32 range by the checks above
+	return -int32(uint32(-n))
 }
 
 // makeScriptNum interprets the passed serialized bytes as an encoded integer
@@ -209,7 +214,8 @@ func makeScriptNum(v []byte, scriptNumLen int) (scriptNum, error) {
 	// Decode from little endian.
 	var result int64
 	for i, val := range v {
-		result |= int64(val) << uint8(8*i)
+		shift := i * 8
+		result |= int64(val) << shift
 	}
 
 	// When the most significant byte of the input bytes has the sign bit
@@ -217,9 +223,8 @@ func makeScriptNum(v []byte, scriptNumLen int) (scriptNum, error) {
 	// and make it negative.
 	if v[len(v)-1]&0x80 != 0 {
 		// The maximum length of v has already been determined to be 4
-		// above, so uint8 is enough to cover the max possible shift
-		// value of 24.
-		result &= ^(int64(0x80) << uint8(8*(len(v)-1)))
+		// above, so the shift count is bounded to at most 24.
+		result &= ^(int64(0x80) << (8 * (len(v) - 1)))
 		return scriptNum(-result), nil
 	}
 

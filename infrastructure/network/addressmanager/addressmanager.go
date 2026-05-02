@@ -209,7 +209,7 @@ func (am *AddressManager) MarkConnectionFailure(address *appmessage.NetAddress) 
 	}
 	entry.lastAttempt = now
 
-	entry.connectionFailedCount = entry.connectionFailedCount + 1
+	entry.connectionFailedCount++
 
 	if entry.connectionFailedCount >= connectionFailedCountForRemove {
 		log.Debugf("Address %s has failed %d connection attempts - removing from address manager",
@@ -255,7 +255,7 @@ func (am *AddressManager) BannedAddresses() []*appmessage.NetAddress {
 	return am.store.getAllBannedNetAddresses()
 }
 
-// notBannedAddressesWithException returns all not banned addresses with excpetion
+// notBannedAddressesWithException returns all not banned addresses with exception
 func (am *AddressManager) notBannedAddressesWithException(exceptions []*appmessage.NetAddress) []*address {
 	am.mutex.Lock()
 	defer am.mutex.Unlock()

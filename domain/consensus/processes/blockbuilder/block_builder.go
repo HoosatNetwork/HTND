@@ -21,7 +21,7 @@ import (
 type blockBuilder struct {
 	databaseContext model.DBManager
 	genesisHash     *externalapi.DomainHash
-	POWScores       []uint64
+	powScores       []uint64
 
 	difficultyManager     model.DifficultyManager
 	pastMedianTimeManager model.PastMedianTimeManager
@@ -44,7 +44,7 @@ type blockBuilder struct {
 func New(
 	databaseContext model.DBManager,
 	genesisHash *externalapi.DomainHash,
-	POWScores []uint64,
+	powScores []uint64,
 
 	difficultyManager model.DifficultyManager,
 	pastMedianTimeManager model.PastMedianTimeManager,
@@ -65,7 +65,7 @@ func New(
 	return &blockBuilder{
 		databaseContext: databaseContext,
 		genesisHash:     genesisHash,
-		POWScores:       POWScores,
+		powScores:       powScores,
 
 		difficultyManager:     difficultyManager,
 		pastMedianTimeManager: pastMedianTimeManager,
@@ -239,9 +239,9 @@ func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions
 
 	// Raise BlockVersion until daaScore is more than powScore
 	var blockVersion uint16 = 1
-	for _, powScore := range bb.POWScores {
+	for _, powScore := range bb.powScores {
 		if daaScore >= powScore {
-			blockVersion += 1
+			blockVersion++
 		}
 	}
 	constants.SetBlockVersion(blockVersion)

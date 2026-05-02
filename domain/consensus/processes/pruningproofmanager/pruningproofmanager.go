@@ -800,8 +800,6 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	ghostdagDataStore.UnstageAll(tmpStagingArea)
 
 	// Clear references to aid GC in low-memory or no-GC environments
-	stagingArea = nil
-	tmpStagingArea = nil
 
 	return nil
 }

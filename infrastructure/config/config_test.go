@@ -36,7 +36,7 @@ func TestCreateDefaultConfigFile(t *testing.T) {
 		t.Fatalf("Failed obtaining app path: %v", err)
 	}
 	tmpConfigFile := filepath.Join(appPath, "sample-htnd.conf")
-	err = os.WriteFile(tmpConfigFile, data, 0o644)
+	err = os.WriteFile(tmpConfigFile, data, 0o600)
 	if err != nil {
 		t.Fatalf("Failed copying sample config file: %v", err)
 	}

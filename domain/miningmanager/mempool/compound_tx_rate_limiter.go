@@ -3,6 +3,7 @@ package mempool
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,6 +29,14 @@ type compoundTxRateLimiter struct {
 	config         *Config
 	addressTracker map[string]*addressTxTracker
 	globalMutex    sync.RWMutex
+}
+
+func checkedDurationFromUint64Minutes(value uint64) (time.Duration, error) {
+	parsedValue, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(parsedValue) * time.Minute, nil
 }
 
 // newCompoundTxRateLimiter creates a new compound transaction rate limiter
@@ -141,7 +150,10 @@ func (rtl *compoundTxRateLimiter) cleanupOldSubmissions(tracker *addressTxTracke
 	tracker.mutex.Lock()
 	defer tracker.mutex.Unlock()
 
-	windowDuration := time.Duration(rtl.config.CompoundTxRateLimitWindowMinutes) * time.Minute
+	windowDuration, err := checkedDurationFromUint64Minutes(rtl.config.CompoundTxRateLimitWindowMinutes)
+	if err != nil {
+		panic(err)
+	}
 	cutoff := time.Now().Add(-windowDuration)
 
 	// Find the first submission within the window

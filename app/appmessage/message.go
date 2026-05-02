@@ -24,7 +24,7 @@ func (cmd MessageCommand) String() string {
 	if !ok {
 		cmdString = "unknown command"
 	}
-	return fmt.Sprintf("%s [code %d]", cmdString, uint8(cmd))
+	return fmt.Sprintf("%s [code %d]", cmdString, cmd)
 }
 
 // Commands used in hoosat message headers which describe the type of message.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -10,6 +11,14 @@ import (
 	"github.com/kaspanet/go-secp256k1"
 	"github.com/pkg/errors"
 )
+
+func checkedDurationFromUint64(value uint64) (time.Duration, error) {
+	parsedValue, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(parsedValue), nil
+}
 
 func mineLoop(syncerRPCClient, syncedRPCClient *rpc.Client) error {
 	miningAddr, err := generateAddress()
@@ -61,7 +70,11 @@ func mineLoop(syncerRPCClient, syncedRPCClient *rpc.Client) error {
 	}
 
 	const expectedAveragePropagationTime = time.Second
-	averagePropagationTime := totalTime / time.Duration(activeConfig().NumberOfBlocks)
+	blockCountDuration, err := checkedDurationFromUint64(activeConfig().NumberOfBlocks)
+	if err != nil {
+		return err
+	}
+	averagePropagationTime := totalTime / blockCountDuration
 	if averagePropagationTime > expectedAveragePropagationTime {
 		return errors.Errorf("average block propagation time %s is higher than expected (%s)", averagePropagationTime, expectedAveragePropagationTime)
 	}

@@ -14,7 +14,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error parsing config: %+v", err)
 		os.Exit(1)
 	}
-	defer backendLog.Close()
+	// backendLog.Close() is called explicitly before os.Exit(1) in all error paths.
 	common.UseLogger(backendLog, log.Level())
 	cfg := activeConfig()
 	if cfg.Profile != "" {
@@ -26,7 +26,9 @@ func main() {
 	err = sendMessages(cfg.NodeP2PAddress, messagesChan)
 	if err != nil {
 		log.Errorf("Error sending messages: %+v", err)
-		backendLog.Close()
+		if backendLog != nil {
+			backendLog.Close()
+		}
 		os.Exit(1)
 	}
 }

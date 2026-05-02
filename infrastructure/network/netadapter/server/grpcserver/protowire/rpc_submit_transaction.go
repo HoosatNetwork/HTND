@@ -321,7 +321,7 @@ func (x *RpcTransactionInputVerboseData) toAppMessage() (*appmessage.RPCTransact
 	return &appmessage.RPCTransactionInputVerboseData{}, nil
 }
 
-func (x *RpcTransactionInputVerboseData) fromAppData(message *appmessage.RPCTransactionInputVerboseData) {
+func (x *RpcTransactionInputVerboseData) fromAppData(_ *appmessage.RPCTransactionInputVerboseData) {
 	*x = RpcTransactionInputVerboseData{}
 }
 

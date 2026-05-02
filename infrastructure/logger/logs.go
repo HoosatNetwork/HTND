@@ -237,7 +237,7 @@ func itoa(buf *[]byte, i int, wid int) {
 // and line number are included after the tag and before the final colon.
 func formatHeader(buf *[]byte, t mstime.Time, lvl, tag string, file string, line int) {
 	year, month, day := t.Date()
-	hour, min, sec := t.Clock()
+	hour, minute, sec := t.Clock()
 	ms := t.Millisecond()
 
 	itoa(buf, year, 4)
@@ -248,7 +248,7 @@ func formatHeader(buf *[]byte, t mstime.Time, lvl, tag string, file string, line
 	*buf = append(*buf, ' ')
 	itoa(buf, hour, 2)
 	*buf = append(*buf, ':')
-	itoa(buf, min, 2)
+	itoa(buf, minute, 2)
 	*buf = append(*buf, ':')
 	itoa(buf, sec, 2)
 	*buf = append(*buf, '.')

@@ -1,6 +1,7 @@
 package lrucachehashandwindowsizetoblockghostdagdatahashpairs
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -17,7 +18,13 @@ func newTestHash(t *testing.T, b byte) *externalapi.DomainHash {
 func newPair(t *testing.T, hashByte byte, score uint64) *externalapi.BlockGHOSTDAGDataHashPair {
 	t.Helper()
 	h := newTestHash(t, hashByte)
-	data := externalapi.NewBlockGHOSTDAGData(score, big.NewInt(int64(score)), externalapi.NewZeroHash(), nil, nil, nil)
+	var blueWork *big.Int
+	if score <= math.MaxInt64 {
+		blueWork = big.NewInt(int64(score))
+	} else {
+		blueWork = big.NewInt(math.MaxInt64)
+	}
+	data := externalapi.NewBlockGHOSTDAGData(score, blueWork, externalapi.NewZeroHash(), nil, nil, nil)
 	return &externalapi.BlockGHOSTDAGDataHashPair{Hash: h, GHOSTDAGData: data}
 }
 

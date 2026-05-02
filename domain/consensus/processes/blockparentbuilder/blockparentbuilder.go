@@ -162,9 +162,8 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		return nil, errors.New("BuildParents should get at least one parent in the future of the pruning point")
 	}
 
-	oldFirstDirectParent := directParentHashesCopy[0]
-	directParentHashesCopy[0] = directParentHashesCopy[firstParentInFutureOfPruningPointIndex]
-	directParentHashesCopy[firstParentInFutureOfPruningPointIndex] = oldFirstDirectParent
+	directParentHashesCopy[0], directParentHashesCopy[firstParentInFutureOfPruningPointIndex] =
+		directParentHashesCopy[firstParentInFutureOfPruningPointIndex], directParentHashesCopy[0]
 
 	for i, directParentHash := range directParentHashesCopy {
 		directParentHeader, err := bpb.blockHeaderStore.BlockHeader(bpb.databaseContext, stagingArea, directParentHash)

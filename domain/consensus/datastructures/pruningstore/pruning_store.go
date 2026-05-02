@@ -2,6 +2,8 @@ package pruningstore
 
 import (
 	"encoding/binary"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
@@ -108,11 +110,12 @@ func (ps *pruningStore) HasPruningPointCandidate(dbContext model.DBReader, stagi
 func (ps *pruningStore) StagePruningPoint(dbContext model.DBWriter, stagingArea *model.StagingArea, pruningPointBlockHash *externalapi.DomainHash) error {
 	newPruningPointIndex := uint64(0)
 	pruningPointIndex, err := ps.CurrentPruningPointIndex(dbContext, stagingArea)
-	if database.IsNotFoundError(err) {
+	switch {
+	case database.IsNotFoundError(err):
 		newPruningPointIndex = 0
-	} else if err != nil {
+	case err != nil:
 		return err
-	} else {
+	default:
 		newPruningPointIndex = pruningPointIndex + 1
 	}
 
@@ -413,7 +416,15 @@ func (ps *pruningStore) LastPruningTime(dbContext model.DBReader) (time.Time, er
 
 // Helper methods to serialize time
 func (ps *pruningStore) serializeTime(t time.Time) []byte {
-	return binaryserialization.SerializeUint64(uint64(t.UnixNano()))
+	nano := t.UnixNano()
+	if nano < 0 {
+		panic(errors.Errorf("time %s has negative unix nanos", t))
+	}
+	nanoUint64, err := strconv.ParseUint(strconv.FormatInt(nano, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return binaryserialization.SerializeUint64(nanoUint64)
 }
 
 func (ps *pruningStore) deserializeTime(timeBytes []byte) (time.Time, error) {
@@ -421,5 +432,12 @@ func (ps *pruningStore) deserializeTime(timeBytes []byte) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	return time.Unix(0, int64(nano)), nil
+	if nano > math.MaxInt64 {
+		return time.Time{}, errors.Errorf("unix nanos %d exceeds int64", nano)
+	}
+	nanoInt64, err := strconv.ParseInt(strconv.FormatUint(nano, 10), 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(0, nanoInt64), nil
 }

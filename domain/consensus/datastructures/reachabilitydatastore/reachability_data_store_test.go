@@ -63,7 +63,11 @@ func TestReachabilityDataStoreRoundTripHasAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	defer dbTx.RollbackUnlessClosed()
+	defer func() {
+		if err := dbTx.RollbackUnlessClosed(); err != nil {
+			t.Fatalf("dbTx.RollbackUnlessClosed: %v", err)
+		}
+	}()
 	if err := store.Delete(dbTx); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}

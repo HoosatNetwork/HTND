@@ -17,7 +17,7 @@ import (
 func routerInitializerForTest(t *testing.T, routes *sync.Map,
 	routeName string, wg *sync.WaitGroup,
 ) func(*router.Router, *NetConnection) {
-	return func(router *router.Router, connection *NetConnection) {
+	return func(router *router.Router, _ *NetConnection) {
 		route, err := router.AddIncomingRoute(routeName, []appmessage.MessageCommand{appmessage.CmdPing})
 		if err != nil {
 			t.Fatalf("TestNetAdapter: AddIncomingRoute failed: %+v", err)
@@ -56,8 +56,8 @@ func TestNetAdapter(t *testing.T) {
 		t.Fatalf("TestNetAdapter: NetAdapter instantiation failed: %+v", err)
 	}
 
-	adapterA.SetP2PRouterInitializer(func(router *router.Router, connection *NetConnection) {})
-	adapterA.SetRPCRouterInitializer(func(router *router.Router, connection *NetConnection) {})
+	adapterA.SetP2PRouterInitializer(func(_ *router.Router, _ *NetConnection) {})
+	adapterA.SetRPCRouterInitializer(func(_ *router.Router, _ *NetConnection) {})
 	err = adapterA.Start()
 	if err != nil {
 		t.Fatalf("TestNetAdapter: Start() failed: %+v", err)
@@ -70,7 +70,7 @@ func TestNetAdapter(t *testing.T) {
 
 	initializer := routerInitializerForTest(t, routes, "B", wg)
 	adapterB.SetP2PRouterInitializer(initializer)
-	adapterB.SetRPCRouterInitializer(func(router *router.Router, connection *NetConnection) {})
+	adapterB.SetRPCRouterInitializer(func(_ *router.Router, _ *NetConnection) {})
 	err = adapterB.Start()
 	if err != nil {
 		t.Fatalf("TestNetAdapter: Start() failed: %+v", err)
@@ -83,7 +83,7 @@ func TestNetAdapter(t *testing.T) {
 
 	initializer = routerInitializerForTest(t, routes, "C", wg)
 	adapterC.SetP2PRouterInitializer(initializer)
-	adapterC.SetRPCRouterInitializer(func(router *router.Router, connection *NetConnection) {})
+	adapterC.SetRPCRouterInitializer(func(_ *router.Router, _ *NetConnection) {})
 	err = adapterC.Start()
 	if err != nil {
 		t.Fatalf("TestNetAdapter: Start() failed: %+v", err)

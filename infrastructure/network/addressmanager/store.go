@@ -2,6 +2,7 @@ package addressmanager
 
 import (
 	"encoding/binary"
+	"math"
 	"net"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -224,7 +225,7 @@ func (as *addressStore) serializeAddressKey(key addressKey) []byte {
 	serializedSize := 16 + 2 // ipv6 + port
 	serializedKey := make([]byte, serializedSize)
 
-	copy(serializedKey[:], key.address[:])
+	copy(serializedKey, key.address[:])
 	binary.LittleEndian.PutUint16(serializedKey[16:], key.port)
 
 	return serializedKey
@@ -232,7 +233,7 @@ func (as *addressStore) serializeAddressKey(key addressKey) []byte {
 
 func (as *addressStore) deserializeAddressKey(serializedKey []byte) addressKey {
 	var ip ipv6
-	copy(ip[:], serializedKey[:])
+	copy(ip[:], serializedKey)
 
 	port := binary.LittleEndian.Uint16(serializedKey[16:])
 
@@ -246,9 +247,13 @@ func (as *addressStore) serializeAddress(address *address) []byte {
 	serializedSize := 16 + 2 + 8 + 8 // ipv6 + port + timestamp + connectionFailedCount
 	serializedNetAddress := make([]byte, serializedSize)
 
-	copy(serializedNetAddress[:], address.netAddress.IP.To16()[:])
+	copy(serializedNetAddress, address.netAddress.IP.To16()[:])
 	binary.LittleEndian.PutUint16(serializedNetAddress[16:], address.netAddress.Port)
-	binary.LittleEndian.PutUint64(serializedNetAddress[18:], uint64(address.netAddress.Timestamp.UnixMilliseconds()))
+	ts := address.netAddress.Timestamp.UnixMilliseconds()
+	if ts < 0 {
+		panic("timestamp is negative and cannot be represented as uint64")
+	}
+	binary.LittleEndian.PutUint64(serializedNetAddress[18:], uint64(ts))
 	binary.LittleEndian.PutUint64(serializedNetAddress[26:], uint64(address.connectionFailedCount))
 
 	return serializedNetAddress
@@ -256,10 +261,14 @@ func (as *addressStore) serializeAddress(address *address) []byte {
 
 func (as *addressStore) deserializeAddress(serializedAddress []byte) *address {
 	ip := make(net.IP, 16)
-	copy(ip[:], serializedAddress[:])
+	copy(ip[:], serializedAddress)
 
 	port := binary.LittleEndian.Uint16(serializedAddress[16:])
-	timestamp := mstime.UnixMilliseconds(int64(binary.LittleEndian.Uint64(serializedAddress[18:])))
+	rawTimestamp := binary.LittleEndian.Uint64(serializedAddress[18:])
+	if rawTimestamp > math.MaxInt64 {
+		panic("timestamp overflows int64")
+	}
+	timestamp := mstime.UnixMilliseconds(int64(rawTimestamp))
 	connectionFailedCount := binary.LittleEndian.Uint64(serializedAddress[26:])
 
 	return &address{

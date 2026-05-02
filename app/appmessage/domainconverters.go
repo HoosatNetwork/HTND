@@ -1,7 +1,9 @@
 package appmessage
 
 import (
+	"encoding/binary"
 	"encoding/hex"
+	"math"
 	"math/big"
 
 	"github.com/pkg/errors"
@@ -17,6 +19,15 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/mstime"
 )
 
+func checkedUint32ToUint16(value uint32) uint16 {
+	if value > math.MaxUint16 {
+		panic(errors.Errorf("value %d exceeds uint16", value))
+	}
+	var valueBytes [4]byte
+	binary.BigEndian.PutUint32(valueBytes[:], value)
+	return binary.BigEndian.Uint16(valueBytes[2:])
+}
+
 // DomainBlockToMsgBlock converts an externalapi.DomainBlock to MsgBlock
 func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 	if domainBlock == nil {
@@ -25,11 +36,6 @@ func DomainBlockToMsgBlock(domainBlock *externalapi.DomainBlock) *MsgBlock {
 	if domainBlock.Header == nil {
 		// Defensive: block header should not be nil
 		return nil
-	}
-	if domainBlock.PoWHash == "" {
-		state := pow.NewState(domainBlock.Header.ToMutable())
-		_, powHash := state.CalculateProofOfWorkValue()
-		domainBlock.PoWHash = powHash.String()
 	}
 	var transactions []*MsgTx
 	if len(domainBlock.Transactions) > 0 {
@@ -491,8 +497,11 @@ func RPCBlockToDomainBlock(block *RPCBlock, powHash string) (*externalapi.Domain
 	if err != nil {
 		return nil, err
 	}
+	if block.Header.Version > math.MaxUint16 {
+		return nil, errors.Errorf("block header version %d exceeds uint16", block.Header.Version)
+	}
 	header := blockheader.NewImmutableBlockHeader(
-		uint16(block.Header.Version),
+		checkedUint32ToUint16(block.Header.Version),
 		parents,
 		hashMerkleRoot,
 		acceptedIDMerkleRoot,
@@ -617,11 +626,6 @@ func DomainBlockWithTrustedDataToBlockWithTrustedData(block *externalapi.BlockWi
 			Hash:         datum.Hash,
 			GHOSTDAGData: domainGHOSTDAGDataGHOSTDAGData(datum.GHOSTDAGData),
 		}
-	}
-	if block.Block.PoWHash == "" {
-		state := pow.NewState(block.Block.Header.ToMutable())
-		_, powHash := state.CalculateProofOfWorkValue()
-		block.Block.PoWHash = powHash.String()
 	}
 
 	return &MsgBlockWithTrustedData{

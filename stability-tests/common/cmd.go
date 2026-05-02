@@ -14,6 +14,10 @@ import (
 // The `name` parameter is used for logs.
 // The command executable should be in args[0]
 func StartCmd(name string, args ...string) (*exec.Cmd, error) {
+	if len(args) == 0 {
+		return nil, errors.New("no command provided")
+	}
+	// #nosec G204 -- stability tests execute explicit command paths and arguments assembled in code.
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = NewLogWriter(log, logger.LevelTrace, fmt.Sprintf("%s-STDOUT", name))
 	cmd.Stderr = NewLogWriter(log, logger.LevelWarn, fmt.Sprintf("%s-STDERR", name))

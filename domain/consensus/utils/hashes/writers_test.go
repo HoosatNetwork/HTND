@@ -1,12 +1,12 @@
 package hashes
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"testing"
 )
 
-func TestNewBlockHash(t *testing.T) {
+func TestNewBlockHash(_ *testing.T) {
 	datas := [][]byte{
 		{},
 		{1},
@@ -75,9 +75,10 @@ func TestNewBlockHash(t *testing.T) {
 }
 
 func BenchmarkNewBlockHashWriterSmall(b *testing.B) {
-	r := rand.New(rand.NewSource(0))
 	var someBytes [32]byte
-	r.Read(someBytes[:])
+	if _, err := rand.Read(someBytes[:]); err != nil {
+		b.Fatalf("crypto/rand.Read failed: %v", err)
+	}
 	for i := 0; i < b.N; i++ {
 		hasher := NewBlockHashWriter()
 		hasher.InfallibleWrite(someBytes[:])
@@ -86,9 +87,10 @@ func BenchmarkNewBlockHashWriterSmall(b *testing.B) {
 }
 
 func BenchmarkNewBlockHashWriterBig(b *testing.B) {
-	r := rand.New(rand.NewSource(0))
 	var someBytes [1024]byte
-	r.Read(someBytes[:])
+	if _, err := rand.Read(someBytes[:]); err != nil {
+		b.Fatalf("crypto/rand.Read failed: %v", err)
+	}
 	for i := 0; i < b.N; i++ {
 		hasher := NewBlockHashWriter()
 		hasher.InfallibleWrite(someBytes[:])
@@ -97,9 +99,10 @@ func BenchmarkNewBlockHashWriterBig(b *testing.B) {
 }
 
 func BenchmarkKHeavyHashWriterSmall(b *testing.B) {
-	r := rand.New(rand.NewSource(0))
 	var someBytes [32]byte
-	r.Read(someBytes[:])
+	if _, err := rand.Read(someBytes[:]); err != nil {
+		b.Fatalf("crypto/rand.Read failed: %v", err)
+	}
 	for i := 0; i < b.N; i++ {
 		hasher := KeccakHeavyHashWriter()
 		hasher.InfallibleWrite(someBytes[:])
@@ -108,9 +111,10 @@ func BenchmarkKHeavyHashWriterSmall(b *testing.B) {
 }
 
 func BenchmarkKHeavyHashWriterBig(b *testing.B) {
-	r := rand.New(rand.NewSource(0))
 	var someBytes [1024]byte
-	r.Read(someBytes[:])
+	if _, err := rand.Read(someBytes[:]); err != nil {
+		b.Fatalf("crypto/rand.Read failed: %v", err)
+	}
 	for i := 0; i < b.N; i++ {
 		hasher := KeccakHeavyHashWriter()
 		hasher.InfallibleWrite(someBytes[:])
@@ -119,9 +123,10 @@ func BenchmarkKHeavyHashWriterBig(b *testing.B) {
 }
 
 func BenchmarkBHeavyHashWriterSmall(b *testing.B) {
-	r := rand.New(rand.NewSource(0))
 	var someBytes [32]byte
-	r.Read(someBytes[:])
+	if _, err := rand.Read(someBytes[:]); err != nil {
+		b.Fatalf("crypto/rand.Read failed: %v", err)
+	}
 	for i := 0; i < b.N; i++ {
 		hasher := BlakeHeavyHashWriter()
 		hasher.InfallibleWrite(someBytes[:])
@@ -130,9 +135,10 @@ func BenchmarkBHeavyHashWriterSmall(b *testing.B) {
 }
 
 func BenchmarkBHeavyHashWriterBig(b *testing.B) {
-	r := rand.New(rand.NewSource(0))
 	var someBytes [1024]byte
-	r.Read(someBytes[:])
+	if _, err := rand.Read(someBytes[:]); err != nil {
+		b.Fatalf("crypto/rand.Read failed: %v", err)
+	}
 	for i := 0; i < b.N; i++ {
 		hasher := BlakeHeavyHashWriter()
 		hasher.InfallibleWrite(someBytes[:])

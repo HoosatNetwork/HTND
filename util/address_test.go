@@ -327,7 +327,7 @@ func TestAddresses(t *testing.T) {
 			// Encode again and compare against the original.
 			encoded := decoded.EncodeAddress()
 			if test.encoded != encoded {
-				t.Errorf("%v: decoding and encoding produced different addressess: %v != %v",
+				t.Errorf("%v: decoding and encoding produced different addresses: %v != %v",
 					test.name, test.encoded, encoded)
 				return
 			}
@@ -359,7 +359,21 @@ func TestAddresses(t *testing.T) {
 			}
 			switch a := decoded.(type) {
 			case *util.AddressPublicKey:
-				if h := a.ScriptAddress()[:]; !bytes.Equal(saddr, h) {
+				if h := a.ScriptAddress(); !bytes.Equal(saddr, h) {
+					t.Errorf("%v: hashes do not match:\n%x != \n%x",
+						test.name, saddr, h)
+					return
+				}
+
+			case *util.AddressPublicKeyHash:
+				if h := a.HashBlake2b()[:]; !bytes.Equal(saddr, h) {
+					t.Errorf("%v: hashes do not match:\n%x != \n%x",
+						test.name, saddr, h)
+					return
+				}
+
+			case *util.AddressPublicKeyHashECDSA:
+				if h := a.HashBlake2b()[:]; !bytes.Equal(saddr, h) {
 					t.Errorf("%v: hashes do not match:\n%x != \n%x",
 						test.name, saddr, h)
 					return

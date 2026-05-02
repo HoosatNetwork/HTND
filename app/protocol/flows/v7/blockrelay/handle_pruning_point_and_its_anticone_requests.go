@@ -1,6 +1,7 @@
 package blockrelay
 
 import (
+	"strconv"
 	"sync/atomic"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -78,7 +79,11 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 				for x := range blockDAAWindowHashes {
 					index, exists := daaWindowHashesToIndex[*blockDAAWindowHashes[x]]
 					if !exists {
-						trustedDataDataDAAHeader, err := context.Domain().Consensus().TrustedDataDataDAAHeader(pointAndItsAnticone[i], blockDAAWindowHashes[x], uint64(i))
+						pointIndex, err := strconv.ParseUint(strconv.Itoa(i), 10, 64)
+						if err != nil {
+							return err
+						}
+						trustedDataDataDAAHeader, err := context.Domain().Consensus().TrustedDataDataDAAHeader(pointAndItsAnticone[i], blockDAAWindowHashes[x], pointIndex)
 						if err != nil {
 							return err
 						}
@@ -87,7 +92,15 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 						daaWindowHashesToIndex[*blockDAAWindowHashes[x]] = index
 					}
 
-					trustedDataDAABlockIndexes[*pointAndItsAnticone[i]] = append(trustedDataDAABlockIndexes[*pointAndItsAnticone[i]], uint64(index))
+					// Prevent integer overflow when converting index to uint64
+					if index < 0 {
+						return protocolerrors.Errorf(false, "index %d is negative, cannot convert to uint64", index)
+					}
+					indexUint64, err := strconv.ParseUint(strconv.Itoa(index), 10, 64)
+					if err != nil {
+						return err
+					}
+					trustedDataDAABlockIndexes[*pointAndItsAnticone[i]] = append(trustedDataDAABlockIndexes[*pointAndItsAnticone[i]], indexUint64)
 				}
 
 				ghostdagDataBlockHashes, err := context.Domain().Consensus().TrustedBlockAssociatedGHOSTDAGDataBlockHashes(pointAndItsAnticone[i])
@@ -111,7 +124,11 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 						ghostdagDataHashToIndex[*ghostdagDataBlockHashes[y]] = index
 					}
 
-					trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]] = append(trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]], uint64(index))
+					indexUint64, err := strconv.ParseUint(strconv.Itoa(index), 10, 64)
+					if err != nil {
+						return err
+					}
+					trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]] = append(trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]], indexUint64)
 				}
 			}
 

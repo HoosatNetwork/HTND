@@ -100,6 +100,7 @@ func TestPOW(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// #nosec G404 -- this test intentionally uses a fixed-seed math/rand source for deterministic mining behavior.
 		random := rand.New(rand.NewSource(0))
 		// Difficulty is too high on mainnet to actually mine.
 		if consensusConfig.Name != "hoosat-mainnet" {
@@ -362,7 +363,7 @@ func (dm *mocDifficultyManager) RequiredDifficulty(*model.StagingArea, *external
 }
 
 // StageDAADataAndReturnRequiredDifficulty returns the difficulty required for the test
-func (dm *mocDifficultyManager) StageDAADataAndReturnRequiredDifficulty(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isBlockWithTrustedData bool) (uint32, error) {
+func (dm *mocDifficultyManager) StageDAADataAndReturnRequiredDifficulty(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, _ bool) (uint32, error) {
 	// Populate daaBlocksStore with fake values
 	dm.daaBlocksStore.StageDAAScore(stagingArea, blockHash, dm.genesisDaaScore)
 	dm.daaBlocksStore.StageBlockDAAAddedBlocks(stagingArea, blockHash, nil)
@@ -370,6 +371,6 @@ func (dm *mocDifficultyManager) StageDAADataAndReturnRequiredDifficulty(stagingA
 	return dm.testDifficulty, nil
 }
 
-func (dm *mocDifficultyManager) EstimateNetworkHashesPerSecond(startHash *externalapi.DomainHash, windowSize int) (uint64, error) {
+func (dm *mocDifficultyManager) EstimateNetworkHashesPerSecond(_ *externalapi.DomainHash, _ int) (uint64, error) {
 	return 0, nil
 }

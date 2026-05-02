@@ -24,10 +24,6 @@ type testBlockBuilder struct {
 	timeCounter   int64
 }
 
-var tempBlockHash = externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-})
-
 // NewTestBlockBuilder creates an instance of a TestBlockBuilder
 func NewTestBlockBuilder(baseBlockBuilder model.BlockBuilder, testConsensus testapi.TestConsensus) testapi.TestBlockBuilder {
 	return &testBlockBuilder{
@@ -50,6 +46,9 @@ func cleanBlockPrefilledFields(block *externalapi.DomainBlock) {
 
 func (bb *testBlockBuilder) nextTempBlockHash() *externalapi.DomainHash {
 	bb.timeCounter++
+	if bb.timeCounter < 0 {
+		panic("timeCounter cannot be negative")
+	}
 	byteArray := [externalapi.DomainHashSize]byte{}
 	binary.LittleEndian.PutUint64(byteArray[:8], uint64(bb.timeCounter))
 	return externalapi.NewDomainHashFromByteArray(&byteArray)
@@ -107,9 +106,9 @@ func (bb *testBlockBuilder) buildUTXOInvalidHeader(stagingArea *model.StagingAre
 
 	// Raise BlockVersion until daaScore is more than powScore
 	var version uint16 = 1
-	for _, powScore := range bb.POWScores {
+	for _, powScore := range bb.powScores {
 		if daaScore >= powScore {
-			version = version + 1
+			version++
 		}
 	}
 	bb.nonceCounter++

@@ -67,7 +67,7 @@ var (
 	DefaultAppDir = util.AppDir("htnd", false)
 
 	defaultConfigFile  = filepath.Join(DefaultAppDir, defaultConfigFilename)
-	defaultDataDir     = filepath.Join(DefaultAppDir)
+	defaultDataDir     = DefaultAppDir
 	defaultRPCKeyFile  = filepath.Join(DefaultAppDir, "rpc.key")
 	defaultRPCCertFile = filepath.Join(DefaultAppDir, "rpc.cert")
 )

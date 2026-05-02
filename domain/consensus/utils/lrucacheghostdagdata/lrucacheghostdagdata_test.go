@@ -16,6 +16,10 @@ func newTestHash(t *testing.T, b byte) *externalapi.DomainHash {
 
 func newTestGHOSTDAGData(t *testing.T, score uint64) *externalapi.BlockGHOSTDAGData {
 	t.Helper()
+	const maxInt64AsUint64 = uint64(1<<63 - 1)
+	if score > maxInt64AsUint64 {
+		t.Fatalf("score %d exceeds int64 range", score)
+	}
 	return externalapi.NewBlockGHOSTDAGData(score, big.NewInt(int64(score)), externalapi.NewZeroHash(), nil, nil, nil)
 }
 

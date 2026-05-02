@@ -76,7 +76,12 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			return nil, nil, err
 		}
 
-		if maxBlocks != 0 && uint64(len(blockHashes)+len(sortedMergeSet)) > maxBlocks {
+		total := len(blockHashes) + len(sortedMergeSet)
+		if total < 0 {
+			// Should never happen, but guard for safety
+			break
+		}
+		if maxBlocks != 0 && uint64(total) > maxBlocks {
 			break
 		}
 

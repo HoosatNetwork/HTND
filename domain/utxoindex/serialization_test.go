@@ -11,6 +11,7 @@ import (
 )
 
 func Test_serializeHashes(t *testing.T) {
+	// #nosec G404 -- deterministic RNG keeps the hash serialization test reproducible.
 	r := rand.New(rand.NewSource(0))
 
 	for length := range 32 {
@@ -37,7 +38,7 @@ func Test_deserializeHashesFailure(t *testing.T) {
 		externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{3}),
 	}
 	serialized := serializeHashes(hashes)
-	binary.LittleEndian.PutUint64(serialized[:8], uint64(len(hashes)+1))
+	binary.LittleEndian.PutUint64(serialized[:8], 4)
 	_, err := deserializeHashes(serialized)
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("Expected error to be EOF, instead got: %v", err)

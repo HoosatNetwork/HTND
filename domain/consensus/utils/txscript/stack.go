@@ -7,8 +7,17 @@ package txscript
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strings"
 )
+
+func checkedStackSize(size int) int32 {
+	if size > math.MaxInt32 {
+		panic("stack depth exceeds int32")
+	}
+	//nolint:gosec // bounded by the explicit MaxInt32 check above
+	return int32(size)
+}
 
 // asBool gets the boolean value of the byte array.
 func asBool(t []byte) bool {
@@ -42,7 +51,7 @@ type stack struct {
 
 // Depth returns the number of items on the stack.
 func (s *stack) Depth() int32 {
-	return int32(len(s.stk))
+	return checkedStackSize(len(s.stk))
 }
 
 // PushByteArray adds the given back array to the top of the stack.
@@ -104,7 +113,7 @@ func (s *stack) PopBool() (bool, error) {
 
 // PeekByteArray returns the Nth item on the stack without removing it.
 func (s *stack) PeekByteArray(idx int32) ([]byte, error) {
-	sz := int32(len(s.stk))
+	sz := checkedStackSize(len(s.stk))
 	if idx < 0 || idx >= sz {
 		str := fmt.Sprintf("index %d is invalid for stack size %d", idx,
 			sz)
@@ -144,7 +153,7 @@ func (s *stack) PeekBool(idx int32) (bool, error) {
 // nipN(1): [... x1 x2 x3] -> [... x1 x3]
 // nipN(2): [... x1 x2 x3] -> [... x2 x3]
 func (s *stack) nipN(idx int32) ([]byte, error) {
-	sz := int32(len(s.stk))
+	sz := checkedStackSize(len(s.stk))
 	if idx < 0 || idx > sz-1 {
 		str := fmt.Sprintf("index %d is invalid for stack size %d", idx,
 			sz)
@@ -152,13 +161,14 @@ func (s *stack) nipN(idx int32) ([]byte, error) {
 	}
 
 	so := s.stk[sz-idx-1]
-	if idx == 0 {
+	switch {
+	case idx == 0:
 		s.stk = s.stk[:sz-1]
-	} else if idx == sz-1 {
+	case idx == sz-1:
 		s1 := make([][]byte, sz-1)
 		copy(s1, s.stk[1:])
 		s.stk = s1
-	} else {
+	default:
 		s1 := s.stk[sz-idx : sz]
 		s.stk = s.stk[:sz-idx-1]
 		s.stk = append(s.stk, s1...)

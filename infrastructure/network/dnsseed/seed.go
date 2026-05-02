@@ -7,7 +7,6 @@ package dnsseed
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net"
 	"strconv"
 	"time"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	pb2 "github.com/Hoosat-Oy/HTND/infrastructure/network/dnsseed/pb"
+	"github.com/Hoosat-Oy/HTND/util/random"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -37,6 +37,35 @@ const (
 // OnSeed is the signature of the callback function which is invoked when DNS
 // seeding is successful.
 type OnSeed func(addrs []*appmessage.NetAddress)
+
+func randomInt31n(limit int32) int32 {
+	if limit <= 0 {
+		panic(fmt.Sprintf("randomInt31n requires a positive limit, got %d", limit))
+	}
+	value, err := random.Uint64()
+	if err != nil {
+		panic(err)
+	}
+	limitUint32 := uint32(limit)
+	randomOffset := value % uint64(limitUint32)
+	randomOffsetInt64, err := strconv.ParseInt(strconv.FormatUint(randomOffset, 10), 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	//nolint:gosec // bounded by ParseInt with bitSize 32 and positive limit
+	return int32(randomOffsetInt64)
+}
+
+func mustPortUint16(port string) uint16 {
+	intPort, err := strconv.Atoi(port)
+	if err != nil {
+		panic(err)
+	}
+	if intPort < 0 || intPort > 65535 {
+		panic(fmt.Sprintf("port %d overflows uint16", intPort))
+	}
+	return uint16(intPort)
+}
 
 // LookupFunc is the signature of the DNS lookup function.
 type LookupFunc func(string) ([]net.IP, error)
@@ -64,8 +93,6 @@ func SeedFromDNS(dagParams *dagconfig.Params, customSeed string, includeAllSubne
 		}
 
 		spawn("SeedFromDNS", func() {
-			randSource := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 			seedPeers, err := lookupFn(host)
 			if err != nil {
 				log.Infof("DNS discovery failed on seed %s: %s", host, err)
@@ -79,15 +106,14 @@ func SeedFromDNS(dagParams *dagconfig.Params, customSeed string, includeAllSubne
 				return
 			}
 			addresses := make([]*appmessage.NetAddress, len(seedPeers))
-			// if this errors then we have *real* problems
-			intPort, _ := strconv.Atoi(dagParams.DefaultPort)
+			port := mustPortUint16(dagParams.DefaultPort)
 			for i, peer := range seedPeers {
 				addresses[i] = appmessage.NewNetAddressTimestamp(
 					// seed with addresses from a time randomly selected
 					// between 3 and 7 days ago.
 					mstime.Now().Add(-1*time.Second*time.Duration(secondsIn3Days+
-						randSource.Int31n(secondsIn4Days))),
-					peer, uint16(intPort))
+						randomInt31n(secondsIn4Days))),
+					peer, port)
 			}
 
 			seedFn(addresses)
@@ -108,8 +134,6 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 
 	for _, host := range grpcSeeds {
 		spawn("SeedFromGRPC", func() {
-			randSource := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 			conn, err := grpc.NewClient(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			client := pb2.NewPeerServiceClient(conn)
 			if err != nil {
@@ -143,15 +167,14 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 				return
 			}
 			addresses := make([]*appmessage.NetAddress, len(seedPeers))
-			// if this errors then we have *real* problems
-			intPort, _ := strconv.Atoi(dagParams.DefaultPort)
+			port := mustPortUint16(dagParams.DefaultPort)
 			for i, peer := range seedPeers {
 				addresses[i] = appmessage.NewNetAddressTimestamp(
 					// seed with addresses from a time randomly selected
 					// between 3 and 7 days ago.
 					mstime.Now().Add(-1*time.Second*time.Duration(secondsIn3Days+
-						randSource.Int31n(secondsIn4Days))),
-					peer, uint16(intPort))
+						randomInt31n(secondsIn4Days))),
+					peer, port)
 			}
 
 			seedFn(addresses)

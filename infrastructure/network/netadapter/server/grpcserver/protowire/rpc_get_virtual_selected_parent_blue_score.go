@@ -12,7 +12,7 @@ func (x *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) toAppMessage()
 	return &appmessage.GetVirtualSelectedParentBlueScoreRequestMessage{}, nil
 }
 
-func (x *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) fromAppMessage(message *appmessage.GetVirtualSelectedParentBlueScoreRequestMessage) error {
+func (x *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) fromAppMessage(_ *appmessage.GetVirtualSelectedParentBlueScoreRequestMessage) error {
 	x.GetVirtualSelectedParentBlueScoreRequest = &GetVirtualSelectedParentBlueScoreRequestMessage{}
 	return nil
 }

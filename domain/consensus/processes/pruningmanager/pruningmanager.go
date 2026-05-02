@@ -454,7 +454,8 @@ func (pm *pruningManager) calculateBlocksToKeep(stagingArea *model.StagingArea,
 	if err != nil {
 		return nil, err
 	}
-	pruningPointAndItsAnticone := append(pruningPointAnticone, pruningPoint)
+	pruningPointAndItsAnticone := append([]*externalapi.DomainHash{}, pruningPointAnticone...)
+	pruningPointAndItsAnticone = append(pruningPointAndItsAnticone, pruningPoint)
 	blocksToKeep := make(map[externalapi.DomainHash]struct{})
 	for _, blockHash := range pruningPointAndItsAnticone {
 		blocksToKeep[*blockHash] = struct{}{}
@@ -863,9 +864,11 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPoints(st
 	var diffHashesFromPrevious []*externalapi.DomainHash
 	var diffHashesFromCurrent []*externalapi.DomainHash
 
+diffTraversalLoop:
 	for {
 		// if currentPruningCurrentDiffChildBlueWork > previousPruningCurrentDiffChildBlueWork
-		if currentPruningCurrentDiffChildBlueWork.Cmp(previousPruningCurrentDiffChildBlueWork) == 1 {
+		switch {
+		case currentPruningCurrentDiffChildBlueWork.Cmp(previousPruningCurrentDiffChildBlueWork) == 1:
 			diffHashesFromPrevious = append(diffHashesFromPrevious, previousPruningCurrentDiffChild)
 			previousPruningCurrentDiffChild, err = pm.utxoDiffStore.UTXODiffChild(pm.databaseContext, stagingArea, previousPruningCurrentDiffChild)
 			if err != nil {
@@ -876,9 +879,9 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPoints(st
 				return nil, err
 			}
 			previousPruningCurrentDiffChildBlueWork = diffChildGhostDag.BlueWork()
-		} else if currentPruningCurrentDiffChild.Equal(previousPruningCurrentDiffChild) {
-			break
-		} else {
+		case currentPruningCurrentDiffChild.Equal(previousPruningCurrentDiffChild):
+			break diffTraversalLoop
+		default:
 			diffHashesFromCurrent = append(diffHashesFromCurrent, currentPruningCurrentDiffChild)
 			currentPruningCurrentDiffChild, err = pm.utxoDiffStore.UTXODiffChild(pm.databaseContext, stagingArea, currentPruningCurrentDiffChild)
 			if err != nil {

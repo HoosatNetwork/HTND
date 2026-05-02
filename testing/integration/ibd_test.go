@@ -125,7 +125,7 @@ func TestIBDWithPruning(t *testing.T) {
 		}
 
 		// This should trigger resolving the syncee virtual
-		syncerTip := mineNextBlockWithMockTimestamps(t, syncer, rand.New(rand.NewSource(time.Now().UnixNano())))
+		syncerTip := mineNextBlockWithMockTimestamps(t, syncer, newMiningRand())
 		time.Sleep(time.Second)
 
 		synceeSelectedTip, err := syncee.rpcClient.GetSelectedTipHash()
@@ -193,7 +193,7 @@ func TestIBDWithPruning(t *testing.T) {
 	// iteration to find the highest shared chain
 	// block.
 	const synceeOnlyBlocks = 2
-	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rd := newMiningRand()
 	for range synceeOnlyBlocks {
 		mineNextBlockWithMockTimestamps(t, syncee1, rd)
 	}
@@ -208,7 +208,7 @@ func TestIBDWithPruning(t *testing.T) {
 	testSync(syncee1, syncee2)
 }
 
-var currentMockTimestamp int64 = 0
+var currentMockTimestamp int64
 
 // mineNextBlockWithMockTimestamps mines blocks with large timestamp differences
 // between every two blocks. This is done to avoid the timestamp threshold validation
@@ -315,12 +315,12 @@ func TestBoundedMergeDepth(t *testing.T) {
 		}
 	}
 
-	t.Run("mergeDepth", func(t *testing.T) {
+	t.Run("mergeDepth", func(_ *testing.T) {
 		mergeDepth := overrideDAGParams.MergeDepth[len(overrideDAGParams.MergeDepth)-1]
 		test(harnesses[0], harnesses[1], mergeDepth, false)
 	})
 
-	t.Run("mergeDepth-1", func(t *testing.T) {
+	t.Run("mergeDepth-1", func(_ *testing.T) {
 		mergeDepth := overrideDAGParams.MergeDepth[len(overrideDAGParams.MergeDepth)-1]
 		test(harnesses[2], harnesses[3], mergeDepth-1, true)
 	})

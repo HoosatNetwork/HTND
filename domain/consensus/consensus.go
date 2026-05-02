@@ -4,8 +4,6 @@ import (
 	"math/big"
 	"os"
 	"runtime"
-	"runtime/debug"
-	"strconv"
 	"sync"
 	"time"
 
@@ -169,7 +167,11 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 	if os.Getenv("HTND_PROFILER") != "" {
 		go s.displayCacheSizes()
 		go s.displayMemUse()
-		go s.periodicLogFrees()
+		go func() {
+			if err := s.periodicLogFrees(); err != nil {
+				log.Warnf("periodicLogFrees exited with error: %v", err)
+			}
+		}()
 	}
 
 	// go s.periodicFreeOSMemory()
@@ -184,31 +186,6 @@ func (s *consensus) periodicLogFrees() error {
 	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
 	for range ticker.C {
 		memory.LogLeaks()
-	}
-	return nil
-}
-
-func (s *consensus) periodicFreeOSMemory() error {
-	minutes := 5
-	htnd_gc_timer_argument := os.Getenv("HTND_GC_TIMER")
-	if htnd_gc_timer_argument != "" {
-		var err error
-		minutes, err = strconv.Atoi(htnd_gc_timer_argument)
-		if err != nil {
-			return err
-		}
-	}
-	time.Sleep(time.Duration(minutes))
-
-	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
-	for range ticker.C {
-		nearlySynced, err := s.IsNearlySynced()
-		if err != nil {
-			continue
-		}
-		if nearlySynced {
-			debug.FreeOSMemory()
-		}
 	}
 	return nil
 }
@@ -230,7 +207,7 @@ func (s *consensus) displayCacheSizes() {
 		log.Infof("FinalityStore cache size: %d", s.finalityStore.CacheLen())
 		log.Infof("HeadersSelectedChainStore cache size: %d", s.headersSelectedChainStore.CacheLen())
 
-		var cacheLen int = 0
+		var cacheLen int
 		for i := 1; i < len(s.blockRelationStores); i++ {
 			cacheLen += s.blockRelationStores[i].CacheLen()
 		}

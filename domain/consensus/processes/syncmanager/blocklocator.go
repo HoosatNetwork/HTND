@@ -1,6 +1,8 @@
 package syncmanager
 
 import (
+	"math"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -26,7 +28,20 @@ func (sm *syncManager) createBlockLocator(stagingArea *model.StagingArea, lowHas
 		locator = append(locator, currentHash)
 
 		// Stop if we've reached the limit (if it's set)
-		if limit > 0 && uint32(len(locator)) == limit {
+		l := len(locator)
+		if l < 0 {
+			// Should never happen, but guard for safety
+			break
+		}
+		locatorLengthInt64 := int64(l)
+		if locatorLengthInt64 < 0 {
+			break
+		}
+		if locatorLengthInt64 > math.MaxUint32 {
+			break
+		}
+		locatorLength := uint32(locatorLengthInt64)
+		if limit > 0 && locatorLength == limit {
 			break
 		}
 

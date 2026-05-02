@@ -70,7 +70,7 @@ func (f *FlowContext) OnPruningPointUTXOSetOverride() error {
 }
 
 func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
-	addedBlocks []*externalapi.DomainBlock, transactionsAcceptedToMempool []*externalapi.DomainTransaction,
+	_ []*externalapi.DomainBlock, transactionsAcceptedToMempool []*externalapi.DomainTransaction,
 ) error {
 	// Don't relay transactions when in IBD.
 	if f.IsIBDRunning() {

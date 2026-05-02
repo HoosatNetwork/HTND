@@ -6,6 +6,7 @@ package dagconfig
 
 import (
 	"math/big"
+	"strconv"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -239,7 +240,15 @@ func (p *Params) FinalityDepth() uint64 {
 	finalityDuration := p.finalityDurationForCurrentVersion()
 	targetTimePerBlock := p.targetTimePerBlockForCurrentVersion()
 	if constants.GetBlockVersion() < 5 {
-		return uint64(finalityDuration / targetTimePerBlock)
+		val := finalityDuration / targetTimePerBlock
+		if val < 0 {
+			panic("finalityDuration / targetTimePerBlock is negative, cannot convert to uint64")
+		}
+		finalityDepth, err := strconv.ParseUint(strconv.FormatInt(int64(val), 10), 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		return finalityDepth
 	}
 	return uint64(finalityDuration.Seconds() / targetTimePerBlock.Seconds())
 }

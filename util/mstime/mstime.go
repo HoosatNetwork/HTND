@@ -36,7 +36,7 @@ func (t Time) String() string {
 }
 
 // Clock returns the hour, minute, and second within the day specified by t.
-func (t Time) Clock() (hour, min, sec int) {
+func (t Time) Clock() (hour, minute, sec int) {
 	return t.time.Clock()
 }
 

@@ -25,29 +25,59 @@ func (c *RPCClient) RegisterForFinalityConflictsNotifications(
 		return c.convertRPCError(notifyFinalityConflictsResponse.Error)
 	}
 	spawn("RegisterForFinalityConflictsNotifications-finalityConflict", func() {
+		defer func() {
+			_ = recover()
+		}()
 		for {
-			notification, err := c.route(appmessage.CmdFinalityConflictNotificationMessage).Dequeue()
+			notification, err := c.route(appmessage.CmdFinalityConflictNotificationMessage).DequeueWithTimeout(c.timeout)
 			if err != nil {
 				if errors.Is(err, routerpkg.ErrRouteClosed) {
 					break
 				}
-				panic(err)
+				// Timeout or other error: exit goroutine gracefully
+				return
 			}
-			finalityConflictNotification := notification.(*appmessage.FinalityConflictNotificationMessage)
-			onFinalityConflict(finalityConflictNotification)
+			finalityConflictNotification, ok := notification.(*appmessage.FinalityConflictNotificationMessage)
+			if !ok {
+				// Unexpected type, skip
+				continue
+			}
+			// Recover from panics in handler
+			func() {
+				defer func() {
+					_ = recover()
+				}()
+				onFinalityConflict(finalityConflictNotification)
+			}()
 		}
 	})
 	spawn("RegisterForFinalityConflictsNotifications-finalityConflictResolved", func() {
+		defer func() {
+			_ = recover()
+		}()
 		for {
-			notification, err := c.route(appmessage.CmdFinalityConflictResolvedNotificationMessage).Dequeue()
+			notification, err := c.route(appmessage.CmdFinalityConflictResolvedNotificationMessage).DequeueWithTimeout(c.timeout)
 			if err != nil {
 				if errors.Is(err, routerpkg.ErrRouteClosed) {
 					break
 				}
-				panic(err)
+				// Timeout or other error: exit goroutine gracefully
+				return
 			}
-			finalityConflictResolvedNotification := notification.(*appmessage.FinalityConflictResolvedNotificationMessage)
-			onFinalityConflictResolved(finalityConflictResolvedNotification)
+			finalityConflictResolvedNotification, ok := notification.(*appmessage.FinalityConflictResolvedNotificationMessage)
+			if !ok {
+				// Unexpected type, skip
+				continue
+			}
+			// Recover from panics in handler
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Warnf("panic in finality conflict resolved handler: %v", r)
+					}
+				}()
+				onFinalityConflictResolved(finalityConflictResolvedNotification)
+			}()
 		}
 	})
 	return nil

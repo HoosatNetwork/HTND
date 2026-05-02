@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,19 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
 	"github.com/pkg/errors"
 )
+
+func newConsensusTestRand() *rand.Rand {
+	// #nosec G404 -- this helper is used only in tests that need math/rand-compatible sources.
+	return rand.New(rand.NewSource(0))
+}
+
+func checkedTestUint64FromInt64(value int64) uint64 {
+	parsedValue, err := strconv.ParseUint(strconv.FormatInt(value, 10), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+	return parsedValue
+}
 
 func TestFinality(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
@@ -181,7 +195,7 @@ func TestFinality(t *testing.T) {
 
 func TestBoundedMergeDepth(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
-		rd := rand.New(rand.NewSource(0))
+		rd := newConsensusTestRand()
 		// Set finalityInterval to 50 blocks, so that test runs quickly
 		consensusConfig.K[constants.GetBlockVersion()-1] = 5
 		consensusConfig.MergeDepth = []uint64{7}
@@ -205,14 +219,14 @@ func TestBoundedMergeDepth(t *testing.T) {
 			}
 
 			err = consensus.ValidateAndInsertBlock(block, true, true)
-			if err == nil {
+			switch {
+			case err == nil:
 				return block, false
-			} else if errors.Is(err, ruleerrors.ErrViolatingBoundedMergeDepth) {
+			case errors.Is(err, ruleerrors.ErrViolatingBoundedMergeDepth):
 				return block, true
-			} else {
-				t.Fatalf("TestBoundedMergeDepth: expected err: %v, found err: %v", ruleerrors.ErrViolatingBoundedMergeDepth, err)
-				return nil, false // fo some reason go doesn't recognize that t.Fatalf never returns
 			}
+			t.Fatalf("TestBoundedMergeDepth: expected err: %v, found err: %v", ruleerrors.ErrViolatingBoundedMergeDepth, err)
+			return nil, false // fo some reason go doesn't recognize that t.Fatalf never returns
 		}
 
 		processBlock := func(consensus testapi.TestConsensus, block *externalapi.DomainBlock, name string) {
@@ -557,7 +571,7 @@ func TestFinalityResolveVirtual(t *testing.T) {
 			// as well.
 			if i == 0 {
 				mutableHeader := block.Header.ToMutable()
-				mutableHeader.SetNonce(uint64(rand.NewSource(84147).Int63()))
+				mutableHeader.SetNonce(checkedTestUint64FromInt64(rand.NewSource(84147).Int63()))
 				block.Header = mutableHeader.ToImmutable()
 			}
 

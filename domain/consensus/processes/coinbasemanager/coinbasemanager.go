@@ -349,7 +349,13 @@ func (c *coinbaseManager) calcDeflationaryPeriodBlockSubsidy(blockDaaScore uint6
 
 func (c *coinbaseManager) getDeflationaryPeriodBlockSubsidyFromTable(year uint64, blockVersion uint16) uint64 {
 	if year >= uint64(len(subsidyByDeflationaryYearTable)) {
-		year = uint64(len(subsidyByDeflationaryYearTable) - 1)
+		maxIdx := len(subsidyByDeflationaryYearTable) - 1
+		if maxIdx < 0 {
+			panic("subsidyByDeflationaryYearTable is empty")
+		}
+		// maxIdx is always >= 0, and len() returns int, which is always representable as uint64 on 64-bit platforms
+		// Defensive: check only for negative (already checked), so this branch is unreachable
+		year = uint64(maxIdx)
 	}
 	return uint64(float64(subsidyByDeflationaryYearTable[year]) * c.targetTimePerBlock[blockVersion-1].Seconds())
 }

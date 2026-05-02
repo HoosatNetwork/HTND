@@ -7,11 +7,12 @@ package main
 import (
 	"log"
 	"net/http"
-	_ "net/http/pprof"
+	httppprof "net/http/pprof"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"strconv"
+	"time"
 
 	"github.com/Hoosat-Oy/HTND/app"
 )
@@ -43,7 +44,22 @@ func main() {
 		runtime.SetBlockProfileRate(1)     // Set block profile rate to 1 to enable block profiling
 		runtime.SetMutexProfileFraction(1) // Set mutex profile fraction to 1 to enable mutex profiling
 		go func() {
-			log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
+			mux := http.NewServeMux()
+			mux.Handle("/", http.RedirectHandler("/debug/pprof", http.StatusSeeOther))
+			mux.HandleFunc("/debug/pprof/", httppprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", httppprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", httppprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", httppprof.Trace)
+
+			srv := &http.Server{
+				Addr:         "127.0.0.1:6060",
+				Handler:      mux,
+				ReadTimeout:  5 * time.Second,
+				WriteTimeout: 10 * time.Second,
+				IdleTimeout:  120 * time.Second,
+			}
+			log.Println(srv.ListenAndServe())
 		}()
 	}
 

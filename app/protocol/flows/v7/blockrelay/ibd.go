@@ -77,7 +77,7 @@ func (flow *handleIBDFlow) updateBlockVersionFromDAAScore(daaScore uint64) {
 	var blockVersion uint16 = 1
 	for _, powScore := range flow.IBDContext.Config().ActiveNetParams.POWScores {
 		if daaScore >= powScore {
-			blockVersion += 1
+			blockVersion++
 		}
 	}
 	constants.SetBlockVersion(blockVersion)
@@ -105,7 +105,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 
 	flow.updateBlockVersionFromDAAScore(block.Header.DAAScore())
 	isFinishedSuccessfully := false
-	var err error = nil
+	var err error
 	defer func() {
 		flow.UnsetIBDRunning()
 		err = flow.logIBDFinished(isFinishedSuccessfully, err)
@@ -132,7 +132,9 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 		if !flow.Config().DisableIBDTimeout || timeout == 0 {
 			log.Warnf("IBD with peer %s timed out after %v, disconnecting and trying to ban the peer depending on --enablebanning setting", flow.peer, timeout)
 			// Disconnect & Remove the peer from address manager to prevent immediate reconnection
-			flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out"))
+			if err := flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out")); err != nil {
+				log.Warnf("logIBDFinished returned error: %v", err)
+			}
 			netAddress := flow.peer.Connection().NetAddress()
 			if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
 				log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
@@ -156,10 +158,9 @@ func (flow *handleIBDFlow) getIBDTimeout() time.Duration {
 		if isNearlySynced {
 			// If nearly synced, IBD should be faster, use shorter timeout
 			return flow.Config().NearlySyncedIBDTimeout
-		} else {
-			// If not nearly synced, allow more time for IBD
-			return flow.Config().IBDTimeout
 		}
+		// If not nearly synced, allow more time for IBD
+		return flow.Config().IBDTimeout
 	}
 	return 0
 }
@@ -399,7 +400,7 @@ func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error
 }
 
 func (flow *handleIBDFlow) getSyncerChainBlockLocator(
-	highHash, lowHash *externalapi.DomainHash, timeout time.Duration,
+	highHash, lowHash *externalapi.DomainHash, _ time.Duration,
 ) ([]*externalapi.DomainHash, error) {
 	requestIbdChainBlockLocatorMessage := appmessage.NewMsgIBDRequestChainBlockLocator(highHash, lowHash)
 	err := flow.outgoingRoute.Enqueue(requestIbdChainBlockLocatorMessage)
@@ -602,10 +603,9 @@ func (flow *handleIBDFlow) processHeader(consensus externalapi.Consensus, msgBlo
 	if err != nil {
 		if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
 			return nil
-		} else {
-			log.Errorf("Rejected block header %s from %s during IBD: %+v", blockHash, flow.peer, errors.WithStack(err))
-			return err
 		}
+		log.Errorf("Rejected block header %s from %s during IBD: %+v", blockHash, flow.peer, errors.WithStack(err))
+		return err
 	}
 
 	return nil
@@ -802,10 +802,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			if err != nil {
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
 					continue
-				} else {
-					log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
-					continue
 				}
+				log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
+				continue
 			}
 			err = flow.OnNewBlock(block)
 			if err != nil {
@@ -867,7 +866,7 @@ func (flow *handleIBDFlow) checkPeriodicRate(itemType string) error {
 	now := time.Now()
 	elapsed := now.Sub(flow.lastRateCheckTime).Seconds()
 	if elapsed <= 9 {
-		return nil // Avoid division by zero and low artifical first count too....
+		return nil // Avoid division by zero and low artificial first count too....
 	}
 
 	var rate float64

@@ -2,11 +2,22 @@ package coinbasemanager
 
 import (
 	"encoding/binary"
+	"strconv"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/pkg/errors"
 )
+
+func scriptLengthByte(length int) byte {
+	parsedLength, err := strconv.ParseUint(strconv.Itoa(length), 10, 8)
+	if err != nil {
+		panic(err)
+	}
+	var lengthBytes [8]byte
+	binary.BigEndian.PutUint64(lengthBytes[:], parsedLength)
+	return lengthBytes[7]
+}
 
 const (
 	uint64Len                   = 8
@@ -25,13 +36,14 @@ func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
 		return nil, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen, "coinbase's payload script public key is "+
 			"longer than the max allowed length of %d", c.coinbasePayloadScriptPublicKeyMaxLength)
 	}
+	scriptLengthOfScriptPubKeyByte := scriptLengthByte(scriptLengthOfScriptPubKey)
 
 	payload := make([]byte, uint64Len+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey+len(coinbaseData.ExtraData)+lengthOfSubsidy)
 	binary.LittleEndian.PutUint64(payload[:uint64Len], blueScore)
 	binary.LittleEndian.PutUint64(payload[uint64Len:], subsidy)
 
 	binary.LittleEndian.PutUint16(payload[uint64Len+lengthOfSubsidy:], coinbaseData.ScriptPublicKey.Version)
-	payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey] = uint8(len(coinbaseData.ScriptPublicKey.Script))
+	payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey] = scriptLengthOfScriptPubKeyByte
 	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength:], coinbaseData.ScriptPublicKey.Script)
 	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey:], coinbaseData.ExtraData)
 
@@ -45,6 +57,7 @@ func ModifyCoinbasePayload(payload []byte, coinbaseData *externalapi.DomainCoinb
 		return nil, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen, "coinbase's payload script public key is "+
 			"longer than the max allowed length of %d", coinbasePayloadScriptPublicKeyMaxLength)
 	}
+	scriptLengthOfScriptPubKeyByte := scriptLengthByte(scriptLengthOfScriptPubKey)
 
 	newPayloadLen := uint64Len + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength + scriptLengthOfScriptPubKey + len(coinbaseData.ExtraData) + lengthOfSubsidy
 	if len(payload) != newPayloadLen {
@@ -54,7 +67,7 @@ func ModifyCoinbasePayload(payload []byte, coinbaseData *externalapi.DomainCoinb
 	}
 
 	binary.LittleEndian.PutUint16(payload[uint64Len+lengthOfSubsidy:uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey], coinbaseData.ScriptPublicKey.Version)
-	payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey] = uint8(len(coinbaseData.ScriptPublicKey.Script))
+	payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey] = scriptLengthOfScriptPubKeyByte
 	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength:], coinbaseData.ScriptPublicKey.Script)
 	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey:], coinbaseData.ExtraData)
 

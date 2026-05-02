@@ -88,13 +88,13 @@ func TestCursorSanity(t *testing.T) {
 	hasNext := cursor.First()
 	if !hasNext {
 		t.Fatalf("TestCursorSanity: First " +
-			"unexpectedly returned non-existance")
+			"unexpectedly returned non-existence")
 	}
 	expectedKey := bucket.Key([]byte("key0"))
 	expectedValue := []byte("value0")
 	validateCurrentCursorKeyAndValue(t, "TestCursorSanity", cursor, expectedKey, expectedValue)
 
-	// Seek to a non-existant key
+	// Seek to a non-existent key
 	err = cursor.Seek(database.MakeBucket(nil).Key([]byte("doesn't exist")))
 	if err == nil {
 		t.Fatalf("TestCursorSanity: Seek " +

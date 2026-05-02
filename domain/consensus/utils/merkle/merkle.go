@@ -86,7 +86,7 @@ func merkleRoot(hashes []*externalapi.DomainHash) *externalapi.DomainHash {
 			merkles[offset] = newHash
 
 		// The normal case sets the parent node to the hash
-		// of the concatentation of the left and right children.
+		// of the concatenation of the left and right children.
 		default:
 			newHash := hashMerkleBranches(merkles[i], merkles[i+1])
 			merkles[offset] = newHash

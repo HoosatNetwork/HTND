@@ -258,7 +258,7 @@ func TestCheckLockTimeVerifyConditionedByAbsoluteTime(t *testing.T) {
 		}
 		// Create a CLTV script:
 		timeToWait := uint64(12 * 1000)
-		lockTimeTarget := uint64(blockD.Header.TimeInMilliseconds()) + timeToWait
+		lockTimeTarget := checkedTestUint64FromInt64(blockD.Header.TimeInMilliseconds()) + timeToWait
 		redeemScriptCLTV, err := createScriptCLTV(lockTimeTarget)
 		if err != nil {
 			t.Fatalf("Failed to create a script using createScriptCLTV: %v", err)
@@ -328,7 +328,7 @@ func TestCheckLockTimeVerifyConditionedByAbsoluteTime(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed getting pastMedianTime: %v", err)
 			}
-			if uint64(pastMedianTime) > lockTimeTarget {
+			if checkedTestUint64FromInt64(pastMedianTime) > lockTimeTarget {
 				break
 			}
 		}
@@ -387,7 +387,7 @@ func TestCheckLockTimeVerifyConditionedByAbsoluteTimeWithWrongLockTime(t *testin
 		}
 		// Create a CLTV script:
 		timeToWait := uint64(12 * 1000)
-		lockTimeTarget := uint64(blockD.Header.TimeInMilliseconds()) + timeToWait
+		lockTimeTarget := checkedTestUint64FromInt64(blockD.Header.TimeInMilliseconds()) + timeToWait
 		redeemScriptCLTV, err := createScriptCLTV(lockTimeTarget)
 		if err != nil {
 			t.Fatalf("Failed to create a script using createScriptCLTV: %v", err)
@@ -450,7 +450,7 @@ func TestCheckLockTimeVerifyConditionedByAbsoluteTimeWithWrongLockTime(t *testin
 			if err != nil {
 				t.Fatalf("Failed getting pastMedianTime: %v", err)
 			}
-			if uint64(pastMedianTime) > lockTimeTarget {
+			if checkedTestUint64FromInt64(pastMedianTime) > lockTimeTarget {
 				break
 			}
 		}

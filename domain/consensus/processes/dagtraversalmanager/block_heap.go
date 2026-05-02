@@ -146,9 +146,9 @@ type sizedUpBlockHeap struct {
 }
 
 // newSizedUpHeap initializes and returns a new sizedUpBlockHeap
-func (dtm *dagTraversalManager) newSizedUpHeap(stagingArea *model.StagingArea, cap int) *sizedUpBlockHeap {
+func (dtm *dagTraversalManager) newSizedUpHeap(stagingArea *model.StagingArea, capacity int) *sizedUpBlockHeap {
 	h := sizedUpBlockHeap{
-		impl:          upHeap{baseHeap{slice: make([]*externalapi.BlockGHOSTDAGDataHashPair, 0, cap), ghostdagManager: dtm.ghostdagManager}},
+		impl:          upHeap{baseHeap{slice: make([]*externalapi.BlockGHOSTDAGDataHashPair, 0, capacity), ghostdagManager: dtm.ghostdagManager}},
 		ghostdagStore: dtm.ghostdagDataStore,
 		dbContext:     dtm.databaseContext,
 		stagingArea:   stagingArea,
@@ -183,9 +183,9 @@ func (sbh *sizedUpBlockHeap) tryPushWithGHOSTDAGData(blockHash *externalapi.Doma
 		GHOSTDAGData: ghostdagData,
 	}
 	if len(sbh.impl.slice) == cap(sbh.impl.slice) {
-		min := sbh.impl.peek()
+		minNode := sbh.impl.peek()
 		// if the heap is full, and the new block is less than the minimum, return false
-		if blockGHOSTDAGDataHashPairLess(node, min, sbh.impl.ghostdagManager) {
+		if blockGHOSTDAGDataHashPairLess(node, minNode, sbh.impl.ghostdagManager) {
 			return false, nil
 		}
 		sbh.pop()

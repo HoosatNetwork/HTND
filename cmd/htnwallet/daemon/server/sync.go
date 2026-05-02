@@ -85,7 +85,11 @@ const (
 func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 	addresses := make(walletAddressSet)
 	for index := start; index < end; index++ {
-		for cosignerIndex := uint32(0); cosignerIndex < uint32(len(s.keysFile.ExtendedPublicKeys)); cosignerIndex++ {
+		cosignerCount, err := checkedUint32FromInt(len(s.keysFile.ExtendedPublicKeys))
+		if err != nil {
+			return nil, err
+		}
+		for cosignerIndex := uint32(0); cosignerIndex < cosignerCount; cosignerIndex++ {
 			for _, keychain := range keyChains {
 				address := &walletAddress{
 					index:         index,

@@ -11,15 +11,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// PebbleDB defines a thin wrapper around Pebble.
-type PebbleDB struct {
+// DB defines a thin wrapper around Pebble.
+type DB struct {
 	db      *pebble.DB
-	cursors []*PebbleDBCursor // Track all cursors
-	mu      sync.Mutex        // Protect cursors slice
+	cursors []*DBCursor // Track all cursors
+	mu      sync.Mutex  // Protect cursors slice
 }
 
 // NewPebbleDB opens a Pebble instance defined by the given path.
-func NewPebbleDB(path string, cacheSizeMiB int) (*PebbleDB, error) {
+func NewPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	options := Options(cacheSizeMiB)
 
 	db, err := pebble.Open(path, options)
@@ -44,21 +44,21 @@ func NewPebbleDB(path string, cacheSizeMiB int) (*PebbleDB, error) {
 		}
 	}
 
-	dbInstance := &PebbleDB{
+	dbInstance := &DB{
 		db: db,
 	}
 	return dbInstance, nil
 }
 
 // Compact compacts the Pebble instance (full range).
-func (db *PebbleDB) Compact() error {
+func (db *DB) Compact() error {
 	// Full-range compaction: empty start key to max end key, non-parallel
 	err := db.db.Compact(context.Background(), nil, []byte{0xff, 0xff, 0xff, 0xff}, false)
 	return errors.WithStack(err)
 }
 
 // Close closes the Pebble instance and all associated cursors.
-func (db *PebbleDB) Close() error {
+func (db *DB) Close() error {
 	// Close all tracked cursors
 	for _, cursor := range db.cursors {
 		if !cursor.isClosed {
@@ -75,13 +75,13 @@ func (db *PebbleDB) Close() error {
 }
 
 // Put sets the value for the given key. It overwrites any previous value for that key.
-func (db *PebbleDB) Put(key *database.Key, value []byte) error {
+func (db *DB) Put(key *database.Key, value []byte) error {
 	// log.Infof("Put key: %s, value %x", key, value)
 	err := db.db.Set(key.Bytes(), value, pebble.NoSync)
 	return errors.WithStack(err)
 }
 
-func (db *PebbleDB) BatchPut(pairs map[*database.Key][]byte) error {
+func (db *DB) BatchPut(pairs map[*database.Key][]byte) error {
 	batch := db.db.NewBatch()
 	defer batch.Close()
 	for key, value := range pairs {
@@ -96,7 +96,7 @@ func (db *PebbleDB) BatchPut(pairs map[*database.Key][]byte) error {
 }
 
 // Get gets the value for the given key. It returns ErrNotFound if the given key does not exist.
-func (db *PebbleDB) Get(key *database.Key) ([]byte, error) {
+func (db *DB) Get(key *database.Key) ([]byte, error) {
 	data, closer, err := db.db.Get(key.Bytes())
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
@@ -112,7 +112,7 @@ func (db *PebbleDB) Get(key *database.Key) ([]byte, error) {
 }
 
 // Has returns true if the database contains the given key.
-func (db *PebbleDB) Has(key *database.Key) (bool, error) {
+func (db *DB) Has(key *database.Key) (bool, error) {
 	_, closer, err := db.db.Get(key.Bytes())
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
@@ -125,20 +125,20 @@ func (db *PebbleDB) Has(key *database.Key) (bool, error) {
 }
 
 // Delete deletes the value for the given key. Will not return an error if the key doesn't exist.
-func (db *PebbleDB) Delete(key *database.Key) error {
+func (db *DB) Delete(key *database.Key) error {
 	err := db.db.Delete(key.Bytes(), pebble.NoSync)
 	return errors.WithStack(err)
 }
 
 // registerCursor registers a cursor with the database for tracking.
-func (db *PebbleDB) registerCursor(cursor *PebbleDBCursor) {
+func (db *DB) registerCursor(cursor *DBCursor) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.cursors = append(db.cursors, cursor)
 }
 
 // deregisterCursor removes a cursor from the database's tracking.
-func (db *PebbleDB) deregisterCursor(cursor *PebbleDBCursor) {
+func (db *DB) deregisterCursor(cursor *DBCursor) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	for i, c := range db.cursors {

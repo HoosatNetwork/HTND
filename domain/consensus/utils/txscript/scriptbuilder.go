@@ -103,19 +103,21 @@ func canonicalDataSize(data []byte) int {
 	// When the data consists of a single number that can be represented
 	// by one of the "small integer" opcodes, that opcode will be instead
 	// of a data push opcode followed by the number.
-	if dataLen == 0 {
+	switch {
+	case dataLen == 0:
 		return 1
-	} else if dataLen == 1 && data[0] <= 16 {
+	case dataLen == 1 && data[0] <= 16:
 		return 1
-	} else if dataLen == 1 && data[0] == 0x81 {
+	case dataLen == 1 && data[0] == 0x81:
 		return 1
 	}
 
-	if dataLen < OpPushData1 {
+	switch {
+	case dataLen < OpPushData1:
 		return 1 + dataLen
-	} else if dataLen <= 0xff {
+	case dataLen <= 0xff:
 		return 2 + dataLen
-	} else if dataLen <= 0xffff {
+	case dataLen <= 0xffff:
 		return 3 + dataLen
 	}
 
@@ -132,13 +134,14 @@ func (b *ScriptBuilder) addData(data []byte) *ScriptBuilder {
 	// When the data consists of a single number that can be represented
 	// by one of the "small integer" opcodes, use that opcode instead of
 	// a data push opcode followed by the number.
-	if dataLen == 0 || dataLen == 1 && data[0] == 0 {
+	switch {
+	case dataLen == 0 || dataLen == 1 && data[0] == 0:
 		b.script = append(b.script, Op0)
 		return b
-	} else if dataLen == 1 && data[0] <= 16 {
+	case dataLen == 1 && data[0] <= 16:
 		b.script = append(b.script, (Op1-1)+data[0])
 		return b
-	} else if dataLen == 1 && data[0] == 0x81 {
+	case dataLen == 1 && data[0] == 0x81:
 		b.script = append(b.script, byte(Op1Negate))
 		return b
 	}
@@ -147,18 +150,25 @@ func (b *ScriptBuilder) addData(data []byte) *ScriptBuilder {
 	// enough so the data push instruction is only a single byte.
 	// Otherwise, choose the smallest possible OP_PUSHDATA# opcode that
 	// can represent the length of the data.
-	if dataLen < OpPushData1 {
+	switch {
+	case dataLen < OpPushData1:
 		b.script = append(b.script, byte((OpData1-1)+dataLen))
-	} else if dataLen <= 0xff {
+	case dataLen <= 0xff:
 		b.script = append(b.script, OpPushData1, byte(dataLen))
-	} else if dataLen <= 0xffff {
+	case dataLen <= 0xffff:
 		buf := make([]byte, 2)
 		binary.LittleEndian.PutUint16(buf, uint16(dataLen))
 		b.script = append(b.script, OpPushData2)
 		b.script = append(b.script, buf...)
-	} else {
+	default:
+		if dataLen < 0 || dataLen > MaxScriptSize {
+			str := fmt.Sprintf("data size %d is larger than max script size %d", dataLen, MaxScriptSize)
+			b.err = ErrScriptNotCanonical(str)
+			return b
+		}
 		buf := make([]byte, 4)
-		binary.LittleEndian.PutUint32(buf, uint32(dataLen))
+		dataLenUint32 := uint32(dataLen)
+		binary.LittleEndian.PutUint32(buf, dataLenUint32)
 		b.script = append(b.script, OpPushData4)
 		b.script = append(b.script, buf...)
 	}

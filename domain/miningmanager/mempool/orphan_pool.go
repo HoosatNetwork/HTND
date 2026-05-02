@@ -149,7 +149,7 @@ func (op *orphansPool) processOrphansAfterAcceptedTransaction(acceptedTransactio
 		currentTransactionID := consensushashing.TransactionID(current)
 		outpoint := externalapi.DomainOutpoint{TransactionID: *currentTransactionID}
 		for i, output := range current.Outputs {
-			outpoint.Index = uint32(i)
+			outpoint.Index = checkedOutpointIndex(i)
 			orphan, ok := op.orphansByPreviousOutpoint[outpoint]
 			if !ok {
 				continue
@@ -262,7 +262,7 @@ func (op *orphansPool) removeOrphan(orphanTransactionID *externalapi.DomainTrans
 func (op *orphansPool) removeRedeemersOf(transaction model.Transaction) error {
 	outpoint := externalapi.DomainOutpoint{TransactionID: *transaction.TransactionID()}
 	for i := range transaction.Transaction().Outputs {
-		outpoint.Index = uint32(i)
+		outpoint.Index = checkedOutpointIndex(i)
 		if orphan, ok := op.orphansByPreviousOutpoint[outpoint]; ok {
 			// Recursive call is bound by size of orphan pool (which is very small)
 			err := op.removeOrphan(orphan.TransactionID(), true)
@@ -312,7 +312,7 @@ func (op *orphansPool) updateOrphansAfterTransactionRemoved(
 
 	outpoint := externalapi.DomainOutpoint{TransactionID: *removedTransaction.TransactionID()}
 	for i := range removedTransaction.Transaction().Outputs {
-		outpoint.Index = uint32(i)
+		outpoint.Index = checkedOutpointIndex(i)
 		if orphan, ok := op.orphansByPreviousOutpoint[outpoint]; ok {
 			for _, input := range orphan.Transaction().Inputs {
 				if input.PreviousOutpoint.TransactionID.Equal(removedTransaction.TransactionID()) {
