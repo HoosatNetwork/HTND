@@ -7,12 +7,11 @@
 package pb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1634,41 +1633,38 @@ func file_htnwalletd_proto_rawDescGZIP() []byte {
 	return file_htnwalletd_proto_rawDescData
 }
 
-var (
-	file_htnwalletd_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-	file_htnwalletd_proto_msgTypes  = make([]protoimpl.MessageInfo, 27)
-	file_htnwalletd_proto_goTypes   = []any{
-		(AddressType)(0),                                  // 0: htnwalletd.AddressType
-		(*GetBalanceRequest)(nil),                         // 1: htnwalletd.GetBalanceRequest
-		(*GetBalanceResponse)(nil),                        // 2: htnwalletd.GetBalanceResponse
-		(*AddressBalances)(nil),                           // 3: htnwalletd.AddressBalances
-		(*CreateUnsignedTransactionsRequest)(nil),         // 4: htnwalletd.CreateUnsignedTransactionsRequest
-		(*CreateUnsignedTransactionsResponse)(nil),        // 5: htnwalletd.CreateUnsignedTransactionsResponse
-		(*CreateUnsignedCompoundTransactionRequest)(nil),  // 6: htnwalletd.CreateUnsignedCompoundTransactionRequest
-		(*CreateUnsignedCompoundTransactionResponse)(nil), // 7: htnwalletd.CreateUnsignedCompoundTransactionResponse
-		(*ShowAddressesRequest)(nil),                      // 8: htnwalletd.ShowAddressesRequest
-		(*ShowAddressesResponse)(nil),                     // 9: htnwalletd.ShowAddressesResponse
-		(*NewAddressRequest)(nil),                         // 10: htnwalletd.NewAddressRequest
-		(*NewAddressResponse)(nil),                        // 11: htnwalletd.NewAddressResponse
-		(*BroadcastRequest)(nil),                          // 12: htnwalletd.BroadcastRequest
-		(*BroadcastResponse)(nil),                         // 13: htnwalletd.BroadcastResponse
-		(*ShutdownRequest)(nil),                           // 14: htnwalletd.ShutdownRequest
-		(*ShutdownResponse)(nil),                          // 15: htnwalletd.ShutdownResponse
-		(*Outpoint)(nil),                                  // 16: htnwalletd.Outpoint
-		(*UtxosByAddressesEntry)(nil),                     // 17: htnwalletd.UtxosByAddressesEntry
-		(*ScriptPublicKey)(nil),                           // 18: htnwalletd.ScriptPublicKey
-		(*UtxoEntry)(nil),                                 // 19: htnwalletd.UtxoEntry
-		(*GetExternalSpendableUTXOsRequest)(nil),          // 20: htnwalletd.GetExternalSpendableUTXOsRequest
-		(*GetExternalSpendableUTXOsResponse)(nil),         // 21: htnwalletd.GetExternalSpendableUTXOsResponse
-		(*SendRequest)(nil),                               // 22: htnwalletd.SendRequest
-		(*SendResponse)(nil),                              // 23: htnwalletd.SendResponse
-		(*SignRequest)(nil),                               // 24: htnwalletd.SignRequest
-		(*SignResponse)(nil),                              // 25: htnwalletd.SignResponse
-		(*GetVersionRequest)(nil),                         // 26: htnwalletd.GetVersionRequest
-		(*GetVersionResponse)(nil),                        // 27: htnwalletd.GetVersionResponse
-	}
-)
-
+var file_htnwalletd_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_htnwalletd_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_htnwalletd_proto_goTypes = []any{
+	(AddressType)(0),                                  // 0: htnwalletd.AddressType
+	(*GetBalanceRequest)(nil),                         // 1: htnwalletd.GetBalanceRequest
+	(*GetBalanceResponse)(nil),                        // 2: htnwalletd.GetBalanceResponse
+	(*AddressBalances)(nil),                           // 3: htnwalletd.AddressBalances
+	(*CreateUnsignedTransactionsRequest)(nil),         // 4: htnwalletd.CreateUnsignedTransactionsRequest
+	(*CreateUnsignedTransactionsResponse)(nil),        // 5: htnwalletd.CreateUnsignedTransactionsResponse
+	(*CreateUnsignedCompoundTransactionRequest)(nil),  // 6: htnwalletd.CreateUnsignedCompoundTransactionRequest
+	(*CreateUnsignedCompoundTransactionResponse)(nil), // 7: htnwalletd.CreateUnsignedCompoundTransactionResponse
+	(*ShowAddressesRequest)(nil),                      // 8: htnwalletd.ShowAddressesRequest
+	(*ShowAddressesResponse)(nil),                     // 9: htnwalletd.ShowAddressesResponse
+	(*NewAddressRequest)(nil),                         // 10: htnwalletd.NewAddressRequest
+	(*NewAddressResponse)(nil),                        // 11: htnwalletd.NewAddressResponse
+	(*BroadcastRequest)(nil),                          // 12: htnwalletd.BroadcastRequest
+	(*BroadcastResponse)(nil),                         // 13: htnwalletd.BroadcastResponse
+	(*ShutdownRequest)(nil),                           // 14: htnwalletd.ShutdownRequest
+	(*ShutdownResponse)(nil),                          // 15: htnwalletd.ShutdownResponse
+	(*Outpoint)(nil),                                  // 16: htnwalletd.Outpoint
+	(*UtxosByAddressesEntry)(nil),                     // 17: htnwalletd.UtxosByAddressesEntry
+	(*ScriptPublicKey)(nil),                           // 18: htnwalletd.ScriptPublicKey
+	(*UtxoEntry)(nil),                                 // 19: htnwalletd.UtxoEntry
+	(*GetExternalSpendableUTXOsRequest)(nil),          // 20: htnwalletd.GetExternalSpendableUTXOsRequest
+	(*GetExternalSpendableUTXOsResponse)(nil),         // 21: htnwalletd.GetExternalSpendableUTXOsResponse
+	(*SendRequest)(nil),                               // 22: htnwalletd.SendRequest
+	(*SendResponse)(nil),                              // 23: htnwalletd.SendResponse
+	(*SignRequest)(nil),                               // 24: htnwalletd.SignRequest
+	(*SignResponse)(nil),                              // 25: htnwalletd.SignResponse
+	(*GetVersionRequest)(nil),                         // 26: htnwalletd.GetVersionRequest
+	(*GetVersionResponse)(nil),                        // 27: htnwalletd.GetVersionResponse
+}
 var file_htnwalletd_proto_depIdxs = []int32{
 	3,  // 0: htnwalletd.GetBalanceResponse.addressBalances:type_name -> htnwalletd.AddressBalances
 	0,  // 1: htnwalletd.ShowAddressesRequest.addressType:type_name -> htnwalletd.AddressType

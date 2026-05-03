@@ -375,6 +375,25 @@ message GetBlockByTransactionIDResponseMessage{
   RPCError error = 1000;
 }
 
+enum TransactionStatus {
+  TRANSACTION_STATUS_UNKNOWN = 0;
+  TRANSACTION_STATUS_NOT_FOUND = 1;
+  TRANSACTION_STATUS_PENDING = 2;
+  TRANSACTION_STATUS_ORPHAN = 3;
+  TRANSACTION_STATUS_ACCEPTED = 4;
+  TRANSACTION_STATUS_CONFIRMED = 5;
+}
+
+message GetTransactionStatusRequestMessage{
+  string transactionId = 1;
+}
+
+message GetTransactionStatusResponseMessage{
+  TransactionStatus status = 1;
+  uint64 confirmations = 2;
+  RPCError error = 1000;
+}
+
 // GetSubnetworkRequestMessage requests information about a specific subnetwork
 //
 // Currently unimplemented

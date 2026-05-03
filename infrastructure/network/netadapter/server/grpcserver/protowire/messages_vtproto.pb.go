@@ -7,14 +7,13 @@ package protowire
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	io "io"
 )
 
 const (
@@ -1233,6 +1232,24 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) CloneVT() isHoosatdMess
 	return r
 }
 
+func (m *HoosatdMessage_GetTransactionStatusRequest) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetTransactionStatusRequest)(nil)
+	}
+	r := new(HoosatdMessage_GetTransactionStatusRequest)
+	r.GetTransactionStatusRequest = m.GetTransactionStatusRequest.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_GetTransactionStatusResponse) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetTransactionStatusResponse)(nil)
+	}
+	r := new(HoosatdMessage_GetTransactionStatusResponse)
+	r.GetTransactionStatusResponse = m.GetTransactionStatusResponse.CloneVT()
+	return r
+}
+
 func (m *HoosatdMessage_GetUsableAddressesRequest) CloneVT() isHoosatdMessage_Payload {
 	if m == nil {
 		return (*HoosatdMessage_GetUsableAddressesRequest)(nil)
@@ -1333,7 +1350,6 @@ func (this *HoosatdMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *HoosatdMessage_Addresses) EqualVT(thatIface isHoosatdMessage_Payload) bool {
 	that, ok := thatIface.(*HoosatdMessage_Addresses)
 	if !ok {
@@ -4734,6 +4750,56 @@ func (this *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) EqualVT(thatIfa
 	return true
 }
 
+func (this *HoosatdMessage_GetTransactionStatusRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetTransactionStatusRequest)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetTransactionStatusRequest, that.GetTransactionStatusRequest; p != q {
+		if p == nil {
+			p = &GetTransactionStatusRequestMessage{}
+		}
+		if q == nil {
+			q = &GetTransactionStatusRequestMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_GetTransactionStatusResponse) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetTransactionStatusResponse)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetTransactionStatusResponse, that.GetTransactionStatusResponse; p != q {
+		if p == nil {
+			p = &GetTransactionStatusResponseMessage{}
+		}
+		if q == nil {
+			q = &GetTransactionStatusResponseMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
 func (this *HoosatdMessage_SubmitTransactionReplacementRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
 	that, ok := thatIface.(*HoosatdMessage_SubmitTransactionReplacementRequest)
 	if !ok {
@@ -4894,7 +4960,8 @@ type P2PServer interface {
 }
 
 // UnimplementedP2PServer must be embedded to have forward compatible implementations.
-type UnimplementedP2PServer struct{}
+type UnimplementedP2PServer struct {
+}
 
 func (UnimplementedP2PServer) MessageStream(P2P_MessageStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method MessageStream not implemented")
@@ -5011,7 +5078,8 @@ type RPCServer interface {
 }
 
 // UnimplementedRPCServer must be embedded to have forward compatible implementations.
-type UnimplementedRPCServer struct{}
+type UnimplementedRPCServer struct {
+}
 
 func (UnimplementedRPCServer) MessageStream(RPC_MessageStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method MessageStream not implemented")
@@ -5134,7 +5202,6 @@ func (m *HoosatdMessage_Addresses) MarshalToSizedBufferVT(dAtA []byte) (int, err
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Block) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5154,7 +5221,6 @@ func (m *HoosatdMessage_Block) MarshalToSizedBufferVT(dAtA []byte) (int, error) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Transaction) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5174,7 +5240,6 @@ func (m *HoosatdMessage_Transaction) MarshalToSizedBufferVT(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockLocator) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5194,7 +5259,6 @@ func (m *HoosatdMessage_BlockLocator) MarshalToSizedBufferVT(dAtA []byte) (int, 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestAddresses) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5214,7 +5278,6 @@ func (m *HoosatdMessage_RequestAddresses) MarshalToSizedBufferVT(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestRelayBlocks) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5234,7 +5297,6 @@ func (m *HoosatdMessage_RequestRelayBlocks) MarshalToSizedBufferVT(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestTransactions) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5254,7 +5316,6 @@ func (m *HoosatdMessage_RequestTransactions) MarshalToSizedBufferVT(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlock) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5274,7 +5335,6 @@ func (m *HoosatdMessage_IbdBlock) MarshalToSizedBufferVT(dAtA []byte) (int, erro
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_InvRelayBlock) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5294,7 +5354,6 @@ func (m *HoosatdMessage_InvRelayBlock) MarshalToSizedBufferVT(dAtA []byte) (int,
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_InvTransactions) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5314,7 +5373,6 @@ func (m *HoosatdMessage_InvTransactions) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Ping) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5336,7 +5394,6 @@ func (m *HoosatdMessage_Ping) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Pong) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5358,7 +5415,6 @@ func (m *HoosatdMessage_Pong) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Verack) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5380,7 +5436,6 @@ func (m *HoosatdMessage_Verack) MarshalToSizedBufferVT(dAtA []byte) (int, error)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Version) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5402,7 +5457,6 @@ func (m *HoosatdMessage_Version) MarshalToSizedBufferVT(dAtA []byte) (int, error
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_TransactionNotFound) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5424,7 +5478,6 @@ func (m *HoosatdMessage_TransactionNotFound) MarshalToSizedBufferVT(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Reject) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5446,7 +5499,6 @@ func (m *HoosatdMessage_Reject) MarshalToSizedBufferVT(dAtA []byte) (int, error)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPointUtxoSetChunk) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5468,7 +5520,6 @@ func (m *HoosatdMessage_PruningPointUtxoSetChunk) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestIBDBlocks) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5490,7 +5541,6 @@ func (m *HoosatdMessage_RequestIBDBlocks) MarshalToSizedBufferVT(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UnexpectedPruningPoint) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5512,7 +5562,6 @@ func (m *HoosatdMessage_UnexpectedPruningPoint) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlockLocator) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5534,7 +5583,6 @@ func (m *HoosatdMessage_IbdBlockLocator) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlockLocatorHighestHash) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5556,7 +5604,6 @@ func (m *HoosatdMessage_IbdBlockLocatorHighestHash) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestNextPruningPointUtxoSetChunk) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5578,7 +5625,6 @@ func (m *HoosatdMessage_RequestNextPruningPointUtxoSetChunk) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_DonePruningPointUtxoSetChunks) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5600,7 +5646,6 @@ func (m *HoosatdMessage_DonePruningPointUtxoSetChunks) MarshalToSizedBufferVT(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5622,7 +5667,6 @@ func (m *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) MarshalToSizedBuffer
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockWithTrustedData) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5644,7 +5688,6 @@ func (m *HoosatdMessage_BlockWithTrustedData) MarshalToSizedBufferVT(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_DoneBlocksWithTrustedData) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5666,7 +5709,6 @@ func (m *HoosatdMessage_DoneBlocksWithTrustedData) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestPruningPointAndItsAnticone) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5688,7 +5730,6 @@ func (m *HoosatdMessage_RequestPruningPointAndItsAnticone) MarshalToSizedBufferV
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockHeaders) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5710,7 +5751,6 @@ func (m *HoosatdMessage_BlockHeaders) MarshalToSizedBufferVT(dAtA []byte) (int, 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestNextHeaders) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5732,7 +5772,6 @@ func (m *HoosatdMessage_RequestNextHeaders) MarshalToSizedBufferVT(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_DoneHeaders) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5754,7 +5793,6 @@ func (m *HoosatdMessage_DoneHeaders) MarshalToSizedBufferVT(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestPruningPointUTXOSet) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5776,7 +5814,6 @@ func (m *HoosatdMessage_RequestPruningPointUTXOSet) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestHeaders) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5798,7 +5835,6 @@ func (m *HoosatdMessage_RequestHeaders) MarshalToSizedBufferVT(dAtA []byte) (int
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestBlockLocator) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5820,7 +5856,6 @@ func (m *HoosatdMessage_RequestBlockLocator) MarshalToSizedBufferVT(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPoints) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5842,7 +5877,6 @@ func (m *HoosatdMessage_PruningPoints) MarshalToSizedBufferVT(dAtA []byte) (int,
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestPruningPointProof) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5864,7 +5898,6 @@ func (m *HoosatdMessage_RequestPruningPointProof) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPointProof) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5886,7 +5919,6 @@ func (m *HoosatdMessage_PruningPointProof) MarshalToSizedBufferVT(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Ready) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5908,7 +5940,6 @@ func (m *HoosatdMessage_Ready) MarshalToSizedBufferVT(dAtA []byte) (int, error) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockWithTrustedDataV4) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5930,7 +5961,6 @@ func (m *HoosatdMessage_BlockWithTrustedDataV4) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_TrustedData) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5952,7 +5982,6 @@ func (m *HoosatdMessage_TrustedData) MarshalToSizedBufferVT(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestIBDChainBlockLocator) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5974,7 +6003,6 @@ func (m *HoosatdMessage_RequestIBDChainBlockLocator) MarshalToSizedBufferVT(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdChainBlockLocator) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -5996,7 +6024,6 @@ func (m *HoosatdMessage_IbdChainBlockLocator) MarshalToSizedBufferVT(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestAnticone) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6018,7 +6045,6 @@ func (m *HoosatdMessage_RequestAnticone) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestNextPruningPointAndItsAnticoneBlocks) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6040,7 +6066,6 @@ func (m *HoosatdMessage_RequestNextPruningPointAndItsAnticoneBlocks) MarshalToSi
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCurrentNetworkRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6062,7 +6087,6 @@ func (m *HoosatdMessage_GetCurrentNetworkRequest) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCurrentNetworkResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6084,7 +6108,6 @@ func (m *HoosatdMessage_GetCurrentNetworkResponse) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitBlockRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6106,7 +6129,6 @@ func (m *HoosatdMessage_SubmitBlockRequest) MarshalToSizedBufferVT(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitBlockResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6128,7 +6150,6 @@ func (m *HoosatdMessage_SubmitBlockResponse) MarshalToSizedBufferVT(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockTemplateRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6150,7 +6171,6 @@ func (m *HoosatdMessage_GetBlockTemplateRequest) MarshalToSizedBufferVT(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockTemplateResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6172,7 +6192,6 @@ func (m *HoosatdMessage_GetBlockTemplateResponse) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyBlockAddedRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6194,7 +6213,6 @@ func (m *HoosatdMessage_NotifyBlockAddedRequest) MarshalToSizedBufferVT(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyBlockAddedResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6216,7 +6234,6 @@ func (m *HoosatdMessage_NotifyBlockAddedResponse) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockAddedNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6238,7 +6255,6 @@ func (m *HoosatdMessage_BlockAddedNotification) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPeerAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6260,7 +6276,6 @@ func (m *HoosatdMessage_GetPeerAddressesRequest) MarshalToSizedBufferVT(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPeerAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6282,7 +6297,6 @@ func (m *HoosatdMessage_GetPeerAddressesResponse) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSelectedTipHashRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6304,7 +6318,6 @@ func (m *HoosatdMessage_GetSelectedTipHashRequest) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSelectedTipHashResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6326,7 +6339,6 @@ func (m *HoosatdMessage_GetSelectedTipHashResponse) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntryRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6348,7 +6360,6 @@ func (m *HoosatdMessage_GetMempoolEntryRequest) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntryResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6370,7 +6381,6 @@ func (m *HoosatdMessage_GetMempoolEntryResponse) MarshalToSizedBufferVT(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetConnectedPeerInfoRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6392,7 +6402,6 @@ func (m *HoosatdMessage_GetConnectedPeerInfoRequest) MarshalToSizedBufferVT(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetConnectedPeerInfoResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6414,7 +6423,6 @@ func (m *HoosatdMessage_GetConnectedPeerInfoResponse) MarshalToSizedBufferVT(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_AddPeerRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6436,7 +6444,6 @@ func (m *HoosatdMessage_AddPeerRequest) MarshalToSizedBufferVT(dAtA []byte) (int
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_AddPeerResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6458,7 +6465,6 @@ func (m *HoosatdMessage_AddPeerResponse) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitTransactionRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6480,7 +6486,6 @@ func (m *HoosatdMessage_SubmitTransactionRequest) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitTransactionResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6502,7 +6507,6 @@ func (m *HoosatdMessage_SubmitTransactionResponse) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6524,7 +6528,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest) MarshalT
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6546,7 +6549,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedResponse) Marshal
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_VirtualSelectedParentChainChangedNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6568,7 +6570,6 @@ func (m *HoosatdMessage_VirtualSelectedParentChainChangedNotification) MarshalTo
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6590,7 +6591,6 @@ func (m *HoosatdMessage_GetBlockRequest) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6612,7 +6612,6 @@ func (m *HoosatdMessage_GetBlockResponse) MarshalToSizedBufferVT(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSubnetworkRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6634,7 +6633,6 @@ func (m *HoosatdMessage_GetSubnetworkRequest) MarshalToSizedBufferVT(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSubnetworkResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6656,7 +6654,6 @@ func (m *HoosatdMessage_GetSubnetworkResponse) MarshalToSizedBufferVT(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6678,7 +6675,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest) MarshalTo
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6700,7 +6696,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockResponse) MarshalT
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlocksRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6722,7 +6717,6 @@ func (m *HoosatdMessage_GetBlocksRequest) MarshalToSizedBufferVT(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlocksResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6744,7 +6738,6 @@ func (m *HoosatdMessage_GetBlocksResponse) MarshalToSizedBufferVT(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockCountRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6766,7 +6759,6 @@ func (m *HoosatdMessage_GetBlockCountRequest) MarshalToSizedBufferVT(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockCountResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6788,7 +6780,6 @@ func (m *HoosatdMessage_GetBlockCountResponse) MarshalToSizedBufferVT(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockDagInfoRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6810,7 +6801,6 @@ func (m *HoosatdMessage_GetBlockDagInfoRequest) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockDagInfoResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6832,7 +6822,6 @@ func (m *HoosatdMessage_GetBlockDagInfoResponse) MarshalToSizedBufferVT(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ResolveFinalityConflictRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6854,7 +6843,6 @@ func (m *HoosatdMessage_ResolveFinalityConflictRequest) MarshalToSizedBufferVT(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ResolveFinalityConflictResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6876,7 +6864,6 @@ func (m *HoosatdMessage_ResolveFinalityConflictResponse) MarshalToSizedBufferVT(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyFinalityConflictsRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6898,7 +6885,6 @@ func (m *HoosatdMessage_NotifyFinalityConflictsRequest) MarshalToSizedBufferVT(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyFinalityConflictsResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6920,7 +6906,6 @@ func (m *HoosatdMessage_NotifyFinalityConflictsResponse) MarshalToSizedBufferVT(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_FinalityConflictNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6942,7 +6927,6 @@ func (m *HoosatdMessage_FinalityConflictNotification) MarshalToSizedBufferVT(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_FinalityConflictResolvedNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6964,7 +6948,6 @@ func (m *HoosatdMessage_FinalityConflictResolvedNotification) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -6986,7 +6969,6 @@ func (m *HoosatdMessage_GetMempoolEntriesRequest) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7008,7 +6990,6 @@ func (m *HoosatdMessage_GetMempoolEntriesResponse) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ShutDownRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7030,7 +7011,6 @@ func (m *HoosatdMessage_ShutDownRequest) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ShutDownResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7052,7 +7032,6 @@ func (m *HoosatdMessage_ShutDownResponse) MarshalToSizedBufferVT(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetHeadersRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7074,7 +7053,6 @@ func (m *HoosatdMessage_GetHeadersRequest) MarshalToSizedBufferVT(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetHeadersResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7096,7 +7074,6 @@ func (m *HoosatdMessage_GetHeadersResponse) MarshalToSizedBufferVT(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyUtxosChangedRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7118,7 +7095,6 @@ func (m *HoosatdMessage_NotifyUtxosChangedRequest) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyUtxosChangedResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7140,7 +7116,6 @@ func (m *HoosatdMessage_NotifyUtxosChangedResponse) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UtxosChangedNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7162,7 +7137,6 @@ func (m *HoosatdMessage_UtxosChangedNotification) MarshalToSizedBufferVT(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUtxosByAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7184,7 +7158,6 @@ func (m *HoosatdMessage_GetUtxosByAddressesRequest) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUtxosByAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7206,7 +7179,6 @@ func (m *HoosatdMessage_GetUtxosByAddressesResponse) MarshalToSizedBufferVT(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7228,7 +7200,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) MarshalToSized
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7250,7 +7221,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreResponse) MarshalToSize
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7272,7 +7242,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedRequest) Mars
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7294,7 +7263,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedResponse) Mar
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_VirtualSelectedParentBlueScoreChangedNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7316,7 +7284,6 @@ func (m *HoosatdMessage_VirtualSelectedParentBlueScoreChangedNotification) Marsh
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BanRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7338,7 +7305,6 @@ func (m *HoosatdMessage_BanRequest) MarshalToSizedBufferVT(dAtA []byte) (int, er
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BanResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7360,7 +7326,6 @@ func (m *HoosatdMessage_BanResponse) MarshalToSizedBufferVT(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UnbanRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7382,7 +7347,6 @@ func (m *HoosatdMessage_UnbanRequest) MarshalToSizedBufferVT(dAtA []byte) (int, 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UnbanResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7404,7 +7368,6 @@ func (m *HoosatdMessage_UnbanResponse) MarshalToSizedBufferVT(dAtA []byte) (int,
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetInfoRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7426,7 +7389,6 @@ func (m *HoosatdMessage_GetInfoRequest) MarshalToSizedBufferVT(dAtA []byte) (int
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetInfoResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7448,7 +7410,6 @@ func (m *HoosatdMessage_GetInfoResponse) MarshalToSizedBufferVT(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingUtxosChangedRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7470,7 +7431,6 @@ func (m *HoosatdMessage_StopNotifyingUtxosChangedRequest) MarshalToSizedBufferVT
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingUtxosChangedResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7492,7 +7452,6 @@ func (m *HoosatdMessage_StopNotifyingUtxosChangedResponse) MarshalToSizedBufferV
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7514,7 +7473,6 @@ func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideRequest) MarshalToSized
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7536,7 +7494,6 @@ func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideResponse) MarshalToSize
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPointUTXOSetOverrideNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7558,7 +7515,6 @@ func (m *HoosatdMessage_PruningPointUTXOSetOverrideNotification) MarshalToSizedB
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7580,7 +7536,6 @@ func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideRequest) Marshal
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7602,7 +7557,6 @@ func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) Marsha
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_EstimateNetworkHashesPerSecondRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7624,7 +7578,6 @@ func (m *HoosatdMessage_EstimateNetworkHashesPerSecondRequest) MarshalToSizedBuf
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_EstimateNetworkHashesPerSecondResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7646,7 +7599,6 @@ func (m *HoosatdMessage_EstimateNetworkHashesPerSecondResponse) MarshalToSizedBu
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7668,7 +7620,6 @@ func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7690,7 +7641,6 @@ func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_VirtualDaaScoreChangedNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7712,7 +7662,6 @@ func (m *HoosatdMessage_VirtualDaaScoreChangedNotification) MarshalToSizedBuffer
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalanceByAddressRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7734,7 +7683,6 @@ func (m *HoosatdMessage_GetBalanceByAddressRequest) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalanceByAddressResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7756,7 +7704,6 @@ func (m *HoosatdMessage_GetBalanceByAddressResponse) MarshalToSizedBufferVT(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalancesByAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7778,7 +7725,6 @@ func (m *HoosatdMessage_GetBalancesByAddressesRequest) MarshalToSizedBufferVT(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalancesByAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7800,7 +7746,6 @@ func (m *HoosatdMessage_GetBalancesByAddressesResponse) MarshalToSizedBufferVT(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyNewBlockTemplateRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7822,7 +7767,6 @@ func (m *HoosatdMessage_NotifyNewBlockTemplateRequest) MarshalToSizedBufferVT(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyNewBlockTemplateResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7844,7 +7788,6 @@ func (m *HoosatdMessage_NotifyNewBlockTemplateResponse) MarshalToSizedBufferVT(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NewBlockTemplateNotification) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7866,7 +7809,6 @@ func (m *HoosatdMessage_NewBlockTemplateNotification) MarshalToSizedBufferVT(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesByAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7888,7 +7830,6 @@ func (m *HoosatdMessage_GetMempoolEntriesByAddressesRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesByAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7910,7 +7851,6 @@ func (m *HoosatdMessage_GetMempoolEntriesByAddressesResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCoinSupplyRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7932,7 +7872,6 @@ func (m *HoosatdMessage_GetCoinSupplyRequest) MarshalToSizedBufferVT(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCoinSupplyResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7954,7 +7893,6 @@ func (m *HoosatdMessage_GetCoinSupplyResponse) MarshalToSizedBufferVT(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockByTransactionIdRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7976,7 +7914,6 @@ func (m *HoosatdMessage_GetBlockByTransactionIdRequest) MarshalToSizedBufferVT(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockByTransactionIdResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -7998,7 +7935,6 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) MarshalToSizedBufferVT(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8020,7 +7956,6 @@ func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToSizedBufferVT(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8042,7 +7977,6 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToSizedBufferVT(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8064,7 +7998,6 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8086,7 +8019,48 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetTransactionStatusRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
 
+func (m *HoosatdMessage_GetTransactionStatusRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetTransactionStatusRequest != nil {
+		size, err := m.GetTransactionStatusRequest.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xb2
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetTransactionStatusResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetTransactionStatusResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetTransactionStatusResponse != nil {
+		size, err := m.GetTransactionStatusResponse.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xba
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8108,7 +8082,6 @@ func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8130,7 +8103,6 @@ func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8152,7 +8124,6 @@ func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToSizedBufferVT(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
@@ -8174,7 +8145,6 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -8227,6 +8197,20 @@ func (m *HoosatdMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) 
 		i -= size
 	}
 	if msg, ok := m.Payload.(*HoosatdMessage_SubmitTransactionReplacementRequest); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetTransactionStatusResponse); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetTransactionStatusRequest); ok {
 		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
 		if err != nil {
 			return 0, err
@@ -9207,7 +9191,6 @@ func (m *HoosatdMessage_Addresses) MarshalToSizedBufferVTStrict(dAtA []byte) (in
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Block) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9227,7 +9210,6 @@ func (m *HoosatdMessage_Block) MarshalToSizedBufferVTStrict(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Transaction) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9247,7 +9229,6 @@ func (m *HoosatdMessage_Transaction) MarshalToSizedBufferVTStrict(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockLocator) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9267,7 +9248,6 @@ func (m *HoosatdMessage_BlockLocator) MarshalToSizedBufferVTStrict(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestAddresses) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9287,7 +9267,6 @@ func (m *HoosatdMessage_RequestAddresses) MarshalToSizedBufferVTStrict(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestRelayBlocks) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9307,7 +9286,6 @@ func (m *HoosatdMessage_RequestRelayBlocks) MarshalToSizedBufferVTStrict(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestTransactions) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9327,7 +9305,6 @@ func (m *HoosatdMessage_RequestTransactions) MarshalToSizedBufferVTStrict(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlock) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9347,7 +9324,6 @@ func (m *HoosatdMessage_IbdBlock) MarshalToSizedBufferVTStrict(dAtA []byte) (int
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_InvRelayBlock) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9367,7 +9343,6 @@ func (m *HoosatdMessage_InvRelayBlock) MarshalToSizedBufferVTStrict(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_InvTransactions) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9387,7 +9362,6 @@ func (m *HoosatdMessage_InvTransactions) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Ping) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9409,7 +9383,6 @@ func (m *HoosatdMessage_Ping) MarshalToSizedBufferVTStrict(dAtA []byte) (int, er
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Pong) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9431,7 +9404,6 @@ func (m *HoosatdMessage_Pong) MarshalToSizedBufferVTStrict(dAtA []byte) (int, er
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Verack) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9453,7 +9425,6 @@ func (m *HoosatdMessage_Verack) MarshalToSizedBufferVTStrict(dAtA []byte) (int, 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Version) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9475,7 +9446,6 @@ func (m *HoosatdMessage_Version) MarshalToSizedBufferVTStrict(dAtA []byte) (int,
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_TransactionNotFound) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9497,7 +9467,6 @@ func (m *HoosatdMessage_TransactionNotFound) MarshalToSizedBufferVTStrict(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Reject) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9519,7 +9488,6 @@ func (m *HoosatdMessage_Reject) MarshalToSizedBufferVTStrict(dAtA []byte) (int, 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPointUtxoSetChunk) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9541,7 +9509,6 @@ func (m *HoosatdMessage_PruningPointUtxoSetChunk) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestIBDBlocks) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9563,7 +9530,6 @@ func (m *HoosatdMessage_RequestIBDBlocks) MarshalToSizedBufferVTStrict(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UnexpectedPruningPoint) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9585,7 +9551,6 @@ func (m *HoosatdMessage_UnexpectedPruningPoint) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlockLocator) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9607,7 +9572,6 @@ func (m *HoosatdMessage_IbdBlockLocator) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlockLocatorHighestHash) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9629,7 +9593,6 @@ func (m *HoosatdMessage_IbdBlockLocatorHighestHash) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestNextPruningPointUtxoSetChunk) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9651,7 +9614,6 @@ func (m *HoosatdMessage_RequestNextPruningPointUtxoSetChunk) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_DonePruningPointUtxoSetChunks) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9673,7 +9635,6 @@ func (m *HoosatdMessage_DonePruningPointUtxoSetChunks) MarshalToSizedBufferVTStr
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9695,7 +9656,6 @@ func (m *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) MarshalToSizedBuffer
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockWithTrustedData) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9717,7 +9677,6 @@ func (m *HoosatdMessage_BlockWithTrustedData) MarshalToSizedBufferVTStrict(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_DoneBlocksWithTrustedData) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9739,7 +9698,6 @@ func (m *HoosatdMessage_DoneBlocksWithTrustedData) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestPruningPointAndItsAnticone) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9761,7 +9719,6 @@ func (m *HoosatdMessage_RequestPruningPointAndItsAnticone) MarshalToSizedBufferV
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockHeaders) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9783,7 +9740,6 @@ func (m *HoosatdMessage_BlockHeaders) MarshalToSizedBufferVTStrict(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestNextHeaders) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9805,7 +9761,6 @@ func (m *HoosatdMessage_RequestNextHeaders) MarshalToSizedBufferVTStrict(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_DoneHeaders) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9827,7 +9782,6 @@ func (m *HoosatdMessage_DoneHeaders) MarshalToSizedBufferVTStrict(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestPruningPointUTXOSet) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9849,7 +9803,6 @@ func (m *HoosatdMessage_RequestPruningPointUTXOSet) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestHeaders) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9871,7 +9824,6 @@ func (m *HoosatdMessage_RequestHeaders) MarshalToSizedBufferVTStrict(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestBlockLocator) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9893,7 +9845,6 @@ func (m *HoosatdMessage_RequestBlockLocator) MarshalToSizedBufferVTStrict(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPoints) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9915,7 +9866,6 @@ func (m *HoosatdMessage_PruningPoints) MarshalToSizedBufferVTStrict(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestPruningPointProof) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9937,7 +9887,6 @@ func (m *HoosatdMessage_RequestPruningPointProof) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPointProof) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9959,7 +9908,6 @@ func (m *HoosatdMessage_PruningPointProof) MarshalToSizedBufferVTStrict(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_Ready) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -9981,7 +9929,6 @@ func (m *HoosatdMessage_Ready) MarshalToSizedBufferVTStrict(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockWithTrustedDataV4) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10003,7 +9950,6 @@ func (m *HoosatdMessage_BlockWithTrustedDataV4) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_TrustedData) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10025,7 +9971,6 @@ func (m *HoosatdMessage_TrustedData) MarshalToSizedBufferVTStrict(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestIBDChainBlockLocator) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10047,7 +9992,6 @@ func (m *HoosatdMessage_RequestIBDChainBlockLocator) MarshalToSizedBufferVTStric
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_IbdChainBlockLocator) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10069,7 +10013,6 @@ func (m *HoosatdMessage_IbdChainBlockLocator) MarshalToSizedBufferVTStrict(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestAnticone) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10091,7 +10034,6 @@ func (m *HoosatdMessage_RequestAnticone) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_RequestNextPruningPointAndItsAnticoneBlocks) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10113,7 +10055,6 @@ func (m *HoosatdMessage_RequestNextPruningPointAndItsAnticoneBlocks) MarshalToSi
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCurrentNetworkRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10135,7 +10076,6 @@ func (m *HoosatdMessage_GetCurrentNetworkRequest) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCurrentNetworkResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10157,7 +10097,6 @@ func (m *HoosatdMessage_GetCurrentNetworkResponse) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitBlockRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10179,7 +10118,6 @@ func (m *HoosatdMessage_SubmitBlockRequest) MarshalToSizedBufferVTStrict(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitBlockResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10201,7 +10139,6 @@ func (m *HoosatdMessage_SubmitBlockResponse) MarshalToSizedBufferVTStrict(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockTemplateRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10223,7 +10160,6 @@ func (m *HoosatdMessage_GetBlockTemplateRequest) MarshalToSizedBufferVTStrict(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockTemplateResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10245,7 +10181,6 @@ func (m *HoosatdMessage_GetBlockTemplateResponse) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyBlockAddedRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10267,7 +10202,6 @@ func (m *HoosatdMessage_NotifyBlockAddedRequest) MarshalToSizedBufferVTStrict(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyBlockAddedResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10289,7 +10223,6 @@ func (m *HoosatdMessage_NotifyBlockAddedResponse) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BlockAddedNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10311,7 +10244,6 @@ func (m *HoosatdMessage_BlockAddedNotification) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPeerAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10333,7 +10265,6 @@ func (m *HoosatdMessage_GetPeerAddressesRequest) MarshalToSizedBufferVTStrict(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPeerAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10355,7 +10286,6 @@ func (m *HoosatdMessage_GetPeerAddressesResponse) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSelectedTipHashRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10377,7 +10307,6 @@ func (m *HoosatdMessage_GetSelectedTipHashRequest) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSelectedTipHashResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10399,7 +10328,6 @@ func (m *HoosatdMessage_GetSelectedTipHashResponse) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntryRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10421,7 +10349,6 @@ func (m *HoosatdMessage_GetMempoolEntryRequest) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntryResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10443,7 +10370,6 @@ func (m *HoosatdMessage_GetMempoolEntryResponse) MarshalToSizedBufferVTStrict(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetConnectedPeerInfoRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10465,7 +10391,6 @@ func (m *HoosatdMessage_GetConnectedPeerInfoRequest) MarshalToSizedBufferVTStric
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetConnectedPeerInfoResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10487,7 +10412,6 @@ func (m *HoosatdMessage_GetConnectedPeerInfoResponse) MarshalToSizedBufferVTStri
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_AddPeerRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10509,7 +10433,6 @@ func (m *HoosatdMessage_AddPeerRequest) MarshalToSizedBufferVTStrict(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_AddPeerResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10531,7 +10454,6 @@ func (m *HoosatdMessage_AddPeerResponse) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitTransactionRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10553,7 +10475,6 @@ func (m *HoosatdMessage_SubmitTransactionRequest) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitTransactionResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10575,7 +10496,6 @@ func (m *HoosatdMessage_SubmitTransactionResponse) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10597,7 +10517,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest) MarshalT
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10619,7 +10538,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedResponse) Marshal
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_VirtualSelectedParentChainChangedNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10641,7 +10559,6 @@ func (m *HoosatdMessage_VirtualSelectedParentChainChangedNotification) MarshalTo
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10663,7 +10580,6 @@ func (m *HoosatdMessage_GetBlockRequest) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10685,7 +10601,6 @@ func (m *HoosatdMessage_GetBlockResponse) MarshalToSizedBufferVTStrict(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSubnetworkRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10707,7 +10622,6 @@ func (m *HoosatdMessage_GetSubnetworkRequest) MarshalToSizedBufferVTStrict(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetSubnetworkResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10729,7 +10643,6 @@ func (m *HoosatdMessage_GetSubnetworkResponse) MarshalToSizedBufferVTStrict(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10751,7 +10664,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest) MarshalTo
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10773,7 +10685,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockResponse) MarshalT
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlocksRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10795,7 +10706,6 @@ func (m *HoosatdMessage_GetBlocksRequest) MarshalToSizedBufferVTStrict(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlocksResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10817,7 +10727,6 @@ func (m *HoosatdMessage_GetBlocksResponse) MarshalToSizedBufferVTStrict(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockCountRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10839,7 +10748,6 @@ func (m *HoosatdMessage_GetBlockCountRequest) MarshalToSizedBufferVTStrict(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockCountResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10861,7 +10769,6 @@ func (m *HoosatdMessage_GetBlockCountResponse) MarshalToSizedBufferVTStrict(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockDagInfoRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10883,7 +10790,6 @@ func (m *HoosatdMessage_GetBlockDagInfoRequest) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockDagInfoResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10905,7 +10811,6 @@ func (m *HoosatdMessage_GetBlockDagInfoResponse) MarshalToSizedBufferVTStrict(dA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ResolveFinalityConflictRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10927,7 +10832,6 @@ func (m *HoosatdMessage_ResolveFinalityConflictRequest) MarshalToSizedBufferVTSt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ResolveFinalityConflictResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10949,7 +10853,6 @@ func (m *HoosatdMessage_ResolveFinalityConflictResponse) MarshalToSizedBufferVTS
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyFinalityConflictsRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10971,7 +10874,6 @@ func (m *HoosatdMessage_NotifyFinalityConflictsRequest) MarshalToSizedBufferVTSt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyFinalityConflictsResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -10993,7 +10895,6 @@ func (m *HoosatdMessage_NotifyFinalityConflictsResponse) MarshalToSizedBufferVTS
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_FinalityConflictNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11015,7 +10916,6 @@ func (m *HoosatdMessage_FinalityConflictNotification) MarshalToSizedBufferVTStri
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_FinalityConflictResolvedNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11037,7 +10937,6 @@ func (m *HoosatdMessage_FinalityConflictResolvedNotification) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11059,7 +10958,6 @@ func (m *HoosatdMessage_GetMempoolEntriesRequest) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11081,7 +10979,6 @@ func (m *HoosatdMessage_GetMempoolEntriesResponse) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ShutDownRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11103,7 +11000,6 @@ func (m *HoosatdMessage_ShutDownRequest) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_ShutDownResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11125,7 +11021,6 @@ func (m *HoosatdMessage_ShutDownResponse) MarshalToSizedBufferVTStrict(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetHeadersRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11147,7 +11042,6 @@ func (m *HoosatdMessage_GetHeadersRequest) MarshalToSizedBufferVTStrict(dAtA []b
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetHeadersResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11169,7 +11063,6 @@ func (m *HoosatdMessage_GetHeadersResponse) MarshalToSizedBufferVTStrict(dAtA []
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyUtxosChangedRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11191,7 +11084,6 @@ func (m *HoosatdMessage_NotifyUtxosChangedRequest) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyUtxosChangedResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11213,7 +11105,6 @@ func (m *HoosatdMessage_NotifyUtxosChangedResponse) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UtxosChangedNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11235,7 +11126,6 @@ func (m *HoosatdMessage_UtxosChangedNotification) MarshalToSizedBufferVTStrict(d
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUtxosByAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11257,7 +11147,6 @@ func (m *HoosatdMessage_GetUtxosByAddressesRequest) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUtxosByAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11279,7 +11168,6 @@ func (m *HoosatdMessage_GetUtxosByAddressesResponse) MarshalToSizedBufferVTStric
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11301,7 +11189,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) MarshalToSized
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11323,7 +11210,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreResponse) MarshalToSize
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11345,7 +11231,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedRequest) Mars
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11367,7 +11252,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedResponse) Mar
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_VirtualSelectedParentBlueScoreChangedNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11389,7 +11273,6 @@ func (m *HoosatdMessage_VirtualSelectedParentBlueScoreChangedNotification) Marsh
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BanRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11411,7 +11294,6 @@ func (m *HoosatdMessage_BanRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (i
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_BanResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11433,7 +11315,6 @@ func (m *HoosatdMessage_BanResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UnbanRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11455,7 +11336,6 @@ func (m *HoosatdMessage_UnbanRequest) MarshalToSizedBufferVTStrict(dAtA []byte) 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_UnbanResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11477,7 +11357,6 @@ func (m *HoosatdMessage_UnbanResponse) MarshalToSizedBufferVTStrict(dAtA []byte)
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetInfoRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11499,7 +11378,6 @@ func (m *HoosatdMessage_GetInfoRequest) MarshalToSizedBufferVTStrict(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetInfoResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11521,7 +11399,6 @@ func (m *HoosatdMessage_GetInfoResponse) MarshalToSizedBufferVTStrict(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingUtxosChangedRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11543,7 +11420,6 @@ func (m *HoosatdMessage_StopNotifyingUtxosChangedRequest) MarshalToSizedBufferVT
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingUtxosChangedResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11565,7 +11441,6 @@ func (m *HoosatdMessage_StopNotifyingUtxosChangedResponse) MarshalToSizedBufferV
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11587,7 +11462,6 @@ func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideRequest) MarshalToSized
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11609,7 +11483,6 @@ func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideResponse) MarshalToSize
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_PruningPointUTXOSetOverrideNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11631,7 +11504,6 @@ func (m *HoosatdMessage_PruningPointUTXOSetOverrideNotification) MarshalToSizedB
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11653,7 +11525,6 @@ func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideRequest) Marshal
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11675,7 +11546,6 @@ func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) Marsha
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_EstimateNetworkHashesPerSecondRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11697,7 +11567,6 @@ func (m *HoosatdMessage_EstimateNetworkHashesPerSecondRequest) MarshalToSizedBuf
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_EstimateNetworkHashesPerSecondResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11719,7 +11588,6 @@ func (m *HoosatdMessage_EstimateNetworkHashesPerSecondResponse) MarshalToSizedBu
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11741,7 +11609,6 @@ func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11763,7 +11630,6 @@ func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_VirtualDaaScoreChangedNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11785,7 +11651,6 @@ func (m *HoosatdMessage_VirtualDaaScoreChangedNotification) MarshalToSizedBuffer
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalanceByAddressRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11807,7 +11672,6 @@ func (m *HoosatdMessage_GetBalanceByAddressRequest) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalanceByAddressResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11829,7 +11693,6 @@ func (m *HoosatdMessage_GetBalanceByAddressResponse) MarshalToSizedBufferVTStric
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalancesByAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11851,7 +11714,6 @@ func (m *HoosatdMessage_GetBalancesByAddressesRequest) MarshalToSizedBufferVTStr
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBalancesByAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11873,7 +11735,6 @@ func (m *HoosatdMessage_GetBalancesByAddressesResponse) MarshalToSizedBufferVTSt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyNewBlockTemplateRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11895,7 +11756,6 @@ func (m *HoosatdMessage_NotifyNewBlockTemplateRequest) MarshalToSizedBufferVTStr
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NotifyNewBlockTemplateResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11917,7 +11777,6 @@ func (m *HoosatdMessage_NotifyNewBlockTemplateResponse) MarshalToSizedBufferVTSt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_NewBlockTemplateNotification) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11939,7 +11798,6 @@ func (m *HoosatdMessage_NewBlockTemplateNotification) MarshalToSizedBufferVTStri
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesByAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11961,7 +11819,6 @@ func (m *HoosatdMessage_GetMempoolEntriesByAddressesRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesByAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -11983,7 +11840,6 @@ func (m *HoosatdMessage_GetMempoolEntriesByAddressesResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCoinSupplyRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12005,7 +11861,6 @@ func (m *HoosatdMessage_GetCoinSupplyRequest) MarshalToSizedBufferVTStrict(dAtA 
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetCoinSupplyResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12027,7 +11882,6 @@ func (m *HoosatdMessage_GetCoinSupplyResponse) MarshalToSizedBufferVTStrict(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockByTransactionIdRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12049,7 +11903,6 @@ func (m *HoosatdMessage_GetBlockByTransactionIdRequest) MarshalToSizedBufferVTSt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetBlockByTransactionIdResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12071,7 +11924,6 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) MarshalToSizedBufferVTS
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12093,7 +11945,6 @@ func (m *HoosatdMessage_GetUsableAddressesRequest) MarshalToSizedBufferVTStrict(
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12115,7 +11966,6 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) MarshalToSizedBufferVTStrict
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12137,7 +11987,6 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12159,7 +12008,48 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetTransactionStatusRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
 
+func (m *HoosatdMessage_GetTransactionStatusRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetTransactionStatusRequest != nil {
+		size, err := m.GetTransactionStatusRequest.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xb2
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetTransactionStatusResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetTransactionStatusResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetTransactionStatusResponse != nil {
+		size, err := m.GetTransactionStatusResponse.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x44
+		i--
+		dAtA[i] = 0xba
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12181,7 +12071,6 @@ func (m *HoosatdMessage_SubmitTransactionReplacementRequest) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12203,7 +12092,6 @@ func (m *HoosatdMessage_SubmitTransactionReplacementResponse) MarshalToSizedBuff
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12225,7 +12113,6 @@ func (m *HoosatdMessage_GetFeeEstimateRequest) MarshalToSizedBufferVTStrict(dAtA
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
@@ -12247,7 +12134,6 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
-
 func (m *HoosatdMessage) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12273,7 +12159,6 @@ func (m *HoosatdMessage_Addresses) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Block) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12286,7 +12171,6 @@ func (m *HoosatdMessage_Block) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Transaction) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12299,7 +12183,6 @@ func (m *HoosatdMessage_Transaction) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BlockLocator) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12312,7 +12195,6 @@ func (m *HoosatdMessage_BlockLocator) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestAddresses) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12325,7 +12207,6 @@ func (m *HoosatdMessage_RequestAddresses) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestRelayBlocks) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12338,7 +12219,6 @@ func (m *HoosatdMessage_RequestRelayBlocks) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestTransactions) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12351,7 +12231,6 @@ func (m *HoosatdMessage_RequestTransactions) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_IbdBlock) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12364,7 +12243,6 @@ func (m *HoosatdMessage_IbdBlock) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_InvRelayBlock) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12377,7 +12255,6 @@ func (m *HoosatdMessage_InvRelayBlock) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_InvTransactions) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12390,7 +12267,6 @@ func (m *HoosatdMessage_InvTransactions) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Ping) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12403,7 +12279,6 @@ func (m *HoosatdMessage_Ping) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Pong) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12416,7 +12291,6 @@ func (m *HoosatdMessage_Pong) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Verack) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12429,7 +12303,6 @@ func (m *HoosatdMessage_Verack) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Version) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12442,7 +12315,6 @@ func (m *HoosatdMessage_Version) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_TransactionNotFound) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12455,7 +12327,6 @@ func (m *HoosatdMessage_TransactionNotFound) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Reject) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12468,7 +12339,6 @@ func (m *HoosatdMessage_Reject) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_PruningPointUtxoSetChunk) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12481,7 +12351,6 @@ func (m *HoosatdMessage_PruningPointUtxoSetChunk) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestIBDBlocks) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12494,7 +12363,6 @@ func (m *HoosatdMessage_RequestIBDBlocks) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_UnexpectedPruningPoint) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12507,7 +12375,6 @@ func (m *HoosatdMessage_UnexpectedPruningPoint) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_IbdBlockLocator) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12520,7 +12387,6 @@ func (m *HoosatdMessage_IbdBlockLocator) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_IbdBlockLocatorHighestHash) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12533,7 +12399,6 @@ func (m *HoosatdMessage_IbdBlockLocatorHighestHash) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestNextPruningPointUtxoSetChunk) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12546,7 +12411,6 @@ func (m *HoosatdMessage_RequestNextPruningPointUtxoSetChunk) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_DonePruningPointUtxoSetChunks) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12559,7 +12423,6 @@ func (m *HoosatdMessage_DonePruningPointUtxoSetChunks) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12572,7 +12435,6 @@ func (m *HoosatdMessage_IbdBlockLocatorHighestHashNotFound) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BlockWithTrustedData) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12585,7 +12447,6 @@ func (m *HoosatdMessage_BlockWithTrustedData) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_DoneBlocksWithTrustedData) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12598,7 +12459,6 @@ func (m *HoosatdMessage_DoneBlocksWithTrustedData) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestPruningPointAndItsAnticone) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12611,7 +12471,6 @@ func (m *HoosatdMessage_RequestPruningPointAndItsAnticone) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BlockHeaders) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12624,7 +12483,6 @@ func (m *HoosatdMessage_BlockHeaders) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestNextHeaders) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12637,7 +12495,6 @@ func (m *HoosatdMessage_RequestNextHeaders) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_DoneHeaders) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12650,7 +12507,6 @@ func (m *HoosatdMessage_DoneHeaders) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestPruningPointUTXOSet) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12663,7 +12519,6 @@ func (m *HoosatdMessage_RequestPruningPointUTXOSet) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestHeaders) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12676,7 +12531,6 @@ func (m *HoosatdMessage_RequestHeaders) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestBlockLocator) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12689,7 +12543,6 @@ func (m *HoosatdMessage_RequestBlockLocator) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_PruningPoints) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12702,7 +12555,6 @@ func (m *HoosatdMessage_PruningPoints) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestPruningPointProof) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12715,7 +12567,6 @@ func (m *HoosatdMessage_RequestPruningPointProof) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_PruningPointProof) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12728,7 +12579,6 @@ func (m *HoosatdMessage_PruningPointProof) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_Ready) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12741,7 +12591,6 @@ func (m *HoosatdMessage_Ready) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BlockWithTrustedDataV4) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12754,7 +12603,6 @@ func (m *HoosatdMessage_BlockWithTrustedDataV4) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_TrustedData) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12767,7 +12615,6 @@ func (m *HoosatdMessage_TrustedData) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestIBDChainBlockLocator) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12780,7 +12627,6 @@ func (m *HoosatdMessage_RequestIBDChainBlockLocator) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_IbdChainBlockLocator) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12793,7 +12639,6 @@ func (m *HoosatdMessage_IbdChainBlockLocator) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestAnticone) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12806,7 +12651,6 @@ func (m *HoosatdMessage_RequestAnticone) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_RequestNextPruningPointAndItsAnticoneBlocks) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12819,7 +12663,6 @@ func (m *HoosatdMessage_RequestNextPruningPointAndItsAnticoneBlocks) SizeVT() (n
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetCurrentNetworkRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12832,7 +12675,6 @@ func (m *HoosatdMessage_GetCurrentNetworkRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetCurrentNetworkResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12845,7 +12687,6 @@ func (m *HoosatdMessage_GetCurrentNetworkResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_SubmitBlockRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12858,7 +12699,6 @@ func (m *HoosatdMessage_SubmitBlockRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_SubmitBlockResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12871,7 +12711,6 @@ func (m *HoosatdMessage_SubmitBlockResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockTemplateRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12884,7 +12723,6 @@ func (m *HoosatdMessage_GetBlockTemplateRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockTemplateResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12897,7 +12735,6 @@ func (m *HoosatdMessage_GetBlockTemplateResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyBlockAddedRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12910,7 +12747,6 @@ func (m *HoosatdMessage_NotifyBlockAddedRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyBlockAddedResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12923,7 +12759,6 @@ func (m *HoosatdMessage_NotifyBlockAddedResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BlockAddedNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12936,7 +12771,6 @@ func (m *HoosatdMessage_BlockAddedNotification) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetPeerAddressesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12949,7 +12783,6 @@ func (m *HoosatdMessage_GetPeerAddressesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetPeerAddressesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12962,7 +12795,6 @@ func (m *HoosatdMessage_GetPeerAddressesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetSelectedTipHashRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12975,7 +12807,6 @@ func (m *HoosatdMessage_GetSelectedTipHashRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetSelectedTipHashResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -12988,7 +12819,6 @@ func (m *HoosatdMessage_GetSelectedTipHashResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetMempoolEntryRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13001,7 +12831,6 @@ func (m *HoosatdMessage_GetMempoolEntryRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetMempoolEntryResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13014,7 +12843,6 @@ func (m *HoosatdMessage_GetMempoolEntryResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetConnectedPeerInfoRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13027,7 +12855,6 @@ func (m *HoosatdMessage_GetConnectedPeerInfoRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetConnectedPeerInfoResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13040,7 +12867,6 @@ func (m *HoosatdMessage_GetConnectedPeerInfoResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_AddPeerRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13053,7 +12879,6 @@ func (m *HoosatdMessage_AddPeerRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_AddPeerResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13066,7 +12891,6 @@ func (m *HoosatdMessage_AddPeerResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_SubmitTransactionRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13079,7 +12903,6 @@ func (m *HoosatdMessage_SubmitTransactionRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_SubmitTransactionResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13092,7 +12915,6 @@ func (m *HoosatdMessage_SubmitTransactionResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13105,7 +12927,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedRequest) SizeVT()
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13118,7 +12939,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentChainChangedResponse) SizeVT(
 	}
 	return n
 }
-
 func (m *HoosatdMessage_VirtualSelectedParentChainChangedNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13131,7 +12951,6 @@ func (m *HoosatdMessage_VirtualSelectedParentChainChangedNotification) SizeVT() 
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13144,7 +12963,6 @@ func (m *HoosatdMessage_GetBlockRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13157,7 +12975,6 @@ func (m *HoosatdMessage_GetBlockResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetSubnetworkRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13170,7 +12987,6 @@ func (m *HoosatdMessage_GetSubnetworkRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetSubnetworkResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13183,7 +12999,6 @@ func (m *HoosatdMessage_GetSubnetworkResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13196,7 +13011,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockRequest) SizeVT() 
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13209,7 +13023,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentChainFromBlockResponse) SizeVT()
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlocksRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13222,7 +13035,6 @@ func (m *HoosatdMessage_GetBlocksRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlocksResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13235,7 +13047,6 @@ func (m *HoosatdMessage_GetBlocksResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockCountRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13248,7 +13059,6 @@ func (m *HoosatdMessage_GetBlockCountRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockCountResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13261,7 +13071,6 @@ func (m *HoosatdMessage_GetBlockCountResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockDagInfoRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13274,7 +13083,6 @@ func (m *HoosatdMessage_GetBlockDagInfoRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockDagInfoResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13287,7 +13095,6 @@ func (m *HoosatdMessage_GetBlockDagInfoResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_ResolveFinalityConflictRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13300,7 +13107,6 @@ func (m *HoosatdMessage_ResolveFinalityConflictRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_ResolveFinalityConflictResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13313,7 +13119,6 @@ func (m *HoosatdMessage_ResolveFinalityConflictResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyFinalityConflictsRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13326,7 +13131,6 @@ func (m *HoosatdMessage_NotifyFinalityConflictsRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyFinalityConflictsResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13339,7 +13143,6 @@ func (m *HoosatdMessage_NotifyFinalityConflictsResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_FinalityConflictNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13352,7 +13155,6 @@ func (m *HoosatdMessage_FinalityConflictNotification) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_FinalityConflictResolvedNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13365,7 +13167,6 @@ func (m *HoosatdMessage_FinalityConflictResolvedNotification) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13378,7 +13179,6 @@ func (m *HoosatdMessage_GetMempoolEntriesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13391,7 +13191,6 @@ func (m *HoosatdMessage_GetMempoolEntriesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_ShutDownRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13404,7 +13203,6 @@ func (m *HoosatdMessage_ShutDownRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_ShutDownResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13417,7 +13215,6 @@ func (m *HoosatdMessage_ShutDownResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetHeadersRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13430,7 +13227,6 @@ func (m *HoosatdMessage_GetHeadersRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetHeadersResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13443,7 +13239,6 @@ func (m *HoosatdMessage_GetHeadersResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyUtxosChangedRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13456,7 +13251,6 @@ func (m *HoosatdMessage_NotifyUtxosChangedRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyUtxosChangedResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13469,7 +13263,6 @@ func (m *HoosatdMessage_NotifyUtxosChangedResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_UtxosChangedNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13482,7 +13275,6 @@ func (m *HoosatdMessage_UtxosChangedNotification) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetUtxosByAddressesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13495,7 +13287,6 @@ func (m *HoosatdMessage_GetUtxosByAddressesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetUtxosByAddressesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13508,7 +13299,6 @@ func (m *HoosatdMessage_GetUtxosByAddressesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13521,7 +13311,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreRequest) SizeVT() (n in
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13534,7 +13323,6 @@ func (m *HoosatdMessage_GetVirtualSelectedParentBlueScoreResponse) SizeVT() (n i
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13547,7 +13335,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedRequest) Size
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13560,7 +13347,6 @@ func (m *HoosatdMessage_NotifyVirtualSelectedParentBlueScoreChangedResponse) Siz
 	}
 	return n
 }
-
 func (m *HoosatdMessage_VirtualSelectedParentBlueScoreChangedNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13573,7 +13359,6 @@ func (m *HoosatdMessage_VirtualSelectedParentBlueScoreChangedNotification) SizeV
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BanRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13586,7 +13371,6 @@ func (m *HoosatdMessage_BanRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_BanResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13599,7 +13383,6 @@ func (m *HoosatdMessage_BanResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_UnbanRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13612,7 +13395,6 @@ func (m *HoosatdMessage_UnbanRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_UnbanResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13625,7 +13407,6 @@ func (m *HoosatdMessage_UnbanResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetInfoRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13638,7 +13419,6 @@ func (m *HoosatdMessage_GetInfoRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetInfoResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13651,7 +13431,6 @@ func (m *HoosatdMessage_GetInfoResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_StopNotifyingUtxosChangedRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13664,7 +13443,6 @@ func (m *HoosatdMessage_StopNotifyingUtxosChangedRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_StopNotifyingUtxosChangedResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13677,7 +13455,6 @@ func (m *HoosatdMessage_StopNotifyingUtxosChangedResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13690,7 +13467,6 @@ func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideRequest) SizeVT() (n in
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13703,7 +13479,6 @@ func (m *HoosatdMessage_NotifyPruningPointUTXOSetOverrideResponse) SizeVT() (n i
 	}
 	return n
 }
-
 func (m *HoosatdMessage_PruningPointUTXOSetOverrideNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13716,7 +13491,6 @@ func (m *HoosatdMessage_PruningPointUTXOSetOverrideNotification) SizeVT() (n int
 	}
 	return n
 }
-
 func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13729,7 +13503,6 @@ func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideRequest) SizeVT(
 	}
 	return n
 }
-
 func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13742,7 +13515,6 @@ func (m *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) SizeVT
 	}
 	return n
 }
-
 func (m *HoosatdMessage_EstimateNetworkHashesPerSecondRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13755,7 +13527,6 @@ func (m *HoosatdMessage_EstimateNetworkHashesPerSecondRequest) SizeVT() (n int) 
 	}
 	return n
 }
-
 func (m *HoosatdMessage_EstimateNetworkHashesPerSecondResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13768,7 +13539,6 @@ func (m *HoosatdMessage_EstimateNetworkHashesPerSecondResponse) SizeVT() (n int)
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13781,7 +13551,6 @@ func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13794,7 +13563,6 @@ func (m *HoosatdMessage_NotifyVirtualDaaScoreChangedResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_VirtualDaaScoreChangedNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13807,7 +13575,6 @@ func (m *HoosatdMessage_VirtualDaaScoreChangedNotification) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBalanceByAddressRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13820,7 +13587,6 @@ func (m *HoosatdMessage_GetBalanceByAddressRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBalanceByAddressResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13833,7 +13599,6 @@ func (m *HoosatdMessage_GetBalanceByAddressResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBalancesByAddressesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13846,7 +13611,6 @@ func (m *HoosatdMessage_GetBalancesByAddressesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBalancesByAddressesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13859,7 +13623,6 @@ func (m *HoosatdMessage_GetBalancesByAddressesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyNewBlockTemplateRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13872,7 +13635,6 @@ func (m *HoosatdMessage_NotifyNewBlockTemplateRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NotifyNewBlockTemplateResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13885,7 +13647,6 @@ func (m *HoosatdMessage_NotifyNewBlockTemplateResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_NewBlockTemplateNotification) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13898,7 +13659,6 @@ func (m *HoosatdMessage_NewBlockTemplateNotification) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesByAddressesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13911,7 +13671,6 @@ func (m *HoosatdMessage_GetMempoolEntriesByAddressesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetMempoolEntriesByAddressesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13924,7 +13683,6 @@ func (m *HoosatdMessage_GetMempoolEntriesByAddressesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetCoinSupplyRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13937,7 +13695,6 @@ func (m *HoosatdMessage_GetCoinSupplyRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetCoinSupplyResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13950,7 +13707,6 @@ func (m *HoosatdMessage_GetCoinSupplyResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockByTransactionIdRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13963,7 +13719,6 @@ func (m *HoosatdMessage_GetBlockByTransactionIdRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetBlockByTransactionIdResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13976,7 +13731,6 @@ func (m *HoosatdMessage_GetBlockByTransactionIdResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetUsableAddressesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13989,7 +13743,6 @@ func (m *HoosatdMessage_GetUsableAddressesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetUsableAddressesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14002,7 +13755,6 @@ func (m *HoosatdMessage_GetUsableAddressesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14015,7 +13767,6 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14028,7 +13779,30 @@ func (m *HoosatdMessage_GetPaginatedUtxosByAddressesResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
+func (m *HoosatdMessage_GetTransactionStatusRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetTransactionStatusRequest != nil {
+		l = m.GetTransactionStatusRequest.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetTransactionStatusResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetTransactionStatusResponse != nil {
+		l = m.GetTransactionStatusResponse.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
 func (m *HoosatdMessage_SubmitTransactionReplacementRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14041,7 +13815,6 @@ func (m *HoosatdMessage_SubmitTransactionReplacementRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_SubmitTransactionReplacementResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14054,7 +13827,6 @@ func (m *HoosatdMessage_SubmitTransactionReplacementResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetFeeEstimateRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14067,7 +13839,6 @@ func (m *HoosatdMessage_GetFeeEstimateRequest) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage_GetFeeEstimateResponse) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -14080,7 +13851,6 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) SizeVT() (n int) {
 	}
 	return n
 }
-
 func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19686,6 +19456,88 @@ func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesResponse{GetPaginatedUtxosByAddressesResponse: v}
 			}
 			iNdEx = postIndex
+		case 1094:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetTransactionStatusRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetTransactionStatusRequest); ok {
+				if err := oneof.GetTransactionStatusRequest.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetTransactionStatusRequestMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetTransactionStatusRequest{GetTransactionStatusRequest: v}
+			}
+			iNdEx = postIndex
+		case 1095:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetTransactionStatusResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetTransactionStatusResponse); ok {
+				if err := oneof.GetTransactionStatusResponse.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetTransactionStatusResponseMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetTransactionStatusResponse{GetTransactionStatusResponse: v}
+			}
+			iNdEx = postIndex
 		case 1100:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SubmitTransactionReplacementRequest", wireType)
@@ -19872,7 +19724,6 @@ func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *HoosatdMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -25476,6 +25327,88 @@ func (m *HoosatdMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetPaginatedUtxosByAddressesResponse{GetPaginatedUtxosByAddressesResponse: v}
+			}
+			iNdEx = postIndex
+		case 1094:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetTransactionStatusRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetTransactionStatusRequest); ok {
+				if err := oneof.GetTransactionStatusRequest.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetTransactionStatusRequestMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetTransactionStatusRequest{GetTransactionStatusRequest: v}
+			}
+			iNdEx = postIndex
+		case 1095:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetTransactionStatusResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetTransactionStatusResponse); ok {
+				if err := oneof.GetTransactionStatusResponse.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetTransactionStatusResponseMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetTransactionStatusResponse{GetTransactionStatusResponse: v}
 			}
 			iNdEx = postIndex
 		case 1100:

@@ -104,6 +104,8 @@ const (
 	CmdGetBlockResponseMessage
 	CmdGetBlockByTransactionIDRequestMessage
 	CmdGetBlockByTransactionIDResponseMessage
+	CmdGetTransactionStatusRequestMessage
+	CmdGetTransactionStatusResponseMessage
 	CmdGetSubnetworkRequestMessage
 	CmdGetSubnetworkResponseMessage
 	CmdGetVirtualSelectedParentChainFromBlockRequestMessage
@@ -255,6 +257,10 @@ var RPCMessageCommandToString = map[MessageCommand]string{
 	CmdVirtualSelectedParentChainChangedNotificationMessage:       "VirtualSelectedParentChainChangedNotification",
 	CmdGetBlockRequestMessage:                                     "GetBlockRequest",
 	CmdGetBlockResponseMessage:                                    "GetBlockResponse",
+	CmdGetBlockByTransactionIDRequestMessage:                      "GetBlockByTransactionIDRequest",
+	CmdGetBlockByTransactionIDResponseMessage:                     "GetBlockByTransactionIDResponse",
+	CmdGetTransactionStatusRequestMessage:                         "GetTransactionStatusRequest",
+	CmdGetTransactionStatusResponseMessage:                        "GetTransactionStatusResponse",
 	CmdGetSubnetworkRequestMessage:                                "GetSubnetworkRequest",
 	CmdGetSubnetworkResponseMessage:                               "GetSubnetworkResponse",
 	CmdGetVirtualSelectedParentChainFromBlockRequestMessage:       "GetVirtualSelectedParentChainFromBlockRequest",

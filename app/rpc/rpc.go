@@ -31,6 +31,7 @@ var handlers = map[appmessage.MessageCommand]handler{
 	appmessage.CmdNotifyVirtualSelectedParentChainChangedRequestMessage:     rpchandlers.HandleNotifyVirtualSelectedParentChainChanged,
 	appmessage.CmdGetBlockRequestMessage:                                    rpchandlers.HandleGetBlock,
 	appmessage.CmdGetBlockByTransactionIDRequestMessage:                     rpchandlers.HandleGetBlockByTransactionID,
+	appmessage.CmdGetTransactionStatusRequestMessage:                        rpchandlers.HandleGetTransactionStatus,
 	appmessage.CmdGetSubnetworkRequestMessage:                               rpchandlers.HandleGetSubnetwork,
 	appmessage.CmdGetVirtualSelectedParentChainFromBlockRequestMessage:      rpchandlers.HandleGetVirtualSelectedParentChainFromBlock,
 	appmessage.CmdGetBlocksRequestMessage:                                   rpchandlers.HandleGetBlocks,

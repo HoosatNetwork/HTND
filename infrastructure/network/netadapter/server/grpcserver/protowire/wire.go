@@ -590,6 +590,20 @@ func toRPCPayload(message appmessage.Message) (isHoosatdMessage_Payload, error) 
 			return nil, err
 		}
 		return payload, nil
+	case *appmessage.GetTransactionStatusRequestMessage:
+		payload := new(HoosatdMessage_GetTransactionStatusRequest)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	case *appmessage.GetTransactionStatusResponseMessage:
+		payload := new(HoosatdMessage_GetTransactionStatusResponse)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case *appmessage.GetSubnetworkRequestMessage:
 		payload := new(HoosatdMessage_GetSubnetworkRequest)
 		err := payload.fromAppMessage(message)

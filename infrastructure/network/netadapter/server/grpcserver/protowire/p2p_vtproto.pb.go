@@ -6,12 +6,11 @@ package protowire
 
 import (
 	fmt "fmt"
-	io "io"
-	unsafe "unsafe"
-
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	io "io"
+	unsafe "unsafe"
 )
 
 const (
@@ -1309,7 +1308,6 @@ func (this *RequestAddressesMessage) EqualMessageVT(thatMsg proto.Message) bool 
 	}
 	return this.EqualVT(that)
 }
-
 func (this *AddressesMessage) EqualVT(that *AddressesMessage) bool {
 	if this == that {
 		return true
@@ -1343,7 +1341,6 @@ func (this *AddressesMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *NetAddress) EqualVT(that *NetAddress) bool {
 	if this == that {
 		return true
@@ -1369,7 +1366,6 @@ func (this *NetAddress) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *SubnetworkId) EqualVT(that *SubnetworkId) bool {
 	if this == that {
 		return true
@@ -1389,7 +1385,6 @@ func (this *SubnetworkId) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionMessage) EqualVT(that *TransactionMessage) bool {
 	if this == that {
 		return true
@@ -1455,7 +1450,6 @@ func (this *TransactionMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionInput) EqualVT(that *TransactionInput) bool {
 	if this == that {
 		return true
@@ -1484,7 +1478,6 @@ func (this *TransactionInput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *Outpoint) EqualVT(that *Outpoint) bool {
 	if this == that {
 		return true
@@ -1507,7 +1500,6 @@ func (this *Outpoint) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionId) EqualVT(that *TransactionId) bool {
 	if this == that {
 		return true
@@ -1527,7 +1519,6 @@ func (this *TransactionId) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *ScriptPublicKey) EqualVT(that *ScriptPublicKey) bool {
 	if this == that {
 		return true
@@ -1550,7 +1541,6 @@ func (this *ScriptPublicKey) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionOutput) EqualVT(that *TransactionOutput) bool {
 	if this == that {
 		return true
@@ -1573,7 +1563,6 @@ func (this *TransactionOutput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockMessage) EqualVT(that *BlockMessage) bool {
 	if this == that {
 		return true
@@ -1613,7 +1602,6 @@ func (this *BlockMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockHeader) EqualVT(that *BlockHeader) bool {
 	if this == that {
 		return true
@@ -1680,7 +1668,6 @@ func (this *BlockHeader) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockLevelParents) EqualVT(that *BlockLevelParents) bool {
 	if this == that {
 		return true
@@ -1714,7 +1701,6 @@ func (this *BlockLevelParents) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *Hash) EqualVT(that *Hash) bool {
 	if this == that {
 		return true
@@ -1734,7 +1720,6 @@ func (this *Hash) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestBlockLocatorMessage) EqualVT(that *RequestBlockLocatorMessage) bool {
 	if this == that {
 		return true
@@ -1757,7 +1742,6 @@ func (this *RequestBlockLocatorMessage) EqualMessageVT(thatMsg proto.Message) bo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockLocatorMessage) EqualVT(that *BlockLocatorMessage) bool {
 	if this == that {
 		return true
@@ -1791,7 +1775,6 @@ func (this *BlockLocatorMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestHeadersMessage) EqualVT(that *RequestHeadersMessage) bool {
 	if this == that {
 		return true
@@ -1814,7 +1797,6 @@ func (this *RequestHeadersMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestNextHeadersMessage) EqualVT(that *RequestNextHeadersMessage) bool {
 	if this == that {
 		return true
@@ -1831,7 +1813,6 @@ func (this *RequestNextHeadersMessage) EqualMessageVT(thatMsg proto.Message) boo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *DoneHeadersMessage) EqualVT(that *DoneHeadersMessage) bool {
 	if this == that {
 		return true
@@ -1848,7 +1829,6 @@ func (this *DoneHeadersMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestRelayBlocksMessage) EqualVT(that *RequestRelayBlocksMessage) bool {
 	if this == that {
 		return true
@@ -1882,7 +1862,6 @@ func (this *RequestRelayBlocksMessage) EqualMessageVT(thatMsg proto.Message) boo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestTransactionsMessage) EqualVT(that *RequestTransactionsMessage) bool {
 	if this == that {
 		return true
@@ -1916,7 +1895,6 @@ func (this *RequestTransactionsMessage) EqualMessageVT(thatMsg proto.Message) bo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionNotFoundMessage) EqualVT(that *TransactionNotFoundMessage) bool {
 	if this == that {
 		return true
@@ -1936,7 +1914,6 @@ func (this *TransactionNotFoundMessage) EqualMessageVT(thatMsg proto.Message) bo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *InvRelayBlockMessage) EqualVT(that *InvRelayBlockMessage) bool {
 	if this == that {
 		return true
@@ -1956,7 +1933,6 @@ func (this *InvRelayBlockMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *InvTransactionsMessage) EqualVT(that *InvTransactionsMessage) bool {
 	if this == that {
 		return true
@@ -1990,7 +1966,6 @@ func (this *InvTransactionsMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PingMessage) EqualVT(that *PingMessage) bool {
 	if this == that {
 		return true
@@ -2010,7 +1985,6 @@ func (this *PingMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PongMessage) EqualVT(that *PongMessage) bool {
 	if this == that {
 		return true
@@ -2030,7 +2004,6 @@ func (this *PongMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *VerackMessage) EqualVT(that *VerackMessage) bool {
 	if this == that {
 		return true
@@ -2047,7 +2020,6 @@ func (this *VerackMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *VersionMessage) EqualVT(that *VersionMessage) bool {
 	if this == that {
 		return true
@@ -2091,7 +2063,6 @@ func (this *VersionMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RejectMessage) EqualVT(that *RejectMessage) bool {
 	if this == that {
 		return true
@@ -2111,7 +2082,6 @@ func (this *RejectMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestPruningPointUTXOSetMessage) EqualVT(that *RequestPruningPointUTXOSetMessage) bool {
 	if this == that {
 		return true
@@ -2131,7 +2101,6 @@ func (this *RequestPruningPointUTXOSetMessage) EqualMessageVT(thatMsg proto.Mess
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PruningPointUtxoSetChunkMessage) EqualVT(that *PruningPointUtxoSetChunkMessage) bool {
 	if this == that {
 		return true
@@ -2165,7 +2134,6 @@ func (this *PruningPointUtxoSetChunkMessage) EqualMessageVT(thatMsg proto.Messag
 	}
 	return this.EqualVT(that)
 }
-
 func (this *OutpointAndUtxoEntryPair) EqualVT(that *OutpointAndUtxoEntryPair) bool {
 	if this == that {
 		return true
@@ -2188,7 +2156,6 @@ func (this *OutpointAndUtxoEntryPair) EqualMessageVT(thatMsg proto.Message) bool
 	}
 	return this.EqualVT(that)
 }
-
 func (this *UtxoEntry) EqualVT(that *UtxoEntry) bool {
 	if this == that {
 		return true
@@ -2217,7 +2184,6 @@ func (this *UtxoEntry) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestNextPruningPointUtxoSetChunkMessage) EqualVT(that *RequestNextPruningPointUtxoSetChunkMessage) bool {
 	if this == that {
 		return true
@@ -2234,7 +2200,6 @@ func (this *RequestNextPruningPointUtxoSetChunkMessage) EqualMessageVT(thatMsg p
 	}
 	return this.EqualVT(that)
 }
-
 func (this *DonePruningPointUtxoSetChunksMessage) EqualVT(that *DonePruningPointUtxoSetChunksMessage) bool {
 	if this == that {
 		return true
@@ -2251,7 +2216,6 @@ func (this *DonePruningPointUtxoSetChunksMessage) EqualMessageVT(thatMsg proto.M
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestIBDBlocksMessage) EqualVT(that *RequestIBDBlocksMessage) bool {
 	if this == that {
 		return true
@@ -2285,7 +2249,6 @@ func (this *RequestIBDBlocksMessage) EqualMessageVT(thatMsg proto.Message) bool 
 	}
 	return this.EqualVT(that)
 }
-
 func (this *UnexpectedPruningPointMessage) EqualVT(that *UnexpectedPruningPointMessage) bool {
 	if this == that {
 		return true
@@ -2302,7 +2265,6 @@ func (this *UnexpectedPruningPointMessage) EqualMessageVT(thatMsg proto.Message)
 	}
 	return this.EqualVT(that)
 }
-
 func (this *IbdBlockLocatorMessage) EqualVT(that *IbdBlockLocatorMessage) bool {
 	if this == that {
 		return true
@@ -2339,7 +2301,6 @@ func (this *IbdBlockLocatorMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestIBDChainBlockLocatorMessage) EqualVT(that *RequestIBDChainBlockLocatorMessage) bool {
 	if this == that {
 		return true
@@ -2362,7 +2323,6 @@ func (this *RequestIBDChainBlockLocatorMessage) EqualMessageVT(thatMsg proto.Mes
 	}
 	return this.EqualVT(that)
 }
-
 func (this *IbdChainBlockLocatorMessage) EqualVT(that *IbdChainBlockLocatorMessage) bool {
 	if this == that {
 		return true
@@ -2396,7 +2356,6 @@ func (this *IbdChainBlockLocatorMessage) EqualMessageVT(thatMsg proto.Message) b
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestAnticoneMessage) EqualVT(that *RequestAnticoneMessage) bool {
 	if this == that {
 		return true
@@ -2419,7 +2378,6 @@ func (this *RequestAnticoneMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *IbdBlockLocatorHighestHashMessage) EqualVT(that *IbdBlockLocatorHighestHashMessage) bool {
 	if this == that {
 		return true
@@ -2439,7 +2397,6 @@ func (this *IbdBlockLocatorHighestHashMessage) EqualMessageVT(thatMsg proto.Mess
 	}
 	return this.EqualVT(that)
 }
-
 func (this *IbdBlockLocatorHighestHashNotFoundMessage) EqualVT(that *IbdBlockLocatorHighestHashNotFoundMessage) bool {
 	if this == that {
 		return true
@@ -2456,7 +2413,6 @@ func (this *IbdBlockLocatorHighestHashNotFoundMessage) EqualMessageVT(thatMsg pr
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockHeadersMessage) EqualVT(that *BlockHeadersMessage) bool {
 	if this == that {
 		return true
@@ -2490,7 +2446,6 @@ func (this *BlockHeadersMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestPruningPointAndItsAnticoneMessage) EqualVT(that *RequestPruningPointAndItsAnticoneMessage) bool {
 	if this == that {
 		return true
@@ -2507,7 +2462,6 @@ func (this *RequestPruningPointAndItsAnticoneMessage) EqualMessageVT(thatMsg pro
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestNextPruningPointAndItsAnticoneBlocksMessage) EqualVT(that *RequestNextPruningPointAndItsAnticoneBlocksMessage) bool {
 	if this == that {
 		return true
@@ -2524,7 +2478,6 @@ func (this *RequestNextPruningPointAndItsAnticoneBlocksMessage) EqualMessageVT(t
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockWithTrustedDataMessage) EqualVT(that *BlockWithTrustedDataMessage) bool {
 	if this == that {
 		return true
@@ -2581,7 +2534,6 @@ func (this *BlockWithTrustedDataMessage) EqualMessageVT(thatMsg proto.Message) b
 	}
 	return this.EqualVT(that)
 }
-
 func (this *DaaBlock) EqualVT(that *DaaBlock) bool {
 	if this == that {
 		return true
@@ -2604,7 +2556,6 @@ func (this *DaaBlock) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *DaaBlockV4) EqualVT(that *DaaBlockV4) bool {
 	if this == that {
 		return true
@@ -2627,7 +2578,6 @@ func (this *DaaBlockV4) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockGhostdagDataHashPair) EqualVT(that *BlockGhostdagDataHashPair) bool {
 	if this == that {
 		return true
@@ -2650,7 +2600,6 @@ func (this *BlockGhostdagDataHashPair) EqualMessageVT(thatMsg proto.Message) boo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *GhostdagData) EqualVT(that *GhostdagData) bool {
 	if this == that {
 		return true
@@ -2727,7 +2676,6 @@ func (this *GhostdagData) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BluesAnticoneSizes) EqualVT(that *BluesAnticoneSizes) bool {
 	if this == that {
 		return true
@@ -2750,7 +2698,6 @@ func (this *BluesAnticoneSizes) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *DoneBlocksWithTrustedDataMessage) EqualVT(that *DoneBlocksWithTrustedDataMessage) bool {
 	if this == that {
 		return true
@@ -2767,7 +2714,6 @@ func (this *DoneBlocksWithTrustedDataMessage) EqualMessageVT(thatMsg proto.Messa
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PruningPointsMessage) EqualVT(that *PruningPointsMessage) bool {
 	if this == that {
 		return true
@@ -2801,7 +2747,6 @@ func (this *PruningPointsMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *RequestPruningPointProofMessage) EqualVT(that *RequestPruningPointProofMessage) bool {
 	if this == that {
 		return true
@@ -2818,7 +2763,6 @@ func (this *RequestPruningPointProofMessage) EqualMessageVT(thatMsg proto.Messag
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PruningPointProofMessage) EqualVT(that *PruningPointProofMessage) bool {
 	if this == that {
 		return true
@@ -2852,7 +2796,6 @@ func (this *PruningPointProofMessage) EqualMessageVT(thatMsg proto.Message) bool
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PruningPointProofHeaderArray) EqualVT(that *PruningPointProofHeaderArray) bool {
 	if this == that {
 		return true
@@ -2886,7 +2829,6 @@ func (this *PruningPointProofHeaderArray) EqualMessageVT(thatMsg proto.Message) 
 	}
 	return this.EqualVT(that)
 }
-
 func (this *ReadyMessage) EqualVT(that *ReadyMessage) bool {
 	if this == that {
 		return true
@@ -2903,7 +2845,6 @@ func (this *ReadyMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *BlockWithTrustedDataV4Message) EqualVT(that *BlockWithTrustedDataV4Message) bool {
 	if this == that {
 		return true
@@ -2941,7 +2882,6 @@ func (this *BlockWithTrustedDataV4Message) EqualMessageVT(thatMsg proto.Message)
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TrustedDataMessage) EqualVT(that *TrustedDataMessage) bool {
 	if this == that {
 		return true
@@ -2992,7 +2932,6 @@ func (this *TrustedDataMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (m *RequestAddressesMessage) MarshalVT() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -10064,7 +10003,6 @@ func (m *RequestAddressesMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *AddressesMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10150,7 +10088,6 @@ func (m *AddressesMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *NetAddress) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10274,7 +10211,6 @@ func (m *NetAddress) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *SubnetworkId) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10360,7 +10296,6 @@ func (m *SubnetworkId) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10607,7 +10542,6 @@ func (m *TransactionMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionInput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10767,7 +10701,6 @@ func (m *TransactionInput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Outpoint) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10874,7 +10807,6 @@ func (m *Outpoint) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionId) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -10960,7 +10892,6 @@ func (m *TransactionId) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11065,7 +10996,6 @@ func (m *ScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionOutput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11172,7 +11102,6 @@ func (m *TransactionOutput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11326,7 +11255,6 @@ func (m *BlockMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockHeader) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11704,7 +11632,6 @@ func (m *BlockHeader) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockLevelParents) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11790,7 +11717,6 @@ func (m *BlockLevelParents) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Hash) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11876,7 +11802,6 @@ func (m *Hash) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -11983,7 +11908,6 @@ func (m *RequestBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12069,7 +11993,6 @@ func (m *BlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12193,7 +12116,6 @@ func (m *RequestHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestNextHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12245,7 +12167,6 @@ func (m *RequestNextHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DoneHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12297,7 +12218,6 @@ func (m *DoneHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestRelayBlocksMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12383,7 +12303,6 @@ func (m *RequestRelayBlocksMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestTransactionsMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12469,7 +12388,6 @@ func (m *RequestTransactionsMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionNotFoundMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12557,7 +12475,6 @@ func (m *TransactionNotFoundMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *InvRelayBlockMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12645,7 +12562,6 @@ func (m *InvRelayBlockMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *InvTransactionsMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12731,7 +12647,6 @@ func (m *InvTransactionsMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PingMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12802,7 +12717,6 @@ func (m *PingMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PongMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12873,7 +12787,6 @@ func (m *PongMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *VerackMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -12925,7 +12838,6 @@ func (m *VerackMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *VersionMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13224,7 +13136,6 @@ func (m *VersionMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RejectMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13308,7 +13219,6 @@ func (m *RejectMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestPruningPointUTXOSetMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13396,7 +13306,6 @@ func (m *RequestPruningPointUTXOSetMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PruningPointUtxoSetChunkMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13482,7 +13391,6 @@ func (m *PruningPointUtxoSetChunkMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *OutpointAndUtxoEntryPair) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13606,7 +13514,6 @@ func (m *OutpointAndUtxoEntryPair) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *UtxoEntry) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13752,7 +13659,6 @@ func (m *UtxoEntry) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestNextPruningPointUtxoSetChunkMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13804,7 +13710,6 @@ func (m *RequestNextPruningPointUtxoSetChunkMessage) UnmarshalVT(dAtA []byte) er
 	}
 	return nil
 }
-
 func (m *DonePruningPointUtxoSetChunksMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13856,7 +13761,6 @@ func (m *DonePruningPointUtxoSetChunksMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestIBDBlocksMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13942,7 +13846,6 @@ func (m *RequestIBDBlocksMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *UnexpectedPruningPointMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -13994,7 +13897,6 @@ func (m *UnexpectedPruningPointMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *IbdBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14116,7 +14018,6 @@ func (m *IbdBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestIBDChainBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14240,7 +14141,6 @@ func (m *RequestIBDChainBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *IbdChainBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14326,7 +14226,6 @@ func (m *IbdChainBlockLocatorMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestAnticoneMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14450,7 +14349,6 @@ func (m *RequestAnticoneMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *IbdBlockLocatorHighestHashMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14538,7 +14436,6 @@ func (m *IbdBlockLocatorHighestHashMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *IbdBlockLocatorHighestHashNotFoundMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14590,7 +14487,6 @@ func (m *IbdBlockLocatorHighestHashNotFoundMessage) UnmarshalVT(dAtA []byte) err
 	}
 	return nil
 }
-
 func (m *BlockHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14676,7 +14572,6 @@ func (m *BlockHeadersMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestPruningPointAndItsAnticoneMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14728,7 +14623,6 @@ func (m *RequestPruningPointAndItsAnticoneMessage) UnmarshalVT(dAtA []byte) erro
 	}
 	return nil
 }
-
 func (m *RequestNextPruningPointAndItsAnticoneBlocksMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14780,7 +14674,6 @@ func (m *RequestNextPruningPointAndItsAnticoneBlocksMessage) UnmarshalVT(dAtA []
 	}
 	return nil
 }
-
 func (m *BlockWithTrustedDataMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -14955,7 +14848,6 @@ func (m *BlockWithTrustedDataMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DaaBlock) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15079,7 +14971,6 @@ func (m *DaaBlock) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DaaBlockV4) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15203,7 +15094,6 @@ func (m *DaaBlockV4) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockGhostdagDataHashPair) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15327,7 +15217,6 @@ func (m *BlockGhostdagDataHashPair) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *GhostdagData) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15570,7 +15459,6 @@ func (m *GhostdagData) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BluesAnticoneSizes) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15677,7 +15565,6 @@ func (m *BluesAnticoneSizes) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DoneBlocksWithTrustedDataMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15729,7 +15616,6 @@ func (m *DoneBlocksWithTrustedDataMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PruningPointsMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15815,7 +15701,6 @@ func (m *PruningPointsMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestPruningPointProofMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15867,7 +15752,6 @@ func (m *RequestPruningPointProofMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PruningPointProofMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -15953,7 +15837,6 @@ func (m *PruningPointProofMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PruningPointProofHeaderArray) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16039,7 +15922,6 @@ func (m *PruningPointProofHeaderArray) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ReadyMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16091,7 +15973,6 @@ func (m *ReadyMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockWithTrustedDataV4Message) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16331,7 +16212,6 @@ func (m *BlockWithTrustedDataV4Message) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TrustedDataMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16451,7 +16331,6 @@ func (m *TrustedDataMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestAddressesMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16559,7 +16438,6 @@ func (m *RequestAddressesMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *AddressesMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16645,7 +16523,6 @@ func (m *AddressesMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *NetAddress) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16766,7 +16643,6 @@ func (m *NetAddress) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *SubnetworkId) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -16849,7 +16725,6 @@ func (m *SubnetworkId) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17093,7 +16968,6 @@ func (m *TransactionMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17250,7 +17124,6 @@ func (m *TransactionInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Outpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17357,7 +17230,6 @@ func (m *Outpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionId) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17440,7 +17312,6 @@ func (m *TransactionId) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17542,7 +17413,6 @@ func (m *ScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionOutput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17649,7 +17519,6 @@ func (m *TransactionOutput) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -17807,7 +17676,6 @@ func (m *BlockMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockHeader) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18182,7 +18050,6 @@ func (m *BlockHeader) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockLevelParents) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18268,7 +18135,6 @@ func (m *BlockLevelParents) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Hash) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18351,7 +18217,6 @@ func (m *Hash) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18458,7 +18323,6 @@ func (m *RequestBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18544,7 +18408,6 @@ func (m *BlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18668,7 +18531,6 @@ func (m *RequestHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestNextHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18720,7 +18582,6 @@ func (m *RequestNextHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DoneHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18772,7 +18633,6 @@ func (m *DoneHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestRelayBlocksMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18858,7 +18718,6 @@ func (m *RequestRelayBlocksMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestTransactionsMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -18944,7 +18803,6 @@ func (m *RequestTransactionsMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionNotFoundMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19032,7 +18890,6 @@ func (m *TransactionNotFoundMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *InvRelayBlockMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19120,7 +18977,6 @@ func (m *InvRelayBlockMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *InvTransactionsMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19206,7 +19062,6 @@ func (m *InvTransactionsMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PingMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19277,7 +19132,6 @@ func (m *PingMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PongMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19348,7 +19202,6 @@ func (m *PongMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *VerackMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19400,7 +19253,6 @@ func (m *VerackMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *VersionMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19704,7 +19556,6 @@ func (m *VersionMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RejectMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19792,7 +19643,6 @@ func (m *RejectMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestPruningPointUTXOSetMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19880,7 +19730,6 @@ func (m *RequestPruningPointUTXOSetMessage) UnmarshalVTUnsafe(dAtA []byte) error
 	}
 	return nil
 }
-
 func (m *PruningPointUtxoSetChunkMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -19966,7 +19815,6 @@ func (m *PruningPointUtxoSetChunkMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *OutpointAndUtxoEntryPair) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20090,7 +19938,6 @@ func (m *OutpointAndUtxoEntryPair) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *UtxoEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20236,7 +20083,6 @@ func (m *UtxoEntry) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestNextPruningPointUtxoSetChunkMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20288,7 +20134,6 @@ func (m *RequestNextPruningPointUtxoSetChunkMessage) UnmarshalVTUnsafe(dAtA []by
 	}
 	return nil
 }
-
 func (m *DonePruningPointUtxoSetChunksMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20340,7 +20185,6 @@ func (m *DonePruningPointUtxoSetChunksMessage) UnmarshalVTUnsafe(dAtA []byte) er
 	}
 	return nil
 }
-
 func (m *RequestIBDBlocksMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20426,7 +20270,6 @@ func (m *RequestIBDBlocksMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *UnexpectedPruningPointMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20478,7 +20321,6 @@ func (m *UnexpectedPruningPointMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *IbdBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20600,7 +20442,6 @@ func (m *IbdBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestIBDChainBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20724,7 +20565,6 @@ func (m *RequestIBDChainBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) erro
 	}
 	return nil
 }
-
 func (m *IbdChainBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20810,7 +20650,6 @@ func (m *IbdChainBlockLocatorMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestAnticoneMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -20934,7 +20773,6 @@ func (m *RequestAnticoneMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *IbdBlockLocatorHighestHashMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21022,7 +20860,6 @@ func (m *IbdBlockLocatorHighestHashMessage) UnmarshalVTUnsafe(dAtA []byte) error
 	}
 	return nil
 }
-
 func (m *IbdBlockLocatorHighestHashNotFoundMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21074,7 +20911,6 @@ func (m *IbdBlockLocatorHighestHashNotFoundMessage) UnmarshalVTUnsafe(dAtA []byt
 	}
 	return nil
 }
-
 func (m *BlockHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21160,7 +20996,6 @@ func (m *BlockHeadersMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestPruningPointAndItsAnticoneMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21212,7 +21047,6 @@ func (m *RequestPruningPointAndItsAnticoneMessage) UnmarshalVTUnsafe(dAtA []byte
 	}
 	return nil
 }
-
 func (m *RequestNextPruningPointAndItsAnticoneBlocksMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21264,7 +21098,6 @@ func (m *RequestNextPruningPointAndItsAnticoneBlocksMessage) UnmarshalVTUnsafe(d
 	}
 	return nil
 }
-
 func (m *BlockWithTrustedDataMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21439,7 +21272,6 @@ func (m *BlockWithTrustedDataMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DaaBlock) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21563,7 +21395,6 @@ func (m *DaaBlock) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DaaBlockV4) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21687,7 +21518,6 @@ func (m *DaaBlockV4) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockGhostdagDataHashPair) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -21811,7 +21641,6 @@ func (m *BlockGhostdagDataHashPair) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *GhostdagData) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22051,7 +21880,6 @@ func (m *GhostdagData) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BluesAnticoneSizes) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22158,7 +21986,6 @@ func (m *BluesAnticoneSizes) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *DoneBlocksWithTrustedDataMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22210,7 +22037,6 @@ func (m *DoneBlocksWithTrustedDataMessage) UnmarshalVTUnsafe(dAtA []byte) error 
 	}
 	return nil
 }
-
 func (m *PruningPointsMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22296,7 +22122,6 @@ func (m *PruningPointsMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RequestPruningPointProofMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22348,7 +22173,6 @@ func (m *RequestPruningPointProofMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PruningPointProofMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22434,7 +22258,6 @@ func (m *PruningPointProofMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PruningPointProofHeaderArray) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22520,7 +22343,6 @@ func (m *PruningPointProofHeaderArray) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ReadyMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22572,7 +22394,6 @@ func (m *ReadyMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *BlockWithTrustedDataV4Message) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -22812,7 +22633,6 @@ func (m *BlockWithTrustedDataV4Message) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TrustedDataMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
