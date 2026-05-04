@@ -102,7 +102,7 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 	}
 
 	coinbaseMaturity := params.BlockCoinbaseMaturity
-	if dagInfo.NetworkName == "hoosa-testnet" {
+	if dagInfo.NetworkName == "hoosat-testnet" {
 		coinbaseMaturity = 1000
 	}
 
