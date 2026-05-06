@@ -264,7 +264,7 @@ func (p *Params) PruningDepth() uint64 {
 
 // MainnetParams defines the network parameters for the main Hoosat network.
 var MainnetParams = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40},
+	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
 	Name:        "hoosat-mainnet",
 	Net:         appmessage.Mainnet,
 	RPCPort:     "42420",
@@ -298,9 +298,10 @@ var MainnetParams = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2640, 2640},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	POWScores:                       []uint64{17500000, 21821800, 29335426, 43334184},
-	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
-	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
+	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
+	POWScores:         []uint64{17500000, 21821800, 29335426, 43334184},
+	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1},
+	MaxBlockMass:      []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
 
 	// Consensus rule change deployments.
 	//
@@ -328,7 +329,7 @@ var MainnetParams = Params{
 	DisableDifficultyAdjustment: false,
 
 	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12},
+	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12, 12},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -341,12 +342,12 @@ var MainnetParams = Params{
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	MaxBlockLevel: 225,
-	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600},
+	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
 
 // TestnetParams defines the network parameters for the test Hoosat network.
 var TestnetParams = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40},
+	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
 	Name:        "hoosat-testnet",
 	Net:         appmessage.Testnet,
 	RPCPort:     "42422",
@@ -374,7 +375,7 @@ var TestnetParams = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2651, 2641},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	POWScores:                       []uint64{1, 2, 3, 4},
+	POWScores:                       []uint64{1, 2, 3, 4, 5},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
 
@@ -404,7 +405,7 @@ var TestnetParams = Params{
 	DisableDifficultyAdjustment: false,
 
 	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12},
+	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12, 12},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -417,11 +418,11 @@ var TestnetParams = Params{
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	MaxBlockLevel: 225,
-	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600},
+	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
 
 var TestnetParamsB5 = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40},
+	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
 	Name:        "hoosat-testnet-b5",
 	Net:         appmessage.Testnet,
 	RPCPort:     "42422",
@@ -478,7 +479,7 @@ var TestnetParamsB5 = Params{
 	DisableDifficultyAdjustment: false,
 
 	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12},
+	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12, 12},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -488,11 +489,11 @@ var TestnetParamsB5 = Params{
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
 	MaxBlockLevel: 225,
-	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600},
+	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
 
 var TestnetParamsB10 = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40},
+	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
 	Name:        "hoosat-testnet-b10",
 	Net:         appmessage.Testnet,
 	RPCPort:     "42422",
@@ -549,7 +550,7 @@ var TestnetParamsB10 = Params{
 	DisableDifficultyAdjustment: false,
 
 	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 16},
+	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 16, 16},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -559,7 +560,7 @@ var TestnetParamsB10 = Params{
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
 	MaxBlockLevel: 250,
-	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600},
+	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
 
 // SimnetParams defines the network parameters for the simulation test Hoosat
@@ -634,7 +635,7 @@ var SimnetParams = Params{
 
 // DevnetParams defines the network parameters for the development Hoosat network.
 var DevnetParams = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40},
+	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
 	Name:        "hoosat-devnet",
 	Net:         appmessage.Devnet,
 	RPCPort:     "42426",
@@ -684,7 +685,7 @@ var DevnetParams = Params{
 	DisableDifficultyAdjustment: false,
 
 	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12},
+	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12, 12},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -697,7 +698,7 @@ var DevnetParams = Params{
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	MaxBlockLevel: 225,
-	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600},
+	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
 
 // ErrDuplicateNet describes an error where the parameters for a Hoosat
