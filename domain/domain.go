@@ -49,6 +49,9 @@ func (d *domain) Consensus() externalapi.Consensus {
 func (d *domain) StagingConsensus() externalapi.Consensus {
 	d.stagingConsensusLock.RLock()
 	defer d.stagingConsensusLock.RUnlock()
+	if d.stagingConsensus == nil {
+		return nil
+	}
 	return *d.stagingConsensus
 }
 

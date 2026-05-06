@@ -69,6 +69,9 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	if blockGHOSTDAGData == nil {
 		return nil, nil, nil, errors.Errorf("blockGHOSTDAGData is nil for block %s", blockHash)
 	}
+	if selectedParentPastUTXO == nil {
+		return nil, nil, nil, errors.Errorf("selected parent past UTXO is nil for block %s", blockHash)
+	}
 
 	// IMPORTANT: For correct UTXO commitment, the DAA score used to build UTXOEntries must match
 	// the score implied by the block header. During pruning-point import/trusted flows, the DAA store
@@ -173,8 +176,7 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	defer log.Tracef("applyMergeSetBlocks end for block %s", blockHash)
 
 	if selectedParentPastUTXODiff == nil {
-		log.Warnf("selectedParentPastUTXODiff is nil for block %s, using empty UTXO diff", blockHash)
-		selectedParentPastUTXODiff = utxo.NewUTXODiff()
+		return nil, nil, errors.Errorf("selected parent past UTXO diff is nil for block %s", blockHash)
 	}
 
 	mergeSetHashes, err := csm.ghostdagManager.GetSortedMergeSet(stagingArea, blockHash)

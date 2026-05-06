@@ -72,6 +72,9 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 
 		if selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
 			blockStatus = externalapi.StatusDisqualifiedFromChain
+			if previousBlockUTXOSet == nil {
+				return 0, nil, errors.Errorf("missing selected parent past UTXO for disqualified block %s (selected parent %s)", unverifiedBlockHash, previousBlockHash)
+			}
 
 			blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingAreaForCurrentBlock, unverifiedBlockHash, false)
 			if err != nil {
@@ -82,6 +85,9 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockUTXOSet, blockGHOSTDAGData)
 			if err != nil {
 				return 0, nil, err
+			}
+			if pastUTXOSet == nil {
+				return 0, nil, errors.Errorf("calculated past UTXO is nil for disqualified block %s", unverifiedBlockHash)
 			}
 
 			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
@@ -240,6 +246,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 ) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveSingleBlockStatus for %s", blockHash))
 	defer onEnd()
+	if !csm.genesisHash.Equal(blockHash) && selectedParentPastUTXOSet == nil {
+		return 0, nil, errors.Errorf("missing selected parent past UTXO for block %s (selected parent %s)", blockHash, selectedParentHash)
+	}
 
 	log.Tracef("Calculating pastUTXO and acceptance data and multiset for block %s", blockHash)
 	blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
@@ -254,6 +263,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		stagingArea, blockHash, selectedParentPastUTXOSet, blockGHOSTDAGData)
 	if err != nil {
 		return 0, nil, err
+	}
+	if pastUTXOSet == nil {
+		return 0, nil, errors.Errorf("calculated past UTXO is nil for block %s", blockHash)
 	}
 
 	if csm.genesisHash.Equal(blockHash) {

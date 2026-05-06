@@ -67,6 +67,15 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 	return nil
 }
 
+func (flow *handleIBDFlow) requireStagingConsensus() (externalapi.Consensus, error) {
+	stagingConsensus := flow.Domain().StagingConsensus()
+	if stagingConsensus == nil {
+		return nil, protocolerrors.New(false, "staging consensus is not initialized")
+	}
+
+	return stagingConsensus, nil
+}
+
 func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
 	relayBlock *externalapi.DomainBlock,
 	highestKnownSyncerChainHash *externalapi.DomainHash,
@@ -156,7 +165,12 @@ func (flow *handleIBDFlow) syncAndValidatePruningPointProof() (*externalapi.Doma
 		return nil, err
 	}
 
-	err = flow.Domain().StagingConsensus().ApplyPruningPointProof(pruningPointProof)
+	stagingConsensus, err := flow.requireStagingConsensus()
+	if err != nil {
+		return nil, err
+	}
+
+	err = stagingConsensus.ApplyPruningPointProof(pruningPointProof)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +198,12 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 		return protocolerrors.Errorf(true, "the genesis pruning point violates finality")
 	}
 
-	err = flow.syncPruningPointFutureHeaders(flow.Domain().StagingConsensus(),
+	stagingConsensus, err := flow.requireStagingConsensus()
+	if err != nil {
+		return err
+	}
+
+	err = flow.syncPruningPointFutureHeaders(stagingConsensus,
 		syncerHeaderSelectedTipHash, proofPruningPoint, relayBlockHash, highBlockDAAScore)
 	if err != nil {
 		return err
@@ -192,7 +211,7 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 
 	log.Infof("Headers downloaded from peer %s", flow.peer)
 
-	relayBlockInfo, err := flow.Domain().StagingConsensus().GetBlockInfo(relayBlockHash)
+	relayBlockInfo, err := stagingConsensus.GetBlockInfo(relayBlockHash)
 	if err != nil {
 		return err
 	}
@@ -207,7 +226,7 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 	}
 
 	log.Debugf("Syncing the current pruning point UTXO set")
-	syncedPruningPointUTXOSetSuccessfully, err := flow.syncPruningPointUTXOSet(flow.Domain().StagingConsensus(), proofPruningPoint)
+	syncedPruningPointUTXOSetSuccessfully, err := flow.syncPruningPointUTXOSet(stagingConsensus, proofPruningPoint)
 	if err != nil {
 		return err
 	}

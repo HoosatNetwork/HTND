@@ -35,6 +35,10 @@ func TestCreateStagingConsensus(t *testing.T) {
 			t.Fatalf("New: %+v", err)
 		}
 
+		if domainInstance.StagingConsensus() != nil {
+			t.Fatalf("staging consensus should be nil before initialization")
+		}
+
 		err = domainInstance.InitStagingConsensusWithoutGenesis()
 		if err != nil {
 			t.Fatalf("InitStagingConsensusWithoutGenesis: %+v", err)

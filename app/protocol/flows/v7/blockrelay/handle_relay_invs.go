@@ -1,6 +1,7 @@
 package blockrelay
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
@@ -76,7 +77,9 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 
 	// Clean up offenseTracker entry when the connection ends, regardless of how it exits
 	defer func() {
+		offenseTrackerLock.Lock()
 		delete(offenseTracker, netConnection.Address())
+		offenseTrackerLock.Unlock()
 	}()
 
 	err := flow.start()
@@ -91,11 +94,13 @@ const (
 )
 
 var offenseTracker = make(map[string][]time.Time, 5)
+var offenseTrackerLock sync.Mutex
 
 func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 	address := flow.netConnection.Address()
 	now := time.Now()
 
+	offenseTrackerLock.Lock()
 	// Track offenses
 	offenseTimes := offenseTracker[address]
 	offenseTimes = append(offenseTimes, now)
@@ -108,6 +113,7 @@ func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 		}
 	}
 	offenseTracker[address] = recentOffenses
+	offenseTrackerLock.Unlock()
 
 	if len(recentOffenses) >= maxOffenses || offenseTimesOverrule {
 		log.Infof("Banning connection: %s due to exceeding offense threshold", address)
