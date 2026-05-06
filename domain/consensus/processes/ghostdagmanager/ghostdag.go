@@ -58,7 +58,7 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 	// Calculate rank using DAGKnight algorithm to determine dynamic K for the block
 	// DAGKnight TODO: modify blockversions before mainnet release.
 	var k externalapi.KType
-	if constants.GetBlockVersion() > 0 {
+	if constants.GetBlockVersion() >= 6 {
 		if len(blockParents) == 0 {
 			// Genesis block uses default K
 			k = gm.k[constants.GetBlockVersion()-1]
