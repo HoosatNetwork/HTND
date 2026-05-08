@@ -2,6 +2,7 @@ package ping
 
 import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 )
 
@@ -30,7 +31,10 @@ func (flow *receivePingsFlow) start() error {
 		if err != nil {
 			return err
 		}
-		pingMessage := message.(*appmessage.MsgPing)
+		pingMessage, err := unwrapPingMessage(message)
+		if err != nil {
+			return err
+		}
 
 		pongMessage := appmessage.NewMsgPong(pingMessage.Nonce)
 		err = flow.outgoingRoute.Enqueue(pongMessage)
@@ -38,4 +42,14 @@ func (flow *receivePingsFlow) start() error {
 			return err
 		}
 	}
+}
+
+func unwrapPingMessage(message appmessage.Message) (*appmessage.MsgPing, error) {
+	pingMessage, ok := message.(*appmessage.MsgPing)
+	if !ok {
+		return nil, protocolerrors.Errorf(true, "received unexpected message type. expected: %s, got: %s",
+			appmessage.CmdPing, message.Command())
+	}
+
+	return pingMessage, nil
 }

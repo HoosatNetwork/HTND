@@ -4,11 +4,11 @@ import (
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/app/protocol/flowcontext"
+	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
 	"github.com/pkg/errors"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 	"github.com/Hoosat-Oy/HTND/util/random"
 )
@@ -68,10 +68,23 @@ func (flow *sendPingsFlow) start() error {
 			}
 			return err
 		}
-		pongMessage := message.(*appmessage.MsgPong)
+		pongMessage, err := unwrapPongMessage(message)
+		if err != nil {
+			return err
+		}
 		if pongMessage.Nonce != pingMessage.Nonce {
 			return protocolerrors.New(true, "nonce mismatch between ping and pong")
 		}
 		flow.peer.SetPingIdle()
 	}
+}
+
+func unwrapPongMessage(message appmessage.Message) (*appmessage.MsgPong, error) {
+	pongMessage, ok := message.(*appmessage.MsgPong)
+	if !ok {
+		return nil, protocolerrors.Errorf(true, "received unexpected message type. expected: %s, got: %s",
+			appmessage.CmdPong, message.Command())
+	}
+
+	return pongMessage, nil
 }
