@@ -96,6 +96,7 @@ func (c *NetConnection) Disconnect() {
 	if atomic.AddUint32(&c.isRouterClosed, 1) == 1 {
 		c.router.Close()
 	}
+	c.connection.Disconnect()
 }
 
 // SetOnInvalidMessageHandler sets the invalid message handler for this connection
