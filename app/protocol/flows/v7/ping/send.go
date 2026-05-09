@@ -39,6 +39,7 @@ func SendPings(context SendPingsContext, incomingRoute *router.Route, outgoingRo
 
 func (flow *sendPingsFlow) start() error {
 	const pingInterval = 2 * time.Minute
+	const pongTimeout = 2 * time.Minute
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 
@@ -61,7 +62,7 @@ func (flow *sendPingsFlow) start() error {
 			return err
 		}
 
-		message, err := flow.incomingRoute.DequeueWithTimeout(30 * time.Second)
+		message, err := flow.incomingRoute.DequeueWithTimeout(pongTimeout)
 		if err != nil {
 			if errors.Is(err, router.ErrTimeout) {
 				return errors.Wrap(flowcontext.ErrPingTimeout, err.Error())
