@@ -19,6 +19,19 @@ import (
 	"github.com/pkg/errors"
 )
 
+func wrapResolveVirtualError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if database.IsNotFoundError(err) {
+		return err
+	}
+	if errors.As(err, &ruleerrors.RuleError{}) {
+		return protocolerrors.Wrapf(true, err, "resolve virtual failed during IBD")
+	}
+	return protocolerrors.Wrapf(false, err, "resolve virtual failed during IBD")
+}
+
 // IBDContext is the interface for the context needed for the HandleIBD flow.
 type IBDContext interface {
 	Domain() domain.Domain
@@ -854,7 +867,11 @@ func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64)
 			log.Errorf("Error: Not found: %s", err)
 			return err
 		}
-		return err
+		wrappedErr := wrapResolveVirtualError(err)
+		if protocolErr := (protocolerrors.ProtocolError{}); errors.As(wrappedErr, &protocolErr) {
+			log.Warnf("ResolveVirtual failed during IBD from %s: %v", flow.peer, err)
+		}
+		return wrappedErr
 	}
 
 	log.Infof("Resolved virtual")
