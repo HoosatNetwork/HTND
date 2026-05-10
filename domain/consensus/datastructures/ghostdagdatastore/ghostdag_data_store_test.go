@@ -24,6 +24,7 @@ func TestGHOSTDAGDataStoreRoundTripTrustedAndUntrusted(t *testing.T) {
 		[]*externalapi.DomainHash{testutils.Hash(4)},
 		map[externalapi.DomainHash]externalapi.KType{*testutils.Hash(3): 1},
 	)
+	data.SetDynamicK(5)
 
 	stagingArea := model.NewStagingArea()
 	store.Stage(stagingArea, blockHash, data, false)
@@ -41,6 +42,9 @@ func TestGHOSTDAGDataStoreRoundTripTrustedAndUntrusted(t *testing.T) {
 	if gotUntrusted.BlueScore() != data.BlueScore() || !gotUntrusted.SelectedParent().Equal(data.SelectedParent()) {
 		t.Fatalf("unexpected untrusted data")
 	}
+	if gotUntrusted.DynamicK() != data.DynamicK() {
+		t.Fatalf("unexpected untrusted dynamic K: got %d, want %d", gotUntrusted.DynamicK(), data.DynamicK())
+	}
 
 	gotTrusted, err := store.Get(dbManager, stagingArea, blockHash, true)
 	if err != nil {
@@ -48,5 +52,8 @@ func TestGHOSTDAGDataStoreRoundTripTrustedAndUntrusted(t *testing.T) {
 	}
 	if gotTrusted.BlueScore() != data.BlueScore() || !gotTrusted.SelectedParent().Equal(data.SelectedParent()) {
 		t.Fatalf("unexpected trusted data")
+	}
+	if gotTrusted.DynamicK() != data.DynamicK() {
+		t.Fatalf("unexpected trusted dynamic K: got %d, want %d", gotTrusted.DynamicK(), data.DynamicK())
 	}
 }

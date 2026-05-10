@@ -11,6 +11,7 @@ type KType byte
 type BlockGHOSTDAGData struct {
 	blueScore          uint64
 	blueWork           *big.Int
+	dynamicK           KType
 	selectedParent     *DomainHash
 	mergeSetBlues      []*DomainHash
 	mergeSetReds       []*DomainHash
@@ -44,6 +45,16 @@ func (bgd *BlockGHOSTDAGData) BlueScore() uint64 {
 // BlueWork returns the BlueWork of the block
 func (bgd *BlockGHOSTDAGData) BlueWork() *big.Int {
 	return bgd.blueWork
+}
+
+// DynamicK returns the dynamic K that was used for this block's GHOSTDAG calculation.
+func (bgd *BlockGHOSTDAGData) DynamicK() KType {
+	return bgd.dynamicK
+}
+
+// SetDynamicK sets the dynamic K that was used for this block's GHOSTDAG calculation.
+func (bgd *BlockGHOSTDAGData) SetDynamicK(dynamicK KType) {
+	bgd.dynamicK = dynamicK
 }
 
 // SelectedParent returns the SelectedParent of the block

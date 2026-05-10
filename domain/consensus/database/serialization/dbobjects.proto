@@ -98,6 +98,7 @@ message DbBlockGhostdagData {
   repeated DbHash mergeSetBlues = 4;
   repeated DbHash mergeSetReds = 5;
   repeated DbBluesAnticoneSizes bluesAnticoneSizes = 6;
+  uint32 dynamicK = 7;
 }
 
 message DbBluesAnticoneSizes {

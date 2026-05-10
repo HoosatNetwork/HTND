@@ -346,7 +346,14 @@ func (flow *handleRelayInvsFlow) start() error {
 			}
 		}
 		txslen := len(block.Transactions)
-		log.Infof("Accepted block %s from node %s with %d tx", inv.Hash, flow.netConnection.Address(), txslen)
+		acceptedBlockInfo, err := flow.Domain().Consensus().GetBlockInfo(inv.Hash)
+		if err != nil {
+			log.Warnf("Accepted block %s from node %s with %d tx, but failed to get block info: %v",
+				inv.Hash, flow.netConnection.Address(), txslen, err)
+		} else {
+			log.Infof("Accepted block %s from node %s with %d tx (dynamic K: %d)",
+				inv.Hash, flow.netConnection.Address(), txslen, acceptedBlockInfo.DynamicK)
+		}
 		err = flow.OnNewBlock(block)
 		if err != nil {
 			return err

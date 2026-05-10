@@ -16,6 +16,7 @@ func BlockGHOSTDAGDataToDBBlockGHOSTDAGData(blockGHOSTDAGData *externalapi.Block
 	return &DbBlockGhostdagData{
 		BlueScore:          blockGHOSTDAGData.BlueScore(),
 		BlueWork:           blockGHOSTDAGData.BlueWork().Bytes(),
+		DynamicK:           uint32(blockGHOSTDAGData.DynamicK()),
 		SelectedParent:     selectedParent,
 		MergeSetBlues:      DomainHashesToDbHashes(blockGHOSTDAGData.MergeSetBlues()),
 		MergeSetReds:       DomainHashesToDbHashes(blockGHOSTDAGData.MergeSetReds()),
@@ -49,12 +50,14 @@ func DBBlockGHOSTDAGDataToBlockGHOSTDAGData(dbBlockGHOSTDAGData *DbBlockGhostdag
 		return nil, err
 	}
 
-	return externalapi.NewBlockGHOSTDAGData(
+	blockGHOSTDAGData := externalapi.NewBlockGHOSTDAGData(
 		dbBlockGHOSTDAGData.BlueScore,
 		new(big.Int).SetBytes(dbBlockGHOSTDAGData.BlueWork),
 		selectedParent,
 		mergetSetBlues,
 		mergetSetReds,
 		bluesAnticoneSizes,
-	), nil
+	)
+	blockGHOSTDAGData.SetDynamicK(externalapi.KType(dbBlockGHOSTDAGData.DynamicK))
+	return blockGHOSTDAGData, nil
 }

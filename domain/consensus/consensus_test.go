@@ -65,11 +65,19 @@ func TestConsensus_GetBlockInfo(t *testing.T) {
 			t.Fatalf("Failed to get block info: %v", err)
 		}
 
+		ghostdagData, err := consensus.TrustedGHOSTDAGData(consensushashing.BlockHash(validBlock))
+		if err != nil {
+			t.Fatalf("Failed to get trusted GHOSTDAG data: %v", err)
+		}
+
 		if !info.Exists {
 			t.Fatal("The block is missing")
 		}
 		if info.BlockStatus != externalapi.StatusUTXOValid {
 			t.Fatalf("Expected block status: %s, instead got: %s", externalapi.StatusUTXOValid, info.BlockStatus)
+		}
+		if info.DynamicK != ghostdagData.DynamicK() {
+			t.Fatalf("Expected dynamic K: %d, instead got: %d", ghostdagData.DynamicK(), info.DynamicK)
 		}
 	})
 }

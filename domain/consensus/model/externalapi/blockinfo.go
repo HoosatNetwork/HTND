@@ -8,6 +8,7 @@ type BlockInfo struct {
 	BlockStatus    BlockStatus
 	BlueScore      uint64
 	BlueWork       *big.Int
+	DynamicK       KType
 	SelectedParent *DomainHash
 	MergeSetBlues  []*DomainHash
 	MergeSetReds   []*DomainHash
@@ -30,6 +31,7 @@ func (bi *BlockInfo) Clone() *BlockInfo {
 		BlockStatus:    bi.BlockStatus.Clone(),
 		BlueScore:      bi.BlueScore,
 		BlueWork:       new(big.Int).Set(bi.BlueWork),
+		DynamicK:       bi.DynamicK,
 		SelectedParent: bi.SelectedParent,
 		MergeSetBlues:  CloneHashes(bi.MergeSetBlues),
 		MergeSetReds:   CloneHashes(bi.MergeSetReds),

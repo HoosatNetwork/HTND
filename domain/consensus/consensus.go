@@ -572,6 +572,7 @@ func (s *consensus) GetBlockInfo(blockHash *externalapi.DomainHash) (*externalap
 
 	blockInfo.BlueScore = ghostdagData.BlueScore()
 	blockInfo.BlueWork = ghostdagData.BlueWork()
+	blockInfo.DynamicK = ghostdagData.DynamicK()
 	blockInfo.SelectedParent = ghostdagData.SelectedParent()
 	blockInfo.MergeSetBlues = ghostdagData.MergeSetBlues()
 	blockInfo.MergeSetReds = ghostdagData.MergeSetReds()

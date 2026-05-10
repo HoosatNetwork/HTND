@@ -914,6 +914,7 @@ type DbBlockGhostdagData struct {
 	MergeSetBlues      []*DbHash               `protobuf:"bytes,4,rep,name=mergeSetBlues,proto3" json:"mergeSetBlues,omitempty"`
 	MergeSetReds       []*DbHash               `protobuf:"bytes,5,rep,name=mergeSetReds,proto3" json:"mergeSetReds,omitempty"`
 	BluesAnticoneSizes []*DbBluesAnticoneSizes `protobuf:"bytes,6,rep,name=bluesAnticoneSizes,proto3" json:"bluesAnticoneSizes,omitempty"`
+	DynamicK           uint32                  `protobuf:"varint,7,opt,name=dynamicK,proto3" json:"dynamicK,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -988,6 +989,13 @@ func (x *DbBlockGhostdagData) GetBluesAnticoneSizes() []*DbBluesAnticoneSizes {
 		return x.BluesAnticoneSizes
 	}
 	return nil
+}
+
+func (x *DbBlockGhostdagData) GetDynamicK() uint32 {
+	if x != nil {
+		return x.DynamicK
+	}
+	return 0
 }
 
 type DbBluesAnticoneSizes struct {

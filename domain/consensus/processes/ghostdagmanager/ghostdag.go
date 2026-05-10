@@ -14,6 +14,7 @@ import (
 type blockGHOSTDAGData struct {
 	blueScore          uint64
 	blueWork           *big.Int
+	dynamicK           externalapi.KType
 	selectedParent     *externalapi.DomainHash
 	mergeSetBlues      []*externalapi.DomainHash
 	mergeSetReds       []*externalapi.DomainHash
@@ -21,7 +22,9 @@ type blockGHOSTDAGData struct {
 }
 
 func (bg *blockGHOSTDAGData) toModel() *externalapi.BlockGHOSTDAGData {
-	return externalapi.NewBlockGHOSTDAGData(bg.blueScore, bg.blueWork, bg.selectedParent, bg.mergeSetBlues, bg.mergeSetReds, bg.bluesAnticoneSizes)
+	ghostdagData := externalapi.NewBlockGHOSTDAGData(bg.blueScore, bg.blueWork, bg.selectedParent, bg.mergeSetBlues, bg.mergeSetReds, bg.bluesAnticoneSizes)
+	ghostdagData.SetDynamicK(bg.dynamicK)
+	return ghostdagData
 }
 
 // GHOSTDAG runs the GHOSTDAG protocol and calculates the block BlockGHOSTDAGData by the given parents.
@@ -76,6 +79,7 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 	} else {
 		k = gm.k[constants.GetBlockVersion()-1]
 	}
+	newBlockData.dynamicK = k
 
 	isGenesis := len(blockParents) == 0
 	if !isGenesis {

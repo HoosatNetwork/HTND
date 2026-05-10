@@ -190,8 +190,15 @@ func newErrorResponse(err error, reason appmessage.RejectReason) *appmessage.Sub
 
 // logBlockAcceptance logs successful block acceptance
 func logBlockAcceptance(context *rpccontext.Context, block *externalapi.DomainBlock, txCount int) {
-	log.Infof("Accepted block %s via submit with %d tx",
-		consensushashing.BlockHash(block), txCount)
+	blockHash := consensushashing.BlockHash(block)
+	blockInfo, err := context.Domain.Consensus().GetBlockInfo(blockHash)
+	if err != nil {
+		log.Warnf("Accepted block %s via submit with %d tx, but failed to get block info: %v",
+			blockHash, txCount, err)
+	} else {
+		log.Infof("Accepted block %s via submit with %d tx (dynamic K: %d)",
+			blockHash, txCount, blockInfo.DynamicK)
+	}
 	log.Debugf("Accepted PoW hash %s", block.PoWHash)
 }
 
