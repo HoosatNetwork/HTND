@@ -416,10 +416,8 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	const maxReps = 5
 	// Sample representatives deterministically (paper allows sampling for efficiency)
 	// Sort by hash string (lex order) → consistent across runs
-	reps := make([]*externalapi.DomainHash, 0, maxReps)
-	if len(P) <= maxReps || paperFaithful == false {
-		reps = P
-	} else {
+	reps := P
+	if len(P) > maxReps && paperFaithful {
 		sorted := make([]*externalapi.DomainHash, len(P))
 		copy(sorted, P)
 

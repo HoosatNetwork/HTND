@@ -61,14 +61,14 @@ func renderDotScript(dotScript string, filename string) error {
 	command := exec.Command("dot", "-Tsvg")
 	stdin, err := command.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("Error creating stdin pipe: %s", err)
+		return fmt.Errorf("error creating stdin pipe: %s", err)
 	}
 	spawn("renderDotScript", func() {
 		defer stdin.Close()
 
 		_, err = io.WriteString(stdin, dotScript)
 		if err != nil {
-			panic(fmt.Errorf("Error writing dotScript into stdin pipe: %s", err))
+			panic(fmt.Errorf("error writing dotScript into stdin pipe: %s", err))
 		}
 	})
 
@@ -76,7 +76,7 @@ func renderDotScript(dotScript string, filename string) error {
 	command.Stderr = &stderr
 	svg, err := command.Output()
 	if err != nil {
-		return fmt.Errorf("Error getting output of dot: %s\nstderr:\n%s", err, stderr.String())
+		return fmt.Errorf("error getting output of dot: %s\nstderr:\n%s", err, stderr.String())
 	}
 
 	return os.WriteFile(filename, svg, 0o600)

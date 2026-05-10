@@ -207,6 +207,7 @@ func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, he
 	return nil
 }
 
+//lint:ignore U1000 check is intentionally disabled for now (see ValidateHeaderInContext).
 func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	header externalapi.BlockHeader,
 ) error {
