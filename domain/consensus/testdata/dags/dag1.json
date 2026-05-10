@@ -1,6 +1,7 @@
 {
     "K": 4,
     "GenesisID": "0",
+    "ExpectedReds": null,
     "Blocks": [
         {
             "ID": "a1",
@@ -132,13 +133,12 @@
         },
         {
             "ID": "11",
-            "ExpectedScore": 6,
+            "ExpectedScore": 7,
             "ExpectedSelectedParent": "9",
-            "ExpectedReds": [
-                "7"
-            ],
+            "ExpectedReds": [],
             "ExpectedBlues": [
-                "9"
+                "9",
+                "7"
             ],
             "Parents": [
                 "7",
@@ -165,13 +165,12 @@
         },
         {
             "ID": "13",
-            "ExpectedScore": 5,
+            "ExpectedScore": 6,
             "ExpectedSelectedParent": "8",
-            "ExpectedReds": [
-                "3"
-            ],
+            "ExpectedReds": [],
             "ExpectedBlues": [
                 "8",
+                "3",
                 "5"
             ],
             "Parents": [
@@ -181,15 +180,14 @@
         },
         {
             "ID": "14",
-            "ExpectedScore": 6,
-            "ExpectedSelectedParent": "a10",
+            "ExpectedScore": 7,
+            "ExpectedSelectedParent": "13",
             "ExpectedReds": [
-                "3",
-                "5",
-                "13"
+                "4",
+                "a10"
             ],
             "ExpectedBlues": [
-                "a10"
+                "13"
             ],
             "Parents": [
                 "13",
@@ -198,7 +196,7 @@
         },
         {
             "ID": "15",
-            "ExpectedScore": 7,
+            "ExpectedScore": 8,
             "ExpectedSelectedParent": "11",
             "ExpectedReds": [
                 "a1",
@@ -215,7 +213,7 @@
         },
         {
             "ID": "16",
-            "ExpectedScore": 7,
+            "ExpectedScore": 8,
             "ExpectedSelectedParent": "11",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -227,7 +225,7 @@
         },
         {
             "ID": "17",
-            "ExpectedScore": 7,
+            "ExpectedScore": 8,
             "ExpectedSelectedParent": "14",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -239,7 +237,7 @@
         },
         {
             "ID": "18",
-            "ExpectedScore": 6,
+            "ExpectedScore": 7,
             "ExpectedSelectedParent": "13",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -251,7 +249,7 @@
         },
         {
             "ID": "19",
-            "ExpectedScore": 8,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "15",
             "ExpectedReds": [
                 "18"
@@ -266,7 +264,7 @@
         },
         {
             "ID": "20",
-            "ExpectedScore": 8,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "17",
             "ExpectedReds": [
                 "6",
@@ -285,13 +283,12 @@
         },
         {
             "ID": "21",
-            "ExpectedScore": 9,
+            "ExpectedScore": 11,
             "ExpectedSelectedParent": "20",
-            "ExpectedReds": [
-                "18"
-            ],
+            "ExpectedReds": [],
             "ExpectedBlues": [
-                "20"
+                "20",
+                "18"
             ],
             "Parents": [
                 "18",
@@ -300,7 +297,7 @@
         },
         {
             "ID": "22",
-            "ExpectedScore": 10,
+            "ExpectedScore": 12,
             "ExpectedSelectedParent": "21",
             "ExpectedReds": [
                 "15",
@@ -316,7 +313,7 @@
         },
         {
             "ID": "23",
-            "ExpectedScore": 9,
+            "ExpectedScore": 10,
             "ExpectedSelectedParent": "17",
             "ExpectedReds": [
                 "6",
@@ -333,7 +330,7 @@
         },
         {
             "ID": "24",
-            "ExpectedScore": 10,
+            "ExpectedScore": 11,
             "ExpectedSelectedParent": "23",
             "ExpectedReds": [
                 "7",
@@ -351,7 +348,7 @@
         },
         {
             "ID": "25555",
-            "ExpectedScore": 10,
+            "ExpectedScore": 12,
             "ExpectedSelectedParent": "21",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -363,16 +360,16 @@
         },
         {
             "ID": "26",
-            "ExpectedScore": 13,
+            "ExpectedScore": 18,
             "ExpectedSelectedParent": "25555",
             "ExpectedReds": [
-                "12",
-                "15",
-                "19",
                 "22"
             ],
             "ExpectedBlues": [
                 "25555",
+                "12",
+                "15",
+                "19",
                 "23",
                 "24"
             ],
@@ -384,7 +381,7 @@
         },
         {
             "ID": "27",
-            "ExpectedScore": 8,
+            "ExpectedScore": 9,
             "ExpectedSelectedParent": "16",
             "ExpectedReds": [],
             "ExpectedBlues": [
@@ -396,7 +393,7 @@
         },
         {
             "ID": "28",
-            "ExpectedScore": 11,
+            "ExpectedScore": 13,
             "ExpectedSelectedParent": "25555",
             "ExpectedReds": [
                 "12",
@@ -412,7 +409,7 @@
         },
         {
             "ID": "29",
-            "ExpectedScore": 14,
+            "ExpectedScore": 19,
             "ExpectedSelectedParent": "26",
             "ExpectedReds": [
                 "28"
@@ -427,7 +424,7 @@
         },
         {
             "ID": "30",
-            "ExpectedScore": 9,
+            "ExpectedScore": 10,
             "ExpectedSelectedParent": "27",
             "ExpectedReds": [],
             "ExpectedBlues": [

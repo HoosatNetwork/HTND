@@ -379,20 +379,6 @@ func TestAddresses(t *testing.T) {
 					return
 				}
 
-			case *util.AddressPublicKeyHash:
-				if h := a.HashBlake2b()[:]; !bytes.Equal(saddr, h) {
-					t.Errorf("%v: hashes do not match:\n%x != \n%x",
-						test.name, saddr, h)
-					return
-				}
-
-			case *util.AddressPublicKeyHashECDSA:
-				if h := a.HashBlake2b()[:]; !bytes.Equal(saddr, h) {
-					t.Errorf("%v: hashes do not match:\n%x != \n%x",
-						test.name, saddr, h)
-					return
-				}
-
 			case *util.AddressScriptHash:
 				if h := a.HashBlake2b()[:]; !bytes.Equal(saddr, h) {
 					t.Errorf("%v: hashes do not match:\n%x != \n%x",

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -135,8 +136,21 @@ func commonConfig() *config.Config {
 func randomDirectory(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "integration-test")
 	if err != nil {
-		t.Fatalf("Error creating temporary directory for test: %+v", err)
+		// If the system temp directory is full (or otherwise unavailable),
+		// fall back to a temp folder under the repository.
+		fallbackBase := filepath.Join(".", ".tmp")
+		if mkErr := os.MkdirAll(fallbackBase, 0o755); mkErr != nil {
+			t.Fatalf("Error creating fallback temp directory for test: %+v", mkErr)
+		}
+		dir, err = os.MkdirTemp(fallbackBase, "integration-test")
+		if err != nil {
+			t.Fatalf("Error creating temporary directory for test: %+v", err)
+		}
 	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
 
 	return dir
 }

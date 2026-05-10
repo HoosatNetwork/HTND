@@ -101,18 +101,33 @@ func checkIsUTXODiffOnlyRemoveCoinbase(t *testing.T, utxoDiff externalapi.UTXODi
 		return utxoDiff.ToAdd().Len() == 0 && utxoDiff.ToRemove().Len() == 0
 	}
 
-	if utxoDiff.ToAdd().Len() > 0 || utxoDiff.ToRemove().Len() > 1 {
+	coinbaseTxID := consensushashing.TransactionID(currentBlock.Transactions[0])
+	coinbaseOutputsCount := len(currentBlock.Transactions[0].Outputs)
+
+	if utxoDiff.ToAdd().Len() != 0 {
+		return false
+	}
+	if utxoDiff.ToRemove().Len() != coinbaseOutputsCount {
 		return false
 	}
 
-	iterator := utxoDiff.ToRemove().Iterator()
-	iterator.First()
-	outpoint, _, err := iterator.Get()
-	if err != nil {
-		t.Fatalf("Error getting from UTXODiff's iterator: %+v", err)
+	for outputIndex := range coinbaseOutputsCount {
+		outpoint := &externalapi.DomainOutpoint{TransactionID: *coinbaseTxID, Index: uint32(outputIndex)}
+		if !utxoDiff.ToRemove().Contains(outpoint) {
+			return false
+		}
 	}
-	if !outpoint.TransactionID.Equal(consensushashing.TransactionID(currentBlock.Transactions[0])) {
-		return false
+
+	iterator := utxoDiff.ToRemove().Iterator()
+	defer iterator.Close()
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		outpoint, _, err := iterator.Get()
+		if err != nil {
+			t.Fatalf("Error getting from UTXODiff's iterator: %+v", err)
+		}
+		if !outpoint.TransactionID.Equal(coinbaseTxID) {
+			return false
+		}
 	}
 
 	return true

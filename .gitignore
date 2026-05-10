@@ -2,6 +2,8 @@
 *~
 .vs 
 
+.tmp/
+
 # Databases
 htnd.db
 *-shm

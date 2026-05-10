@@ -144,15 +144,17 @@ func TestGHOSTDAG(t *testing.T) {
 							factory.implName, info.Name(), testBlockData.ID, err)
 					}
 
-					// because the difficulty is constant and equal to genesis the work should be blueScore*genesisWork.
+					if testBlockData.Score != (ghostdagData.BlueScore()) {
+						t.Fatalf("\nTEST FAILED:\n Impl: %s, FileName: %s \nBlock: %s, \nError: expected blue score %d but got %d.",
+							factory.implName, info.Name(), testBlockData.ID, testBlockData.Score, ghostdagData.BlueScore())
+					}
+
+					// Because the difficulty is constant and equal to genesis, each block contributes genesisWork.
+					// In this test genesis blueWork is initialized to 0, so expected blueWork is blueScore*genesisWork.
 					expectedWork := new(big.Int).Mul(genesisWork, new(big.Int).SetUint64(testBlockData.Score))
 					if expectedWork.Cmp(ghostdagData.BlueWork()) != 0 {
 						t.Fatalf("\nTEST FAILED:\n Impl: %s, FileName: %s \nBlock: %s, \nError: expected blue work %d but got %d.",
 							factory.implName, info.Name(), testBlockData.ID, expectedWork, ghostdagData.BlueWork())
-					}
-					if testBlockData.Score != (ghostdagData.BlueScore()) {
-						t.Fatalf("\nTEST FAILED:\n Impl: %s, FileName: %s \nBlock: %s, \nError: expected blue score %d but got %d.",
-							factory.implName, info.Name(), testBlockData.ID, testBlockData.Score, ghostdagData.BlueScore())
 					}
 
 					if !StringToDomainHash(testBlockData.SelectedParent).Equal(ghostdagData.SelectedParent()) {
@@ -171,6 +173,7 @@ func TestGHOSTDAG(t *testing.T) {
 					}
 				}
 				dagTopology.parentsMap = make(map[externalapi.DomainHash][]*externalapi.DomainHash)
+				dagTopology.childrenMap = make(map[externalapi.DomainHash][]*externalapi.DomainHash)
 				dagTopology.parentsMap[genesisHash] = nil
 				ghostdagDataStore.dagMap = make(map[externalapi.DomainHash]*externalapi.BlockGHOSTDAGData)
 				ghostdagDataStore.dagMap[genesisHash] = blockGHOSTDAGDataGenesis
@@ -382,16 +385,38 @@ func (dt *DAGTopologyManagerImpl) Parents(_ *model.StagingArea, blockHash *exter
 	return v, nil
 }
 
-func (dt *DAGTopologyManagerImpl) Children(_ *model.StagingArea, _ *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-	panic("unimplemented")
+func (dt *DAGTopologyManagerImpl) Children(_ *model.StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	v, ok := dt.childrenMap[*blockHash]
+	if !ok {
+		return []*externalapi.DomainHash{}, nil
+	}
+	return v, nil
 }
 
-func (dt *DAGTopologyManagerImpl) IsParentOf(_ *model.StagingArea, _ *externalapi.DomainHash, _ *externalapi.DomainHash) (bool, error) {
-	panic("unimplemented")
+func (dt *DAGTopologyManagerImpl) IsParentOf(_ *model.StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
+	parents, ok := dt.parentsMap[*blockHashB]
+	if !ok {
+		return false, nil
+	}
+	for _, p := range parents {
+		if p.Equal(blockHashA) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
-func (dt *DAGTopologyManagerImpl) IsChildOf(_ *model.StagingArea, _ *externalapi.DomainHash, _ *externalapi.DomainHash) (bool, error) {
-	panic("unimplemented")
+func (dt *DAGTopologyManagerImpl) IsChildOf(_ *model.StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {
+	children, ok := dt.childrenMap[*blockHashB]
+	if !ok {
+		return false, nil
+	}
+	for _, c := range children {
+		if c.Equal(blockHashA) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (dt *DAGTopologyManagerImpl) IsAncestorOf(stagingArea *model.StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error) {

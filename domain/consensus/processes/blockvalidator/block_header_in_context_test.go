@@ -2,13 +2,10 @@ package blockvalidator_test
 
 import (
 	"errors"
-	"math/big"
 	"strconv"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
-
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/blockheader"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -117,23 +114,10 @@ func TestCheckParentsIncest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("AddBlock: %+v", err)
 		}
-		version := constants.GetBlockVersion()
-		directParentsRelationBlock := &externalapi.DomainBlock{
-			Header: blockheader.NewImmutableBlockHeader(
-				version,
-				[]externalapi.BlockLevelParents{[]*externalapi.DomainHash{a, b}},
-				&externalapi.DomainHash{},
-				&externalapi.DomainHash{},
-				&externalapi.DomainHash{},
-				0,
-				0,
-				0,
-				0,
-				0,
-				big.NewInt(0),
-				&externalapi.DomainHash{},
-			),
-			Transactions: nil,
+
+		directParentsRelationBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{a, b}, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildBlockWithParents: %+v", err)
 		}
 
 		err = tc.ValidateAndInsertBlock(directParentsRelationBlock, true, true)
@@ -141,22 +125,9 @@ func TestCheckParentsIncest(t *testing.T) {
 			t.Fatalf("unexpected error %+v", err)
 		}
 
-		indirectParentsRelationBlock := &externalapi.DomainBlock{
-			Header: blockheader.NewImmutableBlockHeader(
-				version,
-				[]externalapi.BlockLevelParents{[]*externalapi.DomainHash{consensusConfig.GenesisHash, b}},
-				&externalapi.DomainHash{},
-				&externalapi.DomainHash{},
-				&externalapi.DomainHash{},
-				0,
-				0,
-				0,
-				0,
-				0,
-				big.NewInt(0),
-				&externalapi.DomainHash{},
-			),
-			Transactions: nil,
+		indirectParentsRelationBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{consensusConfig.GenesisHash, b}, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildBlockWithParents: %+v", err)
 		}
 
 		err = tc.ValidateAndInsertBlock(indirectParentsRelationBlock, true, true)

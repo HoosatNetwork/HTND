@@ -193,6 +193,7 @@ func (bb *testBlockBuilder) buildBlockWithParents(stagingArea *model.StagingArea
 	if err != nil {
 		return nil, nil, err
 	}
+	constants.SetBlockVersion(bb.blockVersionForDAAScore(daaScore))
 
 	ghostdagData, err := bb.ghostdagDataStore.Get(bb.databaseContext, stagingArea, tempHash, false)
 	if database.IsNotFoundError(err) {

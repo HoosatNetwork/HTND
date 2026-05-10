@@ -40,8 +40,8 @@ func TestPruning(t *testing.T) {
 			dagconfig.SimnetParams.Name:  "1582",
 		},
 		"dag-for-test-pruning.json": {
-			dagconfig.MainnetParams.Name: "503",
-			dagconfig.TestnetParams.Name: "502",
+			dagconfig.MainnetParams.Name: "423",
+			dagconfig.TestnetParams.Name: "423",
 			dagconfig.DevnetParams.Name:  "502",
 			dagconfig.SimnetParams.Name:  "503",
 		},
@@ -51,6 +51,9 @@ func TestPruning(t *testing.T) {
 		// Improve the performance of the test a little
 		consensusConfig.DisableDifficultyAdjustment = true
 		consensusConfig.POWScores = []uint64{math.MaxUint64}
+		// The test block builder derives the header version from DAA score vs POWScores.
+		// With POWScores=max, all blocks produced here are version 1; keep the forced version
+		// consistent so coinbase subsidy rules match the built headers.
 		constants.ForceSetBlockVersion(1)
 		err := filepath.Walk("./testdata", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -60,7 +63,7 @@ func TestPruning(t *testing.T) {
 				return nil
 			}
 
-			constants.ForceSetBlockVersion(5)
+			constants.ForceSetBlockVersion(1)
 
 			jsonFile, err := os.Open(path)
 			if err != nil {
@@ -103,9 +106,7 @@ func TestPruning(t *testing.T) {
 			}
 			defer teardown(false)
 
-			if consensusConfig.Name == "hoosat-testnet" {
-				constants.ForceSetBlockVersion(5)
-			}
+			constants.ForceSetBlockVersion(1)
 
 			blockIDToHash := map[string]*externalapi.DomainHash{
 				"0": consensusConfig.GenesisHash,

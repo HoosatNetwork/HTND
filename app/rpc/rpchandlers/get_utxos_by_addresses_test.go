@@ -7,10 +7,10 @@ import (
 )
 
 func TestEncodeHexStringRejectsOversizedSlice(t *testing.T) {
-	var value []byte
-	// Use unsafe to create a slice with a huge length/capacity (Go 1.17+)
-	data := unsafe.SliceData(value)
-	value = unsafe.Slice(data, math.MaxInt/2+1)
+	// Use unsafe to create a slice with a huge length/capacity without
+	// allocating that much memory. The slice must not be dereferenced.
+	dummy := byte(0)
+	value := unsafe.Slice(&dummy, math.MaxInt/2+1)
 
 	buffer, encoded := encodeHexString(nil, value)
 	if encoded != "" {

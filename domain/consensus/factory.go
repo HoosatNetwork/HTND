@@ -3,6 +3,7 @@ package consensus
 import (
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -621,9 +622,18 @@ func (f *factory) NewTestConsensus(config *Config, testName string) (
 ) {
 	datadir := f.dataDir
 	if datadir == "" {
-		datadir, err = os.MkdirTemp("", testName)
+		// Prefer a repo-local temp dir to avoid relying on system temp space (e.g. /tmp)
+		// which can be constrained in CI and containerized environments.
+		fallbackBase := filepath.Join(".", ".tmp")
+		if mkErr := os.MkdirAll(fallbackBase, 0o755); mkErr == nil {
+			datadir, err = os.MkdirTemp(fallbackBase, testName)
+		}
 		if err != nil {
-			return nil, nil, err
+			// As a last resort, fall back to the system temp directory.
+			datadir, err = os.MkdirTemp("", testName)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	var cacheSizeMiB int

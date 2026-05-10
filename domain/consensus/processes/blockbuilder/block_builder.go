@@ -110,6 +110,11 @@ func (bb *blockBuilder) buildBlock(stagingArea *model.StagingArea, coinbaseData 
 	if err != nil {
 		return nil, false, err
 	}
+	newBlockDAAScore, err := bb.newBlockDAAScore(stagingArea)
+	if err != nil {
+		return nil, false, err
+	}
+	constants.SetBlockVersion(bb.blockVersionForDAAScore(newBlockDAAScore))
 	coinbase, coinbaseHasRedReward, err := bb.newBlockCoinbaseTransaction(stagingArea, coinbaseData)
 	if err != nil {
 		return nil, false, err
@@ -237,13 +242,7 @@ func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions
 		return nil, err
 	}
 
-	// Raise BlockVersion until daaScore is more than powScore
-	var blockVersion uint16 = 1
-	for _, powScore := range bb.powScores {
-		if daaScore >= powScore {
-			blockVersion++
-		}
-	}
+	blockVersion := bb.blockVersionForDAAScore(daaScore)
 	constants.SetBlockVersion(blockVersion)
 
 	return blockheader.NewImmutableBlockHeader(
@@ -260,6 +259,16 @@ func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions
 		blueWork,
 		newBlockPruningPoint,
 	), nil
+}
+
+func (bb *blockBuilder) blockVersionForDAAScore(daaScore uint64) uint16 {
+	var blockVersion uint16 = 1
+	for _, powScore := range bb.powScores {
+		if daaScore >= powScore {
+			blockVersion++
+		}
+	}
+	return blockVersion
 }
 
 func (bb *blockBuilder) newBlockParents(stagingArea *model.StagingArea, daaScore uint64) ([]externalapi.BlockLevelParents, error) {

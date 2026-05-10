@@ -125,7 +125,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		MaxManifestFileSize: 128 << 20,
 		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
 
-		DisableWAL: false,
+		// WAL is not needed for integration tests and disabling it avoids WAL
+		// rotation paths that can be problematic under constrained CI environments.
+		DisableWAL: envBool("HTND_PEBBLE_DISABLE_WAL") || envBool("HTND_TEST_MODE"),
 		// WALBytesPerSync: 4 << 20,
 		// BytesPerSync:    4 << 20,
 

@@ -9,7 +9,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/chewxy/math32 v1.11.1
 	github.com/cockroachdb/errors v1.12.0
-	github.com/cockroachdb/pebble/v2 v2.1.4
+	github.com/cockroachdb/pebble/v2 v2.1.5
 	github.com/davecgh/go-spew v1.1.1
 	github.com/gofrs/flock v0.13.0
 	github.com/jessevdk/go-flags v1.6.1

@@ -8,9 +8,15 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// set log level to trace, so that logClosures passed to log.Tracef are covered
-	log.SetLevel(logger.LevelTrace)
-	logger.InitLogStdout(logger.LevelTrace)
+	// Default to a quiet logger during tests so failures are readable and output
+	// doesn't get truncated by CI/log collectors.
+	// Set TXSCRIPT_TRACE=1 to re-enable trace-level logs when debugging.
+	level := logger.LevelError
+	if os.Getenv("TXSCRIPT_TRACE") == "1" {
+		level = logger.LevelTrace
+	}
+	log.SetLevel(level)
+	logger.InitLogStdout(level)
 
 	os.Exit(m.Run())
 }

@@ -161,11 +161,6 @@ func (b *ScriptBuilder) addData(data []byte) *ScriptBuilder {
 		b.script = append(b.script, OpPushData2)
 		b.script = append(b.script, buf...)
 	default:
-		if dataLen < 0 || dataLen > MaxScriptSize {
-			str := fmt.Sprintf("data size %d is larger than max script size %d", dataLen, MaxScriptSize)
-			b.err = ErrScriptNotCanonical(str)
-			return b
-		}
 		buf := make([]byte, 4)
 		dataLenUint32 := uint32(dataLen)
 		binary.LittleEndian.PutUint32(buf, dataLenUint32)

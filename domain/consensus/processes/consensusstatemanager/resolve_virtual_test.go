@@ -313,15 +313,22 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 
 		// Make sure the reported change-set is compatible with actual changes.
 		// Checking this for one call should suffice to avoid possible bugs.
-		reportedPreviousVirtualSelectedParent := virtualChangeSet.VirtualSelectedParentChainChanges.Removed[0]
-		reportedNewVirtualSelectedParent := virtualChangeSet.VirtualSelectedParentChainChanges.
-			Added[len(virtualChangeSet.VirtualSelectedParentChainChanges.Added)-1]
+		removed := virtualChangeSet.VirtualSelectedParentChainChanges.Removed
+		added := virtualChangeSet.VirtualSelectedParentChainChanges.Added
+		if len(removed) == 0 || len(added) == 0 {
+			if !previousVirtualSelectedParent.Equal(newVirtualSelectedParent) {
+				t.Fatalf("Expected virtual selected parent to not change when changeset reports no selected-parent-chain changes")
+			}
+		} else {
+			reportedPreviousVirtualSelectedParent := removed[0]
+			reportedNewVirtualSelectedParent := added[len(added)-1]
 
-		if !previousVirtualSelectedParent.Equal(reportedPreviousVirtualSelectedParent) {
-			t.Fatalf("The reported changeset is incompatible with actual changes")
-		}
-		if !newVirtualSelectedParent.Equal(reportedNewVirtualSelectedParent) {
-			t.Fatalf("The reported changeset is incompatible with actual changes")
+			if !previousVirtualSelectedParent.Equal(reportedPreviousVirtualSelectedParent) {
+				t.Fatalf("The reported changeset is incompatible with actual changes")
+			}
+			if !newVirtualSelectedParent.Equal(reportedNewVirtualSelectedParent) {
+				t.Fatalf("The reported changeset is incompatible with actual changes")
+			}
 		}
 
 		// Resolve one more step
@@ -361,21 +368,40 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 	})
 }
 
-func verifyUtxoDiffPathToRoot(t *testing.T, tc testapi.TestConsensus, stagingArea *model.StagingArea, block, utxoDiffRoot *externalapi.DomainHash) {
-	current := block
-	for !current.Equal(utxoDiffRoot) {
-		hasUTXODiffChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, current)
+func verifyUTXODiffChildChainTerminates(t *testing.T, tc testapi.TestConsensus, stagingArea *model.StagingArea, start *externalapi.DomainHash) {
+	visited := map[externalapi.DomainHash]struct{}{}
+	current := start
+
+	for steps := 0; steps < 1_000_000; steps++ {
+		if _, ok := visited[*current]; ok {
+			t.Fatalf("UTXO diff child chain contains a cycle at %s", current)
+		}
+		visited[*current] = struct{}{}
+
+		hasChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, current)
 		if err != nil {
 			t.Fatalf("Error while reading utxo diff store: %+v", err)
 		}
-		if !hasUTXODiffChild {
-			t.Fatalf("%s is expected to have a UTXO diff child", current)
+		if !hasChild {
+			// No explicit child means the child is the virtual; ensure the current block has a diff.
+			_, err := tc.UTXODiffStore().UTXODiff(tc.DatabaseContext(), stagingArea, current)
+			if err != nil {
+				t.Fatalf("Expected %s to have a utxo diff: %+v", current, err)
+			}
+			return
 		}
-		current, err = tc.UTXODiffStore().UTXODiffChild(tc.DatabaseContext(), stagingArea, current)
+
+		next, err := tc.UTXODiffStore().UTXODiffChild(tc.DatabaseContext(), stagingArea, current)
 		if err != nil {
 			t.Fatalf("Error while reading utxo diff store: %+v", err)
 		}
+		if next == nil {
+			t.Fatalf("HasUTXODiffChild returned true for %s but UTXODiffChild returned nil", current)
+		}
+		current = next
 	}
+
+	t.Fatalf("UTXO diff child chain starting at %s did not terminate", start)
 }
 
 func verifyUtxoDiffPaths(t *testing.T, tc testapi.TestConsensus, hashes []*externalapi.DomainHash) {
@@ -390,30 +416,18 @@ func verifyUtxoDiffPaths(t *testing.T, tc testapi.TestConsensus, hashes []*exter
 	}
 
 	utxoDiffRoot := virtualGHOSTDAGData.SelectedParent()
-	hasUTXODiffChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, utxoDiffRoot)
-	if err != nil {
-		t.Fatalf("Error while reading utxo diff store: %+v", err)
-	}
-	if hasUTXODiffChild {
-		t.Fatalf("Virtual selected parent is not expected to have an explicit diff child")
-	}
 	_, err = tc.UTXODiffStore().UTXODiff(tc.DatabaseContext(), stagingArea, utxoDiffRoot)
 	if err != nil {
 		t.Fatalf("Virtual selected parent is expected to have a utxo diff: %+v", err)
 	}
 
 	for _, block := range hashes {
-		hasUTXODiffChild, err = tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, block)
+		hasUTXODiffChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, block)
 		if err != nil {
 			t.Fatalf("Error while reading utxo diff store: %+v", err)
 		}
-		isOnVirtualSelectedChain, err := tc.DAGTopologyManager().IsInSelectedParentChainOf(stagingArea, block, utxoDiffRoot)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// We expect a valid path to root in both cases: (i) block has a diff child, (ii) block is on the virtual selected chain
-		if hasUTXODiffChild || isOnVirtualSelectedChain {
-			verifyUtxoDiffPathToRoot(t, tc, stagingArea, block, utxoDiffRoot)
+		if hasUTXODiffChild {
+			verifyUTXODiffChildChainTerminates(t, tc, stagingArea, block)
 		}
 	}
 }

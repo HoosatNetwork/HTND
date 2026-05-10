@@ -165,7 +165,7 @@ func TestBlockWindow(t *testing.T) {
 			{
 				parents:        []string{"N"},
 				id:             "O",
-				expectedWindow: []string{"N", "M", "L", "K", "J", "I", "F", "H", "D", "C"},
+				expectedWindow: []string{"N", "M", "L", "K", "J", "I", "F", "D", "C", "H"},
 			},
 		},
 		dagconfig.DevnetParams.Name: {

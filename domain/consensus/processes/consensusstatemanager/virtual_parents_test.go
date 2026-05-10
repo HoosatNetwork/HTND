@@ -1,6 +1,7 @@
 package consensusstatemanager_test
 
 import (
+	"encoding/binary"
 	"slices"
 	"sort"
 	"testing"
@@ -76,8 +77,13 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 
 		// Clear all tips.
 		var virtualSelectedParent *externalapi.DomainHash
+		var coinbaseExtraDataCounter uint64
 		for {
-			block, err := tc.BuildBlock(&externalapi.DomainCoinbaseData{ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0}, ExtraData: nil}, nil)
+			extraData := make([]byte, 8)
+			binary.LittleEndian.PutUint64(extraData, coinbaseExtraDataCounter)
+			coinbaseExtraDataCounter++
+
+			block, err := tc.BuildBlock(&externalapi.DomainCoinbaseData{ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0}, ExtraData: extraData}, nil)
 			if err != nil {
 				t.Fatalf("Failed building a block: %v", err)
 			}
