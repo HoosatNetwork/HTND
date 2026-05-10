@@ -293,14 +293,14 @@ func TestKColouringUsesCacheWithoutSharingSlices(t *testing.T) {
 	}
 
 	manager := &ghostdagManager{
-		dagTopologyManager: topology,
+		dagTopologyManager:  topology,
 		dagTraversalManager: traversal,
-		ghostdagDataStore:  store,
-		pastCache:          lrucache.New[[]*externalapi.DomainHash](16, false),
-		futureCache:        lrucache.New[[]*externalapi.DomainHash](16, false),
-		anticoneCache:      lrucache.New[[]*externalapi.DomainHash](16, false),
-		kColouringCache:    lrucache.New[KColouringResult](16, false),
-		umcVotingCache:     lrucache.New[int](16, false),
+		ghostdagDataStore:   store,
+		pastCache:           lrucache.New[[]*externalapi.DomainHash](16, false),
+		futureCache:         lrucache.New[[]*externalapi.DomainHash](16, false),
+		anticoneCache:       lrucache.New[[]*externalapi.DomainHash](16, false),
+		kColouringCache:     lrucache.New[KColouringResult](16, false),
+		umcVotingCache:      lrucache.New[int](16, false),
 	}
 
 	graph := []*externalapi.DomainHash{block, genesis, parent}
