@@ -68,7 +68,10 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 				return err
 			}
 			k = externalapi.KType(rank)
-			gm.k[constants.GetBlockVersion()-1] = k
+			// Don't change the static K which affects pruning
+			// unless making factory to respect the dynamic K completely
+			// instead of using mixed static and dynamic K.
+			// gm.k[constants.GetBlockVersion()-1] = k
 		}
 	} else {
 		k = gm.k[constants.GetBlockVersion()-1]
