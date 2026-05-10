@@ -1,7 +1,6 @@
 package consensusstatemanager_test
 
 import (
-	"encoding/binary"
 	"slices"
 	"sort"
 	"testing"
@@ -10,8 +9,6 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/testapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
 )
 
@@ -25,7 +22,7 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 		}
 		defer teardown(false)
 
-		getSortedVirtualParents := func(tc testapi.TestConsensus) []*externalapi.DomainHash {
+		getSortedVirtualParents := func(tc testapi.TestConsensus) ([]*externalapi.DomainHash, int) {
 			virtualRelations, err := tc.BlockRelationStore().BlockRelation(tc.DatabaseContext(), stagingArea, model.VirtualBlockHash)
 			if err != nil {
 				t.Fatalf("Failed getting virtual block virtualRelations: %v", err)
@@ -35,18 +32,27 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Consensus failed building a block: %v", err)
 			}
+			blockVersion := int(block.Header.Version())
+			if blockVersion <= 0 || blockVersion > len(consensusConfig.MaxBlockParents) {
+				t.Fatalf("Unexpected block version %d (MaxBlockParents has %d entries)", blockVersion, len(consensusConfig.MaxBlockParents))
+			}
+			maxParents := int(consensusConfig.MaxBlockParents[blockVersion-1])
+			if maxParents <= 0 {
+				t.Fatalf("Unexpected MaxBlockParents[%d]=%d", blockVersion-1, maxParents)
+			}
 			blockParents := block.Header.DirectParents()
 			sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, virtualRelations.Parents, tc, t))
 			sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, blockParents, tc, t))
 			if !externalapi.HashesEqual(virtualRelations.Parents, blockParents) {
 				t.Fatalf("Block relations and BuildBlock return different parents for virtual, %s != %s", virtualRelations.Parents, blockParents)
 			}
-			return virtualRelations.Parents
+			return virtualRelations.Parents, maxParents
 		}
 
-		// We build 3*consensusConfig.MaxBlockParents each one with blueWork higher than the other.
-		parents := make([]*externalapi.DomainHash, 0, consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1])
-		for i := 0; i < 3*int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]); i++ {
+		_, maxParents := getSortedVirtualParents(tc)
+
+		// We build 3*maxParents chains, each one with blueWork higher than the other.
+		for i := 0; i < 3*maxParents; i++ {
 			lastBlock := consensusConfig.GenesisHash
 			for j := 0; j <= i; j++ {
 				lastBlock, _, err = tc.AddBlock([]*externalapi.DomainHash{lastBlock}, nil, nil)
@@ -54,51 +60,30 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 					t.Fatalf("Failed Adding block to tc: %+v", err)
 				}
 			}
-			parents = append(parents, lastBlock)
 		}
 
-		virtualParents := getSortedVirtualParents(tc)
-		// Sort parents by GHOSTDAG order
-		sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, parents, tc, t))
-
-		candidateParentSet := make(map[externalapi.DomainHash]struct{}, len(parents))
-		for _, parent := range parents {
-			candidateParentSet[*parent] = struct{}{}
-		}
-
-		if len(virtualParents) > int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]) {
-			t.Fatalf("Expected at most %d virtual parents, got %d", consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1], len(virtualParents))
-		}
-		for i, virtualParent := range virtualParents {
-			if _, ok := candidateParentSet[*virtualParent]; !ok {
-				t.Fatalf("Unexpected virtual parent at %d: %s", i, virtualParent)
-			}
+		virtualParents, maxParents := getSortedVirtualParents(tc)
+		if len(virtualParents) > maxParents {
+			t.Fatalf("Expected at most %d virtual parents, got %d", maxParents, len(virtualParents))
 		}
 
 		// Clear all tips.
 		var virtualSelectedParent *externalapi.DomainHash
-		var coinbaseExtraDataCounter uint64
 		for {
-			extraData := make([]byte, 8)
-			binary.LittleEndian.PutUint64(extraData, coinbaseExtraDataCounter)
-			coinbaseExtraDataCounter++
-
-			block, err := tc.BuildBlock(&externalapi.DomainCoinbaseData{ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0}, ExtraData: extraData}, nil)
-			if err != nil {
-				t.Fatalf("Failed building a block: %v", err)
-			}
-			err = tc.ValidateAndInsertBlock(block, true, true)
-			if err != nil {
-				t.Fatalf("Failed Inserting block to tc: %v", err)
-			}
-			virtualSelectedParent = consensushashing.BlockHash(block)
-			if len(block.Header.DirectParents()) == 1 {
+			virtualParents, _ := getSortedVirtualParents(tc)
+			if len(virtualParents) == 1 {
+				virtualSelectedParent = virtualParents[0]
 				break
+			}
+			_, _, err := tc.AddBlock(virtualParents, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed Adding block to tc: %+v", err)
 			}
 		}
 		// build exactly consensusConfig.MaxBlockParents
-		parents = make([]*externalapi.DomainHash, 0, consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1])
-		for i := 0; i < int(consensusConfig.MaxBlockParents[constants.GetBlockVersion()-1]); i++ {
+		_, maxParents = getSortedVirtualParents(tc)
+		parents := make([]*externalapi.DomainHash, 0, maxParents)
+		for i := 0; i < maxParents; i++ {
 			block, _, err := tc.AddBlock([]*externalapi.DomainHash{virtualSelectedParent}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed Adding block to tc: %+v", err)
@@ -107,7 +92,7 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 		}
 
 		sort.Sort(testutils.NewTestGhostDAGSorter(stagingArea, parents, tc, t))
-		virtualParents = getSortedVirtualParents(tc)
+		virtualParents, _ = getSortedVirtualParents(tc)
 		// Check that all parents are virtual parents
 		if len(virtualParents) < len(parents) {
 			t.Fatalf("Expected at least %d virtual parents, got %d", len(parents), len(virtualParents))

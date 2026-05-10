@@ -255,13 +255,12 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		previousBlockHash := consensusConfig.GenesisHash
 		for i := range initialChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
-			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", i)
-			hashes = append(hashes, previousBlockHash)
-			printfDebug("A_%d: %s\n", i, previousBlockHash)
-
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in initial chain: %+v", i, err)
 			}
+			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", i)
+			hashes = append(hashes, previousBlockHash)
+			printfDebug("A_%d: %s\n", i, previousBlockHash)
 		}
 
 		printfDebug("\n")
@@ -352,13 +351,12 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 		previousBlockHash = firstChainTip
 		for i := range reorgChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
-			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", initialChainLength+i)
-			hashes = append(hashes, previousBlockHash)
-			printfDebug("A_%d: %s\n", initialChainLength+i, previousBlockHash)
-
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in initial chain: %+v", initialChainLength+i, err)
 			}
+			blocks[*previousBlockHash] = fmt.Sprintf("A_%d", initialChainLength+i)
+			hashes = append(hashes, previousBlockHash)
+			printfDebug("A_%d: %s\n", initialChainLength+i, previousBlockHash)
 		}
 
 		printfDebug("\n")

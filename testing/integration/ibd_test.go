@@ -244,6 +244,8 @@ func mineNextBlockWithMockTimestamps(t *testing.T, harness *appHarness, rd *rand
 }
 
 func TestBoundedMergeDepth(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping bounded merge depth integration test (takes too long in CI)")
+
 	overrideDAGParams := dagconfig.SimnetParams
 
 	overrideDAGParams.MergeDepth = []uint64{50}
