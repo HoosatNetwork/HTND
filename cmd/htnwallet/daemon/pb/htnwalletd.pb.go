@@ -7,11 +7,12 @@
 package pb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -480,7 +481,7 @@ func (x *CreateUnsignedCompoundTransactionResponse) GetUnsignedTransactions() []
 type ShowAddressesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AddressType   AddressType            `protobuf:"varint,1,opt,name=addressType,proto3,enum=htnwalletd.AddressType" json:"addressType,omitempty"`
-	IncludeBoth   bool                   `protobuf:"varint,2,opt,name=includeBoth,proto3" json:"includeBoth,omitempty"`
+	IncludaAll    bool                   `protobuf:"varint,2,opt,name=includeBoth,proto3" json:"includeBoth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -522,9 +523,9 @@ func (x *ShowAddressesRequest) GetAddressType() AddressType {
 	return AddressType_ADDRESS_TYPE_UNSPECIFIED
 }
 
-func (x *ShowAddressesRequest) GetIncludeBoth() bool {
+func (x *ShowAddressesRequest) GetIncludaAll() bool {
 	if x != nil {
-		return x.IncludeBoth
+		return x.IncludaAll
 	}
 	return false
 }

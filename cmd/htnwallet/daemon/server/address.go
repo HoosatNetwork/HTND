@@ -60,7 +60,7 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 			cosignerIndex: s.keysFile.CosignerIndex,
 			keyChain:      libhtnwallet.ExternalKeychain,
 		}
-		if request.GetIncludeBoth() && !s.isMultisig() {
+		if request.GetIncludaAll() && !s.isMultisig() {
 			addressStrings, err := s.walletAddressStringsForScan(walletAddr)
 			if err != nil {
 				return nil, err

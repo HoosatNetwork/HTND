@@ -7,14 +7,15 @@ package pb
 import (
 	context "context"
 	fmt "fmt"
+	io "io"
+	unsafe "unsafe"
+
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	io "io"
-	unsafe "unsafe"
 )
 
 const (
@@ -201,7 +202,7 @@ func (m *ShowAddressesRequest) CloneVT() *ShowAddressesRequest {
 	}
 	r := new(ShowAddressesRequest)
 	r.AddressType = m.AddressType
-	r.IncludeBoth = m.IncludeBoth
+	r.IncludaAll = m.IncludaAll
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -830,7 +831,7 @@ func (this *ShowAddressesRequest) EqualVT(that *ShowAddressesRequest) bool {
 	if this.AddressType != that.AddressType {
 		return false
 	}
-	if this.IncludeBoth != that.IncludeBoth {
+	if this.IncludaAll != that.IncludaAll {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -2182,9 +2183,9 @@ func (m *ShowAddressesRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) 
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if m.IncludeBoth {
+	if m.IncludaAll {
 		i--
-		if m.IncludeBoth {
+		if m.IncludaAll {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
@@ -3528,9 +3529,9 @@ func (m *ShowAddressesRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, e
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if m.IncludeBoth {
+	if m.IncludaAll {
 		i--
-		if m.IncludeBoth {
+		if m.IncludaAll {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
@@ -4625,7 +4626,7 @@ func (m *ShowAddressesRequest) SizeVT() (n int) {
 	if m.AddressType != 0 {
 		n += 1 + protohelpers.SizeOfVarint(uint64(m.AddressType))
 	}
-	if m.IncludeBoth {
+	if m.IncludaAll {
 		n += 2
 	}
 	n += len(m.unknownFields)
@@ -5896,7 +5897,7 @@ func (m *ShowAddressesRequest) UnmarshalVT(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IncludeBoth", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field IncludaAll", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -5913,7 +5914,7 @@ func (m *ShowAddressesRequest) UnmarshalVT(dAtA []byte) error {
 					break
 				}
 			}
-			m.IncludeBoth = bool(v != 0)
+			m.IncludaAll = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
@@ -8898,7 +8899,7 @@ func (m *ShowAddressesRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IncludeBoth", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field IncludaAll", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -8915,7 +8916,7 @@ func (m *ShowAddressesRequest) UnmarshalVTUnsafe(dAtA []byte) error {
 					break
 				}
 			}
-			m.IncludeBoth = bool(v != 0)
+			m.IncludaAll = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

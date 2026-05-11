@@ -24,8 +24,8 @@ func showAddresses(conf *showAddressesConfig) error {
 	}
 
 	request := &pb.ShowAddressesRequest{AddressType: addressType}
-	if conf.IncludeBoth {
-		request.IncludeBoth = true
+	if conf.IncludaAll {
+		request.IncludaAll = true
 	}
 
 	response, err := daemonClient.ShowAddresses(ctx, request)
@@ -34,7 +34,7 @@ func showAddresses(conf *showAddressesConfig) error {
 	}
 
 	header := "Addresses"
-	if conf.IncludeBoth {
+	if conf.IncludaAll {
 		header = "Addresses (P2PK, P2PKH, P2SH)"
 	}
 	fmt.Printf("%s (%d):\n", header, len(response.Address))
