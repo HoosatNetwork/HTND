@@ -35,7 +35,7 @@ func showAddresses(conf *showAddressesConfig) error {
 
 	header := "Addresses"
 	if conf.IncludeBoth {
-		header = "Addresses (both P2PK and P2PKH)"
+		header = "Addresses (P2PK, P2PKH, P2SH)"
 	}
 	fmt.Printf("%s (%d):\n", header, len(response.Address))
 	for _, address := range response.Address {

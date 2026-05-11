@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"strconv"
@@ -87,8 +88,30 @@ func (rtl *compoundTxRateLimiter) extractSenderAddresses(transaction *externalap
 
 		// Prefer standard address extraction (when possible) so the limiter groups by human-readable address.
 		if rtl.config != nil && rtl.config.DAGParams != nil {
-			_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, rtl.config.DAGParams)
+			scriptClass, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, rtl.config.DAGParams)
 			if err == nil && extractedAddress != nil {
+				// For P2SH spends, try to canonicalize to the underlying redeemScript address (e.g. P2SH-P2PKH)
+				// to avoid bypassing per-address limits by switching between address encodings.
+				if scriptClass == txscript.ScriptHashTy {
+					if scriptHashAddr, ok := extractedAddress.(*util.AddressScriptHash); ok && scriptHashAddr != nil {
+						pushes, err := txscript.PushedData(input.SignatureScript)
+						if err == nil && len(pushes) > 0 {
+							redeemScript := pushes[len(pushes)-1]
+							if redeemScript != nil {
+								redeemHash := util.HashBlake2b(redeemScript)
+								if bytes.Equal(redeemHash, scriptHashAddr.ScriptAddress()) {
+									redeemSPK := &externalapi.ScriptPublicKey{Script: redeemScript, Version: scriptPublicKey.Version}
+									_, innerAddr, err := txscript.ExtractScriptPubKeyAddress(redeemSPK, rtl.config.DAGParams)
+									if err == nil && innerAddr != nil {
+										addresses[innerAddr.EncodeAddress()] = true
+										continue
+									}
+								}
+							}
+						}
+					}
+				}
+
 				addresses[extractedAddress.EncodeAddress()] = true
 				continue
 			}

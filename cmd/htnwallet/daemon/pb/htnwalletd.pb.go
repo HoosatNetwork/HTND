@@ -27,6 +27,7 @@ const (
 	AddressType_ADDRESS_TYPE_UNSPECIFIED AddressType = 0
 	AddressType_ADDRESS_TYPE_P2PKH       AddressType = 1
 	AddressType_ADDRESS_TYPE_P2PK        AddressType = 2
+	AddressType_ADDRESS_TYPE_P2SH        AddressType = 3
 )
 
 // Enum value maps for AddressType.
@@ -35,11 +36,13 @@ var (
 		0: "ADDRESS_TYPE_UNSPECIFIED",
 		1: "ADDRESS_TYPE_P2PKH",
 		2: "ADDRESS_TYPE_P2PK",
+		3: "ADDRESS_TYPE_P2SH",
 	}
 	AddressType_value = map[string]int32{
 		"ADDRESS_TYPE_UNSPECIFIED": 0,
 		"ADDRESS_TYPE_P2PKH":       1,
 		"ADDRESS_TYPE_P2PK":        2,
+		"ADDRESS_TYPE_P2SH":        3,
 	}
 )
 
@@ -619,10 +622,11 @@ type NewAddressResponse struct {
 	// address is the primary address string returned by the daemon.
 	// When addressType is unspecified it defaults to P2PK.
 	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	// p2pkAddress and p2pkhAddress are returned for single-sig wallets.
+	// p2pkAddress, p2pkhAddress and p2shAddress are returned for single-sig wallets.
 	// For multisig wallets (P2SH), these fields are empty.
 	P2PkAddress   string `protobuf:"bytes,2,opt,name=p2pkAddress,proto3" json:"p2pkAddress,omitempty"`
 	P2PkhAddress  string `protobuf:"bytes,3,opt,name=p2pkhAddress,proto3" json:"p2pkhAddress,omitempty"`
+	P2ShAddress   string `protobuf:"bytes,4,opt,name=p2shAddress,proto3" json:"p2shAddress,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -674,6 +678,13 @@ func (x *NewAddressResponse) GetP2PkAddress() string {
 func (x *NewAddressResponse) GetP2PkhAddress() string {
 	if x != nil {
 		return x.P2PkhAddress
+	}
+	return ""
+}
+
+func (x *NewAddressResponse) GetP2ShAddress() string {
+	if x != nil {
+		return x.P2ShAddress
 	}
 	return ""
 }
@@ -1544,11 +1555,12 @@ const file_htnwalletd_proto_rawDesc = "" +
 	"\x15ShowAddressesResponse\x12\x18\n" +
 	"\aaddress\x18\x01 \x03(\tR\aaddress\"N\n" +
 	"\x11NewAddressRequest\x129\n" +
-	"\vaddressType\x18\x01 \x01(\x0e2\x17.htnwalletd.AddressTypeR\vaddressType\"t\n" +
+	"\vaddressType\x18\x01 \x01(\x0e2\x17.htnwalletd.AddressTypeR\vaddressType\"\x96\x01\n" +
 	"\x12NewAddressResponse\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12 \n" +
 	"\vp2pkAddress\x18\x02 \x01(\tR\vp2pkAddress\x12\"\n" +
-	"\fp2pkhAddress\x18\x03 \x01(\tR\fp2pkhAddress\"\xb4\x01\n" +
+	"\fp2pkhAddress\x18\x03 \x01(\tR\fp2pkhAddress\x12 \n" +
+	"\vp2shAddress\x18\x04 \x01(\tR\vp2shAddress\"\xb4\x01\n" +
 	"\x10BroadcastRequest\x12\x1a\n" +
 	"\bisDomain\x18\x01 \x01(\bR\bisDomain\x12\"\n" +
 	"\ftransactions\x18\x02 \x03(\fR\ftransactions\x12 \n" +
@@ -1599,11 +1611,12 @@ const file_htnwalletd_proto_rawDesc = "" +
 	"\x12signedTransactions\x18\x01 \x03(\fR\x12signedTransactions\"\x13\n" +
 	"\x11GetVersionRequest\".\n" +
 	"\x12GetVersionResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\tR\aversion*Z\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion*q\n" +
 	"\vAddressType\x12\x1c\n" +
 	"\x18ADDRESS_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12ADDRESS_TYPE_P2PKH\x10\x01\x12\x15\n" +
-	"\x11ADDRESS_TYPE_P2PK\x10\x022\xf0\a\n" +
+	"\x11ADDRESS_TYPE_P2PK\x10\x02\x12\x15\n" +
+	"\x11ADDRESS_TYPE_P2SH\x10\x032\xf0\a\n" +
 	"\n" +
 	"htnwalletd\x12M\n" +
 	"\n" +

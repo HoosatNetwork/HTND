@@ -29,9 +29,10 @@ func newAddress(conf *newAddressConfig) error {
 	}
 
 	fmt.Printf("New address:\n%s\n", response.Address)
-	if conf.IncludeBoth && (response.P2PkAddress != "" || response.P2PkhAddress != "") {
+	if conf.IncludeBoth && (response.P2PkAddress != "" || response.P2PkhAddress != "" || response.P2ShAddress != "") {
 		fmt.Printf("\nP2PK:\n%s\n", response.P2PkAddress)
 		fmt.Printf("P2PKH:\n%s\n", response.P2PkhAddress)
+		fmt.Printf("P2SH:\n%s\n", response.P2ShAddress)
 	}
 	return nil
 }

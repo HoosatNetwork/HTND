@@ -312,6 +312,70 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 					return nil, err
 				}
 				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+			case txscript.ScriptHashTy:
+				derivedPublicKey, err := bip32.DeserializeExtendedKey(input.PubKeySignaturePairs[0].ExtendedPublicKey)
+				if err != nil {
+					return nil, err
+				}
+
+				publicKey, err := derivedPublicKey.PublicKey()
+				if err != nil {
+					return nil, err
+				}
+
+				var (
+					serializedPublicKey []byte
+					redeemScript        []byte
+				)
+				if ecdsa {
+					serializedECDSAPublicKey, err := publicKey.Serialize()
+					if err != nil {
+						return nil, err
+					}
+					serializedPublicKey = serializedECDSAPublicKey[:]
+
+					redeemScript, err = txscript.NewScriptBuilder().
+						AddOp(txscript.OpDup).
+						AddOp(txscript.OpBlake2b).
+						AddData(util.HashBlake2b(serializedPublicKey)).
+						AddOp(txscript.OpEqualVerify).
+						AddOp(txscript.OpCheckSigECDSA).
+						Script()
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					schnorrPublicKey, err := publicKey.ToSchnorr()
+					if err != nil {
+						return nil, err
+					}
+					serializedSchnorrPublicKey, err := schnorrPublicKey.Serialize()
+					if err != nil {
+						return nil, err
+					}
+					serializedPublicKey = serializedSchnorrPublicKey[:]
+
+					redeemScript, err = txscript.NewScriptBuilder().
+						AddOp(txscript.OpDup).
+						AddOp(txscript.OpBlake2b).
+						AddData(util.HashBlake2b(serializedPublicKey)).
+						AddOp(txscript.OpEqualVerify).
+						AddOp(txscript.OpCheckSig).
+						Script()
+					if err != nil {
+						return nil, err
+					}
+				}
+
+				sigScript, err := txscript.NewScriptBuilder().
+					AddData(input.PubKeySignaturePairs[0].Signature).
+					AddData(serializedPublicKey).
+					AddData(redeemScript).
+					Script()
+				if err != nil {
+					return nil, err
+				}
+				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
 			default:
 				return nil, errors.Errorf("unsupported prev output script class %s", prevScriptClass)
 			}

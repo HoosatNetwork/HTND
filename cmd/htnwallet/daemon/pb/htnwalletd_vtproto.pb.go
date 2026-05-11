@@ -259,6 +259,7 @@ func (m *NewAddressResponse) CloneVT() *NewAddressResponse {
 	r.Address = m.Address
 	r.P2PkAddress = m.P2PkAddress
 	r.P2PkhAddress = m.P2PkhAddress
+	r.P2ShAddress = m.P2ShAddress
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -899,6 +900,9 @@ func (this *NewAddressResponse) EqualVT(that *NewAddressResponse) bool {
 		return false
 	}
 	if this.P2PkhAddress != that.P2PkhAddress {
+		return false
+	}
+	if this.P2ShAddress != that.P2ShAddress {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -2306,6 +2310,13 @@ func (m *NewAddressResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if len(m.P2ShAddress) > 0 {
+		i -= len(m.P2ShAddress)
+		copy(dAtA[i:], m.P2ShAddress)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.P2ShAddress)))
+		i--
+		dAtA[i] = 0x22
+	}
 	if len(m.P2PkhAddress) > 0 {
 		i -= len(m.P2PkhAddress)
 		copy(dAtA[i:], m.P2PkhAddress)
@@ -3645,6 +3656,13 @@ func (m *NewAddressResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, err
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if len(m.P2ShAddress) > 0 {
+		i -= len(m.P2ShAddress)
+		copy(dAtA[i:], m.P2ShAddress)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.P2ShAddress)))
+		i--
+		dAtA[i] = 0x22
+	}
 	if len(m.P2PkhAddress) > 0 {
 		i -= len(m.P2PkhAddress)
 		copy(dAtA[i:], m.P2PkhAddress)
@@ -4658,6 +4676,10 @@ func (m *NewAddressResponse) SizeVT() (n int) {
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	l = len(m.P2PkhAddress)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	l = len(m.P2ShAddress)
 	if l > 0 {
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
@@ -6191,6 +6213,38 @@ func (m *NewAddressResponse) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.P2PkhAddress = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field P2ShAddress", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.P2ShAddress = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -9177,6 +9231,42 @@ func (m *NewAddressResponse) UnmarshalVTUnsafe(dAtA []byte) error {
 				stringValue = unsafe.String(&dAtA[iNdEx], intStringLen)
 			}
 			m.P2PkhAddress = stringValue
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field P2ShAddress", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var stringValue string
+			if intStringLen > 0 {
+				stringValue = unsafe.String(&dAtA[iNdEx], intStringLen)
+			}
+			m.P2ShAddress = stringValue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

@@ -77,6 +77,8 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 			singleSigType = libhtnwallet.SingleSigAddressTypeP2PK
 		case pb.AddressType_ADDRESS_TYPE_P2PKH:
 			singleSigType = libhtnwallet.SingleSigAddressTypeP2PKH
+		case pb.AddressType_ADDRESS_TYPE_P2SH:
+			singleSigType = libhtnwallet.SingleSigAddressTypeP2SH
 		default:
 			singleSigType = libhtnwallet.SingleSigAddressTypeP2PK
 		}
@@ -133,12 +135,19 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		return nil, err
 	}
 
+	addrP2SH, err := libhtnwallet.AddressWithSingleSigAddressType(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA, libhtnwallet.SingleSigAddressTypeP2SH)
+	if err != nil {
+		return nil, err
+	}
+
 	var primary string
 	switch request.GetAddressType() {
 	case pb.AddressType_ADDRESS_TYPE_P2PK:
 		primary = addrP2PK.String()
 	case pb.AddressType_ADDRESS_TYPE_P2PKH:
 		primary = addrP2PKH.String()
+	case pb.AddressType_ADDRESS_TYPE_P2SH:
+		primary = addrP2SH.String()
 	default:
 		primary = addrP2PK.String()
 	}
@@ -147,6 +156,7 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		Address:      primary,
 		P2PkAddress:  addrP2PK.String(),
 		P2PkhAddress: addrP2PKH.String(),
+		P2ShAddress:  addrP2SH.String(),
 	}, nil
 }
 
@@ -190,7 +200,19 @@ func (s *server) walletAddressStringsForScan(wAddr *walletAddress) ([]string, er
 		return nil, err
 	}
 
-	return []string{addrP2PK.String(), addrP2PKH.String()}, nil
+	addrP2SH, err := libhtnwallet.AddressWithSingleSigAddressType(
+		s.params,
+		s.keysFile.ExtendedPublicKeys,
+		s.keysFile.MinimumSignatures,
+		path,
+		s.keysFile.ECDSA,
+		libhtnwallet.SingleSigAddressTypeP2SH,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{addrP2PK.String(), addrP2PKH.String(), addrP2SH.String()}, nil
 }
 
 func (s *server) walletAddressPath(wAddr *walletAddress) string {

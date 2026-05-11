@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/bip32"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/kaspanet/go-secp256k1"
@@ -129,6 +130,7 @@ type SingleSigAddressType uint8
 const (
 	SingleSigAddressTypeP2PK SingleSigAddressType = iota
 	SingleSigAddressTypeP2PKH
+	SingleSigAddressTypeP2SH
 )
 
 // AddressWithSingleSigAddressType is like Address, but allows choosing between P2PK and P2PKH
@@ -157,6 +159,8 @@ func AddressWithSingleSigAddressType(
 			return p2pkAddress(params, extendedPublicKeys[0], path, ecdsa)
 		case SingleSigAddressTypeP2PKH:
 			return p2pkhAddress(params, extendedPublicKeys[0], path, ecdsa)
+		case SingleSigAddressTypeP2SH:
+			return p2shP2PKHAddress(params, extendedPublicKeys[0], path, ecdsa)
 		default:
 			return nil, errors.Errorf("unknown singleSigType %d", singleSigType)
 		}
@@ -242,6 +246,22 @@ func p2pkhAddress(params *dagconfig.Params, extendedPublicKey string, path strin
 	}
 
 	return util.NewAddressPublicKeyHash(serializedSchnorrPublicKey[:], params.Prefix)
+}
+
+// p2shP2PKHAddress returns a P2SH address whose redeem script is a standard
+// single-sig P2PKH script for the derived key.
+func p2shP2PKHAddress(params *dagconfig.Params, extendedPublicKey string, path string, ecdsa bool) (util.Address, error) {
+	addrP2PKH, err := p2pkhAddress(params, extendedPublicKey, path, ecdsa)
+	if err != nil {
+		return nil, err
+	}
+
+	redeemScriptPublicKey, err := txscript.PayToAddrScript(addrP2PKH)
+	if err != nil {
+		return nil, err
+	}
+
+	return util.NewAddressScriptHash(redeemScriptPublicKey.Script, params.Prefix)
 }
 
 func sortPublicKeys(extendedPublicKeys []string) {

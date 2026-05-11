@@ -1,10 +1,12 @@
 package mempool
 
 import (
+	"bytes"
 	"sync"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
+	"github.com/Hoosat-Oy/HTND/util"
 )
 
 // walletFreezingManager handles frozen wallet address management and checking
@@ -50,11 +52,39 @@ func (wfm *walletFreezingManager) extractAddressesFromTransaction(transaction *e
 			continue
 		}
 
-		_, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, wfm.config.DAGParams)
+		scriptClass, extractedAddress, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, wfm.config.DAGParams)
 		if err != nil || extractedAddress == nil {
 			continue
 		}
 		addresses[extractedAddress.EncodeAddress()] = true
+
+		// For P2SH spends, also try to extract the underlying redeemScript address (when available)
+		// so freezing either representation prevents bypass.
+		if scriptClass != txscript.ScriptHashTy {
+			continue
+		}
+		scriptHashAddr, ok := extractedAddress.(*util.AddressScriptHash)
+		if !ok || scriptHashAddr == nil {
+			continue
+		}
+		pushes, err := txscript.PushedData(input.SignatureScript)
+		if err != nil || len(pushes) == 0 {
+			continue
+		}
+		redeemScript := pushes[len(pushes)-1]
+		if redeemScript == nil {
+			continue
+		}
+		redeemHash := util.HashBlake2b(redeemScript)
+		if !bytes.Equal(redeemHash, scriptHashAddr.ScriptAddress()) {
+			continue
+		}
+		redeemSPK := &externalapi.ScriptPublicKey{Script: redeemScript, Version: scriptPublicKey.Version}
+		_, innerAddr, err := txscript.ExtractScriptPubKeyAddress(redeemSPK, wfm.config.DAGParams)
+		if err != nil || innerAddr == nil {
+			continue
+		}
+		addresses[innerAddr.EncodeAddress()] = true
 	}
 
 	// Extract addresses from outputs (recipient addresses)

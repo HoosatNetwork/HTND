@@ -130,3 +130,62 @@ func TestCompoundTxRateLimiterExtractSenderAddresses_FallbackToScriptHash(t *tes
 		t.Fatalf("expected fallback identifier with prefix 'spkblake2b:', got %q", ids[0])
 	}
 }
+
+func TestCompoundTxRateLimiterExtractSenderAddresses_P2SHCanonicalizesToRedeemScriptAddress(t *testing.T) {
+	config := &Config{
+		CompoundTxRateLimitEnabled: true,
+		DAGParams:                  &dagconfig.MainnetParams,
+	}
+	rtl := newCompoundTxRateLimiter(config)
+
+	pubKeyHash := make([]byte, 32)
+	for i := range pubKeyHash {
+		pubKeyHash[i] = 0x11
+	}
+
+	redeemScript, err := txscript.NewScriptBuilder().
+		AddOp(txscript.OpDup).
+		AddOp(txscript.OpBlake2b).
+		AddData(pubKeyHash).
+		AddOp(txscript.OpEqualVerify).
+		AddOp(txscript.OpCheckSig).
+		Script()
+	if err != nil {
+		t.Fatalf("unexpected redeemScript builder error: %v", err)
+	}
+
+	p2shScript, err := txscript.PayToScriptHashScript(redeemScript)
+	if err != nil {
+		t.Fatalf("PayToScriptHashScript: %v", err)
+	}
+
+	signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)
+	if err != nil {
+		t.Fatalf("PayToScriptHashSignatureScript: %v", err)
+	}
+
+	innerClass, innerAddr, err := txscript.ExtractScriptPubKeyAddress(&externalapi.ScriptPublicKey{Script: redeemScript, Version: 0}, config.DAGParams)
+	if err != nil {
+		t.Fatalf("ExtractScriptPubKeyAddress(inner): %v", err)
+	}
+	if innerAddr == nil || innerClass != txscript.PubKeyHashTy {
+		t.Fatalf("unexpected inner extraction: class=%v addr=%v", innerClass, innerAddr)
+	}
+
+	tx := &externalapi.DomainTransaction{
+		Inputs: []*externalapi.DomainTransactionInput{
+			{
+				SignatureScript: signatureScript,
+				UTXOEntry:       &testUTXOEntry{scriptPublicKey: &externalapi.ScriptPublicKey{Script: p2shScript, Version: 0}},
+			},
+		},
+	}
+
+	ids := rtl.extractSenderAddresses(tx)
+	if len(ids) != 1 {
+		t.Fatalf("expected exactly 1 sender identifier, got %d (%v)", len(ids), ids)
+	}
+	if ids[0] != innerAddr.EncodeAddress() {
+		t.Fatalf("expected canonical sender %q, got %q", innerAddr.EncodeAddress(), ids[0])
+	}
+}
