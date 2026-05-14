@@ -1,6 +1,8 @@
 package blockstore
 
 import (
+	"sync"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
@@ -15,6 +17,7 @@ var bucketName = []byte("blocks")
 // blockStore represents a store of blocks
 type blockStore struct {
 	shardID     model.StagingShardID
+	lock        sync.Mutex
 	cache       *lrucache.LRUCache[*externalapi.DomainBlock]
 	countCached uint64
 	bucket      model.DBBucket
@@ -58,7 +61,9 @@ func (bs *blockStore) initializeCount(dbContext model.DBReader) error {
 			return err
 		}
 	}
+	bs.lock.Lock()
 	bs.countCached = count
+	bs.lock.Unlock()
 	return nil
 }
 
@@ -91,7 +96,9 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 		return block.Clone(), nil
 	}
 
+	bs.lock.Lock()
 	blockCached, ok := bs.cache.Get(blockHash)
+	bs.lock.Unlock()
 	if ok && blockCached != nil {
 		return blockCached.Clone(), nil
 	}
@@ -108,7 +115,9 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 	if err != nil {
 		return nil, err
 	}
+	bs.lock.Lock()
 	bs.cache.Add(blockHash, blockDeserialized)
+	bs.lock.Unlock()
 	return blockDeserialized.Clone(), nil
 }
 
@@ -120,7 +129,10 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 		return true, nil
 	}
 
-	if bs.cache.Has(blockHash) {
+	bs.lock.Lock()
+	cachedHas := bs.cache.Has(blockHash)
+	bs.lock.Unlock()
+	if cachedHas {
 		return true, nil
 	}
 
@@ -134,7 +146,9 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 		return false, err
 	}
 
+	bs.lock.Lock()
 	bs.cache.Add(blockHash, blockDeserialized)
+	bs.lock.Unlock()
 	return true, nil
 }
 
@@ -156,7 +170,9 @@ func (bs *blockStore) Blocks(dbContext model.DBReader, stagingArea *model.Stagin
 // Delete deletes the block associated with the given blockHash
 func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := bs.stagingShard(stagingArea)
+	bs.lock.Lock()
 	bs.cache.Remove(blockHash)
+	bs.lock.Unlock()
 
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
 		delete(stagingShard.toAdd, *blockHash)
@@ -189,7 +205,10 @@ func (bs *blockStore) Count(stagingArea *model.StagingArea) uint64 {
 }
 
 func (bs *blockStore) count(stagingShard *blockStagingShard) uint64 {
-	return bs.countCached + uint64(len(stagingShard.toAdd)) - uint64(len(stagingShard.toDelete))
+	bs.lock.Lock()
+	countCached := bs.countCached
+	bs.lock.Unlock()
+	return countCached + uint64(len(stagingShard.toAdd)) - uint64(len(stagingShard.toDelete))
 }
 
 func (bs *blockStore) deserializeBlockCount(countBytes []byte) (uint64, error) {
@@ -261,5 +280,7 @@ func (bs *blockStore) AllBlockHashesIterator(dbContext model.DBReader) (model.Bl
 }
 
 func (bs *blockStore) CacheLen() int {
+	bs.lock.Lock()
+	defer bs.lock.Unlock()
 	return bs.cache.Len()
 }
