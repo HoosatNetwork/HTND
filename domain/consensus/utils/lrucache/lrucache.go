@@ -1,6 +1,8 @@
 package lrucache
 
 import (
+	"sync"
+
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/cespare/xxhash/v2"
 )
@@ -14,8 +16,12 @@ type entry[V any] struct {
 	next *entry[V]
 }
 
-// LRUCache is a thread-unsafe (for now) generic LRU cache using intrusive links
+// LRUCache is a thread-safe generic LRU cache using intrusive links.
+//
+// Note: Get promotes entries to MRU and therefore takes an exclusive lock.
 type LRUCache[V any] struct {
+	mu sync.RWMutex
+
 	cache    map[uint64]*entry[V]
 	head     *entry[V]
 	tail     *entry[V]
@@ -107,6 +113,9 @@ func (c *LRUCache[V]) moveToFront(e *entry[V]) {
 
 // Add inserts or updates a key-value pair (moves to front on update)
 func (c *LRUCache[V]) Add(key *externalapi.DomainHash, value V) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	h := hash(*key)
 
 	if e, ok := c.cache[h]; ok {
@@ -140,6 +149,9 @@ func (c *LRUCache[V]) Add(key *externalapi.DomainHash, value V) {
 
 // Get returns the value if present and promotes it to MRU
 func (c *LRUCache[V]) Get(key *externalapi.DomainHash) (value V, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	h := hash(*key)
 
 	e, exists := c.cache[h]
@@ -157,6 +169,9 @@ func (c *LRUCache[V]) Get(key *externalapi.DomainHash) (value V, ok bool) {
 
 // Has checks existence without changing LRU order
 func (c *LRUCache[V]) Has(key *externalapi.DomainHash) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	h := hash(*key)
 	e, ok := c.cache[h]
 	return ok && e.key == *key
@@ -164,6 +179,9 @@ func (c *LRUCache[V]) Has(key *externalapi.DomainHash) bool {
 
 // Remove deletes an entry if it exists
 func (c *LRUCache[V]) Remove(key *externalapi.DomainHash) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	h := hash(*key)
 	e, ok := c.cache[h]
 	if !ok || e.key != *key {
@@ -196,6 +214,9 @@ func (c *LRUCache[V]) unlink(e *entry[V]) {
 
 // Clear empties the cache
 func (c *LRUCache[V]) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if len(c.pool) > 0 {
 		for i := 0; i < len(c.pool)-1; i++ {
 			c.pool[i].next = &c.pool[i+1]
@@ -222,5 +243,8 @@ func (c *LRUCache[V]) Clear() {
 
 // Len returns current number of items
 func (c *LRUCache[V]) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.length
 }

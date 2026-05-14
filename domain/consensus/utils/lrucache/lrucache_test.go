@@ -1,6 +1,9 @@
 package lrucache
 
 import (
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
@@ -146,4 +149,54 @@ func TestLRUCache_RandomEvictionVariesAcrossTrials(t *testing.T) {
 	if !cache.Has(key1) || !cache.Has(key3) {
 		t.Fatalf("expected key1 and key3 to remain")
 	}
+}
+
+func TestLRUCache_ConcurrentAccess_DoesNotPanic(t *testing.T) {
+	cache := New[int](128, true)
+
+	keys := make([]*externalapi.DomainHash, 512)
+	for i := range keys {
+		keys[i] = newTestHash(t, byte(i))
+	}
+
+	stop := &atomic.Bool{}
+	var wg sync.WaitGroup
+
+	workers := runtime.NumCPU() * 4
+	if workers < 8 {
+		workers = 8
+	}
+
+	// Writers
+	for w := 0; w < workers/2; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < 50_000 && !stop.Load(); i++ {
+				k := keys[(i+workerID)%len(keys)]
+				cache.Add(k, i)
+				if i%17 == 0 {
+					cache.Remove(k)
+				}
+			}
+		}(w)
+	}
+
+	// Readers
+	for r := 0; r < workers/2; r++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < 50_000 && !stop.Load(); i++ {
+				k := keys[(i*31+workerID)%len(keys)]
+				cache.Has(k)
+				cache.Get(k)
+				if i%101 == 0 {
+					cache.Len()
+				}
+			}
+		}(r)
+	}
+
+	wg.Wait()
 }
