@@ -44,7 +44,9 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 	}
 
 	outgoingBackpressurePollInterval := 5 * time.Millisecond
-	outgoingBackpressureTimeout := 30 * time.Second
+	// Serving IBD to a slow peer can legitimately take minutes, and we want backpressure
+	// to stall producers rather than abort the whole flow.
+	outgoingBackpressureTimeout := 10 * time.Minute
 
 	rateLimit := time.NewTicker(time.Second / time.Duration(workerCount))
 	defer rateLimit.Stop()
@@ -68,7 +70,11 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 		}
 
 		jobs := make(chan *externalapi.DomainHash, workerCount*2)
-		results := make(chan appmessage.Message, workerCount*2)
+		type ibdBlockResult struct {
+			hash  *externalapi.DomainHash
+			block *externalapi.DomainBlock
+		}
+		results := make(chan ibdBlockResult, workerCount*2)
 		var workersWG sync.WaitGroup
 		var senderWG sync.WaitGroup
 
@@ -80,7 +86,7 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				select {
 				case <-doneChan:
 					return
-				case msg, ok := <-results:
+				case res, ok := <-results:
 					if !ok {
 						return
 					}
@@ -97,7 +103,11 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 						time.Sleep(outgoingBackpressurePollInterval)
 					}
 
-					err := outgoingRoute.Enqueue(msg)
+					// Convert to the wire message only once we're likely to enqueue immediately,
+					// to avoid holding both the domain block and its converted message in memory.
+					log.Debugf("Relaying IBD block %s to peer %s", res.hash, peer.Address())
+					ibdBlockMessage := appmessage.NewMsgIBDBlock(appmessage.DomainBlockToMsgBlock(res.block))
+					err := outgoingRoute.Enqueue(ibdBlockMessage)
 					if err != nil {
 						log.Warnf("failed to enqueue IBD block message: %s", err)
 						cancel()
@@ -130,13 +140,10 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 							cancel()
 							return
 						}
-
-						log.Debugf("Relaying IBD block %s to peer %s", hash, peer.Address())
-						ibdBlockMessage := appmessage.NewMsgIBDBlock(appmessage.DomainBlockToMsgBlock(block))
 						select {
 						case <-doneChan:
 							return
-						case results <- ibdBlockMessage:
+						case results <- ibdBlockResult{hash: hash, block: block}:
 						}
 					}
 				}
