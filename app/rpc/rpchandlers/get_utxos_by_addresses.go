@@ -15,10 +15,17 @@ import (
 )
 
 func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
+	return encodeHexStringWithMaxValueLen(buffer, value, math.MaxInt/2)
+}
+
+func encodeHexStringWithMaxValueLen(buffer []byte, value []byte, maxValueLen int) ([]byte, string) {
 	if value == nil {
 		return buffer[:0], ""
 	}
-	if len(value) > math.MaxInt/2 {
+	if maxValueLen < 0 {
+		return buffer[:0], ""
+	}
+	if len(value) > maxValueLen {
 		return buffer[:0], ""
 	}
 	needed := hex.EncodedLen(len(value))

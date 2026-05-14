@@ -1,18 +1,16 @@
 package rpchandlers
 
 import (
-	"math"
 	"testing"
-	"unsafe"
 )
 
 func TestEncodeHexStringRejectsOversizedSlice(t *testing.T) {
-	// Use unsafe to create a slice with a huge length/capacity without
-	// allocating that much memory. The slice must not be dereferenced.
-	dummy := byte(0)
-	value := unsafe.Slice(&dummy, math.MaxInt/2+1)
+	// We want to test the oversized-input fast-path without attempting
+	// to construct a gigantic slice (which would either OOM or panic
+	// under checkptr when using unsafe tricks).
+	value := make([]byte, 11)
 
-	buffer, encoded := encodeHexString(nil, value)
+	buffer, encoded := encodeHexStringWithMaxValueLen(nil, value, 10)
 	if encoded != "" {
 		t.Fatalf("expected empty encoding for oversized slice, got %q", encoded)
 	}

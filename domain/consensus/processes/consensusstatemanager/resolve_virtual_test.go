@@ -312,8 +312,15 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 
 		// Make sure the reported change-set is compatible with actual changes.
 		// Checking this for one call should suffice to avoid possible bugs.
-		removed := virtualChangeSet.VirtualSelectedParentChainChanges.Removed
-		added := virtualChangeSet.VirtualSelectedParentChainChanges.Added
+		//
+		// Note: ResolveVirtualWithMaxParam may return a nil changeset when nothing changed.
+		// Treat nil change-set/path as “no selected-parent-chain changes”.
+		var removed []*externalapi.DomainHash
+		var added []*externalapi.DomainHash
+		if virtualChangeSet != nil && virtualChangeSet.VirtualSelectedParentChainChanges != nil {
+			removed = virtualChangeSet.VirtualSelectedParentChainChanges.Removed
+			added = virtualChangeSet.VirtualSelectedParentChainChanges.Added
+		}
 		if len(removed) == 0 || len(added) == 0 {
 			if !previousVirtualSelectedParent.Equal(newVirtualSelectedParent) {
 				t.Fatalf("Expected virtual selected parent to not change when changeset reports no selected-parent-chain changes")
