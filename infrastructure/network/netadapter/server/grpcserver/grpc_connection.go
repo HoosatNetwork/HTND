@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -75,6 +76,13 @@ func (c *gRPCConnection) Start(router *router.Router) {
 					log.Errorf("Untrusted peer detected for %s, immediately disconnecting: %s", c.address, err)
 					c.Disconnect()
 					return
+				case codes.Internal:
+					// This usually indicates a peer/proxy sending an invalid gRPC frame (compressed bit without a negotiated encoding).
+					// It's not actionable locally, so keep it out of error logs.
+					if strings.Contains(status.Message(), "grpc: compressed flag set with identity or empty encoding") {
+						log.Debugf("Disconnecting %s due to invalid gRPC compression framing: %s", c.address, status.Message())
+						return
+					}
 				default:
 					log.Errorf("Status error from connectionLoops for %s: %s (code: %s, details: %s)",
 						c.address, err, status.Code(), status.Message())
