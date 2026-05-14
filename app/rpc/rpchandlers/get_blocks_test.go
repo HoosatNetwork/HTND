@@ -1,6 +1,7 @@
 package rpchandlers_test
 
 import (
+	"crypto/rand"
 	"os"
 	"reflect"
 	"sort"
@@ -165,6 +166,96 @@ func TestHandleGetBlocks(t *testing.T) {
 		requestAllExplictly := getBlocks(consensusConfig.GenesisHash)
 		if !reflect.DeepEqual(requestAllExplictly.BlockHashes, hashes.ToStrings(expectedOrder)) {
 			t.Fatalf("TestHandleGetBlocks \nexpected: \n%v\n. actual:\n%v", expectedOrder, requestAllExplictly.BlockHashes)
+		}
+	})
+}
+
+func TestHandleGetBlocksCacheRespectsIncludeFlags(t *testing.T) {
+	os.Setenv("HTND_TEST_MODE", "true")
+	defer os.Unsetenv("HTND_TEST_MODE")
+
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestHandleGetBlocksCacheRespectsIncludeFlags")
+		if err != nil {
+			t.Fatalf("Error setting up consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		fakeContext := rpccontext.Context{
+			Config: &config.Config{Flags: &config.Flags{NetworkFlags: config.NetworkFlags{ActiveNetParams: &consensusConfig.Params}}},
+			Domain: fakeDomain{tc},
+		}
+
+		extra := make([]byte, 32)
+		_, _ = rand.Read(extra)
+		coinbaseData := &externalapi.DomainCoinbaseData{
+			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0},
+			ExtraData:       extra,
+		}
+		lowHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, coinbaseData, nil)
+		if err != nil {
+			t.Fatalf("Failed adding block: %v", err)
+		}
+
+		// 1) Warm cache with IncludeBlocks=false.
+		requestNoBlocks := &appmessage.GetBlocksRequestMessage{LowHash: lowHash.String(), IncludeBlocks: false, IncludeTransactions: false}
+		respNoBlocksMsg, err := rpchandlers.HandleGetBlocks(&fakeContext, nil, requestNoBlocks)
+		if err != nil {
+			t.Fatalf("HandleGetBlocks returned error: %v", err)
+		}
+		respNoBlocks := respNoBlocksMsg.(*appmessage.GetBlocksResponseMessage)
+		if respNoBlocks.Error != nil {
+			t.Fatalf("HandleGetBlocks returned RPC error: %v", respNoBlocks.Error)
+		}
+		if respNoBlocks.Blocks != nil {
+			t.Fatalf("expected Blocks to be nil when IncludeBlocks=false")
+		}
+		if len(respNoBlocks.BlockHashes) == 0 {
+			t.Fatalf("expected non-empty BlockHashes")
+		}
+
+		// 2) Immediately request with IncludeBlocks=true. Old buggy cache keying would return Blocks=nil here.
+		requestWithBlocks := &appmessage.GetBlocksRequestMessage{LowHash: lowHash.String(), IncludeBlocks: true, IncludeTransactions: false}
+		respWithBlocksMsg, err := rpchandlers.HandleGetBlocks(&fakeContext, nil, requestWithBlocks)
+		if err != nil {
+			t.Fatalf("HandleGetBlocks returned error: %v", err)
+		}
+		respWithBlocks := respWithBlocksMsg.(*appmessage.GetBlocksResponseMessage)
+		if respWithBlocks.Error != nil {
+			t.Fatalf("HandleGetBlocks returned RPC error: %v", respWithBlocks.Error)
+		}
+		if respWithBlocks.Blocks == nil {
+			t.Fatalf("expected Blocks to be populated when IncludeBlocks=true")
+		}
+		if len(respWithBlocks.Blocks) != len(respWithBlocks.BlockHashes) {
+			t.Fatalf("expected Blocks length %d, got %d", len(respWithBlocks.BlockHashes), len(respWithBlocks.Blocks))
+		}
+
+		for i, hashString := range respWithBlocks.BlockHashes {
+			block := respWithBlocks.Blocks[i]
+			if block.VerboseData == nil {
+				t.Fatalf("expected VerboseData to be populated for block %s", hashString)
+			}
+			if block.VerboseData.Hash != hashString {
+				t.Fatalf("expected VerboseData.Hash to equal %s, got %s", hashString, block.VerboseData.Hash)
+			}
+
+			hash, err := externalapi.NewDomainHashFromString(hashString)
+			if err != nil {
+				t.Fatalf("failed parsing hash %s: %v", hashString, err)
+			}
+			info, err := tc.GetBlockInfo(hash)
+			if err != nil {
+				t.Fatalf("failed getting block info for %s: %v", hashString, err)
+			}
+
+			if !reflect.DeepEqual(block.VerboseData.MergeSetBluesHashes, hashes.ToStrings(info.MergeSetBlues)) {
+				t.Fatalf("MergeSetBluesHashes mismatch for %s", hashString)
+			}
+			if !reflect.DeepEqual(block.VerboseData.MergeSetRedsHashes, hashes.ToStrings(info.MergeSetReds)) {
+				t.Fatalf("MergeSetRedsHashes mismatch for %s", hashString)
+			}
 		}
 	})
 }

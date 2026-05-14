@@ -1,6 +1,7 @@
 package rpchandlers
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -90,6 +91,8 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 		}
 	}
 	cacheKey := lowHash.String()
+	cacheKey += "|includeBlocks=" + strconv.FormatBool(getBlocksRequest.IncludeBlocks)
+	cacheKey += "|includeTransactions=" + strconv.FormatBool(getBlocksRequest.IncludeTransactions)
 
 	getBlocksCacheMutex.Lock()
 	now := time.Now()
