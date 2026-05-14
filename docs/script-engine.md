@@ -72,6 +72,8 @@ HTND’s P2SH is a standard “script-hash” pattern:
   OP_BLAKE2B <32-byte scriptHash> OP_EQUAL
   ```
 
+  Note: This exact template is reserved for P2SH detection. If you want a “hashlock” style spend (preimage reveal), use a different pattern (e.g. `OP_SHA256 <32-byte hash> OP_EQUAL`) so it won’t be interpreted as P2SH.
+
   (detected by `isScriptHash` in `txscript/script.go`).
 
 - If the `ScriptPublicKey` is P2SH, `Init()` sets `vm.isP2SH = true` and requires the input `SignatureScript` to be push-only.
