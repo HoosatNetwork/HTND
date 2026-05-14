@@ -438,17 +438,17 @@ var opcodeArray = [256]opcode{
 	OpTuck:         {OpTuck, "OP_TUCK", 1, opcodeTuck},
 
 	// Splice opcodes.
-	OpCat:    {OpCat, "OP_CAT", 1, opcodeCat},
-	OpSubStr: {OpSubStr, "OP_SUBSTR", 1, opcodeSubStr},
-	OpLeft:   {OpLeft, "OP_LEFT", 1, opcodeLeft},
-	OpRight:  {OpRight, "OP_RIGHT", 1, opcodeRight},
+	OpCat:    {OpCat, "OP_CAT", 1, opcodeDisabled},
+	OpSubStr: {OpSubStr, "OP_SUBSTR", 1, opcodeDisabled},
+	OpLeft:   {OpLeft, "OP_LEFT", 1, opcodeDisabled},
+	OpRight:  {OpRight, "OP_RIGHT", 1, opcodeDisabled},
 	OpSize:   {OpSize, "OP_SIZE", 1, opcodeSize},
 
 	// Bitwise logic opcodes.
-	OpInvert:      {OpInvert, "OP_INVERT", 1, opcodeInvert},
-	OpAnd:         {OpAnd, "OP_AND", 1, opcodeAnd},
-	OpOr:          {OpOr, "OP_OR", 1, opcodeOr},
-	OpXor:         {OpXor, "OP_XOR", 1, opcodeXor},
+	OpInvert:      {OpInvert, "OP_INVERT", 1, opcodeDisabled},
+	OpAnd:         {OpAnd, "OP_AND", 1, opcodeDisabled},
+	OpOr:          {OpOr, "OP_OR", 1, opcodeDisabled},
+	OpXor:         {OpXor, "OP_XOR", 1, opcodeDisabled},
 	OpEqual:       {OpEqual, "OP_EQUAL", 1, opcodeEqual},
 	OpEqualVerify: {OpEqualVerify, "OP_EQUALVERIFY", 1, opcodeEqualVerify},
 	OpReserved1:   {OpReserved1, "OP_RESERVED1", 1, opcodeReserved},
@@ -1398,174 +1398,174 @@ func opcodeSize(_ *parsedOpcode, vm *Engine) error {
 	return nil
 }
 
-// opcodeCat concatenates the top two stack items.
-//
-// Stack transformation: [... x1 x2] -> [... x1x2]
-func opcodeCat(_ *parsedOpcode, vm *Engine) error {
-	data2, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
-	data1, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
+// // opcodeCat concatenates the top two stack items.
+// //
+// // Stack transformation: [... x1 x2] -> [... x1x2]
+// func opcodeCat(_ *parsedOpcode, vm *Engine) error {
+// 	data2, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	data1, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if len(data1)+len(data2) > MaxScriptElementSize {
-		str := fmt.Sprintf("element size %d exceeds max allowed size %d",
-			len(data1)+len(data2), MaxScriptElementSize)
-		return scriptError(ErrElementTooBig, str)
-	}
+// 	if len(data1)+len(data2) > MaxScriptElementSize {
+// 		str := fmt.Sprintf("element size %d exceeds max allowed size %d",
+// 			len(data1)+len(data2), MaxScriptElementSize)
+// 		return scriptError(ErrElementTooBig, str)
+// 	}
 
-	result := make([]byte, 0, len(data1)+len(data2))
-	result = append(result, data1...)
-	result = append(result, data2...)
-	vm.dstack.PushByteArray(result)
-	return nil
-}
+// 	result := make([]byte, 0, len(data1)+len(data2))
+// 	result = append(result, data1...)
+// 	result = append(result, data2...)
+// 	vm.dstack.PushByteArray(result)
+// 	return nil
+// }
 
-// opcodeSubStr extracts a substring.
-//
-// Stack transformation: [... x1 start size] -> [... x1[start:start+size]]
-func opcodeSubStr(_ *parsedOpcode, vm *Engine) error {
-	size, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-	start, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-	data, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
+// // opcodeSubStr extracts a substring.
+// //
+// // Stack transformation: [... x1 start size] -> [... x1[start:start+size]]
+// func opcodeSubStr(_ *parsedOpcode, vm *Engine) error {
+// 	size, err := vm.dstack.PopInt()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	start, err := vm.dstack.PopInt()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	data, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	startI64 := int64(start)
-	sizeI64 := int64(size)
-	if startI64 < 0 || sizeI64 < 0 {
-		return scriptError(ErrInvalidStackOperation, "negative substring index or size")
-	}
-	if startI64 > int64(len(data)) {
-		return scriptError(ErrInvalidStackOperation, "substring start exceeds data length")
-	}
-	if startI64+sizeI64 > int64(len(data)) {
-		return scriptError(ErrInvalidStackOperation, "substring end exceeds data length")
-	}
+// 	startI64 := int64(start)
+// 	sizeI64 := int64(size)
+// 	if startI64 < 0 || sizeI64 < 0 {
+// 		return scriptError(ErrInvalidStackOperation, "negative substring index or size")
+// 	}
+// 	if startI64 > int64(len(data)) {
+// 		return scriptError(ErrInvalidStackOperation, "substring start exceeds data length")
+// 	}
+// 	if startI64+sizeI64 > int64(len(data)) {
+// 		return scriptError(ErrInvalidStackOperation, "substring end exceeds data length")
+// 	}
 
-	startI := int(startI64)
-	endI := int(startI64 + sizeI64)
-	vm.dstack.PushByteArray(data[startI:endI])
-	return nil
-}
+// 	startI := int(startI64)
+// 	endI := int(startI64 + sizeI64)
+// 	vm.dstack.PushByteArray(data[startI:endI])
+// 	return nil
+// }
 
-// opcodeLeft returns the left-most size bytes.
-//
-// Stack transformation: [... x1 size] -> [... x1[:size]]
-func opcodeLeft(_ *parsedOpcode, vm *Engine) error {
-	size, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-	data, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
+// // opcodeLeft returns the left-most size bytes.
+// //
+// // Stack transformation: [... x1 size] -> [... x1[:size]]
+// func opcodeLeft(_ *parsedOpcode, vm *Engine) error {
+// 	size, err := vm.dstack.PopInt()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	data, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	sizeI64 := int64(size)
-	if sizeI64 < 0 {
-		return scriptError(ErrInvalidStackOperation, "negative left size")
-	}
-	if sizeI64 > int64(len(data)) {
-		return scriptError(ErrInvalidStackOperation, "left size exceeds data length")
-	}
+// 	sizeI64 := int64(size)
+// 	if sizeI64 < 0 {
+// 		return scriptError(ErrInvalidStackOperation, "negative left size")
+// 	}
+// 	if sizeI64 > int64(len(data)) {
+// 		return scriptError(ErrInvalidStackOperation, "left size exceeds data length")
+// 	}
 
-	vm.dstack.PushByteArray(data[:int(sizeI64)])
-	return nil
-}
+// 	vm.dstack.PushByteArray(data[:int(sizeI64)])
+// 	return nil
+// }
 
-// opcodeRight returns the right-most size bytes.
-//
-// Stack transformation: [... x1 size] -> [... x1[len(x1)-size:]]
-func opcodeRight(_ *parsedOpcode, vm *Engine) error {
-	size, err := vm.dstack.PopInt()
-	if err != nil {
-		return err
-	}
-	data, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
+// // opcodeRight returns the right-most size bytes.
+// //
+// // Stack transformation: [... x1 size] -> [... x1[len(x1)-size:]]
+// func opcodeRight(_ *parsedOpcode, vm *Engine) error {
+// 	size, err := vm.dstack.PopInt()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	data, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	sizeI64 := int64(size)
-	if sizeI64 < 0 {
-		return scriptError(ErrInvalidStackOperation, "negative right size")
-	}
-	if sizeI64 > int64(len(data)) {
-		return scriptError(ErrInvalidStackOperation, "right size exceeds data length")
-	}
+// 	sizeI64 := int64(size)
+// 	if sizeI64 < 0 {
+// 		return scriptError(ErrInvalidStackOperation, "negative right size")
+// 	}
+// 	if sizeI64 > int64(len(data)) {
+// 		return scriptError(ErrInvalidStackOperation, "right size exceeds data length")
+// 	}
 
-	start := len(data) - int(sizeI64)
-	vm.dstack.PushByteArray(data[start:])
-	return nil
-}
+// 	start := len(data) - int(sizeI64)
+// 	vm.dstack.PushByteArray(data[start:])
+// 	return nil
+// }
 
-// opcodeInvert inverts all of the bits in the top stack item.
-//
-// Stack transformation: [... x1] -> [... ~x1]
-func opcodeInvert(_ *parsedOpcode, vm *Engine) error {
-	data, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
+// // opcodeInvert inverts all of the bits in the top stack item.
+// //
+// // Stack transformation: [... x1] -> [... ~x1]
+// func opcodeInvert(_ *parsedOpcode, vm *Engine) error {
+// 	data, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	for i := range data {
-		data[i] = ^data[i]
-	}
-	vm.dstack.PushByteArray(data)
-	return nil
-}
+// 	for i := range data {
+// 		data[i] = ^data[i]
+// 	}
+// 	vm.dstack.PushByteArray(data)
+// 	return nil
+// }
 
-func opcodeBitwiseBinary(opName string, vm *Engine, fn func(a, b byte) byte) error {
-	b, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
-	a, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
+// func opcodeBitwiseBinary(opName string, vm *Engine, fn func(a, b byte) byte) error {
+// 	b, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	a, err := vm.dstack.PopByteArray()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if len(a) != len(b) {
-		return scriptError(ErrInvalidStackOperation, fmt.Sprintf("%s requires equal length byte arrays", opName))
-	}
-	if len(a) > MaxScriptElementSize {
-		str := fmt.Sprintf("element size %d exceeds max allowed size %d", len(a), MaxScriptElementSize)
-		return scriptError(ErrElementTooBig, str)
-	}
+// 	if len(a) != len(b) {
+// 		return scriptError(ErrInvalidStackOperation, fmt.Sprintf("%s requires equal length byte arrays", opName))
+// 	}
+// 	if len(a) > MaxScriptElementSize {
+// 		str := fmt.Sprintf("element size %d exceeds max allowed size %d", len(a), MaxScriptElementSize)
+// 		return scriptError(ErrElementTooBig, str)
+// 	}
 
-	result := make([]byte, len(a))
-	for i := range a {
-		result[i] = fn(a[i], b[i])
-	}
-	vm.dstack.PushByteArray(result)
-	return nil
-}
+// 	result := make([]byte, len(a))
+// 	for i := range a {
+// 		result[i] = fn(a[i], b[i])
+// 	}
+// 	vm.dstack.PushByteArray(result)
+// 	return nil
+// }
 
-// opcodeAnd applies bitwise AND to two equal-length byte arrays.
-func opcodeAnd(_ *parsedOpcode, vm *Engine) error {
-	return opcodeBitwiseBinary("OP_AND", vm, func(a, b byte) byte { return a & b })
-}
+// // opcodeAnd applies bitwise AND to two equal-length byte arrays.
+// func opcodeAnd(_ *parsedOpcode, vm *Engine) error {
+// 	return opcodeBitwiseBinary("OP_AND", vm, func(a, b byte) byte { return a & b })
+// }
 
-// opcodeOr applies bitwise OR to two equal-length byte arrays.
-func opcodeOr(_ *parsedOpcode, vm *Engine) error {
-	return opcodeBitwiseBinary("OP_OR", vm, func(a, b byte) byte { return a | b })
-}
+// // opcodeOr applies bitwise OR to two equal-length byte arrays.
+// func opcodeOr(_ *parsedOpcode, vm *Engine) error {
+// 	return opcodeBitwiseBinary("OP_OR", vm, func(a, b byte) byte { return a | b })
+// }
 
-// opcodeXor applies bitwise XOR to two equal-length byte arrays.
-func opcodeXor(_ *parsedOpcode, vm *Engine) error {
-	return opcodeBitwiseBinary("OP_XOR", vm, func(a, b byte) byte { return a ^ b })
-}
+// // opcodeXor applies bitwise XOR to two equal-length byte arrays.
+// func opcodeXor(_ *parsedOpcode, vm *Engine) error {
+// 	return opcodeBitwiseBinary("OP_XOR", vm, func(a, b byte) byte { return a ^ b })
+// }
 
 // opcodeEqual removes the top 2 items of the data stack, compares them as raw
 // bytes, and pushes the result, encoded as a boolean, back to the stack.
