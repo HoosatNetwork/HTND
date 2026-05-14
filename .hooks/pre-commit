@@ -19,7 +19,10 @@ if command -v go >/dev/null 2>&1; then
 fi
 
 # Avoid failing when /tmp is full (staticcheck compiles packages and uses temp files).
-GIT_DIR_PATH="$(git rev-parse --git-path . 2>/dev/null || true)"
+# IMPORTANT: GOTMPDIR must be an *absolute* path. The Go toolchain may execute
+# cgo/gcc from a different working directory; relative GOTMPDIR paths can cause
+# intermittent "cgo: open ... no such file or directory" failures.
+GIT_DIR_PATH="$(git rev-parse --absolute-git-dir 2>/dev/null || true)"
 if [ -n "${GIT_DIR_PATH:-}" ]; then
     TMP_BASE="$GIT_DIR_PATH/.gotmp"
     mkdir -p "$TMP_BASE"
