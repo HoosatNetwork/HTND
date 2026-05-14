@@ -294,6 +294,17 @@ func TestCheckTransactionStandardInIsolation(t *testing.T) {
 			isStandard: false,
 			code:       RejectNonstandard,
 		},
+		{
+			name: "Non-push-only signature script",
+			tx: &externalapi.DomainTransaction{Version: 0, Inputs: []*externalapi.DomainTransactionInput{{
+				PreviousOutpoint: dummyPrevOut,
+				SignatureScript:  []byte{txscript.OpDup},
+				Sequence:         constants.MaxTxInSequenceNum,
+			}}, Outputs: []*externalapi.DomainTransactionOutput{&dummyTxOut}},
+			height:     300000,
+			isStandard: false,
+			code:       RejectNonstandard,
+		},
 	}
 
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {

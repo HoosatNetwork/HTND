@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 )
@@ -151,6 +152,38 @@ func TestCheckErrorCondition(t *testing.T) {
 				t.Errorf("TestCheckErrorCondition: %d: %s", i, e)
 			}
 		}()
+	}
+}
+
+func TestUnsupportedScriptPublicKeyVersionFails(t *testing.T) {
+	t.Parallel()
+
+	inputs := []*externalapi.DomainTransactionInput{{
+		PreviousOutpoint: externalapi.DomainOutpoint{
+			TransactionID: externalapi.DomainTransactionID{},
+			Index:         0,
+		},
+		SignatureScript: nil,
+		Sequence:        4294967295,
+	}}
+	outputs := []*externalapi.DomainTransactionOutput{{
+		Value:           1000000000,
+		ScriptPublicKey: nil,
+	}}
+	tx := &externalapi.DomainTransaction{
+		Version: 1,
+		Inputs:  inputs,
+		Outputs: outputs,
+	}
+
+	scriptPubKey := &externalapi.ScriptPublicKey{
+		Script:  mustParseShortForm("OP_1", 0),
+		Version: constants.MaxScriptPublicKeyVersion + 1,
+	}
+
+	_, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, &consensushashing.SighashReusedValues{})
+	if err == nil || !IsErrorCode(err, ErrUnsupportedScriptVersion) {
+		t.Fatalf("expected ErrUnsupportedScriptVersion, got %v", err)
 	}
 }
 

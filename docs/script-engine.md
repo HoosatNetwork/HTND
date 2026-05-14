@@ -115,11 +115,9 @@ This is enforced in `Engine.Init`.
 Scripts are versioned via `ScriptPublicKey.Version`.
 
 - Today, the maximum supported version is `constants.MaxScriptPublicKeyVersion` (currently `0`).
-- If a `ScriptPublicKey` has a **higher version than supported**, the engine treats it as “unknown” and returns success:
-  - `Engine.Init` returns `nil` early.
-  - `Engine.Execute` returns `nil` early.
+- If a `ScriptPublicKey` has a **higher version than supported**, the engine fails with `ErrUnsupportedScriptVersion`.
 
-This means outputs created with higher script versions are effectively **anyone-can-spend** under current rules (useful for forward-compat experiments, but it’s an important behavior to understand when designing upgrades).
+This means outputs created with higher script versions are **invalid under current consensus rules** until support for that script version is explicitly implemented.
 
 ---
 

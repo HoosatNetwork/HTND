@@ -75,6 +75,20 @@ func isPushOnly(pops []parsedOpcode) bool {
 	return true
 }
 
+// IsPushOnlyScript returns true if the passed raw script only pushes data.
+//
+// This is primarily useful for mempool policy/standardness checks. Consensus
+// rules generally allow arbitrary scripts (and script semantics are only
+// enforced when a script is executed during a spend), but standardness rules
+// often restrict signature scripts to be push-only.
+func IsPushOnlyScript(script []byte) (bool, error) {
+	pops, err := ParseScript(script)
+	if err != nil {
+		return false, err
+	}
+	return isPushOnly(pops), nil
+}
+
 // parseScriptTemplate is the same as parseScript but allows the passing of the
 // template list for testing purposes. When there are parse errors, it returns
 // the list of parsed opcodes up to the point of failure along with the error.

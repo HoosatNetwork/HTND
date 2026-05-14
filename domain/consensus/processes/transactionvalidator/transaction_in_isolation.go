@@ -60,6 +60,17 @@ func (v *transactionValidator) ValidateTransactionInIsolation(tx *externalapi.Do
 		return err
 	}
 
+	for i, output := range tx.Outputs {
+		if output == nil || output.ScriptPublicKey == nil {
+			continue
+		}
+		if output.ScriptPublicKey.Version > constants.MaxScriptPublicKeyVersion {
+			return errors.Wrapf(ruleerrors.ErrScriptMalformed,
+				"transaction output %d has unsupported script public key version %d (max: %d)",
+				i, output.ScriptPublicKey.Version, constants.MaxScriptPublicKeyVersion)
+		}
+	}
+
 	if tx.Version > constants.MaxTransactionVersion {
 		return errors.Wrapf(ruleerrors.ErrTransactionVersionIsUnknown, "validation failed: unknown transaction version. ")
 	}

@@ -21,6 +21,13 @@ type ScriptFlags uint32
 const (
 	// ScriptNoFlags is used when you want to use ScriptFlags without raising any flags
 	ScriptNoFlags ScriptFlags = 0
+
+	// ScriptEnableDisabledOpcodes makes some historically-disabled opcodes
+	// executable by the script engine.
+	//
+	// NOTE: This flag is intentionally opt-in so that consensus validation can
+	// keep using ScriptNoFlags and preserve the current behavior.
+	ScriptEnableDisabledOpcodes ScriptFlags = 1 << 0
 )
 
 const (
@@ -84,8 +91,8 @@ func (vm *Engine) isBranchExecuting() bool {
 // whether or not it is hidden by conditionals, but some rules still must be
 // tested in this case.
 func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
-	// Disabled opcodes are fail on program counter.
-	if pop.isDisabled() {
+	// Disabled opcodes fail on program counter unless explicitly enabled.
+	if pop.isDisabled() && vm.flags&ScriptEnableDisabledOpcodes == 0 {
 		str := fmt.Sprintf("attempt to execute disabled opcode %s",
 			pop.opcode.name)
 		return scriptError(ErrDisabledOpcode, str)
@@ -326,8 +333,9 @@ func (vm *Engine) Step() (done bool, err error) {
 // for successful validation or an error if one occurred.
 func (vm *Engine) Execute() (err error) {
 	if vm.scriptVersion > constants.MaxScriptPublicKeyVersion {
-		log.Tracef("The version of the scriptPublicKey is higher than the known version - the Execute function returns true.")
-		return nil
+		str := fmt.Sprintf("unsupported script public key version %d (max: %d)",
+			vm.scriptVersion, constants.MaxScriptPublicKeyVersion)
+		return scriptError(ErrUnsupportedScriptVersion, str)
 	}
 	done := false
 	for !done {
@@ -487,7 +495,9 @@ func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalap
 	vm.sigCacheECDSA = sigCacheECDSA
 
 	if vm.scriptVersion > constants.MaxScriptPublicKeyVersion {
-		return nil
+		str := fmt.Sprintf("unsupported script public key version %d (max: %d)",
+			vm.scriptVersion, constants.MaxScriptPublicKeyVersion)
+		return scriptError(ErrUnsupportedScriptVersion, str)
 	}
 	parsedScriptSig, err := parseScriptAndVerifySize(scriptSig)
 	if err != nil {

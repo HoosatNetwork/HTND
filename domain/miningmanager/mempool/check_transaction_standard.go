@@ -74,6 +74,19 @@ func (mp *mempool) checkTransactionStandardInIsolation(transaction *externalapi.
 				"maximum allowed size of %d bytes", i, signatureScriptLen, maximumStandardSignatureScriptSize)
 			return transactionRuleError(RejectNonstandard, str)
 		}
+
+		// Standardness: signature scripts should be push-only. This prevents
+		// relaying/mining transactions with nonsensical or non-standard scriptSigs
+		// that include arbitrary opcodes (including unknown/disabled ones).
+		isPushOnly, err := txscript.IsPushOnlyScript(input.SignatureScript)
+		if err != nil {
+			str := fmt.Sprintf("transaction input %d: signature script is not a valid script: %s", i, err)
+			return transactionRuleError(RejectNonstandard, str)
+		}
+		if !isPushOnly {
+			str := fmt.Sprintf("transaction input %d: signature script is not push-only", i)
+			return transactionRuleError(RejectNonstandard, str)
+		}
 	}
 
 	// None of the output public key scripts can be a non-standard script or be "dust".

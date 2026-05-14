@@ -134,6 +134,15 @@ func TestValidateTransactionInIsolationAndPopulateMass(t *testing.T) {
 				},
 				ruleerrors.ErrInvalidPayload, 0,
 			},
+			{
+				"unsupported output script version", 1, 1, 1,
+				subnetworks.SubnetworkIDNative,
+				nil,
+				func(tx *externalapi.DomainTransaction) {
+					tx.Outputs[0].ScriptPublicKey.Version = constants.MaxScriptPublicKeyVersion + 1
+				},
+				ruleerrors.ErrScriptMalformed, 0,
+			},
 		}
 
 		for _, test := range tests {

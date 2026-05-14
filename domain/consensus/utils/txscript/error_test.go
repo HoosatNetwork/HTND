@@ -19,6 +19,7 @@ func TestErrorCodeStringer(t *testing.T) {
 		{ErrInternal, "ErrInternal"},
 		{ErrInvalidFlags, "ErrInvalidFlags"},
 		{ErrInvalidIndex, "ErrInvalidIndex"},
+		{ErrUnsupportedScriptVersion, "ErrUnsupportedScriptVersion"},
 		{ErrUnsupportedAddress, "ErrUnsupportedAddress"},
 		{ErrTooManyRequiredSigs, "ErrTooManyRequiredSigs"},
 		{ErrNotMultisigScript, "ErrNotMultisigScript"},
