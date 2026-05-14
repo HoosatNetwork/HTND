@@ -114,8 +114,18 @@ func (c *gRPCConnection) receiveLoop() error {
 				return nil
 			}
 
-			// ErrRouteCapacityReached isn't an invalid message error, so
-			// we return it in order to log it later on.
+			// Inv messages are optional and can arrive when the corresponding flow
+			// isn't active or is backpressured. Dropping them is better than
+			// disconnecting peers during heavy sync/IBD.
+			if message.Command() == appmessage.CmdInvRelayBlock || message.Command() == appmessage.CmdInvTransaction {
+				if errors.Is(err, routerpkg.ErrRouteDoesNotExist) || errors.Is(err, routerpkg.ErrRouteCapacityReached) {
+					log.Debugf("dropping incoming '%s' from %s: %s", message.Command(), c, err)
+					continue
+				}
+			}
+
+			// For other message types, a full route likely indicates the peer is
+			// overwhelming us or we're unable to make progress, so keep existing behavior.
 			if errors.Is(err, routerpkg.ErrRouteCapacityReached) {
 				return err
 			}

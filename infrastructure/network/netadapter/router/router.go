@@ -10,6 +10,12 @@ import (
 
 const outgoingRouteMaxMessages = DefaultMaxMessages
 
+var (
+	// ErrRouteDoesNotExist indicates that the router has no route registered for a message command.
+	// This is not necessarily a protocol violation for optional/unsolicited messages.
+	ErrRouteDoesNotExist = errors.New("route does not exist")
+)
+
 // OnRouteCapacityReachedHandler is called when a route cannot accept another message.
 type OnRouteCapacityReachedHandler func(route *Route, message appmessage.Message)
 
@@ -207,7 +213,7 @@ func (r *Router) ReleaseRoute(route *Route) {
 func (r *Router) EnqueueIncomingMessage(message appmessage.Message) error {
 	route, ok := r.incomingRoute(message.Command())
 	if !ok {
-		return errors.Errorf("a route for '%s' does not exist", message.Command())
+		return errors.Wrapf(ErrRouteDoesNotExist, "a route for '%s' does not exist", message.Command())
 	}
 	return route.Enqueue(message)
 }

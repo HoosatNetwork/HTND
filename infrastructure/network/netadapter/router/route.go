@@ -27,7 +27,7 @@ var (
 )
 
 func defaultOnRouteCapacityReachedHandler(route *Route, message appmessage.Message) {
-	log.Infof("Route '%s' is full (%d/%d). Dropping outgoing '%s' message",
+	log.Infof("Route '%s' is full (%d/%d). Dropping '%s' message",
 		route.name, len(route.channel), route.capacity, message.Command())
 }
 
