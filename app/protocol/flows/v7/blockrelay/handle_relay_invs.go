@@ -274,8 +274,8 @@ func (flow *handleRelayInvsFlow) start() error {
 			}
 			if !isNearlySynced {
 				flow.unreadInv(inv)
-				time.Sleep(250 * time.Millisecond)
 				log.Debugf("Got block while in IBD and the node is out of sync. Continuing...")
+				time.Sleep(30 * time.Second)
 				continue
 			}
 		}
