@@ -273,6 +273,7 @@ func (flow *handleRelayInvsFlow) start() error {
 				return err
 			}
 			if !isNearlySynced {
+				flow.unreadInv(inv)
 				time.Sleep(250 * time.Millisecond)
 				log.Debugf("Got block while in IBD and the node is out of sync. Continuing...")
 				continue
@@ -458,6 +459,16 @@ func (flow *handleRelayInvsFlow) readInv() (invRelayBlock, error) {
 		return invRelayBlock{}, flow.getIncomingErr()
 	}
 	return inv, nil
+}
+
+func (flow *handleRelayInvsFlow) unreadInv(inv invRelayBlock) {
+	if inv.Hash == nil {
+		return
+	}
+	if len(flow.invsQueue) > 0 && flow.invsQueue[0].Hash != nil && flow.invsQueue[0].Hash.Equal(inv.Hash) {
+		return
+	}
+	flow.invsQueue = append([]invRelayBlock{inv}, flow.invsQueue...)
 }
 
 func (flow *handleRelayInvsFlow) requestBlock(requestHash *externalapi.DomainHash) (*externalapi.DomainBlock, bool, error) {
