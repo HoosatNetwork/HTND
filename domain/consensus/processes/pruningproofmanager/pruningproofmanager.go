@@ -2,6 +2,7 @@ package pruningproofmanager
 
 import (
 	"math/big"
+	"time"
 
 	consensusDB "github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/blockheaderstore"
@@ -22,6 +23,8 @@ import (
 	"github.com/Hoosat-Oy/HTND/util/staging"
 	"github.com/pkg/errors"
 )
+
+const pruningProofProgressLogInterval = 30 * time.Second
 
 type pruningProofManager struct {
 	databaseContext model.DBManager
@@ -390,9 +393,12 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 
 	selectedTipByLevel := make([]*externalapi.DomainHash, maxLevel+1)
 	for blockLevel := maxLevel; blockLevel >= 0; blockLevel-- {
-		log.Infof("Validating level %d from the pruning point proof", blockLevel)
+		levelStartTime := time.Now()
 		headers := make([]externalapi.BlockHeader, len(pruningPointProof.Headers[blockLevel]))
 		copy(headers, pruningPointProof.Headers[blockLevel])
+		totalHeaders := len(headers)
+		log.Infof("Validating level %d from the pruning point proof (%d headers)", blockLevel, totalHeaders)
+		lastProgressLogTime := time.Now()
 
 		var selectedTip *externalapi.DomainHash
 		for i, header := range headers {
@@ -455,7 +461,28 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 					return err
 				}
 			}
+
+			if totalHeaders > 0 && time.Since(lastProgressLogTime) >= pruningProofProgressLogInterval {
+				processed := i + 1
+				elapsed := time.Since(levelStartTime)
+				rate := float64(processed) / elapsed.Seconds()
+				eta := time.Duration(0)
+				if rate > 0 {
+					eta = time.Duration(float64(totalHeaders-processed)/rate) * time.Second
+				}
+				if selectedTip != nil {
+					log.Infof("Pruning proof validate level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s selectedTip=%s",
+						blockLevel, processed, totalHeaders, 100*float64(processed)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second), selectedTip)
+				} else {
+					log.Infof("Pruning proof validate level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s",
+						blockLevel, processed, totalHeaders, 100*float64(processed)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+				}
+				lastProgressLogTime = time.Now()
+			}
 		}
+
+		log.Infof("Finished validating level %d from the pruning point proof (headers=%d selectedTip=%s duration=%s)",
+			blockLevel, totalHeaders, selectedTip, time.Since(levelStartTime).Truncate(time.Second))
 
 		if blockLevel < maxLevel {
 			blockAtDepthMAtNextLevel, err := ppm.blockAtDepth(stagingArea, ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
@@ -722,10 +749,16 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 			}
 		}
 	}
+	log.Infof("Pruning proof reachability: building temporary DAG for %d unique proof blocks", len(dag))
 
 	var selectedTip *externalapi.DomainHash
+	startTime := time.Now()
+	lastProgressLogTime := time.Now()
+	processed := 0
+	totalBlocks := allProofBlocksUpHeap.Len()
 	for allProofBlocksUpHeap.Len() > 0 {
 		blockHash := allProofBlocksUpHeap.Pop()
+		processed++
 		block := dag[*blockHash]
 		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
 		for parent := range block.parents {
@@ -788,7 +821,20 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 				return err
 			}
 		}
+
+		if totalBlocks > 0 && time.Since(lastProgressLogTime) >= pruningProofProgressLogInterval {
+			elapsed := time.Since(startTime)
+			rate := float64(processed) / elapsed.Seconds()
+			eta := time.Duration(0)
+			if rate > 0 {
+				eta = time.Duration(float64(totalBlocks-processed)/rate) * time.Second
+			}
+			log.Infof("Pruning proof reachability progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f blk/s eta~%s",
+				processed, totalBlocks, 100*float64(processed)/float64(totalBlocks), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+			lastProgressLogTime = time.Now()
+		}
 	}
+	log.Infof("Pruning proof reachability: finished (blocks=%d duration=%s)", processed, time.Since(startTime).Truncate(time.Second))
 
 	err = staging.CommitAllChanges(ppm.databaseContext, stagingArea)
 	if err != nil {
@@ -813,16 +859,21 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 	defer onEnd()
 
 	stagingArea := model.NewStagingArea()
+	stageStartTime := time.Now()
+	totalHeaders := 0
 	for _, headers := range pruningPointProof.Headers {
+		totalHeaders += len(headers)
 		for _, header := range headers {
 			blockHash := consensushashing.HeaderHash(header)
 			ppm.blockHeaderStore.Stage(stagingArea, blockHash, header)
 		}
 	}
+	log.Infof("Applying pruning point proof: staging %d headers", totalHeaders)
 	err := staging.CommitAllChanges(ppm.databaseContext, stagingArea)
 	if err != nil {
 		return err
 	}
+	log.Infof("Applying pruning point proof: staged headers committed (duration=%s)", time.Since(stageStartTime).Truncate(time.Second))
 
 	err = ppm.populateProofReachabilityAndHeaders(pruningPointProof, ppm.reachabilityDataStore)
 	if err != nil {
@@ -830,7 +881,10 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 	}
 
 	for blockLevel, headers := range pruningPointProof.Headers {
-		log.Infof("Applying level %d from the pruning point proof", blockLevel)
+		levelStartTime := time.Now()
+		totalLevelHeaders := len(headers)
+		log.Infof("Applying level %d from the pruning point proof (%d headers)", blockLevel, totalLevelHeaders)
+		lastProgressLogTime := time.Now()
 		for i, header := range headers {
 			stagingArea := model.NewStagingArea()
 
@@ -897,7 +951,22 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 			if err != nil {
 				return err
 			}
+
+			if totalLevelHeaders > 0 && time.Since(lastProgressLogTime) >= pruningProofProgressLogInterval {
+				processed := i + 1
+				elapsed := time.Since(levelStartTime)
+				rate := float64(processed) / elapsed.Seconds()
+				eta := time.Duration(0)
+				if rate > 0 {
+					eta = time.Duration(float64(totalLevelHeaders-processed)/rate) * time.Second
+				}
+				log.Infof("Pruning proof apply level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s",
+					blockLevel, processed, totalLevelHeaders, 100*float64(processed)/float64(totalLevelHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+				lastProgressLogTime = time.Now()
+			}
 		}
+		log.Infof("Finished applying level %d from the pruning point proof (headers=%d duration=%s)",
+			blockLevel, totalLevelHeaders, time.Since(levelStartTime).Truncate(time.Second))
 	}
 
 	pruningPointHeader := pruningPointProof.Headers[0][len(pruningPointProof.Headers[0])-1]
