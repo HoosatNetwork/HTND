@@ -719,10 +719,11 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	tmpGHOSTDAGManager := ghostdagmanager.New(ppm.databaseContext, nil, nil, ghostdagDataStore, nil, nil, []externalapi.KType{0}, nil)
 	dagTraversalManager := dagtraversalmanager.New(ppm.databaseContext, nil, ghostdagDataStore, nil, tmpGHOSTDAGManager, nil, nil, nil, []int{0})
 	allProofBlocksUpHeap := dagTraversalManager.NewUpHeap(tmpStagingArea)
-	dag := make(map[externalapi.DomainHash]struct {
-		parents hashset.HashSet
-		header  externalapi.BlockHeader
-	})
+	type proofBlock struct {
+		parents []externalapi.DomainHash
+	}
+	dag := make(map[externalapi.DomainHash]proofBlock)
+	hashPtrByValue := make(map[externalapi.DomainHash]*externalapi.DomainHash)
 	for _, headers := range pruningPointProof.Headers {
 		for _, header := range headers {
 			blockHash := consensushashing.HeaderHash(header)
@@ -730,16 +731,16 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 				continue
 			}
 
-			dag[*blockHash] = struct {
-				parents hashset.HashSet
-				header  externalapi.BlockHeader
-			}{parents: hashset.New(), header: header}
+			hashPtrByValue[*blockHash] = blockHash
+			parents := make([]externalapi.DomainHash, 0, ppm.maxBlockLevel+1)
 
 			for level := 0; level <= ppm.maxBlockLevel; level++ {
 				for _, parent := range ppm.parentsManager.ParentsAtLevel(header, level) {
-					dag[*blockHash].parents.Add(parent)
+					parents = append(parents, *parent)
 				}
 			}
+
+			dag[*blockHash] = proofBlock{parents: parents}
 
 			// We stage temporary GHOSTDAG data that is needed in order to sort allProofBlocksUpHeap.
 			ghostdagDataStore.Stage(tmpStagingArea, blockHash, externalapi.NewBlockGHOSTDAGData(header.BlueScore(), header.BlueWork(), nil, nil, nil, nil), false)
@@ -761,12 +762,13 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 		processed++
 		block := dag[*blockHash]
 		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
-		for parent := range block.parents {
-			if _, ok := dag[parent]; !ok {
+		for _, parentValue := range block.parents {
+			parentHash, ok := hashPtrByValue[parentValue]
+			if !ok {
 				continue
 			}
 
-			err := parentsHeap.Push(&parent)
+			err := parentsHeap.Push(parentHash)
 			if err != nil {
 				return err
 			}
