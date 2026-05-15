@@ -119,10 +119,11 @@ func (c *gRPCConnection) IsOutbound() bool {
 //
 // This is part of the Connection interface
 func (c *gRPCConnection) Disconnect() {
-	if !c.IsConnected() {
+	// Multiple goroutines can race to disconnect (receive loop, send loop, higher layers).
+	// Ensure we only run the disconnect sequence once.
+	if !atomic.CompareAndSwapUint32(&c.isConnected, 1, 0) {
 		return
 	}
-	atomic.StoreUint32(&c.isConnected, 0)
 
 	close(c.stopChan)
 
@@ -171,17 +172,17 @@ func (c *gRPCConnection) closeSend() {
 	c.streamLock.Lock()
 	defer c.streamLock.Unlock()
 
-	// Whilst we are protecting against nil streams, do it here too
-	if c.stream != nil {
-		if clientStream, ok := c.stream.(grpc.ClientStream); ok {
-			// ignore error because we don't really know what's the status of the connection
-			_ = clientStream.CloseSend()
-		}
+	if c.stream == nil {
+		return
 	}
 
-	clientStream := c.stream.(grpc.ClientStream)
+	clientStream, ok := c.stream.(grpc.ClientStream)
+	if ok {
+		// ignore error because we don't really know what's the status of the connection
+		_ = clientStream.CloseSend()
+	}
 
-	// ignore error because we don't really know what's the status of the connection
-	_ = clientStream.CloseSend()
-	_ = c.lowLevelClientConnection.Close()
+	if c.lowLevelClientConnection != nil {
+		_ = c.lowLevelClientConnection.Close()
+	}
 }
