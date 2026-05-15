@@ -918,28 +918,57 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 	totalHeaders := 0
 	for _, headers := range pruningPointProof.Headers {
 		totalHeaders += len(headers)
+	}
+	log.Infof("Applying pruning point proof: staging %d headers", totalHeaders)
+	staged := 0
+	lastProgressLogTime := time.Now()
+	for _, headers := range pruningPointProof.Headers {
 		for _, header := range headers {
 			blockHash := consensushashing.HeaderHash(header)
 			ppm.blockHeaderStore.Stage(stagingArea, blockHash, header)
+			staged++
+
+			if totalHeaders > 0 && time.Since(lastProgressLogTime) >= pruningProofProgressLogInterval {
+				elapsed := time.Since(stageStartTime)
+				rate := float64(staged) / elapsed.Seconds()
+				eta := time.Duration(0)
+				if rate > 0 {
+					eta = time.Duration(float64(totalHeaders-staged)/rate) * time.Second
+				}
+				log.Infof("Applying pruning point proof: staging headers progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s",
+					staged, totalHeaders, 100*float64(staged)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+				lastProgressLogTime = time.Now()
+			}
 		}
 	}
-	log.Infof("Applying pruning point proof: staging %d headers", totalHeaders)
 	err := staging.CommitAllChanges(ppm.databaseContext, stagingArea)
 	if err != nil {
 		return err
 	}
 	log.Infof("Applying pruning point proof: staged headers committed (duration=%s)", time.Since(stageStartTime).Truncate(time.Second))
 
+	log.Infof("Applying pruning point proof: building reachability data for proof blocks")
 	err = ppm.populateProofReachabilityAndHeaders(pruningPointProof, ppm.reachabilityDataStore)
 	if err != nil {
 		return err
 	}
+	log.Infof("Applying pruning point proof: built reachability data for proof blocks")
 
 	for blockLevel, headers := range pruningPointProof.Headers {
 		levelStartTime := time.Now()
 		totalLevelHeaders := len(headers)
 		log.Infof("Applying level %d from the pruning point proof (%d headers)", blockLevel, totalLevelHeaders)
 		lastProgressLogTime := time.Now()
+
+		var (
+			parentsLookupDuration time.Duration
+			setParentsDuration    time.Duration
+			ghostdagDuration      time.Duration
+			overrideDuration      time.Duration
+			commitDuration        time.Duration
+			parentsLookupCount    int
+		)
+
 		for i, header := range headers {
 			stagingArea := model.NewStagingArea()
 
@@ -952,7 +981,9 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 			ppm.blockHeaderStore.Stage(stagingArea, blockHash, header)
 
 			var parents []*externalapi.DomainHash
+			parentsLookupStart := time.Now()
 			for _, parent := range ppm.parentsManager.ParentsAtLevel(header, blockLevel) {
+				parentsLookupCount++
 				_, err := ppm.ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, parent, false)
 				if database.IsNotFoundError(err) {
 					continue
@@ -963,6 +994,7 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 
 				parents = append(parents, parent)
 			}
+			parentsLookupDuration += time.Since(parentsLookupStart)
 
 			if len(parents) == 0 {
 				if i != 0 {
@@ -972,17 +1004,22 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 				parents = append(parents, model.VirtualGenesisBlockHash)
 			}
 
+			setParentsStart := time.Now()
 			err := ppm.dagTopologyManagers[blockLevel].SetParents(stagingArea, blockHash, parents)
 			if err != nil {
 				return err
 			}
+			setParentsDuration += time.Since(setParentsStart)
 
+			ghostdagStart := time.Now()
 			err = ppm.ghostdagManagers[blockLevel].GHOSTDAG(stagingArea, blockHash)
 			if err != nil {
 				return err
 			}
+			ghostdagDuration += time.Since(ghostdagStart)
 
 			if blockLevel == 0 {
+				overrideStart := time.Now()
 				// Override the ghostdag data with the real blue score and blue work
 				ghostdagData, err := ppm.ghostdagDataStores[0].Get(ppm.databaseContext, stagingArea, blockHash, false)
 				if err != nil {
@@ -1000,12 +1037,15 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 
 				ppm.finalityStore.StageFinalityPoint(stagingArea, blockHash, model.VirtualGenesisBlockHash)
 				ppm.blockStatusStore.Stage(stagingArea, blockHash, externalapi.StatusHeaderOnly)
+				overrideDuration += time.Since(overrideStart)
 			}
 
+			commitStart := time.Now()
 			err = staging.CommitAllChanges(ppm.databaseContext, stagingArea)
 			if err != nil {
 				return err
 			}
+			commitDuration += time.Since(commitStart)
 
 			if totalLevelHeaders > 0 && time.Since(lastProgressLogTime) >= pruningProofProgressLogInterval {
 				processed := i + 1
@@ -1017,6 +1057,24 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 				}
 				log.Infof("Pruning proof apply level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s",
 					blockLevel, processed, totalLevelHeaders, 100*float64(processed)/float64(totalLevelHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+
+				perHdr := func(d time.Duration) float64 {
+					if processed == 0 {
+						return 0
+					}
+					return float64(d.Microseconds()) / float64(processed)
+				}
+				timingSummary := fmt.Sprintf(
+					"cost_us/hdr parents=%.1f setParents=%.1f ghostdag=%.1f override=%.1f commit=%.1f parentsLookups=%d",
+					perHdr(parentsLookupDuration),
+					perHdr(setParentsDuration),
+					perHdr(ghostdagDuration),
+					perHdr(overrideDuration),
+					perHdr(commitDuration),
+					parentsLookupCount,
+				)
+				log.Debugf("Pruning proof apply level %d timings: %s", blockLevel, timingSummary)
+
 				lastProgressLogTime = time.Now()
 			}
 		}
