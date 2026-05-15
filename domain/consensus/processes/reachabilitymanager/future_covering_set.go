@@ -1,8 +1,10 @@
 package reachabilitymanager
 
 import (
+	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/reachabilitydata"
 )
 
 // insertToFutureCoveringSet inserts the given block into this node's FutureCoveringSet
@@ -20,57 +22,61 @@ import (
 //     is-superset relation will by definition
 //     be always preserved.
 func (rt *reachabilityManager) insertToFutureCoveringSet(stagingArea *model.StagingArea, node, futureNode *externalapi.DomainHash) error {
-	reachabilityData, err := rt.reachabilityDataForInsertion(stagingArea, node)
+	data, err := rt.reachabilityDataStore.ReachabilityData(rt.databaseContext, stagingArea, node)
+	if err != nil {
+		if !database.IsNotFoundError(err) {
+			return err
+		}
+		data = reachabilitydata.EmptyReachabilityData()
+	}
+	futureCoveringSet := data.FutureCoveringSet()
+
+	futureInterval, err := rt.interval(stagingArea, futureNode)
 	if err != nil {
 		return err
 	}
-	futureCoveringSet := reachabilityData.FutureCoveringSet()
 
-	ancestorIndex, ok, err := rt.findAncestorIndexOfNode(stagingArea, orderedTreeNodeSet(futureCoveringSet), futureNode)
+	ancestorIndex, ok, err := rt.findAncestorIndexOfNodeByIntervalEnd(stagingArea, orderedTreeNodeSet(futureCoveringSet), futureInterval.End)
 	if err != nil {
 		return err
 	}
 
-	var newSet []*externalapi.DomainHash
 	if !ok {
-		newSet = append([]*externalapi.DomainHash{futureNode}, futureCoveringSet...)
-	} else {
-		candidate := futureCoveringSet[ancestorIndex]
-		candidateIsAncestorOfFutureNode, err := rt.IsReachabilityTreeAncestorOf(stagingArea, candidate, futureNode)
-		if err != nil {
-			return err
-		}
-
-		if candidateIsAncestorOfFutureNode {
-			// candidate is an ancestor of futureNode, no need to insert
-			return nil
-		}
-
-		futureNodeIsAncestorOfCandidate, err := rt.IsReachabilityTreeAncestorOf(stagingArea, futureNode, candidate)
-		if err != nil {
-			return err
-		}
-
-		if futureNodeIsAncestorOfCandidate {
-			// futureNode is an ancestor of candidate, and can thus replace it
-			newSet := make([]*externalapi.DomainHash, len(futureCoveringSet))
-			copy(newSet, futureCoveringSet)
-			newSet[ancestorIndex] = futureNode
-
-			return rt.stageFutureCoveringSet(stagingArea, node, newSet)
-		}
-
-		// Insert futureNode in the correct index to maintain futureCoveringTreeNodeSet as
-		// a sorted-by-interval list.
-		// Note that ancestorIndex might be equal to len(futureCoveringTreeNodeSet)
-		left := futureCoveringSet[:ancestorIndex+1]
-		right := append([]*externalapi.DomainHash{futureNode}, futureCoveringSet[ancestorIndex+1:]...)
-		left = append(left, right...)
-		newSet = left
+		// Insert at the beginning.
+		newSet := make([]*externalapi.DomainHash, len(futureCoveringSet)+1)
+		newSet[0] = futureNode
+		copy(newSet[1:], futureCoveringSet)
+		rt.stageData(stagingArea, node, reachabilitydata.New(data.Children(), data.Parent(), data.Interval(), model.FutureCoveringTreeNodeSet(newSet)))
+		return nil
 	}
-	reachabilityData.SetFutureCoveringSet(newSet)
-	rt.stageData(stagingArea, node, reachabilityData)
 
+	candidate := futureCoveringSet[ancestorIndex]
+	candidateInterval, err := rt.interval(stagingArea, candidate)
+	if err != nil {
+		return err
+	}
+
+	if intervalContains(candidateInterval, futureInterval) {
+		// candidate is an ancestor of futureNode, no need to insert
+		return nil
+	}
+	if intervalContains(futureInterval, candidateInterval) {
+		// futureNode is an ancestor of candidate, and can thus replace it
+		newSet := futureCoveringSet.Clone()
+		newSet[ancestorIndex] = futureNode
+		rt.stageData(stagingArea, node, reachabilitydata.New(data.Children(), data.Parent(), data.Interval(), newSet))
+		return nil
+	}
+
+	// Insert futureNode in the correct index to maintain futureCoveringTreeNodeSet as
+	// a sorted-by-interval list.
+	// Note that ancestorIndex might be equal to len(futureCoveringTreeNodeSet)
+	insertIndex := ancestorIndex + 1
+	newSet := make([]*externalapi.DomainHash, len(futureCoveringSet)+1)
+	copy(newSet, futureCoveringSet[:insertIndex])
+	newSet[insertIndex] = futureNode
+	copy(newSet[insertIndex+1:], futureCoveringSet[insertIndex:])
+	rt.stageData(stagingArea, node, reachabilitydata.New(data.Children(), data.Parent(), data.Interval(), model.FutureCoveringTreeNodeSet(newSet)))
 	return nil
 }
 

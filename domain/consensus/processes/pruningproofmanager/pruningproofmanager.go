@@ -1,6 +1,7 @@
 package pruningproofmanager
 
 import (
+	"fmt"
 	"math/big"
 	"time"
 
@@ -25,6 +26,14 @@ import (
 )
 
 const pruningProofProgressLogInterval = 30 * time.Second
+
+// pruningProofReindexRootUpdateInterval throttles reachability root updates during pruning proof
+// validation/reachability building. Updating the root is a performance heuristic, but calling it
+// for every processed header is disproportionately expensive during IBD.
+//
+// Note: This does not change consensus semantics. It only affects how reachability interval
+// reindexes are biased.
+const pruningProofReindexRootUpdateInterval = 200
 
 type pruningProofManager struct {
 	databaseContext model.DBManager
@@ -400,6 +409,17 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 		log.Infof("Validating level %d from the pruning point proof (%d headers)", blockLevel, totalHeaders)
 		lastProgressLogTime := time.Now()
 
+		var (
+			parentsLookupDuration          time.Duration
+			setParentsDuration             time.Duration
+			ghostdagDuration               time.Duration
+			chooseSelectedParentDuration   time.Duration
+			reachabilityAddDuration        time.Duration
+			reachabilityUpdateRootDuration time.Duration
+			parentsLookupCount             int
+			reindexRootUpdateCount         int
+		)
+
 		var selectedTip *externalapi.DomainHash
 		for i, header := range headers {
 			blockHash := consensushashing.HeaderHash(header)
@@ -411,7 +431,9 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			blockHeaderStore.Stage(stagingArea, blockHash, header)
 
 			var parents []*externalapi.DomainHash
+			parentsLookupStart := time.Now()
 			for _, parent := range ppm.parentsManager.ParentsAtLevel(header, blockLevel) {
+				parentsLookupCount++
 				_, err := ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, parent, false)
 				if database.IsNotFoundError(err) {
 					continue
@@ -431,16 +453,23 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 				parents = append(parents, model.VirtualGenesisBlockHash)
 			}
 
+			parentsLookupDuration += time.Since(parentsLookupStart)
+
+			setParentsStart := time.Now()
 			err := dagTopologyManagers[blockLevel].SetParents(stagingArea, blockHash, parents)
 			if err != nil {
 				return err
 			}
+			setParentsDuration += time.Since(setParentsStart)
 
+			ghostdagStart := time.Now()
 			err = ghostdagManagers[blockLevel].GHOSTDAG(stagingArea, blockHash)
 			if err != nil {
 				return err
 			}
+			ghostdagDuration += time.Since(ghostdagStart)
 
+			chooseSelectedParentStart := time.Now()
 			if selectedTip == nil {
 				selectedTip = blockHash
 			} else {
@@ -449,17 +478,23 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 					return err
 				}
 			}
+			chooseSelectedParentDuration += time.Since(chooseSelectedParentStart)
 
+			reachabilityAddStart := time.Now()
 			err = reachabilityManagers[blockLevel].AddBlock(stagingArea, blockHash)
 			if err != nil {
 				return err
 			}
+			reachabilityAddDuration += time.Since(reachabilityAddStart)
 
-			if selectedTip.Equal(blockHash) {
+			if selectedTip.Equal(blockHash) && ((i+1)%pruningProofReindexRootUpdateInterval == 0 || i+1 == len(headers)) {
+				reindexRootUpdateCount++
+				reachabilityUpdateRootStart := time.Now()
 				err := reachabilityManagers[blockLevel].UpdateReindexRoot(stagingArea, selectedTip)
 				if err != nil {
 					return err
 				}
+				reachabilityUpdateRootDuration += time.Since(reachabilityUpdateRootStart)
 			}
 
 			if totalHeaders > 0 && time.Since(lastProgressLogTime) >= pruningProofProgressLogInterval {
@@ -470,18 +505,33 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 				if rate > 0 {
 					eta = time.Duration(float64(totalHeaders-processed)/rate) * time.Second
 				}
-				if selectedTip != nil {
-					log.Infof("Pruning proof validate level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s selectedTip=%s",
-						blockLevel, processed, totalHeaders, 100*float64(processed)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second), selectedTip)
-				} else {
-					log.Infof("Pruning proof validate level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s",
-						blockLevel, processed, totalHeaders, 100*float64(processed)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+
+				perHdr := func(d time.Duration) float64 {
+					if processed == 0 {
+						return 0
+					}
+					return float64(d.Microseconds()) / float64(processed)
 				}
+
+				timingSummary := fmt.Sprintf(
+					"cost_us/hdr parents=%.1f setParents=%.1f ghostdag=%.1f chooseSP=%.1f reachAdd=%.1f reindexRoot=%.1f parentsLookups=%d rootUpdates=%d",
+					perHdr(parentsLookupDuration),
+					perHdr(setParentsDuration),
+					perHdr(ghostdagDuration),
+					perHdr(chooseSelectedParentDuration),
+					perHdr(reachabilityAddDuration),
+					perHdr(reachabilityUpdateRootDuration),
+					parentsLookupCount,
+					reindexRootUpdateCount,
+				)
+				log.Infof("Pruning proof validate level %d progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s",
+					blockLevel, processed, totalHeaders, 100*float64(processed)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
+				log.Debugf("Pruning proof validate level %d timings: %s", blockLevel, timingSummary)
 				lastProgressLogTime = time.Now()
 			}
 		}
 
-		log.Infof("Finished validating level %d from the pruning point proof (headers=%d selectedTip=%s duration=%s)",
+		log.Debugf("Finished validating level %d from the pruning point proof (headers=%d selectedTip=%s duration=%s)",
 			blockLevel, totalHeaders, selectedTip, time.Since(levelStartTime).Truncate(time.Second))
 
 		if blockLevel < maxLevel {
@@ -817,7 +867,7 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 			}
 		}
 
-		if selectedTip.Equal(blockHash) {
+		if selectedTip.Equal(blockHash) && (processed%pruningProofReindexRootUpdateInterval == 0 || processed == totalBlocks) {
 			err := targetReachabilityManager.UpdateReindexRoot(stagingArea, selectedTip)
 			if err != nil {
 				return err

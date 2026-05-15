@@ -37,7 +37,12 @@ func (rt *reachabilityManager) findAncestorIndexOfNode(stagingArea *model.Stagin
 	if err != nil {
 		return 0, false, err
 	}
-	end := blockInterval.End
+	return rt.findAncestorIndexOfNodeByIntervalEnd(stagingArea, tns, blockInterval.End)
+}
+
+func (rt *reachabilityManager) findAncestorIndexOfNodeByIntervalEnd(stagingArea *model.StagingArea, tns orderedTreeNodeSet,
+	end uint64,
+) (int, bool, error) {
 
 	low := 0
 	high := len(tns)

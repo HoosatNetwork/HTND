@@ -59,11 +59,14 @@ func (rt *reachabilityManager) AddBlock(stagingArea *model.StagingArea, blockHas
 
 	// Add the block to the futureCoveringSets of all the blocks
 	// in the merget set
-	mergeSet := make([]*externalapi.DomainHash, len(ghostdagData.MergeSetBlues())+len(ghostdagData.MergeSetReds()))
-	copy(mergeSet, ghostdagData.MergeSetBlues())
-	copy(mergeSet[len(ghostdagData.MergeSetBlues()):], ghostdagData.MergeSetReds())
+	for _, current := range ghostdagData.MergeSetBlues() {
+		err = rt.insertToFutureCoveringSet(stagingArea, current, blockHash)
+		if err != nil {
+			return err
+		}
+	}
 
-	for _, current := range mergeSet {
+	for _, current := range ghostdagData.MergeSetReds() {
 		err = rt.insertToFutureCoveringSet(stagingArea, current, blockHash)
 		if err != nil {
 			return err
