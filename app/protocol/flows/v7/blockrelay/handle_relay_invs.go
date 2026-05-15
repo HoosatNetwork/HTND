@@ -58,6 +58,13 @@ type handleRelayInvsFlow struct {
 	connectionManager            *connmanager.ConnectionManager
 	netConnection                *netadapter.NetConnection
 	invsQueue                    []invRelayBlock
+
+	invChan       chan invRelayBlock
+	blockChan     chan *appmessage.MsgBlock
+	locatorChan   chan *appmessage.MsgBlockLocator
+	incomingDone  chan struct{}
+	incomingErrMu sync.Mutex
+	incomingErr   error
 }
 
 // HandleRelayInvs listens to appmessage.MsgInvRelayBlock messages, requests their corresponding blocks if they
@@ -73,6 +80,10 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 		connectionManager: connectionManager,
 		netConnection:     netConnection,
 		invsQueue:         make([]invRelayBlock, 0, 1000),
+		invChan:           make(chan invRelayBlock, 2048),
+		blockChan:         make(chan *appmessage.MsgBlock, 8),
+		locatorChan:       make(chan *appmessage.MsgBlockLocator, 8),
+		incomingDone:      make(chan struct{}),
 	}
 
 	// Clean up offenseTracker entry when the connection ends, regardless of how it exits
@@ -82,10 +93,75 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 		offenseTrackerLock.Unlock()
 	}()
 
+	flow.startIncomingReader()
 	err := flow.start()
 	// Currently, HandleRelayInvs flow is the only place where IBD is triggered, so the channel can be closed now
 	close(peer.IBDRequestChannel())
 	return err
+}
+
+func (flow *handleRelayInvsFlow) startIncomingReader() {
+	spawn("HandleRelayInvs-incomingReader", func() {
+		defer func() {
+			close(flow.incomingDone)
+			close(flow.invChan)
+			close(flow.blockChan)
+			close(flow.locatorChan)
+		}()
+
+		for {
+			msg, err := flow.incomingRoute.Dequeue()
+			if err != nil {
+				flow.setIncomingErr(err)
+				return
+			}
+
+			switch m := msg.(type) {
+			case *appmessage.MsgInvRelayBlock:
+				inv := invRelayBlock{Hash: m.Hash, IsOrphanRoot: false}
+				select {
+				case flow.invChan <- inv:
+				default:
+					// Best-effort: invs are advisory. If we are overwhelmed, drop.
+					// (Reader keeps draining the router route so it won't saturate.)
+				}
+			case *appmessage.MsgBlock:
+				select {
+				case flow.blockChan <- m:
+				default:
+					flow.setIncomingErr(protocolerrors.Errorf(true, "HandleRelayInvs internal block queue is full"))
+					return
+				}
+			case *appmessage.MsgBlockLocator:
+				select {
+				case flow.locatorChan <- m:
+				default:
+					flow.setIncomingErr(protocolerrors.Errorf(true, "HandleRelayInvs internal block locator queue is full"))
+					return
+				}
+			default:
+				flow.setIncomingErr(protocolerrors.Errorf(true, "unexpected %s message in HandleRelayInvs incoming reader", msg.Command()))
+				return
+			}
+		}
+	})
+}
+
+func (flow *handleRelayInvsFlow) setIncomingErr(err error) {
+	flow.incomingErrMu.Lock()
+	defer flow.incomingErrMu.Unlock()
+	if flow.incomingErr == nil {
+		flow.incomingErr = err
+	}
+}
+
+func (flow *handleRelayInvsFlow) getIncomingErr() error {
+	flow.incomingErrMu.Lock()
+	defer flow.incomingErrMu.Unlock()
+	if flow.incomingErr != nil {
+		return flow.incomingErr
+	}
+	return errors.WithStack(router.ErrRouteClosed)
 }
 
 const (
@@ -377,16 +453,11 @@ func (flow *handleRelayInvsFlow) readInv() (invRelayBlock, error) {
 		return inv, nil
 	}
 
-	msg, err := flow.incomingRoute.Dequeue()
-	if err != nil {
-		return invRelayBlock{}, err
-	}
-
-	msgInv, ok := msg.(*appmessage.MsgInvRelayBlock)
+	inv, ok := <-flow.invChan
 	if !ok {
-		return invRelayBlock{}, protocolerrors.Errorf(true, "unexpected %s message in the block relay handleRelayInvsFlow while expecting an inv message", msg.Command())
+		return invRelayBlock{}, flow.getIncomingErr()
 	}
-	return invRelayBlock{Hash: msgInv.Hash, IsOrphanRoot: false}, nil
+	return inv, nil
 }
 
 func (flow *handleRelayInvsFlow) requestBlock(requestHash *externalapi.DomainHash) (*externalapi.DomainBlock, bool, error) {
@@ -422,19 +493,28 @@ func (flow *handleRelayInvsFlow) requestBlock(requestHash *externalapi.DomainHas
 //
 // Note: this function assumes msgChan can contain only appmessage.MsgInvRelayBlock and appmessage.MsgBlock messages.
 func (flow *handleRelayInvsFlow) readMsgBlock() (msgBlock *appmessage.MsgBlock, err error) {
-	for {
-		message, err := flow.incomingRoute.DequeueWithTimeout(common.DefaultTimeout)
-		if err != nil {
-			return nil, err
-		}
+	timer := time.NewTimer(common.DefaultTimeout)
+	defer timer.Stop()
 
-		switch message := message.(type) {
-		case *appmessage.MsgInvRelayBlock:
-			flow.invsQueue = append(flow.invsQueue, invRelayBlock{Hash: message.Hash, IsOrphanRoot: false})
-		case *appmessage.MsgBlock:
-			return message, nil
-		default:
-			return nil, errors.Errorf("unexpected message %s", message.Command())
+	const maxInvQueueLen = 5000
+	for {
+		select {
+		case <-timer.C:
+			return nil, errors.Wrapf(router.ErrTimeout, "timed out waiting for block")
+		case <-flow.incomingDone:
+			return nil, flow.getIncomingErr()
+		case inv, ok := <-flow.invChan:
+			if !ok {
+				return nil, flow.getIncomingErr()
+			}
+			if len(flow.invsQueue) < maxInvQueueLen {
+				flow.invsQueue = append(flow.invsQueue, inv)
+			}
+		case blk, ok := <-flow.blockChan:
+			if !ok {
+				return nil, flow.getIncomingErr()
+			}
+			return blk, nil
 		}
 	}
 }
