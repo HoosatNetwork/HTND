@@ -68,6 +68,7 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 
 	client := protowire.NewP2PClient(gRPCClientConnection)
 	stream, err := client.MessageStream(context.Background(),
+		grpc.UseCompressor("gzip"),
 		grpc.MaxCallRecvMsgSize(p2pMaxMessageSize),
 		grpc.MaxCallSendMsgSize(p2pMaxMessageSize),
 	)
