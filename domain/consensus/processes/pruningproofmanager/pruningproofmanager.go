@@ -774,12 +774,37 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	}
 	dag := make(map[externalapi.DomainHash]proofBlock)
 	hashPtrByValue := make(map[externalapi.DomainHash]*externalapi.DomainHash)
+	totalHeaders := 0
+	for _, headers := range pruningPointProof.Headers {
+		totalHeaders += len(headers)
+	}
+	collectStartTime := time.Now()
+	lastCollectProgressLogTime := time.Now()
+	processedHeaders := 0
+	uniqueBlocks := 0
+	if totalHeaders > 0 {
+		log.Infof("Pruning proof reachability: collecting proof blocks from %d headers", totalHeaders)
+	}
 	for _, headers := range pruningPointProof.Headers {
 		for _, header := range headers {
+			processedHeaders++
+			if totalHeaders > 0 && time.Since(lastCollectProgressLogTime) >= pruningProofProgressLogInterval {
+				elapsed := time.Since(collectStartTime)
+				rate := float64(processedHeaders) / elapsed.Seconds()
+				eta := time.Duration(0)
+				if rate > 0 {
+					eta = time.Duration(float64(totalHeaders-processedHeaders)/rate) * time.Second
+				}
+				log.Infof("Pruning proof reachability: collecting proof blocks progress: %d/%d (%.1f%%) elapsed=%s rate=%.0f hdr/s eta~%s unique=%d",
+					processedHeaders, totalHeaders, 100*float64(processedHeaders)/float64(totalHeaders), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second), uniqueBlocks)
+				lastCollectProgressLogTime = time.Now()
+			}
+
 			blockHash := consensushashing.HeaderHash(header)
 			if _, ok := dag[*blockHash]; ok {
 				continue
 			}
+			uniqueBlocks++
 
 			hashPtrByValue[*blockHash] = blockHash
 			parents := make([]externalapi.DomainHash, 0, ppm.maxBlockLevel+1)
