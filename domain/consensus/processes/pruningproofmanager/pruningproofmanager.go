@@ -770,13 +770,20 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	dagTraversalManager := dagtraversalmanager.New(ppm.databaseContext, nil, ghostdagDataStore, nil, tmpGHOSTDAGManager, nil, nil, nil, []int{0})
 	allProofBlocksUpHeap := dagTraversalManager.NewUpHeap(tmpStagingArea)
 	type proofBlock struct {
-		parents []externalapi.DomainHash
+		parentsStart int
+		parentsEnd   int
 	}
 	dag := make(map[externalapi.DomainHash]proofBlock)
 	hashPtrByValue := make(map[externalapi.DomainHash]*externalapi.DomainHash)
+	allParentsByValue := make([]externalapi.DomainHash, 0)
 	totalHeaders := 0
 	for _, headers := range pruningPointProof.Headers {
 		totalHeaders += len(headers)
+	}
+	// We expect (almost) all headers to be unique. Pre-sizing reduces map growth/rehash during this phase.
+	if totalHeaders > 0 {
+		dag = make(map[externalapi.DomainHash]proofBlock, totalHeaders)
+		hashPtrByValue = make(map[externalapi.DomainHash]*externalapi.DomainHash, totalHeaders)
 	}
 	collectStartTime := time.Now()
 	lastCollectProgressLogTime := time.Now()
@@ -807,15 +814,14 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 			uniqueBlocks++
 
 			hashPtrByValue[*blockHash] = blockHash
-			parents := make([]externalapi.DomainHash, 0, ppm.maxBlockLevel+1)
-
+			parentsStart := len(allParentsByValue)
 			for level := 0; level <= ppm.maxBlockLevel; level++ {
 				for _, parent := range ppm.parentsManager.ParentsAtLevel(header, level) {
-					parents = append(parents, *parent)
+					allParentsByValue = append(allParentsByValue, *parent)
 				}
 			}
-
-			dag[*blockHash] = proofBlock{parents: parents}
+			parentsEnd := len(allParentsByValue)
+			dag[*blockHash] = proofBlock{parentsStart: parentsStart, parentsEnd: parentsEnd}
 
 			// We stage temporary GHOSTDAG data that is needed in order to sort allProofBlocksUpHeap.
 			ghostdagDataStore.Stage(tmpStagingArea, blockHash, externalapi.NewBlockGHOSTDAGData(header.BlueScore(), header.BlueWork(), nil, nil, nil, nil), false)
@@ -837,7 +843,7 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 		processed++
 		block := dag[*blockHash]
 		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
-		for _, parentValue := range block.parents {
+		for _, parentValue := range allParentsByValue[block.parentsStart:block.parentsEnd] {
 			parentHash, ok := hashPtrByValue[parentValue]
 			if !ok {
 				continue
