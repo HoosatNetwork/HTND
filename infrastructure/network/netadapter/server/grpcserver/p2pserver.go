@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/peer"
 )
 
@@ -67,11 +68,9 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	}
 
 	client := protowire.NewP2PClient(gRPCClientConnection)
-	stream, err := client.MessageStream(context.Background(),
-		grpc.UseCompressor("gzip"),
-		grpc.MaxCallRecvMsgSize(p2pMaxMessageSize),
-		grpc.MaxCallSendMsgSize(p2pMaxMessageSize),
-	)
+	stream, err := client.MessageStream(context.Background(), grpc.UseCompressor(gzip.Name),
+		grpc.MaxCallRecvMsgSize(p2pMaxMessageSize), grpc.MaxCallSendMsgSize(p2pMaxMessageSize))
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s error getting client stream for %s", p.name, address)
 	}
