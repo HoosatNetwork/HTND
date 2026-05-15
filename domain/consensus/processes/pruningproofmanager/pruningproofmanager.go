@@ -836,10 +836,13 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	}
 	log.Infof("Pruning proof reachability: finished (blocks=%d duration=%s)", processed, time.Since(startTime).Truncate(time.Second))
 
+	commitStartTime := time.Now()
+	log.Infof("Pruning proof reachability: committing reachability data")
 	err = staging.CommitAllChanges(ppm.databaseContext, stagingArea)
 	if err != nil {
 		return err
 	}
+	log.Infof("Pruning proof reachability: committed reachability data (duration=%s)", time.Since(commitStartTime).Truncate(time.Second))
 
 	ghostdagDataStoreForTargetReachabilityManager.UnstageAll(stagingArea)
 	blockRelationStoreForTargetReachabilityManager.UnstageAll(stagingArea)

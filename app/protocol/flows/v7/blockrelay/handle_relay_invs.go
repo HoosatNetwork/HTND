@@ -264,18 +264,14 @@ func (flow *handleRelayInvsFlow) start() error {
 		}
 
 		if flow.IsIBDRunning() {
-			// flow.unreadInv(inv)
-			// time.Sleep(250 * time.Millisecond)
-			// log.Debugf("Skipping inv hash %s while IBD is in progress.", inv.Hash)
-			// continue
 			isNearlySynced, err := flow.IsNearlySynced()
 			if err != nil {
 				return err
 			}
 			if !isNearlySynced {
-				flow.unreadInv(inv)
-				log.Debugf("Got block while in IBD and the node is out of sync. Continuing...")
-				time.Sleep(30 * time.Second)
+				// flow.unreadInv(inv)
+				log.Debugf("Skipping inv hash %s while IBD is in progress.", inv.Hash)
+				time.Sleep(250 * time.Millisecond)
 				continue
 			}
 		}
@@ -461,15 +457,15 @@ func (flow *handleRelayInvsFlow) readInv() (invRelayBlock, error) {
 	return inv, nil
 }
 
-func (flow *handleRelayInvsFlow) unreadInv(inv invRelayBlock) {
-	if inv.Hash == nil {
-		return
-	}
-	if len(flow.invsQueue) > 0 && flow.invsQueue[0].Hash != nil && flow.invsQueue[0].Hash.Equal(inv.Hash) {
-		return
-	}
-	flow.invsQueue = append([]invRelayBlock{inv}, flow.invsQueue...)
-}
+// func (flow *handleRelayInvsFlow) unreadInv(inv invRelayBlock) {
+// 	if inv.Hash == nil {
+// 		return
+// 	}
+// 	if len(flow.invsQueue) > 0 && flow.invsQueue[0].Hash != nil && flow.invsQueue[0].Hash.Equal(inv.Hash) {
+// 		return
+// 	}
+// 	flow.invsQueue = append([]invRelayBlock{inv}, flow.invsQueue...)
+// }
 
 func (flow *handleRelayInvsFlow) requestBlock(requestHash *externalapi.DomainHash) (*externalapi.DomainBlock, bool, error) {
 	exists := flow.SharedRequestedBlocks().AddIfNotExists(requestHash)
