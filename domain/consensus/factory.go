@@ -731,9 +731,9 @@ func dagStores(config *Config,
 			reachabilityDataStores[i] = reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache*2, preallocateCaches)
 			ghostdagDataStores[i] = ghostdagdatastore.New(prefixBucket, ghostdagDataCacheSize, preallocateCaches)
 		} else {
-			blockRelationStores[i] = blockrelationstore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache, false)
+			blockRelationStores[i] = blockrelationstore.New(prefixBucket, 1000, false)
 			reachabilityDataStores[i] = reachabilitydatastore.New(prefixBucket, pruningWindowSizePlusFinalityDepthForCache, false)
-			ghostdagDataStores[i] = ghostdagdatastore.New(prefixBucket, ghostdagDataCacheSize, false)
+			ghostdagDataStores[i] = ghostdagdatastore.New(prefixBucket, 1000, false)
 		}
 	}
 
