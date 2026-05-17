@@ -112,7 +112,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	flow.consecutiveLowRateCount = 0
 	flow.minHeadersPerSecond = float64(flow.Config().MinHeadersPerSecond)
 	flow.minBlocksPerSecond = float64(flow.Config().MinBlocksPerSecond)
-	flow.slowIBDTicks = 3 // 30 seconds when done in 10 second slices
+	flow.slowIBDTicks = 5 // 30 seconds when done in 10 second slices
 	flow.headersProcessedSinceLast = 0
 	flow.blocksProcessedSinceLast = 0
 

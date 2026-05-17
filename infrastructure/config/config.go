@@ -58,8 +58,8 @@ const (
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
 	defaultUTXODefaultMaxLimit    = 0
-	defaultMinHeadersPerSecond    = 10
-	defaultMinBlocksPerSecond     = 10
+	defaultMinHeadersPerSecond    = 5
+	defaultMinBlocksPerSecond     = 5
 )
 
 var (
