@@ -44,19 +44,46 @@ func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainH
 	return *key
 }
 
+func filterNil(s []*externalapi.DomainHash) []*externalapi.DomainHash {
+	valid := make([]*externalapi.DomainHash, 0, len(s))
+	for _, x := range s {
+		if x != nil {
+			valid = append(valid, x)
+		}
+	}
+	return valid
+}
+
+func (gm *ghostdagManager) getTipsInG(stagingArea *model.StagingArea, G []*externalapi.DomainHash) []*externalapi.DomainHash {
+	gSet := make(map[externalapi.DomainHash]struct{})
+	for _, h := range G {
+		gSet[*h] = struct{}{}
+	}
+
+	var tips []*externalapi.DomainHash
+	for _, b := range G {
+		children, _ := gm.dagTopologyManager.Children(stagingArea, b)
+		hasChildInG := false
+		for _, c := range children {
+			if _, ok := gSet[*c]; ok {
+				hasChildInG = true
+				break
+			}
+		}
+		if !hasChildInG {
+			tips = append(tips, b)
+		}
+	}
+	return tips
+}
+
 // OrderDAG implements Algorithm 2: KNIGHT DAG ordering algorithm from the DAGKnight paper
 // This algorithm orders the blocks in a DAG by iteratively selecting the "best" tip based on rank and tie-breaking.
 // Input: G - a block DAG represented as a set of block hashes
 // Output: The selected tip of G, and a total ordering over all blocks in G
 func (gm *ghostdagManager) OrderDAG(stagingArea *model.StagingArea, G []*externalapi.DomainHash) (*externalapi.DomainHash, []*externalapi.DomainHash, error) {
 	// Step 1: Filter out any nil blocks from G to ensure validity
-	validG := make([]*externalapi.DomainHash, 0, len(G))
-	for _, g := range G {
-		if g != nil {
-			validG = append(validG, g)
-		}
-	}
-	G = validG
+	G = filterNil(G)
 
 	// Step 2: Base case - if G is empty (only genesis), return genesis as tip and ordering
 	if len(G) == 0 {
@@ -65,10 +92,7 @@ func (gm *ghostdagManager) OrderDAG(stagingArea *model.StagingArea, G []*externa
 	}
 
 	// Step 3: Get the current tips of the DAG from consensus state
-	tips, err := gm.consensusStateStore.Tips(stagingArea, gm.databaseContext)
-	if err != nil {
-		return nil, nil, err
-	}
+	tips := gm.getTipsInG(stagingArea, G)
 
 	// Step 4: For each tip B, recursively compute the ordering of past(B) ∩ G
 	// This corresponds to building the chain orders for each tip
@@ -230,8 +254,8 @@ func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, 
 		return nil, err
 	}
 
-	// Group blocks by their LCA with other blocks
-	groups := make(map[externalapi.DomainHash][]*externalapi.DomainHash)
+	// We will build maximal groups where every pair agrees on the chain after g
+	var partitions [][]*externalapi.DomainHash
 	used := make(map[externalapi.DomainHash]bool)
 
 	for _, block := range P {
@@ -242,34 +266,44 @@ func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, 
 		group := []*externalapi.DomainHash{block}
 		used[*block] = true
 
-		// Find other blocks that have the same LCA pattern
+		// Try to add every other unused block that agrees with the whole group
 		for _, other := range P {
 			if used[*other] {
 				continue
 			}
 
-			// Check if LCA of block and other is in future(g)
-			lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{block, other}, G)
-			if err != nil {
-				continue
+			// Check if other agrees with ALL blocks already in the group w.r.t. future(g)
+			agreesWithGroup := true
+			for _, existing := range group {
+				if !gm.agreesOnFuture(stagingArea, existing, other, futureG) {
+					agreesWithGroup = false
+					break
+				}
 			}
 
-			if contains(futureG, lca) {
+			if agreesWithGroup {
 				group = append(group, other)
 				used[*other] = true
 			}
 		}
 
-		// Use the first block's hash as group key
-		groups[*block] = group
-	}
-
-	partitions := make([][]*externalapi.DomainHash, 0, len(groups))
-	for _, group := range groups {
 		partitions = append(partitions, group)
 	}
 
 	return partitions, nil
+}
+
+// Helper: checks if two blocks agree after g
+func (gm *ghostdagManager) agreesOnFuture(stagingArea *model.StagingArea, A, B *externalapi.DomainHash, futureG []*externalapi.DomainHash) bool {
+	// Get latest common chain ancestor
+	lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{A, B}, nil)
+	if err != nil {
+		return false
+	}
+
+	// They agree w.r.t. future(g) if their LCA is NOT in future(g)
+	// (meaning the disagreement happened before or at g)
+	return !contains(futureG, lca)
 }
 
 // contains checks if slice contains the element
@@ -434,8 +468,14 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 			// Step 3c: Compute G \ future_G(r)
 			GMinusFutureR := difference(G, futureR)
 
-			// Step 3d: Assume g(k) = k (as per paper's assumption)
-			gk := k
+			var gk int
+			if paperFaithful == true {
+				// Step 3d: g(k) = |sqrt(k)|
+				gk = int(math.Floor(math.Sqrt(float64(k))))
+			} else {
+				// Step 3d: Assume g(k) = k
+				gk = k
+			}
 
 			// Step 3e: Run UMC voting on (G \ future_G(r), Ck, g(k))
 			vote, err := gm.UMCVoting(stagingArea, GMinusFutureR, Ck, gk)
@@ -462,91 +502,47 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 // Input: G - a block DAG, Ps - list of tips P1, ..., Pm with the same rank k
 // Output: The winning tip Pi among Ps
 func (gm *ghostdagManager) TieBreaking(stagingArea *model.StagingArea, G []*externalapi.DomainHash, Ps []*externalapi.DomainHash, k int) (*externalapi.DomainHash, error) {
-	// Step 1: Filter out any nil tips from Ps
-	validPs := make([]*externalapi.DomainHash, 0, len(Ps))
-	for _, p := range Ps {
-		if p != nil {
-			validPs = append(validPs, p)
-		}
-	}
-	Ps = validPs
+	Ps = filterNil(Ps)
 	if len(Ps) == 0 {
-		return nil, errors.New("TieBreaking: no valid tips")
+		return nil, errors.New("no tips")
 	}
 
-	// Step 2: Compute the global k-colouring F of G (with freeSearch=true)
 	virtual := model.VirtualGenesisBlockHash
-	gk := k // assume g(k) = k
-	F, err := gm.KColouring(stagingArea, virtual, G, gk, true, nil)
-	if err != nil {
-		return nil, err
-	}
+	F, _ := gm.KColouring(stagingArea, virtual, G, k, true, nil) // global
 
-	// Step 3: For each tip Pi in Ps, compute Ci as the set of blocks B in F.Blues
-	// such that there exists kp in [k/2, k] where |anticone_G(B) ∩ chain_kp(virtual, G, Pi)| > kp
-	type ciResult struct {
-		maxB *externalapi.DomainHash
-	}
-	results := make([]ciResult, len(Ps))
+	bestIdx := 0
+	bestScore := "" // for lex compare
 
 	for i, Pi := range Ps {
-		Ci := make(map[externalapi.DomainHash]struct{})
+		Ci := map[externalapi.DomainHash]struct{}{}
 		for kp := k / 2; kp <= k; kp++ {
 			// Compute k-colouring with conditioning on Pi
-			res, err := gm.KColouring(stagingArea, virtual, G, kp, false, Pi)
-			if err != nil {
-				return nil, err
-			}
+			res, _ := gm.KColouring(stagingArea, virtual, G, kp, false, Pi) // conditioned
 			chain := res.Chain
 			for _, B := range F.Blues {
-				anticoneB, err := gm.getAnticone(stagingArea, B, G)
-				if err != nil {
-					return nil, err
-				}
-				intersection := intersect(anticoneB, chain)
-				if len(intersection) > kp {
+				anticoneB, _ := gm.getAnticone(stagingArea, B, G)
+				if len(intersect(anticoneB, chain)) >= kp {
 					Ci[*B] = struct{}{}
 				}
 			}
 		}
 
-		// Step 4: For each Ci, find the maximum B in Ci (by hash order)
-		if len(Ci) == 0 {
-			results[i] = ciResult{maxB: nil}
-		} else {
-			var maxB *externalapi.DomainHash
-			for b := range Ci {
-				bb := b
-				if maxB == nil || bb.String() > maxB.String() {
-					maxB = &bb
-				}
-			}
-			results[i] = ciResult{maxB: maxB}
-		}
-	}
-
-	// Step 5: Return the Pi with the lexicographically smallest (maxB, Pi) pair
-	minI := 0
-	minMaxB := results[0].maxB
-	for i := 1; i < len(results); i++ {
-		curr := results[i].maxB
-		if minMaxB == nil && curr != nil {
-			continue
-		}
-		if curr == nil && minMaxB != nil {
-			minI = i
-			minMaxB = curr
-			continue
-		}
-		if curr != nil && minMaxB != nil {
-			if curr.String() < minMaxB.String() || (curr.String() == minMaxB.String() && Ps[i].String() < Ps[minI].String()) {
-				minI = i
-				minMaxB = curr
+		// max B in Ci by hash
+		var maxB *externalapi.DomainHash
+		for b := range Ci {
+			bb := b
+			if maxB == nil || bb.String() > maxB.String() {
+				maxB = &bb
 			}
 		}
-	}
 
-	return Ps[minI], nil
+		score := maxB.String() + Pi.String() // lex (maxB, Pi)
+		if score < bestScore || bestScore == "" {
+			bestScore = score
+			bestIdx = i
+		}
+	}
+	return Ps[bestIdx], nil
 }
 
 // KColouring implements Algorithm 5: k-colouring algorithm from the DAGKnight paper
@@ -600,15 +596,9 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 		}
 
 		// Step 2d: If B agrees with C, or freeSearch is true, or k > rank(C)
-		if agrees {
-			res, err := gm.KColouring(stagingArea, B, pastB, k, freeSearch, conditioning)
-			if err != nil {
-				return KColouringResult{}, err
-			}
-			parentResults[*B] = parentResult{blues: res.Blues, chain: res.Chain}
-			P = append(P, B)
-		} else if freeSearch || k > rankC {
-			res, err := gm.KColouring(stagingArea, B, pastB, k, true, conditioning)
+		if agrees || freeSearch || k > rankC {
+			nextFreeSearch := freeSearch || !agrees
+			res, err := gm.KColouring(stagingArea, B, pastB, k, nextFreeSearch, conditioning)
 			if err != nil {
 				return KColouringResult{}, err
 			}
@@ -656,15 +646,13 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 		}
 
 		// Check condition: |chain_G ∩ anticone_G(B)| ≤ k
-		chainGIntersectAnticoneB := intersect(chainG, anticoneB)
-		if len(chainGIntersectAnticoneB) <= k {
+		if len(intersect(chainG, anticoneB)) <= k {
 			// Check condition: |blues_G ∩ anticone_G(Bmax)| < k
 			anticoneBmax, err := gm.getAnticone(stagingArea, Bmax, G)
 			if err != nil {
 				return KColouringResult{}, err
 			}
-			bluesGIntersectAnticoneBmax := intersect(bluesG, anticoneBmax)
-			if len(bluesGIntersectAnticoneBmax) < k {
+			if len(intersect(bluesG, anticoneBmax)) < k {
 				// Add B to blues_G
 				bluesG = append(bluesG, B)
 			}
@@ -740,7 +728,9 @@ func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *exte
 	for len(queue) > 0 {
 		current := queue[0]
 		queue = queue[1:]
-		future = append(future, current)
+		if !current.Equal(block) {
+			future = append(future, current)
+		}
 
 		children, err := gm.dagTopologyManager.Children(stagingArea, current)
 		if err != nil {
@@ -755,10 +745,6 @@ func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *exte
 			}
 		}
 	}
-	// Remove the block itself from future, as future typically excludes the block
-	if len(future) > 0 && future[0].Equal(block) {
-		future = future[1:]
-	}
 	return future, nil
 }
 
@@ -766,24 +752,28 @@ func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *exte
 // Used in KColouring to determine parent relationships.
 // If conditioning is provided, recursively checks agreement with the conditioning block.
 func (gm *ghostdagManager) agrees(stagingArea *model.StagingArea, B, C *externalapi.DomainHash, conditioning *externalapi.DomainHash) (bool, error) {
-	gdB, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, B, false)
+	if B.Equal(C) {
+		return true, nil
+	}
+
+	lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{B, C}, nil)
 	if err != nil {
 		return false, err
 	}
-	gdC, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, C, false)
-	if err != nil {
-		return false, err
-	}
-	original := gdB.SelectedParent().Equal(gdC.SelectedParent())
+
 	if conditioning != nil {
-		virtual := model.VirtualGenesisBlockHash
-		cond, err := gm.agrees(stagingArea, virtual, conditioning, nil) // recursive with nil to avoid loop
-		if err != nil {
-			return false, err
+		// Avoid deep recursion with simple check
+		condLCA, _ := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{B, conditioning}, nil)
+		if !lca.Equal(condLCA) { // stricter chain-descendant check
+			return false, nil
 		}
-		return original && cond, nil
 	}
-	return original, nil
+
+	gdB, _ := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, B, false)
+	gdC, _ := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, C, false)
+
+	// Core of Def 3: LCA should be chain-descendant (no split after relevant point)
+	return gdB.SelectedParent().Equal(gdC.SelectedParent()) || lca.Equal(gdB.SelectedParent()) || lca.Equal(gdC.SelectedParent()), nil
 }
 
 // rank returns the blue score of C as rank
@@ -814,7 +804,9 @@ func (gm *ghostdagManager) getPast(stagingArea *model.StagingArea, block *extern
 	for len(queue) > 0 {
 		current := queue[0]
 		queue = queue[1:]
-		past = append(past, current)
+		if !current.Equal(block) {
+			past = append(past, current)
+		}
 
 		parents, err := gm.dagTopologyManager.Parents(stagingArea, current)
 		if err != nil {
@@ -826,10 +818,6 @@ func (gm *ghostdagManager) getPast(stagingArea *model.StagingArea, block *extern
 				queue = append(queue, parent)
 			}
 		}
-	}
-	// Remove the block itself
-	if len(past) > 0 && past[0].Equal(block) {
-		past = past[1:]
 	}
 	return past, nil
 }
