@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
 
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/pkg/errors"
@@ -178,11 +179,19 @@ func (s *server) collectAddresses(start, end uint32) error {
 
 	getUsableAddressesResponse, err := s.backgroundRPCClient.GetUsableAddresses(addressSet.strings())
 	if err != nil {
+		if errors.Is(err, router.ErrRouteClosed) {
+			log.Warnf("Route is closed during GetUsableAddresses; ignoring and skipping sync cycle.")
+			return nil
+		}
 		return err
 	}
 
 	err = s.updateAddressesAndLastUsedIndexes(addressSet, getUsableAddressesResponse)
 	if err != nil {
+		if errors.Is(err, router.ErrRouteClosed) {
+			log.Warnf("Route is closed during GetUsableAddresses; ignoring and skipping sync cycle.")
+			return nil
+		}
 		return err
 	}
 
@@ -301,11 +310,19 @@ func (s *server) refreshUTXOs(limit uint32) error {
 	// already being spent anywhere in the node mempool before building a new transaction.
 	mempoolEntriesByAddresses, err := s.backgroundRPCClient.GetMempoolEntriesByAddresses(addresses, true, false)
 	if err != nil {
+		if errors.Is(err, router.ErrRouteClosed) {
+			log.Warnf("Route is closed during GetUsableAddresses; ignoring and skipping sync cycle.")
+			return nil
+		}
 		return err
 	}
 
 	getUTXOsByAddressesResponse, err := s.backgroundRPCClient.GetUTXOsByAddresses(addresses, limit)
 	if err != nil {
+		if errors.Is(err, router.ErrRouteClosed) {
+			log.Warnf("Route is closed during GetUsableAddresses; ignoring and skipping sync cycle.")
+			return nil
+		}
 		return err
 	}
 	// log.Infof("Got %d UTXOs from node", len(getUTXOsByAddressesResponse.Entries))
