@@ -376,21 +376,14 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	if len(P) == 0 {
 		return 0, errors.New("CalculateRank: no valid blocks in P")
 	}
-	// paper-aligned small constant;
-	const maxReps = 5
 	// Sample representatives deterministically (paper allows sampling for efficiency)
 	// Sort by hash string (lex order) → consistent across runs
-	reps := P
-	if len(P) > maxReps && paperFaithful {
-		sorted := make([]*externalapi.DomainHash, len(P))
-		copy(sorted, P)
+	reps := make([]*externalapi.DomainHash, len(P))
+	copy(reps, P)
 
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].String() < sorted[j].String()
-		})
-
-		reps = sorted[:maxReps]
-	}
+	sort.Slice(reps, func(i, j int) bool {
+		return reps[i].String() < reps[j].String()
+	})
 
 	// Step 2: For k = 0, 1, 2, 4, 6, ... until a winning k is found
 	currentVote := -1
