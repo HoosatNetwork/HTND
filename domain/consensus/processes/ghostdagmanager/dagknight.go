@@ -506,19 +506,24 @@ func (gm *ghostdagManager) TieBreaking(stagingArea *model.StagingArea, G []*exte
 	if len(Ps) == 0 {
 		return nil, errors.New("no tips")
 	}
+	if len(Ps) == 1 {
+		return Ps[0], nil // trivial case
+	}
 
 	virtual := model.VirtualGenesisBlockHash
-	F, _ := gm.KColouring(stagingArea, virtual, G, k, true, nil) // global
+	// Global k-colouring (ignore error for now – we handle empty below)
+	F, _ := gm.KColouring(stagingArea, virtual, G, k, true, nil)
 
 	bestIdx := 0
-	bestScore := "" // for lex compare
+	bestScore := "" // lexicographically smallest wins
 
 	for i, Pi := range Ps {
-		Ci := map[externalapi.DomainHash]struct{}{}
+		Ci := make(map[externalapi.DomainHash]struct{})
+
 		for kp := k / 2; kp <= k; kp++ {
-			// Compute k-colouring with conditioning on Pi
-			res, _ := gm.KColouring(stagingArea, virtual, G, kp, false, Pi) // conditioned
+			res, _ := gm.KColouring(stagingArea, virtual, G, kp, false, Pi)
 			chain := res.Chain
+
 			for _, B := range F.Blues {
 				anticoneB, _ := gm.getAnticone(stagingArea, B, G)
 				if len(intersect(anticoneB, chain)) >= kp {
@@ -527,21 +532,30 @@ func (gm *ghostdagManager) TieBreaking(stagingArea *model.StagingArea, G []*exte
 			}
 		}
 
-		// max B in Ci by hash
-		var maxB *externalapi.DomainHash
-		for b := range Ci {
-			bb := b
-			if maxB == nil || bb.String() > maxB.String() {
-				maxB = &bb
+		// Handle empty Ci
+		var score string
+		if len(Ci) == 0 {
+			// No distinguishing blues → fall back to Pi hash only.
+			// This keeps the tie-breaker deterministic and stable.
+			score = Pi.String()
+		} else {
+			// max B in Ci by hash (as before)
+			var maxB *externalapi.DomainHash
+			for b := range Ci {
+				bb := b
+				if maxB == nil || bb.String() > maxB.String() {
+					maxB = &bb
+				}
 			}
+			score = maxB.String() + Pi.String()
 		}
 
-		score := maxB.String() + Pi.String() // lex (maxB, Pi)
 		if score < bestScore || bestScore == "" {
 			bestScore = score
 			bestIdx = i
 		}
 	}
+
 	return Ps[bestIdx], nil
 }
 
