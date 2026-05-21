@@ -2,15 +2,12 @@ package ghostdagmanager
 
 import (
 	"crypto/md5"
-	"math"
 	"sort"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
-
-const paperFaithful = true
 
 // makeUMCVotingKey creates a key for UMCVoting cache
 func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainHash {
@@ -409,14 +406,8 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 			// Step 3c: Compute G \ future_G(r)
 			GMinusFutureR := difference(G, futureR)
 
-			var gk int
-			if paperFaithful == true {
-				// Step 3d: g(k) = |sqrt(k)|
-				gk = int(math.Floor(math.Sqrt(float64(k))))
-			} else {
-				// Step 3d: Assume g(k) = k
-				gk = k
-			}
+			// Step 3d: g(k) = k
+			var gk int = k
 
 			// Step 3e: Run UMC voting on (G \ future_G(r), Ck, g(k))
 			vote, err := gm.UMCVoting(stagingArea, GMinusFutureR, Ck, gk)
@@ -461,14 +452,8 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 			// Step 3c: Compute G \ future_G(r)
 			GMinusFutureR := difference(G, futureR)
 
-			var gk int
-			if paperFaithful == true {
-				// Step 3d: g(k) = |sqrt(k)|
-				gk = int(math.Floor(math.Sqrt(float64(k))))
-			} else {
-				// Step 3d: Assume g(k) = k
-				gk = k
-			}
+			// Step 3d: g(k) = k
+			var gk int = k
 
 			// Step 3e: Run UMC voting on (G \ future_G(r), Ck, g(k))
 			vote, err := gm.UMCVoting(stagingArea, GMinusFutureR, Ck, gk)
