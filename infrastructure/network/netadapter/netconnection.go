@@ -42,7 +42,12 @@ func newNetConnection(connection server.Connection, routerInitializer RouterInit
 		if atomic.AddUint32(&netConnection.isRouterClosed, 1) == 1 {
 			netConnection.router.Close()
 		}
-		netConnection.onDisconnectedHandler()
+		// Call the onDisconnectedHandler if it was set by the caller. It may be nil
+		// if the underlying connection disconnected before the caller had a chance
+		// to set it (race between connection lifecycle and handler setup).
+		if netConnection.onDisconnectedHandler != nil {
+			netConnection.onDisconnectedHandler()
+		}
 	})
 
 	routerInitializer(router, netConnection)
