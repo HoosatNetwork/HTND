@@ -46,7 +46,7 @@ func (flow *handleRequestIBDChainBlockLocatorFlow) start() error {
 
 		if err != nil {
 			log.Infof("Couldn't build a block locator between %s and %s", lowHash, highHash)
-
+			log.Infof("Error: %s", err.Error())
 			// The chain has been modified, signal it by sending an empty locator
 			locator, err = externalapi.BlockLocator{}, nil
 		}

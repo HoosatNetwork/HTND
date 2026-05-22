@@ -185,13 +185,12 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 	log.Infof("Syncing blocks up to %s", relayBlockHash)
 	log.Infof("Trying to find highest known syncer chain block from peer %s with relay hash %s", flow.peer, relayBlockHash)
 
-	syncerHeaderSelectedTipHash, highestKnownSyncerChainHash, err := flow.negotiateMissingSyncerChainSegment()
+	syncerHeaderSelectedTipHash, highestKnownSyncerChainHash, err := flow.negotiateMissingSyncerChainSegment(nil, nil)
 	if err != nil {
 		return err
 	}
 
-	shouldDownloadHeadersProof, shouldSync, err := flow.shouldSyncAndShouldDownloadHeadersProof(
-		block, highestKnownSyncerChainHash)
+	shouldDownloadHeadersProof, shouldSync, err := flow.shouldSyncAndShouldDownloadHeadersProof(block, highestKnownSyncerChainHash)
 	if err != nil {
 		return err
 	}
@@ -207,6 +206,30 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 			return err
 		}
 	} else {
+		// When doing sync without headers proof we need to revalidate that the syncee tip
+		// and highest known syncer hash can negototiate, so that syncee wont sync from malicious node
+		// which would pollute useless headers to the node.
+		// tips, err := flow.Domain().Consensus().Tips()
+		// if err != nil {
+		// 	return err
+		// }
+
+		// if !relayBlockHash.Equal(flow.Config().NetParams().GenesisHash) {
+		// 	syncerHeaderSelectedTipHash, highestKnownSyncerChainHash, err = flow.negotiateMissingSyncerChainSegment(tips[0], syncerHeaderSelectedTipHash)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+
+		// 	_, shouldSync, err := flow.shouldSyncAndShouldDownloadHeadersProof(block, highestKnownSyncerChainHash)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+
+		// 	if !shouldSync {
+		// 		return nil
+		// 	}
+		// }
+
 		if flow.Config().NetParams().DisallowDirectBlocksOnTopOfGenesis && !flow.Config().AllowSubmitBlockWhenNotSynced {
 			isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
 			if err != nil {
@@ -255,7 +278,7 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 	return nil
 }
 
-func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment() (*externalapi.DomainHash, *externalapi.DomainHash, error) {
+func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *externalapi.DomainHash, lowHash *externalapi.DomainHash) (*externalapi.DomainHash, *externalapi.DomainHash, error) {
 	/*
 		Algorithm:
 			Request full selected chain block locator from syncer
@@ -264,7 +287,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment() (*externalapi.Do
 	*/
 
 	// Empty hashes indicate that the full chain is queried
-	locatorHashes, err := flow.getSyncerChainBlockLocator(nil, nil, time.Minute*30)
+	locatorHashes, err := flow.getSyncerChainBlockLocator(highHash, lowHash, time.Minute*30)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -99,9 +99,15 @@ func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
 			return false, false, err
 		}
 	}
-	// Note: in the case where `highestSharedBlockFound == true && isPruningPointInSharedBlockChain == false`
-	// we might have here info which is relevant to finality conflict decisions. This should be taken into
-	// account when we improve this aspect.
+	// === Strong finality conflict signal ===
+	// If we share a block but the pruning point is NOT in its selected parent chain,
+	// the peer is on a chain that violates finality relative to our current state.
+	if highestSharedBlockFound && !isPruningPointInSharedBlockChain {
+		log.Warnf("Detected potential finality conflict: pruning point not in peer's shared chain. " +
+			"Stopping IBD from this peer to avoid adopting incorrect history.")
+		return false, false, nil
+	}
+
 	if !highestSharedBlockFound || !isPruningPointInSharedBlockChain {
 		hasMoreBlueWorkThanSelectedTipAndPruningDepthMoreBlueScore, err := flow.checkIfHighHashHasMoreBlueWorkThanSelectedTipAndPruningDepthMoreBlueScore(relayBlock)
 		if err != nil {
@@ -133,7 +139,9 @@ func (flow *handleIBDFlow) checkIfHighHashHasMoreBlueWorkThanSelectedTipAndPruni
 	if err != nil {
 		return false, err
 	}
-	flow.updateBlockVersionFromDAAScore(uint64(relayBlock.Header.Version()))
+	// Use the relay block's DAA score (not the header version) when
+	// updating block version determination logic.
+	flow.updateBlockVersionFromDAAScore(relayBlock.Header.DAAScore())
 	if relayBlock.Header.BlueScore() < virtualSelectedTipInfo.BlueScore+flow.Config().NetParams().PruningDepth() {
 		return false, nil
 	}
