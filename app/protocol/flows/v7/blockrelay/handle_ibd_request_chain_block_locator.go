@@ -3,10 +3,8 @@ package blockrelay
 import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
 	"github.com/Hoosat-Oy/HTND/domain"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
-	"github.com/pkg/errors"
 )
 
 // RequestIBDChainBlockLocatorContext is the interface for the context needed for the HandleRequestBlockLocator flow.
@@ -45,14 +43,12 @@ func (flow *handleRequestIBDChainBlockLocatorFlow) start() error {
 		} else {
 			locator, err = flow.Domain().Consensus().CreateHeadersSelectedChainBlockLocator(lowHash, highHash)
 		}
-		if errors.Is(err, model.ErrBlockNotInSelectedParentChain) {
-			// The chain has been modified, signal it by sending an empty locator
-			locator, err = externalapi.BlockLocator{}, nil
-		}
 
 		if err != nil {
-			return errors.Wrapf(err, "couldn't build a block "+
-				"locator between %s and %s", lowHash, highHash)
+			log.Infof("Couldn't build a block locator between %s and %s", lowHash, highHash)
+
+			// The chain has been modified, signal it by sending an empty locator
+			locator, err = externalapi.BlockLocator{}, nil
 		}
 
 		err = flow.sendIBDChainBlockLocator(locator)
