@@ -376,7 +376,12 @@ func (bb *blockBuilder) newBlockBlueWork(stagingArea *model.StagingArea) (*big.I
 	if err != nil {
 		return nil, err
 	}
-	return virtualGHOSTDAGData.BlueWork(), nil
+	// Return a copy of the blue work to avoid sharing the internal big.Int
+	// instance from the ghostdag data. Sharing the pointer may lead to
+	// unexpected mutations if the underlying value is modified elsewhere,
+	// which can cause spurious header validation failures (unexpected
+	// blue work). Use Set to copy the value into a new big.Int.
+	return new(big.Int).Set(virtualGHOSTDAGData.BlueWork()), nil
 }
 
 func (bb *blockBuilder) newBlockBlueScore(stagingArea *model.StagingArea) (uint64, error) {
