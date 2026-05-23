@@ -67,7 +67,7 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	var orderedTips []*externalapi.DomainHash
 	var err error
 	// DAGKnight TODO: decide DAA Score for hard fork
-	if constants.GetBlockVersion() >= 1 {
+	if constants.GetBlockVersion() >= 6 {
 		orderedTips, err = csm.tipsInDecreasingDAGKnightOrder(stagingArea)
 	} else {
 		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)

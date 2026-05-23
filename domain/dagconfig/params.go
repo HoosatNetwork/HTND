@@ -264,7 +264,7 @@ func (p *Params) PruningDepth() uint64 {
 
 // MainnetParams defines the network parameters for the main Hoosat network.
 var MainnetParams = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
+	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40, 40},
 	Name:        "hoosat-mainnet",
 	Net:         appmessage.Mainnet,
 	RPCPort:     "42420",
@@ -299,7 +299,8 @@ var MainnetParams = Params{
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2640, 2640},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
 	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
-	POWScores:         []uint64{17500000, 21821800, 29335426, 43334184},
+	POWScores: []uint64{17500000, 21821800, 29335426, 43334184},
+
 	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:      []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
 
@@ -375,7 +376,7 @@ var TestnetParams = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2651, 2641},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	POWScores:                       []uint64{1, 2, 3, 4},
+	POWScores:                       []uint64{1, 5, 10, 15, 50},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
 
