@@ -158,6 +158,14 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 	case mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()):
 		mud.toRemove.remove(outpoint)
 	case mud.toAdd.Contains(outpoint):
+		// If the existing staged entry is identical to the one we're trying to add,
+		// treat this as a no-op. This can happen when the same transaction is
+		// encountered multiple times while composing diffs; identical entries
+		// should not cause an error.
+		existingEntry, _ := mud.toAdd.Get(outpoint)
+		if existingEntry.Equal(entry) {
+			return nil
+		}
 		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
 	default:
 		mud.toAdd.add(outpoint, entry)
@@ -170,6 +178,11 @@ func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, en
 	case mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()):
 		mud.toAdd.remove(outpoint)
 	case mud.toRemove.Contains(outpoint):
+		// If the existing staged removal entry is identical, no-op.
+		existingEntry, _ := mud.toRemove.Get(outpoint)
+		if existingEntry.Equal(entry) {
+			return nil
+		}
 		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)
 	default:
 		mud.toRemove.add(outpoint, entry)

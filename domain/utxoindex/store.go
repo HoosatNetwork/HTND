@@ -188,9 +188,14 @@ func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, out
 		uis.toAdd[key] = make(UTXOOutpointEntryPairs)
 	}
 
-	// Return an error if the outpoint already exists in `toAdd`
+	// Return an error if the outpoint already exists in `toAdd`. If the
+	// existing staged entry is identical to the one we are trying to add,
+	// treat it as a no-op.
 	toAddPairsOfKey := uis.toAdd[key]
-	if _, ok := toAddPairsOfKey[*outpoint]; ok {
+	if existing, ok := toAddPairsOfKey[*outpoint]; ok {
+		if existing.Equal(utxoEntry) {
+			return nil
+		}
 		return errors.Errorf("cannot add outpoint %s because it's being added already", outpoint)
 	}
 	toAddPairsOfKey[*outpoint] = utxoEntry
@@ -223,9 +228,13 @@ func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, 
 		uis.toRemove[key] = make(UTXOOutpointEntryPairs)
 	}
 
-	// Return an error if the outpoint already exists in `toRemove`
+	// Return an error if the outpoint already exists in `toRemove`.
+	// If the existing staged removal is identical, treat it as a no-op.
 	toRemovePairsOfKey := uis.toRemove[key]
-	if _, ok := toRemovePairsOfKey[*outpoint]; ok {
+	if existing, ok := toRemovePairsOfKey[*outpoint]; ok {
+		if existing.Equal(utxoEntry) {
+			return nil
+		}
 		return errors.Errorf("cannot remove outpoint %s because it's being removed already", outpoint)
 	}
 
