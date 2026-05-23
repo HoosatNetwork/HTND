@@ -55,7 +55,7 @@ func TestCreateStagingConsensus(t *testing.T) {
 				DAAWindow: nil,
 				GHOSTDAGData: []*externalapi.BlockGHOSTDAGDataHashPair{
 					{
-						GHOSTDAGData: externalapi.NewBlockGHOSTDAGData(0, big.NewInt(0), model.VirtualGenesisBlockHash, nil, nil, make(map[externalapi.DomainHash]externalapi.KType)),
+						GHOSTDAGData: externalapi.NewBlockGHOSTDAGData(0, big.NewInt(0), model.VirtualGenesisBlockHash, nil, nil, make(map[externalapi.DomainHash]externalapi.KType), externalapi.KType(1)),
 						Hash:         consensusConfig.GenesisHash,
 					},
 				},

@@ -9,7 +9,7 @@ import (
 // TestBlueAnticoneSizesSize tests that no data can be loss when converting externalapi.KType to the corresponding type in
 // DbBluesAnticoneSizes
 func TestKType(t *testing.T) {
-	k := externalapi.KType(0)
+	k := externalapi.KType(1)
 	k--
 
 	if k < externalapi.KType(0) {

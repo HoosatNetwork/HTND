@@ -22,8 +22,7 @@ type blockGHOSTDAGData struct {
 }
 
 func (bg *blockGHOSTDAGData) toModel() *externalapi.BlockGHOSTDAGData {
-	ghostdagData := externalapi.NewBlockGHOSTDAGData(bg.blueScore, bg.blueWork, bg.selectedParent, bg.mergeSetBlues, bg.mergeSetReds, bg.bluesAnticoneSizes)
-	ghostdagData.SetDynamicK(bg.dynamicK)
+	ghostdagData := externalapi.NewBlockGHOSTDAGData(bg.blueScore, bg.blueWork, bg.selectedParent, bg.mergeSetBlues, bg.mergeSetReds, bg.bluesAnticoneSizes, bg.dynamicK)
 	return ghostdagData
 }
 
@@ -74,6 +73,8 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 			// Don't change the static K which affects pruning
 			// unless making factory to respect the dynamic K completely
 			// instead of using mixed static and dynamic K.
+			// NOTE: mutating gm.k here caused different nodes to run GHOSTDAG
+			// with diverging static-K values. Keep dynamic K local only.
 			// gm.k[constants.GetBlockVersion()-1] = k
 		}
 	} else {

@@ -23,8 +23,8 @@ func TestGHOSTDAGDataStoreRoundTripTrustedAndUntrusted(t *testing.T) {
 		[]*externalapi.DomainHash{testutils.Hash(3)},
 		[]*externalapi.DomainHash{testutils.Hash(4)},
 		map[externalapi.DomainHash]externalapi.KType{*testutils.Hash(3): 1},
+		externalapi.KType(1),
 	)
-	data.SetDynamicK(5)
 
 	stagingArea := model.NewStagingArea()
 	store.Stage(stagingArea, blockHash, data, false)

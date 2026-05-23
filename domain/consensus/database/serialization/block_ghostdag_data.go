@@ -57,7 +57,7 @@ func DBBlockGHOSTDAGDataToBlockGHOSTDAGData(dbBlockGHOSTDAGData *DbBlockGhostdag
 		mergetSetBlues,
 		mergetSetReds,
 		bluesAnticoneSizes,
+		externalapi.KType(dbBlockGHOSTDAGData.DynamicK),
 	)
-	blockGHOSTDAGData.SetDynamicK(externalapi.KType(dbBlockGHOSTDAGData.DynamicK))
 	return blockGHOSTDAGData, nil
 }

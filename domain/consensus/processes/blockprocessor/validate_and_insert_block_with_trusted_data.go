@@ -89,6 +89,7 @@ func (bp *blockProcessor) ghostdagDataWithoutPrunedBlocks(stagingArea *model.Sta
 		mergeSetBlues,
 		mergeSetReds,
 		data.BluesAnticoneSizes(),
+		externalapi.KType(1),
 	), nil
 }
 

@@ -390,14 +390,17 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			return err
 		}
 
-		ghostdagDataStores[blockLevel].Stage(stagingArea, model.VirtualGenesisBlockHash, externalapi.NewBlockGHOSTDAGData(
+		gd := externalapi.NewBlockGHOSTDAGData(
 			0,
 			big.NewInt(0),
 			nil,
 			nil,
 			nil,
 			nil,
-		), false)
+			externalapi.KType(1),
+		)
+		// Set a sensible default dynamic K for virtual genesis
+		ghostdagDataStores[blockLevel].Stage(stagingArea, model.VirtualGenesisBlockHash, gd, false)
 	}
 
 	selectedTipByLevel := make([]*externalapi.DomainHash, maxLevel+1)
@@ -747,14 +750,16 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 
 	bucket := consensusDB.MakeBucket([]byte("TMP"))
 	ghostdagDataStoreForTargetReachabilityManager := ghostdagdatastore.New(bucket, 0, false)
-	ghostdagDataStoreForTargetReachabilityManager.Stage(stagingArea, model.VirtualGenesisBlockHash, externalapi.NewBlockGHOSTDAGData(
+	gd0 := externalapi.NewBlockGHOSTDAGData(
 		0,
 		big.NewInt(0),
 		nil,
 		nil,
 		nil,
 		nil,
-	), false)
+		externalapi.KType(1),
+	)
+	ghostdagDataStoreForTargetReachabilityManager.Stage(stagingArea, model.VirtualGenesisBlockHash, gd0, false)
 	targetReachabilityManager := reachabilitymanager.New(ppm.databaseContext, ghostdagDataStoreForTargetReachabilityManager, targetReachabilityDataStore)
 	blockRelationStoreForTargetReachabilityManager := blockrelationstore.New(bucket, 0, false)
 	dagTopologyManagerForTargetReachabilityManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, blockRelationStoreForTargetReachabilityManager, nil)
@@ -810,7 +815,7 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 			dag[*blockHash] = proofBlock{header: header}
 
 			// We stage temporary GHOSTDAG data that is needed in order to sort allProofBlocksUpHeap.
-			ghostdagDataStore.Stage(tmpStagingArea, blockHash, externalapi.NewBlockGHOSTDAGData(header.BlueScore(), header.BlueWork(), nil, nil, nil, nil), false)
+			ghostdagDataStore.Stage(tmpStagingArea, blockHash, externalapi.NewBlockGHOSTDAGData(header.BlueScore(), header.BlueWork(), nil, nil, nil, nil, externalapi.KType(1)), false)
 			err := allProofBlocksUpHeap.Push(blockHash)
 			if err != nil {
 				return err
@@ -1045,14 +1050,16 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 					return err
 				}
 
-				ppm.ghostdagDataStores[0].Stage(stagingArea, blockHash, externalapi.NewBlockGHOSTDAGData(
+				gd := externalapi.NewBlockGHOSTDAGData(
 					header.BlueScore(),
 					header.BlueWork(),
 					ghostdagData.SelectedParent(),
 					ghostdagData.MergeSetBlues(),
 					ghostdagData.MergeSetReds(),
 					ghostdagData.BluesAnticoneSizes(),
-				), false)
+					ghostdagData.DynamicK(),
+				)
+				ppm.ghostdagDataStores[0].Stage(stagingArea, blockHash, gd, false)
 
 				ppm.finalityStore.StageFinalityPoint(stagingArea, blockHash, model.VirtualGenesisBlockHash)
 				ppm.blockStatusStore.Stage(stagingArea, blockHash, externalapi.StatusHeaderOnly)

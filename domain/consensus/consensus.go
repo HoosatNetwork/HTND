@@ -135,7 +135,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 				nil,
 				nil,
 				nil,
-			), false)
+				externalapi.KType(1)), false)
 		}
 
 		err = staging.CommitAllChanges(s.databaseContext, stagingArea)
@@ -152,7 +152,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 			DAAWindow: nil,
 			GHOSTDAGData: []*externalapi.BlockGHOSTDAGDataHashPair{
 				{
-					GHOSTDAGData: externalapi.NewBlockGHOSTDAGData(0, big.NewInt(0), model.VirtualGenesisBlockHash, nil, nil, make(map[externalapi.DomainHash]externalapi.KType)),
+					GHOSTDAGData: externalapi.NewBlockGHOSTDAGData(0, big.NewInt(0), model.VirtualGenesisBlockHash, nil, nil, make(map[externalapi.DomainHash]externalapi.KType), externalapi.KType(1)),
 					Hash:         s.genesisHash,
 				},
 			},

@@ -209,7 +209,8 @@ func TestValidateTransactionInContextAndPopulateFee(t *testing.T) {
 			consensusConfig.GenesisHash,
 			nil,
 			nil,
-			nil), false)
+			nil,
+			externalapi.KType(1)), false)
 
 		tests := []struct {
 			name          string

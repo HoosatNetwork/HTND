@@ -40,6 +40,7 @@ type BlockGHOSTDAGData struct {
 	MergeSetBlues      []*externalapi.DomainHash
 	MergeSetReds       []*externalapi.DomainHash
 	BluesAnticoneSizes []*BluesAnticoneSizes
+	dynamicK           externalapi.KType
 }
 
 // BluesAnticoneSizes is an appmessage representation of the BluesAnticoneSizes part of GHOSTDAG data.

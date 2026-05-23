@@ -24,7 +24,8 @@ func newPair(t *testing.T, hashByte byte, score uint64) *externalapi.BlockGHOSTD
 	} else {
 		blueWork = big.NewInt(math.MaxInt64)
 	}
-	data := externalapi.NewBlockGHOSTDAGData(score, blueWork, externalapi.NewZeroHash(), nil, nil, nil)
+	data := externalapi.NewBlockGHOSTDAGData(score, blueWork, externalapi.NewZeroHash(), nil, nil, nil,
+		externalapi.KType(1))
 	return &externalapi.BlockGHOSTDAGDataHashPair{Hash: h, GHOSTDAGData: data}
 }
 

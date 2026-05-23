@@ -92,7 +92,8 @@ func TestUpdateGHOSTDAGFixtures(t *testing.T) {
 					dagMap: make(map[externalapi.DomainHash]externalapi.BlockHeader),
 				}
 
-				blockGHOSTDAGDataGenesis := externalapi.NewBlockGHOSTDAGData(0, new(big.Int), nil, nil, nil, nil)
+				blockGHOSTDAGDataGenesis := externalapi.NewBlockGHOSTDAGData(0, new(big.Int), nil, nil, nil, nil,
+					externalapi.KType(1))
 				dagTopology.parentsMap[genesisHash] = nil
 				ghostdagDataStore.dagMap[genesisHash] = blockGHOSTDAGDataGenesis
 				blockHeadersStore.dagMap[genesisHash] = genesisHeader

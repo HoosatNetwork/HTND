@@ -585,6 +585,7 @@ func ghostdagDataToDomainGHOSTDAGData(data *BlockGHOSTDAGData) *externalapi.Bloc
 		data.MergeSetBlues,
 		data.MergeSetReds,
 		bluesAnticoneSizes,
+		data.dynamicK,
 	)
 }
 

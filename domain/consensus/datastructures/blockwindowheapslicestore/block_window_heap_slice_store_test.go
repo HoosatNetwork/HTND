@@ -27,6 +27,7 @@ func TestBlockWindowHeapSliceStoreStageCommitAndGet(t *testing.T) {
 			[]*externalapi.DomainHash{testutils.Hash(4)},
 			[]*externalapi.DomainHash{},
 			map[externalapi.DomainHash]externalapi.KType{},
+			externalapi.KType(1),
 		),
 	}
 	heapSlice := []*externalapi.BlockGHOSTDAGDataHashPair{pair}

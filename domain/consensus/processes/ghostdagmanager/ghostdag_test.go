@@ -75,7 +75,7 @@ func TestGHOSTDAG(t *testing.T) {
 			dagMap: make(map[externalapi.DomainHash]externalapi.BlockHeader),
 		}
 
-		blockGHOSTDAGDataGenesis := externalapi.NewBlockGHOSTDAGData(0, new(big.Int), nil, nil, nil, nil)
+		blockGHOSTDAGDataGenesis := externalapi.NewBlockGHOSTDAGData(0, new(big.Int), nil, nil, nil, nil, externalapi.KType(1))
 		genesisHeader := consensusConfig.GenesisBlock.Header
 		genesisWork := difficulty.CalcWork(genesisHeader.Bits())
 
@@ -237,7 +237,7 @@ func TestBlueWork(t *testing.T) {
 	)
 
 	dagTopology.parentsMap[*fakeGenesisHash] = nil
-	ghostdagDataStore.dagMap[*fakeGenesisHash] = externalapi.NewBlockGHOSTDAGData(0, new(big.Int), nil, nil, nil, nil)
+	ghostdagDataStore.dagMap[*fakeGenesisHash] = externalapi.NewBlockGHOSTDAGData(0, new(big.Int), nil, nil, nil, nil, externalapi.KType(1))
 	blockHeadersStore.dagMap[*fakeGenesisHash] = lowDifficultyHeader
 
 	dagTopology.parentsMap[*longestChainBlock1Hash] = []*externalapi.DomainHash{fakeGenesisHash}

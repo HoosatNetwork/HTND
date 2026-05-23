@@ -26,6 +26,7 @@ func NewBlockGHOSTDAGData(
 	mergeSetBlues []*DomainHash,
 	mergeSetReds []*DomainHash,
 	bluesAnticoneSizes map[DomainHash]KType,
+	dynamicK KType,
 ) *BlockGHOSTDAGData {
 	return &BlockGHOSTDAGData{
 		blueScore:          blueScore,
@@ -34,6 +35,7 @@ func NewBlockGHOSTDAGData(
 		mergeSetBlues:      mergeSetBlues,
 		mergeSetReds:       mergeSetReds,
 		bluesAnticoneSizes: bluesAnticoneSizes,
+		dynamicK:           dynamicK,
 	}
 }
 
