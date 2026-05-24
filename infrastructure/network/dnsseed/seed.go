@@ -135,10 +135,13 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 	for _, host := range grpcSeeds {
 		spawn("SeedFromGRPC", func() {
 			conn, err := grpc.NewClient(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			client := pb2.NewPeerServiceClient(conn)
 			if err != nil {
 				log.Warnf("Failed to connect to gRPC server: %s", host)
+				return
 			}
+			defer conn.Close()
+
+			client := pb2.NewPeerServiceClient(conn)
 
 			var subnetID []byte
 			if subnetworkID != nil {

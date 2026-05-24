@@ -66,6 +66,12 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s error connecting to %s", p.name, address)
 	}
+	connectionTransferred := false
+	defer func() {
+		if !connectionTransferred && gRPCClientConnection != nil {
+			_ = gRPCClientConnection.Close()
+		}
+	}()
 
 	client := protowire.NewP2PClient(gRPCClientConnection)
 	stream, err := client.MessageStream(context.Background(), grpc.UseCompressor(gzip.Name),
@@ -74,6 +80,7 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s error getting client stream for %s", p.name, address)
 	}
+	connectionTransferred = true
 
 	peerInfo, ok := peer.FromContext(stream.Context())
 	if !ok {
