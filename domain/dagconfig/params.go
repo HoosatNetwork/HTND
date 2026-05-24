@@ -376,7 +376,7 @@ var TestnetParams = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2651, 2641},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	POWScores:                       []uint64{1, 5, 10, 15, 50},
+	POWScores:                       []uint64{1, 50, 100, 150, 200},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
 
