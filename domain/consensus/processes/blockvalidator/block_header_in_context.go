@@ -85,10 +85,10 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		// }
 
 		// TODO: Enable these on block v5 after finding reason for the issues with the blocks
-		err = v.checkBlueWork(stagingArea, ghostdagData, header)
-		if err != nil {
-			return err
-		}
+		// err = v.checkBlueWork(stagingArea, ghostdagData, header)
+		// if err != nil {
+		// 	return err
+		// }
 
 		err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
 		if err != nil {
@@ -222,19 +222,19 @@ func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash
 	return nil
 }
 
-func (v *blockValidator) checkBlueWork(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
-	header externalapi.BlockHeader,
-) error {
-	expectedBlueWork := ghostdagData.BlueWork()
-	headerBlueWork := header.BlueWork()
+// func (v *blockValidator) checkBlueWork(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
+// 	header externalapi.BlockHeader,
+// ) error {
+// 	expectedBlueWork := ghostdagData.BlueWork()
+// 	headerBlueWork := header.BlueWork()
 
-	if headerBlueWork.Cmp(expectedBlueWork) > 0 {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueWork,
-			"block blue work %d is ahead of the expected blue work of %d",
-			headerBlueWork, expectedBlueWork)
-	}
-	return nil
-}
+// 	if headerBlueWork.Cmp(expectedBlueWork) > 0 {
+// 		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueWork,
+// 			"block blue work %d is ahead of the expected blue work of %d",
+// 			headerBlueWork, expectedBlueWork)
+// 	}
+// 	return nil
+// }
 
 func (v *blockValidator) checkHeaderBlueScore(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
 	header externalapi.BlockHeader,

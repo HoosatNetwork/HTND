@@ -299,7 +299,7 @@ var MainnetParams = Params{
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2640, 2640},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
 	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
-	POWScores: []uint64{17500000, 21821800, 29335426, 43334184},
+	POWScores: []uint64{17500000, 21821800, 29335426, 43334184, 180908781 + 1800*5},
 
 	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:      []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},

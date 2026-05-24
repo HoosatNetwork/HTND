@@ -20,6 +20,18 @@ var (
 	BanMinVersion          uint16 = 5
 )
 
+func BlockVersionProgressed(old uint32, new uint16) {
+	if old >= 3 && new == 6 {
+		// Generated with https://patorjk.com/software/taag/#p=display&f=Graffiti&t=Zenith+Hard+Fork+Active&x=none&v=4&h=4&w=80&we=false
+		log.Info("__________            .__  __  .__        ___ ___                  .___ ___________           __        _____          __  .__              ")
+		log.Info("\\____    /____   ____ |__|/  |_|  |__    /   |   \\_____ _______  __| _/ \\_   _____/__________|  | __   /  _  \\   _____/  |_|__|__  __ ____  ")
+		log.Info("  /     // __ \\ /    \\|  \\   __\\  |  \\  /    ~    \\__  \\_   __ \\/ __ |   |    __)/  _ \\_  __ \\  |/ /  /  /_\\  \\_/ ___\\   __\\  \\  \\/ // __ \\ ")
+		log.Info(" /     /\\  ___/|   |  \\  ||  | |   Y  \\ \\    Y    // __ \\|  | \\/ /_/ |   |     \\(  <_> )  | \\/    <  /    |    \\  \\___|  | |  |\\   /\\  ___/ ")
+		log.Info("/_______ \\___  >___|  /__||__| |___|  /  \\___|_  /(____  /__|  \\____ |   \\___  / \\____/|__|  |__|_ \\ \\____|__  /\\___  >__| |__| \\_/  \\___  >")
+		log.Info("        \\/   \\/     \\/              \\/         \\/      \\/           \\/       \\/                   \\/         \\/     \\/                   \\/ ")
+	}
+}
+
 // GetBlockVersion returns the current block version (atomic load).
 func GetBlockVersion() uint16 {
 	v := atomic.LoadUint32(&blockVersion)
@@ -33,6 +45,7 @@ func GetBlockVersion() uint16 {
 func SetBlockVersion(v uint16) {
 	current := atomic.LoadUint32(&blockVersion)
 	if uint32(v) > current {
+		BlockVersionProgressed(current, v)
 		log.Infof("Set block version to %d", v)
 		atomic.StoreUint32(&blockVersion, uint32(v))
 	}
