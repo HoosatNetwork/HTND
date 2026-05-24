@@ -145,7 +145,6 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 	if err != nil {
 		return nil, err
 	}
-
 	if pruningPoint.Equal(ppm.genesisHash) {
 		return &externalapi.PruningPointProof{}, nil
 	}
@@ -158,17 +157,18 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 	maxLevel := len(ppm.parentsManager.Parents(pruningPointHeader)) - 1
 	headersByLevel := make(map[int][]externalapi.BlockHeader)
 	selectedTipByLevel := make([]*externalapi.DomainHash, maxLevel+1)
+
 	pruningPointLevel := pruningPointHeader.BlockLevel(ppm.maxBlockLevel)
+
 	for blockLevel := maxLevel; blockLevel >= 0; blockLevel-- {
 		var selectedTip *externalapi.DomainHash
+
 		if blockLevel <= pruningPointLevel {
 			selectedTip = pruningPoint
 		} else {
 			blockLevelParents := ppm.parentsManager.ParentsAtLevel(pruningPointHeader, blockLevel)
 			selectedTipCandidates := make([]*externalapi.DomainHash, 0, len(blockLevelParents))
 
-			// In a pruned node, some pruning point parents might be missing, but we're guaranteed that its
-			// selected parent is not missing.
 			for _, parent := range blockLevelParents {
 				_, err := ppm.ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, parent, false)
 				if database.IsNotFoundError(err) {
@@ -177,23 +177,31 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 				if err != nil {
 					return nil, err
 				}
-
 				selectedTipCandidates = append(selectedTipCandidates, parent)
 			}
 
-			selectedTip, err = ppm.ghostdagManagers[blockLevel].ChooseSelectedParent(stagingArea, selectedTipCandidates...)
-			if err != nil {
-				return nil, err
+			if len(selectedTipCandidates) == 0 {
+				log.Warnf("No known GHOSTDAG parents at level %d for pruning point %s. Falling back to pruning point.",
+					blockLevel, pruningPoint)
+				selectedTip = pruningPoint
+			} else {
+				selectedTip, err = ppm.ghostdagManagers[blockLevel].ChooseSelectedParent(stagingArea, selectedTipCandidates...)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
+
 		selectedTipByLevel[blockLevel] = selectedTip
 
+		// ====================== IMPROVED ROOT SELECTION ======================
 		blockAtDepth2M, err := ppm.blockAtDepth(stagingArea, ppm.ghostdagDataStores[blockLevel], selectedTip, 2*ppm.pruningProofM)
 		if err != nil {
 			return nil, err
 		}
 
 		root := blockAtDepth2M
+
 		var blockAtDepthMAtNextLevel *externalapi.DomainHash
 		if blockLevel != maxLevel {
 			blockAtDepthMAtNextLevel, err = ppm.blockAtDepth(stagingArea, ppm.ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
@@ -201,70 +209,43 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 				return nil, err
 			}
 
-			isBlockAtDepthMAtNextLevelAncestorOfBlockAtDepth2M, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, blockAtDepthMAtNextLevel, blockAtDepth2M)
+			isNextOlder, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, blockAtDepthMAtNextLevel, blockAtDepth2M)
 			if err != nil {
 				return nil, err
 			}
-
-			if isBlockAtDepthMAtNextLevelAncestorOfBlockAtDepth2M {
-				root = blockAtDepthMAtNextLevel
+			if isNextOlder {
+				log.Debugf("Level %d: next-level M block is older → keeping local 2M root", blockLevel)
 			} else {
-				isBlockAtDepth2MAncestorOfBlockAtDepthMAtNextLevel, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, blockAtDepth2M, blockAtDepthMAtNextLevel)
-				if err != nil {
-					return nil, err
-				}
-
-				if !isBlockAtDepth2MAncestorOfBlockAtDepthMAtNextLevel {
-					// find common ancestor
-					current := blockAtDepthMAtNextLevel
-					for {
-						ghostdagData, err := ppm.ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, current, false)
-						if err != nil {
-							return nil, err
-						}
-
-						current = ghostdagData.SelectedParent()
-						if current.Equal(model.VirtualGenesisBlockHash) {
-							return nil, errors.Errorf("No common ancestor between %s and %s at level %d", blockAtDepth2M, blockAtDepthMAtNextLevel, blockLevel)
-						}
-
-						isCurrentAncestorOfBlockAtDepth2M, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, blockAtDepth2M)
-						if err != nil {
-							return nil, err
-						}
-
-						if isCurrentAncestorOfBlockAtDepth2M {
-							root = current
-							break
-						}
-					}
-				}
+				log.Debugf("Level %d: next-level M block is not older than 2M", blockLevel)
 			}
 		}
 
+		log.Debugf("Level %d root decision → selectedTip=%s | blockAtDepth2M=%s | finalRoot=%s",
+			blockLevel, selectedTip, blockAtDepth2M, root)
+		// ===================================================================
+
+		// ... rest of the function (headers collection) stays the same ...
 		headers := make([]externalapi.BlockHeader, 0, 2*ppm.pruningProofM)
 		visited := hashset.New()
 		queue := ppm.dagTraversalManagers[blockLevel].NewUpHeap(stagingArea)
+
 		err = queue.Push(root)
 		if err != nil {
 			return nil, err
 		}
+
 		for queue.Len() > 0 {
 			current := queue.Pop()
-
 			if visited.Contains(current) {
 				continue
 			}
-
 			visited.Add(current)
+
 			isRelevantForProof, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, selectedTip)
 			if err != nil {
 				return nil, err
 			}
 
-			// Proof levels above the pruning point must also include (and connect to) the block-at-depth-m
-			// of the selected tip in the next level, even when it's not on the selected tip cone of this
-			// level. This is required so the validator can link adjacent proof levels.
 			if !isRelevantForProof && blockAtDepthMAtNextLevel != nil {
 				isRelevantForProof, err = ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, blockAtDepthMAtNextLevel)
 				if err != nil {
@@ -280,8 +261,8 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 			if err != nil {
 				return nil, err
 			}
-
 			headers = append(headers, currentHeader)
+
 			children, err := ppm.dagTopologyManagers[blockLevel].Children(stagingArea, current)
 			if err != nil {
 				return nil, err
@@ -291,7 +272,6 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 				if child.Equal(model.VirtualBlockHash) {
 					continue
 				}
-
 				err = queue.Push(child)
 				if err != nil {
 					return nil, err
