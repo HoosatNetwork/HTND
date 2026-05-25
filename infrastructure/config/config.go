@@ -51,7 +51,6 @@ const (
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
-	defaultMaxUTXOCacheSize       = 5_000_000_000
 	defaultProtocolVersion        = 7
 	defaultIBDTimeout             = 120 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
@@ -128,7 +127,6 @@ type Flags struct {
 	RelayNonStd                     bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd                    bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	ResetDatabase                   bool          `long:"reset-db" description:"Reset database before starting node. It's needed when switching between subnetworks."`
-	MaxUTXOCacheSize                uint64        `long:"maxutxocachesize" description:"Max size of loaded UTXO into ram from the disk in bytes"`
 	UTXOIndex                       bool          `long:"utxoindex" description:"Enable the UTXO index"`
 	IsArchivalNode                  bool          `long:"archival" description:"Run as an archival node: don't delete old block data when moving the pruning point. (Warning: heavy disk usage)'"`
 	DataRetentionHours              uint64        `long:"data-retention-hours" description:"Minimum number of hours of chain data to keep before allowing pruning deletion. 0 (default) uses standard pruning depth rules with no additional time-based retention. (Warning: Setting a high value may significantly increase disk usage.)"`
@@ -221,7 +219,6 @@ func defaultFlags() *Flags {
 		MaxOrphanTxs:                   defaultMaxOrphanTransactions,
 		SigCacheMaxSize:                defaultSigCacheMaxSize,
 		MinRelayTxFee:                  defaultMinRelayTxFee,
-		MaxUTXOCacheSize:               defaultMaxUTXOCacheSize,
 		ServiceOptions:                 &ServiceOptions{},
 		ProtocolVersion:                defaultProtocolVersion,
 		DisableIBDTimeout:              defaultDisableIBDTimeout,
