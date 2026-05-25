@@ -523,7 +523,7 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 				return err
 			}
 
-			hasBlockAtDepthMAtNextLevel, err := blockRelationStores[blockLevel].Has(ppm.databaseContext, stagingArea, blockAtDepthMAtNextLevel)
+			hasBlockAtDepthMAtNextLevel, err := blockRelationStores[blockLevel+1].Has(ppm.databaseContext, stagingArea, blockAtDepthMAtNextLevel)
 			if err != nil {
 				return err
 			}
