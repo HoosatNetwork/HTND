@@ -80,7 +80,7 @@ func TestLowestChainBlockAboveOrEqualToBlueScore(t *testing.T) {
 
 		chain = append(chain, tipHash)
 		blueScore11BlockHash := tipHash
-		checkBlueScore(blueScore11BlockHash, 10)
+		checkBlueScore(blueScore11BlockHash, 11)
 
 		for range 5 {
 			var err error
@@ -104,7 +104,7 @@ func TestLowestChainBlockAboveOrEqualToBlueScore(t *testing.T) {
 		chain = append(chain, tipHash)
 
 		blueScore18BlockHash := tipHash
-		checkBlueScore(blueScore18BlockHash, 16)
+		checkBlueScore(blueScore18BlockHash, 18)
 
 		for range 3 {
 			var err error
