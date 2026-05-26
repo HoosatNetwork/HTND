@@ -70,7 +70,8 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 func (flow *handleIBDFlow) requireStagingConsensus() (externalapi.Consensus, error) {
 	stagingConsensus := flow.Domain().StagingConsensus()
 	if stagingConsensus == nil {
-		return nil, protocolerrors.New(false, "staging consensus is not initialized")
+		flow.Domain().InitStagingConsensusWithoutGenesis()
+		stagingConsensus = flow.Domain().StagingConsensus()
 	}
 
 	return stagingConsensus, nil
