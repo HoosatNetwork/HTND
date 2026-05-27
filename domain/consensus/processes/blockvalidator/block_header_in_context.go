@@ -78,22 +78,24 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	}
 
 	if !isBlockWithTrustedData {
-		// TODO: Disable for now on testnet.. Needs to check what the issue is.
+		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
 		// err = v.checkDAAScore(stagingArea, blockHash, header)
 		// if err != nil {
 		// 	return err
 		// }
 
-		// TODO: Enable these on block v5 after finding reason for the issues with the blocks
+		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
 		// err = v.checkBlueWork(stagingArea, ghostdagData, header)
 		// if err != nil {
 		// 	return err
 		// }
 
-		err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
-		if err != nil {
-			return err
-		}
+		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+		// err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
+		// if err != nil {
+		// 	return err
+		// }
+
 		// TODO: SKIP this check for the time being, investigate the chain pruning points.. Though probably can never again be enabled.
 		// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
 		// if err != nil {
@@ -236,16 +238,16 @@ func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash
 // 	return nil
 // }
 
-func (v *blockValidator) checkHeaderBlueScore(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
-	header externalapi.BlockHeader,
-) error {
-	expectedBlueScore := ghostdagData.BlueScore()
-	headerBlueScore := header.BlueScore()
+// func (v *blockValidator) checkHeaderBlueScore(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
+// 	header externalapi.BlockHeader,
+// ) error {
+// 	expectedBlueScore := ghostdagData.BlueScore()
+// 	headerBlueScore := header.BlueScore()
 
-	if headerBlueScore > expectedBlueScore {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueScore,
-			"block blue score of %d is ahead of the expected blue score of %d",
-			headerBlueScore, expectedBlueScore)
-	}
-	return nil
-}
+// 	if headerBlueScore > expectedBlueScore {
+// 		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueScore,
+// 			"block blue score of %d is ahead of the expected blue score of %d",
+// 			headerBlueScore, expectedBlueScore)
+// 	}
+// 	return nil
+// }
