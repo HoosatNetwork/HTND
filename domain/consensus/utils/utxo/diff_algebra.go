@@ -151,6 +151,15 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	subtractionWithRemainderHavingDAAScoreInPlace(this.toAdd, other.toAdd, result.toRemove, inBothToAdd)
 	// If they are in other.toRemove - base utxoSet is not the same
 	if checkIntersection(inBothToAdd, this.toRemove) != checkIntersection(inBothToAdd, other.toRemove) {
+		// Find the offending outpoint to provide a more descriptive error
+		for outpoint := range inBothToAdd {
+			inThisRemove := this.toRemove.Contains(&outpoint)
+			inOtherRemove := other.toRemove.Contains(&outpoint)
+			if inThisRemove != inOtherRemove {
+				return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and other.toAdd, but present in only one of this.toRemove=%t and other.toRemove=%t",
+					&outpoint, inThisRemove, inOtherRemove)
+			}
+		}
 		return nil, errors.New(
 			"diffFrom: outpoint both in this.toAdd, other.toAdd, and only one of this.toRemove and other.toRemove")
 	}
