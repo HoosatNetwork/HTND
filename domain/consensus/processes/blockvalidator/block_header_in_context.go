@@ -77,31 +77,33 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
-	if !isBlockWithTrustedData {
-		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
-		// err = v.checkDAAScore(stagingArea, blockHash, header)
-		// if err != nil {
-		// 	return err
-		// }
+	/*
+		if !isBlockWithTrustedData {
+			// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+			// err = v.checkDAAScore(stagingArea, blockHash, header)
+			// if err != nil {
+			// 	return err
+			// }
 
-		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
-		// err = v.checkBlueWork(stagingArea, ghostdagData, header)
-		// if err != nil {
-		// 	return err
-		// }
+			// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+			// err = v.checkBlueWork(stagingArea, ghostdagData, header)
+			// if err != nil {
+			// 	return err
+			// }
 
-		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
-		// err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
-		// if err != nil {
-		// 	return err
-		// }
+			// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+			// err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
+			// if err != nil {
+			// 	return err
+			// }
 
-		// TODO: SKIP this check for the time being, investigate the chain pruning points.. Though probably can never again be enabled.
-		// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
-		// if err != nil {
-		// 	return err
-		// }
-	}
+			// TODO: SKIP this check for the time being, investigate the chain pruning points.. Though probably can never again be enabled.
+			// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
+			// if err != nil {
+			// 	return err
+			// }
+		}
+	*/
 
 	return nil
 }
