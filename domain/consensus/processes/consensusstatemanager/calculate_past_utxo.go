@@ -123,7 +123,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 			return nil, err
 		}
 		if blockStatus == externalapi.StatusHeaderOnly {
-			return nil, errors.Errorf("block %s has a selected parent with no body", blockHash)
+			return nil, errors.Errorf("cannot restore past UTXO for block %s: encountered header-only block %s on UTXO-diff child path", blockHash, nextBlockHash)
 		}
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {

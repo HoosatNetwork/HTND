@@ -728,6 +728,11 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	stagingArea := model.NewStagingArea()
 	tmpStagingArea := model.NewStagingArea()
 
+	err := targetReachabilityDataStore.Delete(ppm.databaseContext)
+	if err != nil && !consensusDB.IsNotFoundError(err) {
+		return err
+	}
+
 	bucket := consensusDB.MakeBucket([]byte("TMP"))
 	ghostdagDataStoreForTargetReachabilityManager := ghostdagdatastore.New(bucket, 0, false)
 	gd0 := externalapi.NewBlockGHOSTDAGData(
@@ -741,10 +746,14 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	)
 	ghostdagDataStoreForTargetReachabilityManager.Stage(stagingArea, model.VirtualGenesisBlockHash, gd0, false)
 	targetReachabilityManager := reachabilitymanager.New(ppm.databaseContext, ghostdagDataStoreForTargetReachabilityManager, targetReachabilityDataStore)
+	err = targetReachabilityManager.Init(stagingArea)
+	if err != nil {
+		return err
+	}
 	blockRelationStoreForTargetReachabilityManager := blockrelationstore.New(bucket, 0, false)
 	dagTopologyManagerForTargetReachabilityManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, blockRelationStoreForTargetReachabilityManager, nil)
 	ghostdagManagerForTargetReachabilityManager := ghostdagmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, nil, ghostdagDataStoreForTargetReachabilityManager, ppm.blockHeaderStore, nil, ppm.k, nil)
-	err := dagTopologyManagerForTargetReachabilityManager.SetParents(stagingArea, model.VirtualGenesisBlockHash, nil)
+	err = dagTopologyManagerForTargetReachabilityManager.SetParents(stagingArea, model.VirtualGenesisBlockHash, nil)
 	if err != nil {
 		return err
 	}
@@ -753,9 +762,11 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	ghostdagDataStore := ghostdagdatastore.New(bucket, 0, false)
 	tmpGHOSTDAGManager := ghostdagmanager.New(ppm.databaseContext, nil, nil, ghostdagDataStore, nil, nil, []externalapi.KType{0}, nil)
 	dagTraversalManager := dagtraversalmanager.New(ppm.databaseContext, nil, ghostdagDataStore, nil, tmpGHOSTDAGManager, nil, nil, nil, []int{0})
-	allProofBlocksUpHeap := dagTraversalManager.NewUpHeap(tmpStagingArea)
 	type proofBlock struct {
-		header externalapi.BlockHeader
+		header         externalapi.BlockHeader
+		proofParents   []*externalapi.DomainHash
+		children       []*externalapi.DomainHash
+		pendingParents int
 	}
 	dag := make(map[externalapi.DomainHash]proofBlock)
 	hashPtrByValue := make(map[externalapi.DomainHash]*externalapi.DomainHash)
@@ -796,35 +807,59 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 
 			// We stage temporary GHOSTDAG data that is needed in order to sort allProofBlocksUpHeap.
 			ghostdagDataStore.Stage(tmpStagingArea, blockHash, externalapi.NewBlockGHOSTDAGData(header.BlueScore(), header.BlueWork(), nil, nil, nil, nil, externalapi.KType(1)), false)
-			err := allProofBlocksUpHeap.Push(blockHash)
-			if err != nil {
-				return err
-			}
 		}
 	}
 	log.Infof("Pruning proof reachability: building temporary DAG for %d unique proof blocks", len(dag))
 
-	var selectedTip *externalapi.DomainHash
-	startTime := time.Now()
-	lastProgressLogTime := time.Now()
-	processed := 0
-	totalBlocks := allProofBlocksUpHeap.Len()
-	for allProofBlocksUpHeap.Len() > 0 {
-		blockHash := allProofBlocksUpHeap.Pop()
-		processed++
-		block := dag[*blockHash]
-		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
+	readyProofBlocksUpHeap := dagTraversalManager.NewUpHeap(tmpStagingArea)
+	for hash, block := range dag {
+		proofParentsSet := make(map[externalapi.DomainHash]struct{})
+		proofParents := make([]*externalapi.DomainHash, 0)
 		for level := 0; level <= ppm.maxBlockLevel; level++ {
 			for _, parent := range ppm.parentsManager.ParentsAtLevel(block.header, level) {
 				parentHash, ok := hashPtrByValue[*parent]
 				if !ok {
 					continue
 				}
-
-				err := parentsHeap.Push(parentHash)
-				if err != nil {
-					return err
+				if _, exists := proofParentsSet[*parentHash]; exists {
+					continue
 				}
+				proofParentsSet[*parentHash] = struct{}{}
+				proofParents = append(proofParents, parentHash)
+			}
+		}
+		block.proofParents = proofParents
+		block.pendingParents = len(proofParents)
+		dag[hash] = block
+	}
+
+	for hash, block := range dag {
+		for _, parent := range block.proofParents {
+			parentBlock := dag[*parent]
+			parentBlock.children = append(parentBlock.children, hashPtrByValue[hash])
+			dag[*parent] = parentBlock
+		}
+		if block.pendingParents == 0 {
+			err = readyProofBlocksUpHeap.Push(hashPtrByValue[hash])
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	startTime := time.Now()
+	lastProgressLogTime := time.Now()
+	processed := 0
+	totalBlocks := len(dag)
+	for readyProofBlocksUpHeap.Len() > 0 {
+		blockHash := readyProofBlocksUpHeap.Pop()
+		processed++
+		block := dag[*blockHash]
+		parentsHeap := dagTraversalManager.NewDownHeap(tmpStagingArea)
+		for _, parentHash := range block.proofParents {
+			err = parentsHeap.Push(parentHash)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -862,19 +897,18 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 			return err
 		}
 
-		if selectedTip == nil {
-			selectedTip = blockHash
-		} else {
-			selectedTip, err = ghostdagManagerForTargetReachabilityManager.ChooseSelectedParent(stagingArea, selectedTip, blockHash)
-			if err != nil {
-				return err
+		for _, childHash := range block.children {
+			childBlock := dag[*childHash]
+			childBlock.pendingParents--
+			if childBlock.pendingParents < 0 {
+				return errors.Errorf("proof reachability child %s was released more than once", childHash)
 			}
-		}
-
-		if selectedTip.Equal(blockHash) && (processed%pruningProofReindexRootUpdateInterval == 0 || processed == totalBlocks) {
-			err := targetReachabilityManager.UpdateReindexRoot(stagingArea, selectedTip)
-			if err != nil {
-				return err
+			dag[*childHash] = childBlock
+			if childBlock.pendingParents == 0 {
+				err = readyProofBlocksUpHeap.Push(childHash)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -889,6 +923,9 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 				processed, totalBlocks, 100*float64(processed)/float64(totalBlocks), elapsed.Truncate(time.Second), rate, eta.Truncate(time.Second))
 			lastProgressLogTime = time.Now()
 		}
+	}
+	if processed != totalBlocks {
+		return errors.Errorf("pruning proof reachability could only process %d/%d blocks; some proof blocks were left without all parents available", processed, totalBlocks)
 	}
 	log.Infof("Pruning proof reachability: finished (blocks=%d duration=%s)", processed, time.Since(startTime).Truncate(time.Second))
 
@@ -1042,7 +1079,13 @@ func (ppm *pruningProofManager) ApplyPruningPointProof(pruningPointProof *extern
 				ppm.ghostdagDataStores[0].Stage(stagingArea, blockHash, gd, false)
 
 				ppm.finalityStore.StageFinalityPoint(stagingArea, blockHash, model.VirtualGenesisBlockHash)
-				ppm.blockStatusStore.Stage(stagingArea, blockHash, externalapi.StatusHeaderOnly)
+				existingStatus, statusErr := ppm.blockStatusStore.Get(ppm.databaseContext, stagingArea, blockHash)
+				if statusErr != nil && !consensusDB.IsNotFoundError(statusErr) {
+					return statusErr
+				}
+				if consensusDB.IsNotFoundError(statusErr) || existingStatus == externalapi.StatusHeaderOnly {
+					ppm.blockStatusStore.Stage(stagingArea, blockHash, externalapi.StatusHeaderOnly)
+				}
 				overrideDuration += time.Since(overrideStart)
 			}
 

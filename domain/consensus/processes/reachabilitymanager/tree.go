@@ -320,6 +320,17 @@ func (rt *reachabilityManager) updateReindexRoot(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
+	_, err = rt.ghostdagDataStore.Get(rt.databaseContext, stagingArea, currentReindexRoot, false)
+	if database.IsNotFoundError(err) {
+		// The reindex root is a performance hint. During pruning-point import or staging-consensus
+		// bootstrap, it can legitimately point to a node whose level-0 GHOSTDAG data was never built.
+		// Reset it to the current selected tip rather than failing the block insertion flow.
+		rt.stageReindexRoot(stagingArea, selectedTip)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
 
 	// First, find the new root
 	reindexRootAncestor, newReindexRoot, err := rt.findNextReindexRoot(stagingArea, currentReindexRoot, selectedTip)
@@ -429,6 +440,9 @@ func (rt *reachabilityManager) findNextReindexRoot(stagingArea *model.StagingAre
 		}
 
 		chosenChildGHOSTDAGData, err := rt.ghostdagDataStore.Get(rt.databaseContext, stagingArea, chosenChild, false)
+		if database.IsNotFoundError(err) {
+			break
+		}
 		if err != nil {
 			return nil, nil, err
 		}

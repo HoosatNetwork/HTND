@@ -45,15 +45,22 @@ jobs:
       - name: Build on Windows
         if: runner.os == 'Windows'
         env:
-          GOEXPERIMENT: "simd,jsonv2"        
-        shell: bash        
+          GOEXPERIMENT: "simd,jsonv2"
+        shell: bash
         run: |
           mkdir -p bin
           go build -v -ldflags="-s -w" -o bin/ . ./cmd/...
+          
           archive="bin/HTND-${{ github.event.release.tag_name }}-windows-amd64.zip"
           asset_name="HTND-${{ github.event.release.tag_name }}-windows-amd64.zip"
-          powershell "Compress-Archive bin/* \"${archive}\""
-          Get-FileHash "${archive}" -Algorithm SHA1 | ForEach-Object { $_.Hash + " *" + $_.Path } > "${archive}.sha1sum"
+          
+          # Use PowerShell for both zip and SHA1 (reliable on Windows runners)
+          powershell -Command "
+            Compress-Archive -Path bin/* -DestinationPath '${archive}' -Force;
+            \$hash = Get-FileHash '${archive}' -Algorithm SHA1;
+            \$hash.Hash + ' *' + (Split-Path -Leaf '${archive}') | Out-File '${archive}.sha1sum' -Encoding ascii
+          "
+          
           echo "archive=${archive}" >> $GITHUB_ENV
           echo "asset_name=${asset_name}" >> $GITHUB_ENV
       - name: Build on MacOS
