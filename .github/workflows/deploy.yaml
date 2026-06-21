@@ -49,12 +49,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p bin
-          go build -v -ldflags="-s -w" -o bin/ . ./cmd/...
+          
+          # Build with aggressive stripping
+          go build -v \
+            -ldflags="-s -w -buildid=" \
+            -trimpath \
+            -o bin/ . ./cmd/...
           
           archive="bin/HTND-${{ github.event.release.tag_name }}-windows-amd64.zip"
           asset_name="HTND-${{ github.event.release.tag_name }}-windows-amd64.zip"
           
-          # Use PowerShell for both zip and SHA1 (reliable on Windows runners)
+          # Use PowerShell for both zip and SHA1
           powershell -Command "
             Compress-Archive -Path bin/* -DestinationPath '${archive}' -Force;
             \$hash = Get-FileHash '${archive}' -Algorithm SHA1;
