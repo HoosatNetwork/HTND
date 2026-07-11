@@ -242,18 +242,32 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 				return nil, errors.Errorf("missing %d signatures", input.MinimumSignatures-signatureCountUint32)
 			}
 
-			redeemScript, err := partiallySignedInputMultisigRedeemScript(input, ecdsa)
-			if err != nil {
-				return nil, err
-			}
+			prevScriptClass := txscript.GetScriptClass(input.PrevOutput.ScriptPublicKey.Script)
+			
+			// Check if this is a direct multisig script (MultiSigTy or MultiSigECDSATy)
+			if prevScriptClass == txscript.MultiSigTy || prevScriptClass == txscript.MultiSigECDSATy {
+				// For direct multisig scripts, we don't need to append the redeem script
+				// The signature script is just the signatures
+				sigScript, err := scriptBuilder.Script()
+				if err != nil {
+					return nil, err
+				}
+				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+			} else {
+				// For P2SH and other wrapped multisig, append the redeem script
+				redeemScript, err := partiallySignedInputMultisigRedeemScript(input, ecdsa)
+				if err != nil {
+					return nil, err
+				}
 
-			scriptBuilder.AddData(redeemScript)
-			sigScript, err := scriptBuilder.Script()
-			if err != nil {
-				return nil, err
-			}
+				scriptBuilder.AddData(redeemScript)
+				sigScript, err := scriptBuilder.Script()
+				if err != nil {
+					return nil, err
+				}
 
-			partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+			}
 		} else {
 			if len(input.PubKeySignaturePairs) > 1 {
 				return nil, errors.Errorf("Cannot sign on P2PK when len(input.PubKeySignaturePairs) > 1")

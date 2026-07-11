@@ -12,6 +12,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/kaspanet/go-secp256k1"
+	"golang.org/x/crypto/blake2b"
 	"github.com/pkg/errors"
 )
 
@@ -114,12 +115,14 @@ func Address(params *dagconfig.Params, extendedPublicKeys []string, minimumSigna
 		return p2pkAddress(params, extendedPublicKeys[0], path, ecdsa)
 	}
 
+	// Create the multisig redeem script
 	redeemScript, err := multiSigRedeemScript(extendedPublicKeys, minimumSignatures, path, ecdsa)
 	if err != nil {
 		return nil, err
 	}
 
-	return util.NewAddressScriptHash(redeemScript, params.Prefix)
+	// Create a direct multisig address (P2PK-style multisig)
+	return util.NewAddressMultiSig(redeemScript, params.Prefix)
 }
 
 // SingleSigAddressType controls which address template is used for a single-sig wallet.
@@ -171,7 +174,65 @@ func AddressWithSingleSigAddressType(
 		return nil, err
 	}
 
-	return util.NewAddressScriptHash(redeemScript, params.Prefix)
+	// For multisig, default to direct multisig (P2PK-style)
+	return util.NewAddressMultiSig(redeemScript, params.Prefix)
+}
+
+// MultiSigAddressType controls which address template is used for multisig wallets.
+type MultiSigAddressType uint8
+
+const (
+	MultiSigAddressTypeP2PK    MultiSigAddressType = iota // Direct multisig script (P2PK-style)
+	MultiSigAddressTypeP2PKH                             // P2PKH-style multisig (hash of multisig script)
+	MultiSigAddressTypeP2SH                             // P2SH wrapped multisig (traditional)
+)
+
+// AddressWithMultiSigAddressType is like Address, but allows choosing the address type for multisig wallets.
+func AddressWithMultiSigAddressType(
+	params *dagconfig.Params,
+	extendedPublicKeys []string,
+	minimumSignatures uint32,
+	path string,
+	ecdsa bool,
+	multiSigType MultiSigAddressType,
+) (util.Address, error) {
+	sortPublicKeys(extendedPublicKeys)
+	minimumSignaturesInt, err := checkedUint32ToInt(minimumSignatures)
+	if err != nil {
+		return nil, err
+	}
+	if len(extendedPublicKeys) < minimumSignaturesInt {
+		return nil, errors.Errorf("The minimum amount of signatures (%d) is greater than the amount of "+
+			"provided public keys (%d)", minimumSignatures, len(extendedPublicKeys))
+	}
+
+	if len(extendedPublicKeys) == 1 {
+		// For single-sig, use P2PK
+		return p2pkAddress(params, extendedPublicKeys[0], path, ecdsa)
+	}
+
+	redeemScript, err := multiSigRedeemScript(extendedPublicKeys, minimumSignatures, path, ecdsa)
+	if err != nil {
+		return nil, err
+	}
+
+	switch multiSigType {
+	case MultiSigAddressTypeP2PK:
+		// Direct multisig script (P2PK-style)
+		return util.NewAddressMultiSig(redeemScript, params.Prefix)
+	case MultiSigAddressTypeP2PKH:
+		// P2PKH-style: hash the multisig script and create a P2PKH-style address
+		// This creates an address that looks like P2PKH but contains the hash of a multisig script
+		scriptHash := util.HashBlake2b(redeemScript)
+		var scriptHashArray [blake2b.Size256]byte
+		copy(scriptHashArray[:], scriptHash)
+		return util.NewAddressMultiSigPKH(&scriptHashArray, params.Prefix)
+	case MultiSigAddressTypeP2SH:
+		// Traditional P2SH wrapped multisig
+		return util.NewAddressScriptHash(redeemScript, params.Prefix)
+	default:
+		return nil, errors.Errorf("unknown multiSigType %d", multiSigType)
+	}
 }
 
 func p2pkAddress(params *dagconfig.Params, extendedPublicKey string, path string, ecdsa bool) (util.Address, error) {

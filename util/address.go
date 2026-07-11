@@ -157,6 +157,12 @@ func DecodeAddress(addr string, expectedPrefix Bech32Prefix) (Address, error) {
 		return newAddressPubKeyHashECDSAFromHash(prefix, decoded)
 	case scriptHashAddrID:
 		return newAddressScriptHashFromHash(prefix, decoded)
+	case multiSigAddrID:
+		return NewAddressMultiSig(decoded, prefix)
+	case multiSigPKHAddrID:
+		var hash [blake2b.Size256]byte
+		copy(hash[:], decoded)
+		return NewAddressMultiSigPKH(&hash, prefix)
 	default:
 		return nil, ErrUnknownAddressType
 	}
@@ -476,4 +482,100 @@ func (a *AddressScriptHash) String() string {
 // keys).
 func (a *AddressScriptHash) HashBlake2b() *[blake2b.Size256]byte {
 	return &a.hash
+}
+
+// MultiSigScript addresses always have the version byte set to 9.
+const multiSigAddrID = 0x09
+
+// AddressMultiSig is an Address for a direct pay-to-multisig transaction.
+// This is similar to P2PK but contains a full multisig script instead of a single public key.
+type AddressMultiSig struct {
+	prefix    Bech32Prefix
+	script   []byte
+}
+
+// NewAddressMultiSig returns a new AddressMultiSig. script is the raw multisig script.
+func NewAddressMultiSig(script []byte, prefix Bech32Prefix) (*AddressMultiSig, error) {
+	if len(script) == 0 {
+		return nil, errors.New("script cannot be empty")
+	}
+	return &AddressMultiSig{prefix: prefix, script: script}, nil
+}
+
+// EncodeAddress returns the string encoding of a pay-to-multisig
+// address. Part of the Address interface.
+func (a *AddressMultiSig) EncodeAddress() string {
+	return encodeAddress(a.prefix, a.script, multiSigAddrID)
+}
+
+// ScriptAddress returns the raw multisig script bytes to be included in a txout script.
+// Part of the Address interface.
+func (a *AddressMultiSig) ScriptAddress() []byte {
+	return a.script
+}
+
+// IsForPrefix returns whether or not the pay-to-multisig address is associated
+// with the passed hoosat network.
+func (a *AddressMultiSig) IsForPrefix(prefix Bech32Prefix) bool {
+	return a.prefix == prefix
+}
+
+// Prefix returns the prefix for this address
+func (a *AddressMultiSig) Prefix() Bech32Prefix {
+	return a.prefix
+}
+
+// String returns a human-readable string for the pay-to-multisig address.
+// This is equivalent to calling EncodeAddress, but is provided so the type can
+// be used as a fmt.Stringer.
+func (a *AddressMultiSig) String() string {
+	return a.EncodeAddress()
+}
+
+// MultiSigPKHScript addresses always have the version byte set to 10.
+const multiSigPKHAddrID = 0x0A
+
+// AddressMultiSigPKH is an Address for a P2PKH-style multisig transaction.
+// This is similar to P2PKH but contains the hash of a multisig script instead of a single pubkey hash.
+type AddressMultiSigPKH struct {
+	prefix    Bech32Prefix
+	scriptHash [blake2b.Size256]byte
+}
+
+// NewAddressMultiSigPKH returns a new AddressMultiSigPKH. scriptHash is the Blake2b hash of the multisig script.
+func NewAddressMultiSigPKH(scriptHash *[blake2b.Size256]byte, prefix Bech32Prefix) (*AddressMultiSigPKH, error) {
+	if scriptHash == nil {
+		return nil, errors.New("scriptHash cannot be nil")
+	}
+	return &AddressMultiSigPKH{prefix: prefix, scriptHash: *scriptHash}, nil
+}
+
+// EncodeAddress returns the string encoding of a P2PKH-style multisig address.
+// Part of the Address interface.
+func (a *AddressMultiSigPKH) EncodeAddress() string {
+	return encodeAddress(a.prefix, a.scriptHash[:], multiSigPKHAddrID)
+}
+
+// ScriptAddress returns the hash of the multisig script to be used in the P2PKH-style script.
+// Part of the Address interface.
+func (a *AddressMultiSigPKH) ScriptAddress() []byte {
+	return a.scriptHash[:]
+}
+
+// IsForPrefix returns whether or not the P2PKH-style multisig address is associated
+// with the passed hoosat network.
+func (a *AddressMultiSigPKH) IsForPrefix(prefix Bech32Prefix) bool {
+	return a.prefix == prefix
+}
+
+// Prefix returns the prefix for this address
+func (a *AddressMultiSigPKH) Prefix() Bech32Prefix {
+	return a.prefix
+}
+
+// String returns a human-readable string for the P2PKH-style multisig address.
+// This is equivalent to calling EncodeAddress, but is provided so the type can
+// be used as a fmt.Stringer.
+func (a *AddressMultiSigPKH) String() string {
+	return a.EncodeAddress()
 }
