@@ -1045,6 +1045,7 @@ func (m *GetTransactionStatusResponseMessage) CloneVT() *GetTransactionStatusRes
 	r := new(GetTransactionStatusResponseMessage)
 	r.Status = m.Status
 	r.Confirmations = m.Confirmations
+	r.AcceptingBlockHash = m.AcceptingBlockHash
 	r.Error = m.Error.CloneVT()
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
@@ -3802,6 +3803,9 @@ func (this *GetTransactionStatusResponseMessage) EqualVT(that *GetTransactionSta
 		return false
 	}
 	if this.Confirmations != that.Confirmations {
+		return false
+	}
+	if this.AcceptingBlockHash != that.AcceptingBlockHash {
 		return false
 	}
 	if !this.Error.EqualVT(that.Error) {
@@ -8338,6 +8342,13 @@ func (m *GetTransactionStatusResponseMessage) MarshalToSizedBufferVT(dAtA []byte
 		dAtA[i] = 0x3e
 		i--
 		dAtA[i] = 0xc2
+	}
+	if len(m.AcceptingBlockHash) > 0 {
+		i -= len(m.AcceptingBlockHash)
+		copy(dAtA[i:], m.AcceptingBlockHash)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.AcceptingBlockHash)))
+		i--
+		dAtA[i] = 0x1a
 	}
 	if m.Confirmations != 0 {
 		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.Confirmations))
@@ -14502,6 +14513,13 @@ func (m *GetTransactionStatusResponseMessage) MarshalToSizedBufferVTStrict(dAtA 
 		i--
 		dAtA[i] = 0xc2
 	}
+	if len(m.AcceptingBlockHash) > 0 {
+		i -= len(m.AcceptingBlockHash)
+		copy(dAtA[i:], m.AcceptingBlockHash)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.AcceptingBlockHash)))
+		i--
+		dAtA[i] = 0x1a
+	}
 	if m.Confirmations != 0 {
 		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.Confirmations))
 		i--
@@ -18883,6 +18901,10 @@ func (m *GetTransactionStatusResponseMessage) SizeVT() (n int) {
 	}
 	if m.Confirmations != 0 {
 		n += 1 + protohelpers.SizeOfVarint(uint64(m.Confirmations))
+	}
+	l = len(m.AcceptingBlockHash)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	if m.Error != nil {
 		l = m.Error.SizeVT()
@@ -26363,6 +26385,38 @@ func (m *GetTransactionStatusResponseMessage) UnmarshalVT(dAtA []byte) error {
 					break
 				}
 			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AcceptingBlockHash", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.AcceptingBlockHash = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		case 1000:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
@@ -39810,6 +39864,42 @@ func (m *GetTransactionStatusResponseMessage) UnmarshalVTUnsafe(dAtA []byte) err
 					break
 				}
 			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AcceptingBlockHash", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var stringValue string
+			if intStringLen > 0 {
+				stringValue = unsafe.String(&dAtA[iNdEx], intStringLen)
+			}
+			m.AcceptingBlockHash = stringValue
+			iNdEx = postIndex
 		case 1000:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)

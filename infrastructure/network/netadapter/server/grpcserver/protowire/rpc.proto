@@ -391,6 +391,7 @@ message GetTransactionStatusRequestMessage{
 message GetTransactionStatusResponseMessage{
   TransactionStatus status = 1;
   uint64 confirmations = 2;
+  string acceptingBlockHash = 3;
   RPCError error = 1000;
 }
 

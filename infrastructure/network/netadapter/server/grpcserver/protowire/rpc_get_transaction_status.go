@@ -2,6 +2,7 @@ package protowire
 
 import (
 	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
 
@@ -36,11 +37,19 @@ func (x *HoosatdMessage_GetTransactionStatusResponse) fromAppMessage(message *ap
 	if message.Error != nil {
 		err = &RPCError{Message: message.Error.Message}
 	}
-	x.GetTransactionStatusResponse = &GetTransactionStatusResponseMessage{
-		Status:        TransactionStatus(message.Status),
-		Confirmations: message.Confirmations,
-		Error:         err,
+	var acceptingBlockHash string
+	if message.AcceptingBlockHash != nil {
+		acceptingBlockHash = message.AcceptingBlockHash.String()
+	} else {
+		acceptingBlockHash = ""
 	}
+	x.GetTransactionStatusResponse = &GetTransactionStatusResponseMessage{
+		Status:             TransactionStatus(message.Status),
+		Confirmations:      message.Confirmations,
+		AcceptingBlockHash: acceptingBlockHash,
+		Error:              err,
+	}
+
 	return nil
 }
 
@@ -52,9 +61,14 @@ func (x *GetTransactionStatusResponseMessage) toAppMessage() (appmessage.Message
 	if err != nil && !errors.Is(err, errorNil) {
 		return nil, err
 	}
+	acceptingBlockHash, err := externalapi.NewDomainHashFromString(x.AcceptingBlockHash)
+	if err != nil {
+		return nil, err
+	}
 	return &appmessage.GetTransactionStatusResponseMessage{
-		Status:        appmessage.TransactionStatus(x.Status),
-		Confirmations: x.Confirmations,
-		Error:         rpcErr,
+		Status:             appmessage.TransactionStatus(x.Status),
+		Confirmations:      x.Confirmations,
+		AcceptingBlockHash: acceptingBlockHash,
+		Error:              rpcErr,
 	}, nil
 }

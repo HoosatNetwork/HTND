@@ -1,5 +1,7 @@
 package appmessage
 
+import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+
 // TransactionStatus describes the current state of a transaction in the node.
 type TransactionStatus byte
 
@@ -7,6 +9,7 @@ const (
 	TransactionStatusUnknown TransactionStatus = iota
 	TransactionStatusNotFound
 	TransactionStatusPending
+	TransactionStatusInvalid
 	TransactionStatusOrphan
 	TransactionStatusAccepted
 	TransactionStatusConfirmed
@@ -50,8 +53,9 @@ func NewGetTransactionStatusRequestMessage(transactionID string) *GetTransaction
 // its respective RPC message.
 type GetTransactionStatusResponseMessage struct {
 	baseMessage
-	Status        TransactionStatus
-	Confirmations uint64
+	Status             TransactionStatus
+	Confirmations      uint64
+	AcceptingBlockHash *externalapi.DomainHash
 
 	Error *RPCError
 }
@@ -62,6 +66,6 @@ func (msg *GetTransactionStatusResponseMessage) Command() MessageCommand {
 }
 
 // NewGetTransactionStatusResponseMessage returns an instance of the message.
-func NewGetTransactionStatusResponseMessage(status TransactionStatus, confirmations uint64) *GetTransactionStatusResponseMessage {
-	return &GetTransactionStatusResponseMessage{Status: status, Confirmations: confirmations}
+func NewGetTransactionStatusResponseMessage(status TransactionStatus, acceptingBlockHash *externalapi.DomainHash, confirmations uint64) *GetTransactionStatusResponseMessage {
+	return &GetTransactionStatusResponseMessage{Status: status, AcceptingBlockHash: acceptingBlockHash, Confirmations: confirmations}
 }
