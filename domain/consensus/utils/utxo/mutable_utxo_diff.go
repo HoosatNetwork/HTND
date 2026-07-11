@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionhelper"
 	"github.com/pkg/errors"
@@ -166,7 +167,7 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 		if existingEntry.Equal(entry) {
 			return nil
 		}
-		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
+		return errors.Wrapf(ruleerrors.ErrDuplicateUTXOEntry, "Cannot add outpoint %s twice", outpoint)
 	default:
 		mud.toAdd.add(outpoint, entry)
 	}
@@ -183,7 +184,7 @@ func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, en
 		if existingEntry.Equal(entry) {
 			return nil
 		}
-		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)
+		return errors.Wrapf(ruleerrors.ErrDuplicateUTXOEntry, "Cannot remove outpoint %s twice", outpoint)
 	default:
 		mud.toRemove.add(outpoint, entry)
 	}

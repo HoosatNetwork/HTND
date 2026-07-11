@@ -214,6 +214,11 @@ var (
 
 	ErrMalformedUTXO = newRuleError("ErrMalformedUTXO")
 
+	// ErrDuplicateUTXOEntry indicates an attempt to add a UTXO entry for an outpoint
+	// that already exists in the UTXO diff with a different entry. This can happen
+	// during state restoration when processing merge sets.
+	ErrDuplicateUTXOEntry = newRuleError("ErrDuplicateUTXOEntry")
+
 	ErrWrongPruningPointHash = newRuleError("ErrWrongPruningPointHash")
 
 	// ErrPruningPointViolation indicates that the pruning point isn't in the block past.
