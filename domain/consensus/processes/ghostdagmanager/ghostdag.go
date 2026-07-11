@@ -65,22 +65,21 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 			// Genesis block uses default K
 			k = gm.k[constants.GetBlockVersion()-1]
 		} else {
-			rank, err := gm.CalculateRank(stagingArea, blockParents, blockParents)
+			blockGhostDagData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, blockHash, false)
 			if err != nil {
-				return err
+				rank, err := gm.CalculateRank(stagingArea, blockParents, blockParents)
+				if err != nil {
+					return err
+				}
+				k = externalapi.KType(rank)
+				newBlockData.dynamicK = k
+			} else { // this skips about 50% of k being recalculated.
+				k = blockGhostDagData.DynamicK()
 			}
-			k = externalapi.KType(rank)
-			// Don't change the static K which affects pruning
-			// unless making factory to respect the dynamic K completely
-			// instead of using mixed static and dynamic K.
-			// NOTE: mutating gm.k here caused different nodes to run GHOSTDAG
-			// with diverging static-K values. Keep dynamic K local only.
-			// gm.k[constants.GetBlockVersion()-1] = k
 		}
 	} else {
 		k = gm.k[constants.GetBlockVersion()-1]
 	}
-	newBlockData.dynamicK = k
 
 	isGenesis := len(blockParents) == 0
 	if !isGenesis {
