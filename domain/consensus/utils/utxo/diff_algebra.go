@@ -34,6 +34,22 @@ func checkIntersectionWithRule(collection1 utxoCollection, collection2 utxoColle
 	return nil, false
 }
 
+// checkIntersectionWithRuleAndEntries is like checkIntersectionWithRule but also returns the entries for debugging
+func checkIntersectionWithRuleAndEntries(collection1 utxoCollection, collection2 utxoCollection,
+	extraRule func(*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry) bool) (
+	*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry, bool,
+) {
+	for outpoint, utxoEntry := range collection1 {
+		if diffEntry, ok := collection2.Get(&outpoint); ok {
+			if extraRule(&outpoint, utxoEntry, diffEntry) {
+				return &outpoint, utxoEntry, diffEntry, true
+			}
+		}
+	}
+
+	return nil, nil, nil, false
+}
+
 // intersectionWithRemainderHavingDAAScoreInPlace calculates an intersection between two utxoCollections
 // having same DAA score, puts it into result and into remainder from collection1
 func intersectionWithRemainderHavingDAAScoreInPlace(collection1, collection2, result, remainder utxoCollection) {
@@ -115,8 +131,9 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toRemove.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
-		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove", offendingOutpoint)
+	if offendingOutpoint, entry1, entry2, ok := checkIntersectionWithRuleAndEntries(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd with DAA scores %d and %d",
+			offendingOutpoint, entry1.BlockDAAScore(), entry2.BlockDAAScore())
 	}
 
 	// check that NOT (entries with unequal DAA score AND utxoEntry is in this.toRemove and/or other.toAdd) -> Error
@@ -126,18 +143,19 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toAdd.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	if offendingOutpoint, ok := checkIntersectionWithRule(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
-		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd", offendingOutpoint)
+	if offendingOutpoint, entry1, entry2, ok := checkIntersectionWithRuleAndEntries(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove with DAA scores %d and %d",
+			offendingOutpoint, entry1.BlockDAAScore(), entry2.BlockDAAScore())
 	}
 
 	// if have the same entry in this.toRemove and other.toRemove
 	// and existing entry is with different DAA score, in this case - this is an error
-	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toRemove,
+	if offendingOutpoint, entry1, entry2, ok := checkIntersectionWithRuleAndEntries(this.toRemove, other.toRemove,
 		func(_ *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 			return utxoEntry.BlockDAAScore() != diffEntry.BlockDAAScore()
 		}); ok {
-		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and other.toRemove with different "+
-			"DAA scores, with no corresponding entry in this.toAdd", offendingOutpoint)
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and other.toRemove with different DAA scores %d and %d, with no corresponding entry in this.toAdd",
+			offendingOutpoint, entry1.BlockDAAScore(), entry2.BlockDAAScore())
 	}
 
 	result := &mutableUTXODiff{
@@ -182,20 +200,22 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 // WithDiffInPlace applies provided diff to this diff in-place, that would be the result if
 // first d, and than diff were applied to the same base
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
-	if offendingOutpoint, ok := checkIntersectionWithRule(other.toRemove, this.toRemove,
+	if offendingOutpoint, entry1, entry2, ok := checkIntersectionWithRuleAndEntries(other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, _ externalapi.UTXOEntry) bool {
 			return !this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
 		}); ok {
 		return errors.Errorf(
-			"withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove", offendingOutpoint)
+			"withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove with DAA scores %d and %d",
+			offendingOutpoint, entry1.BlockDAAScore(), entry2.BlockDAAScore())
 	}
 
-	if offendingOutpoint, ok := checkIntersectionWithRule(other.toAdd, this.toAdd,
+	if offendingOutpoint, entry1, entry2, ok := checkIntersectionWithRuleAndEntries(other.toAdd, this.toAdd,
 		func(outpoint *externalapi.DomainOutpoint, _ externalapi.UTXOEntry, existingEntry externalapi.UTXOEntry) bool {
 			return !other.toRemove.containsWithDAAScore(outpoint, existingEntry.BlockDAAScore())
 		}); ok {
 		return errors.Errorf(
-			"withDiffInPlace: outpoint %s both in this.toAdd and in other.toAdd", offendingOutpoint)
+			"withDiffInPlace: outpoint %s both in this.toAdd and in other.toAdd with DAA scores %d and %d",
+			offendingOutpoint, entry1.BlockDAAScore(), entry2.BlockDAAScore())
 	}
 
 	intersection := make(utxoCollection)
