@@ -490,8 +490,8 @@ const multiSigAddrID = 0x09
 // AddressMultiSig is an Address for a direct pay-to-multisig transaction.
 // This is similar to P2PK but contains a full multisig script instead of a single public key.
 type AddressMultiSig struct {
-	prefix    Bech32Prefix
-	script   []byte
+	prefix Bech32Prefix
+	script []byte
 }
 
 // NewAddressMultiSig returns a new AddressMultiSig. script is the raw multisig script.
@@ -538,7 +538,7 @@ const multiSigPKHAddrID = 0x0A
 // AddressMultiSigPKH is an Address for a P2PKH-style multisig transaction.
 // This is similar to P2PKH but contains the hash of a multisig script instead of a single pubkey hash.
 type AddressMultiSigPKH struct {
-	prefix    Bech32Prefix
+	prefix     Bech32Prefix
 	scriptHash [blake2b.Size256]byte
 }
 

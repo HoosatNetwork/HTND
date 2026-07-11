@@ -21,16 +21,16 @@ type ScriptClass byte
 
 // Classes of script payment known about in the blockDAG.
 const (
-	NonStandardTy     ScriptClass = iota // None of the recognized forms.
-	PubKeyTy                             // Pay to pubkey.
-	PubKeyECDSATy                        // Pay to pubkey ECDSA.
-	PubKeyHashTy                         // Pay to pubkey hash.
-	PubKeyHashECDSATy                    // Pay to pubkey hash ECDSA.
-	ScriptHashTy                         // Pay to script hash.
-	MultiSigTy                           // Pay to multisig (direct OP_CHECKMULTISIG script).
-	MultiSigECDSATy                     // Pay to multisig ECDSA (direct OP_CHECKMULTISIGECDSA script).
-	MultiSigPKHTy                        // Pay to P2PKH-style multisig (hash of multisig script).
-	MultiSigPKHECDSATy                  // Pay to P2PKH-style multisig ECDSA.
+	NonStandardTy      ScriptClass = iota // None of the recognized forms.
+	PubKeyTy                              // Pay to pubkey.
+	PubKeyECDSATy                         // Pay to pubkey ECDSA.
+	PubKeyHashTy                          // Pay to pubkey hash.
+	PubKeyHashECDSATy                     // Pay to pubkey hash ECDSA.
+	ScriptHashTy                          // Pay to script hash.
+	MultiSigTy                            // Pay to multisig (direct OP_CHECKMULTISIG script).
+	MultiSigECDSATy                       // Pay to multisig ECDSA (direct OP_CHECKMULTISIGECDSA script).
+	MultiSigPKHTy                         // Pay to P2PKH-style multisig (hash of multisig script).
+	MultiSigPKHECDSATy                    // Pay to P2PKH-style multisig ECDSA.
 )
 
 // Script public key versions for address types.
@@ -46,15 +46,15 @@ const (
 // scriptClassToName houses the human-readable strings which describe each
 // script class.
 var scriptClassToName = []string{
-	NonStandardTy:     "nonstandard",
-	PubKeyTy:          "pubkey",
-	PubKeyECDSATy:     "pubkeyecdsa",
-	PubKeyHashTy:      "pubkeyhash",
-	PubKeyHashECDSATy: "pubkeyhashecdsa",
-	ScriptHashTy:      "scripthash",
-	MultiSigTy:        "multisig",
-	MultiSigECDSATy:   "multisigecdsa",
-	MultiSigPKHTy:     "multisigpkh",
+	NonStandardTy:      "nonstandard",
+	PubKeyTy:           "pubkey",
+	PubKeyECDSATy:      "pubkeyecdsa",
+	PubKeyHashTy:       "pubkeyhash",
+	PubKeyHashECDSATy:  "pubkeyhashecdsa",
+	ScriptHashTy:       "scripthash",
+	MultiSigTy:         "multisig",
+	MultiSigECDSATy:    "multisigecdsa",
+	MultiSigPKHTy:      "multisigpkh",
 	MultiSigPKHECDSATy: "multisigpkhecdsa",
 }
 
@@ -123,12 +123,12 @@ func isMultiSig(pops []parsedOpcode) bool {
 	if len(pops) < 4 {
 		return false
 	}
-	
+
 	// Last opcode must be OP_CHECKMULTISIG
 	if pops[len(pops)-1].opcode.value != OpCheckMultiSig {
 		return false
 	}
-	
+
 	// Second to last must be an integer (n - total number of public keys)
 	var n int
 	if isSmallInt(pops[len(pops)-2].opcode) {
@@ -142,7 +142,7 @@ func isMultiSig(pops []parsedOpcode) bool {
 	} else {
 		return false
 	}
-	
+
 	// First opcode must be an integer (m - required signatures)
 	var m int
 	if isSmallInt(pops[0].opcode) {
@@ -156,25 +156,25 @@ func isMultiSig(pops []parsedOpcode) bool {
 	} else {
 		return false
 	}
-	
+
 	// 1-of-1 multisig is nonstandard (equivalent to P2PK)
 	if m == 1 && n == 1 {
 		return false
 	}
-	
+
 	// Validate the number of public keys matches n
 	// Expected: 1 (m) + n (pubkeys) + 1 (n) + 1 (CHECKMULTISIG) = n + 3
 	if len(pops) != n+3 {
 		return false
 	}
-	
+
 	// All opcodes in between should be valid 32-byte Schnorr pubkeys
 	for i := 1; i < len(pops)-2; i++ {
 		if pops[i].data == nil || len(pops[i].data) != 32 {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -189,12 +189,12 @@ func isMultiSigECDSA(pops []parsedOpcode) bool {
 	if len(pops) < 4 {
 		return false
 	}
-	
+
 	// Last opcode must be OP_CHECKMULTISIGECDSA
 	if pops[len(pops)-1].opcode.value != OpCheckMultiSigECDSA {
 		return false
 	}
-	
+
 	// Second to last must be an integer (n - total number of public keys)
 	var n int
 	if isSmallInt(pops[len(pops)-2].opcode) {
@@ -208,7 +208,7 @@ func isMultiSigECDSA(pops []parsedOpcode) bool {
 	} else {
 		return false
 	}
-	
+
 	// First opcode must be an integer (m - required signatures)
 	var m int
 	if isSmallInt(pops[0].opcode) {
@@ -222,25 +222,25 @@ func isMultiSigECDSA(pops []parsedOpcode) bool {
 	} else {
 		return false
 	}
-	
+
 	// 1-of-1 multisig is nonstandard (equivalent to P2PK)
 	if m == 1 && n == 1 {
 		return false
 	}
-	
+
 	// Validate the number of public keys matches n
 	// Expected: 1 (m) + n (pubkeys) + 1 (n) + 1 (CHECKMULTISIGECDSA) = n + 3
 	if len(pops) != n+3 {
 		return false
 	}
-	
+
 	// All opcodes in between should be valid 33-byte ECDSA pubkeys
 	for i := 1; i < len(pops)-2; i++ {
 		if pops[i].data == nil || len(pops[i].data) != 33 {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -613,22 +613,22 @@ func PayToMultiSigScript(pubKeys [][]byte, requiredSigs int, ecdsa bool) ([]byte
 	if len(pubKeys) == 0 {
 		return nil, errors.New("at least one public key is required")
 	}
-	
+
 	builder := NewScriptBuilder()
 	builder.AddInt64(int64(requiredSigs))
-	
+
 	for _, pubKey := range pubKeys {
 		builder.AddData(pubKey)
 	}
-	
+
 	builder.AddInt64(int64(len(pubKeys)))
-	
+
 	if ecdsa {
 		builder.AddOp(OpCheckMultiSigECDSA)
 	} else {
 		builder.AddOp(OpCheckMultiSig)
 	}
-	
+
 	return builder.Script()
 }
 
@@ -653,16 +653,16 @@ func ExtractMultiSigScriptInfo(script []byte) (int, [][]byte, bool, error) {
 	if err != nil {
 		return 0, nil, false, err
 	}
-	
+
 	scriptClass := typeOfScript(pops)
-	
+
 	// Handle both Schnorr and ECDSA multisig
 	if scriptClass == MultiSigTy {
 		return extractMultiSigInfo(pops, false)
 	} else if scriptClass == MultiSigECDSATy {
 		return extractMultiSigInfo(pops, true)
 	}
-	
+
 	return 0, nil, false, errors.Errorf("script is not a multisig script (class: %s)", scriptClass)
 }
 
@@ -671,7 +671,7 @@ func extractMultiSigInfo(pops []parsedOpcode, ecdsa bool) (int, [][]byte, bool, 
 	if len(pops) < 4 {
 		return 0, nil, false, errors.New("multisig script too short")
 	}
-	
+
 	// Extract required signatures (first opcode)
 	var requiredSigs int
 	if isSmallInt(pops[0].opcode) {
@@ -685,7 +685,7 @@ func extractMultiSigInfo(pops []parsedOpcode, ecdsa bool) (int, [][]byte, bool, 
 	} else {
 		return 0, nil, false, errors.New("invalid required signatures format")
 	}
-	
+
 	// Extract total public keys (second to last opcode)
 	var totalPubKeys int
 	if isSmallInt(pops[len(pops)-2].opcode) {
@@ -699,14 +699,14 @@ func extractMultiSigInfo(pops []parsedOpcode, ecdsa bool) (int, [][]byte, bool, 
 	} else {
 		return 0, nil, false, errors.New("invalid total public keys format")
 	}
-	
+
 	// Validate the number of public keys
 	// Expected: 1 (requiredSigs) + N (pubkeys) + 1 (totalPubKeys) + 1 (CHECKMULTISIG) = N + 3
 	expectedOps := totalPubKeys + 3
 	if len(pops) != expectedOps {
 		return 0, nil, false, errors.Errorf("expected %d total opcodes (including %d pubkeys), found %d", expectedOps, totalPubKeys, len(pops))
 	}
-	
+
 	// Extract public keys (all opcodes between first and last two)
 	pubKeys := make([][]byte, totalPubKeys)
 	for i := 0; i < totalPubKeys; i++ {
@@ -716,7 +716,7 @@ func extractMultiSigInfo(pops []parsedOpcode, ecdsa bool) (int, [][]byte, bool, 
 		}
 		pubKeys[i] = pop.data
 	}
-	
+
 	return requiredSigs, pubKeys, ecdsa, nil
 }
 

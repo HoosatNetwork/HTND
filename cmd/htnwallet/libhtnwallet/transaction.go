@@ -243,7 +243,7 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 			}
 
 			prevScriptClass := txscript.GetScriptClass(input.PrevOutput.ScriptPublicKey.Script)
-			
+
 			// Check if this is a direct multisig script (MultiSigTy or MultiSigECDSATy)
 			if prevScriptClass == txscript.MultiSigTy || prevScriptClass == txscript.MultiSigECDSATy {
 				// For direct multisig scripts, we don't need to append the redeem script

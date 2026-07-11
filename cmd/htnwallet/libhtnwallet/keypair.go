@@ -12,8 +12,8 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
 	"github.com/Hoosat-Oy/HTND/util"
 	"github.com/kaspanet/go-secp256k1"
-	"golang.org/x/crypto/blake2b"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/blake2b"
 )
 
 func checkedUint32ToInt(value uint32) (int, error) {
@@ -182,8 +182,8 @@ func AddressWithSingleSigAddressType(
 type MultiSigAddressType uint8
 
 const (
-	MultiSigAddressTypeP2PK    MultiSigAddressType = iota // Direct multisig script (P2PK-style)
-	MultiSigAddressTypeP2PKH                             // P2PKH-style multisig (hash of multisig script)
+	MultiSigAddressTypeP2PK  MultiSigAddressType = iota // Direct multisig script (P2PK-style)
+	MultiSigAddressTypeP2PKH                            // P2PKH-style multisig (hash of multisig script)
 	MultiSigAddressTypeP2SH                             // P2SH wrapped multisig (traditional)
 )
 
