@@ -117,6 +117,8 @@ func isPayToPubkeyHashECDSA(pops []parsedOpcode) bool {
 //
 // Multisig template:
 // <m> <pub1> <pub2> ... <pubN> <n> OP_CHECKMULTISIG
+//
+// Note: 1-of-1 multisig is considered nonstandard as it's equivalent to P2PK.
 func isMultiSig(pops []parsedOpcode) bool {
 	if len(pops) < 4 {
 		return false
@@ -128,18 +130,47 @@ func isMultiSig(pops []parsedOpcode) bool {
 	}
 	
 	// Second to last must be an integer (n - total number of public keys)
-	if !isSmallInt(pops[len(pops)-2].opcode) && pops[len(pops)-2].data == nil {
+	var n int
+	if isSmallInt(pops[len(pops)-2].opcode) {
+		n = int(pops[len(pops)-2].opcode.value - Op1 + 1)
+	} else if pops[len(pops)-2].data != nil {
+		m, err := makeScriptNum(pops[len(pops)-2].data, 4)
+		if err != nil {
+			return false
+		}
+		n = int(m)
+	} else {
 		return false
 	}
 	
 	// First opcode must be an integer (m - required signatures)
-	if !isSmallInt(pops[0].opcode) && pops[0].data == nil {
+	var m int
+	if isSmallInt(pops[0].opcode) {
+		m = int(pops[0].opcode.value - Op1 + 1)
+	} else if pops[0].data != nil {
+		mVal, err := makeScriptNum(pops[0].data, 4)
+		if err != nil {
+			return false
+		}
+		m = int(mVal)
+	} else {
 		return false
 	}
 	
-	// All opcodes in between should be data pushes (public keys)
+	// 1-of-1 multisig is nonstandard (equivalent to P2PK)
+	if m == 1 && n == 1 {
+		return false
+	}
+	
+	// Validate the number of public keys matches n
+	// Expected: 1 (m) + n (pubkeys) + 1 (n) + 1 (CHECKMULTISIG) = n + 3
+	if len(pops) != n+3 {
+		return false
+	}
+	
+	// All opcodes in between should be valid 32-byte Schnorr pubkeys
 	for i := 1; i < len(pops)-2; i++ {
-		if pops[i].data == nil && !canonicalPush(pops[i]) {
+		if pops[i].data == nil || len(pops[i].data) != 32 {
 			return false
 		}
 	}
@@ -152,6 +183,8 @@ func isMultiSig(pops []parsedOpcode) bool {
 //
 // Multisig ECDSA template:
 // <m> <pub1> <pub2> ... <pubN> <n> OP_CHECKMULTISIGECDSA
+//
+// Note: 1-of-1 multisig ECDSA is considered nonstandard as it's equivalent to P2PK ECDSA.
 func isMultiSigECDSA(pops []parsedOpcode) bool {
 	if len(pops) < 4 {
 		return false
@@ -163,18 +196,47 @@ func isMultiSigECDSA(pops []parsedOpcode) bool {
 	}
 	
 	// Second to last must be an integer (n - total number of public keys)
-	if !isSmallInt(pops[len(pops)-2].opcode) && pops[len(pops)-2].data == nil {
+	var n int
+	if isSmallInt(pops[len(pops)-2].opcode) {
+		n = int(pops[len(pops)-2].opcode.value - Op1 + 1)
+	} else if pops[len(pops)-2].data != nil {
+		m, err := makeScriptNum(pops[len(pops)-2].data, 4)
+		if err != nil {
+			return false
+		}
+		n = int(m)
+	} else {
 		return false
 	}
 	
 	// First opcode must be an integer (m - required signatures)
-	if !isSmallInt(pops[0].opcode) && pops[0].data == nil {
+	var m int
+	if isSmallInt(pops[0].opcode) {
+		m = int(pops[0].opcode.value - Op1 + 1)
+	} else if pops[0].data != nil {
+		mVal, err := makeScriptNum(pops[0].data, 4)
+		if err != nil {
+			return false
+		}
+		m = int(mVal)
+	} else {
 		return false
 	}
 	
-	// All opcodes in between should be data pushes (public keys)
+	// 1-of-1 multisig is nonstandard (equivalent to P2PK)
+	if m == 1 && n == 1 {
+		return false
+	}
+	
+	// Validate the number of public keys matches n
+	// Expected: 1 (m) + n (pubkeys) + 1 (n) + 1 (CHECKMULTISIGECDSA) = n + 3
+	if len(pops) != n+3 {
+		return false
+	}
+	
+	// All opcodes in between should be valid 33-byte ECDSA pubkeys
 	for i := 1; i < len(pops)-2; i++ {
-		if pops[i].data == nil && !canonicalPush(pops[i]) {
+		if pops[i].data == nil || len(pops[i].data) != 33 {
 			return false
 		}
 	}

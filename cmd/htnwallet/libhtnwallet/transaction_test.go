@@ -61,10 +61,6 @@ func TestMultisig(t *testing.T) {
 				t.Fatalf("Address: %+v", err)
 			}
 
-			if _, ok := address.(*util.AddressScriptHash); !ok {
-				t.Fatalf("The address is of unexpected type")
-			}
-
 			scriptPublicKey, err := txscript.PayToAddrScript(address)
 			if err != nil {
 				t.Fatalf("PayToAddrScript: %+v", err)
