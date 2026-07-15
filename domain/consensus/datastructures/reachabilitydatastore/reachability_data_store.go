@@ -47,6 +47,7 @@ func (rds *reachabilityDataStore) Delete(dbContext model.DBWriter) error {
 	if err != nil {
 		return err
 	}
+	defer cursor.Close()
 	rds.reachabilityDataCache.Clear()
 
 	for ok := cursor.First(); ok; ok = cursor.Next() {
