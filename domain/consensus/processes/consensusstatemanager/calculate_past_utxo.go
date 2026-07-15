@@ -157,7 +157,6 @@ func (csm *consensusStateManager) restorePastUTXO(
 	// apply the diffs in reverse order
 	log.Debugf("Applying the collected UTXO diffs for block %s in reverse order", blockHash)
 	accumulatedDiff := utxo.NewMutableUTXODiff()
-	log.Infof("Len of utxoDiffs %d", len(utxoDiffs))
 	for i := len(utxoDiffs) - 1; i >= 0; i-- {
 		err = accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
 		if err != nil {
