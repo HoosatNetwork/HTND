@@ -26,9 +26,6 @@ func (dbw *dbManager) Get(key model.DBKey) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(data) == 0 {
-		log.Warnf("Key %s present with an empty value", key) // surface the anomaly instead of hiding it
-	}
 	return data, nil
 }
 
