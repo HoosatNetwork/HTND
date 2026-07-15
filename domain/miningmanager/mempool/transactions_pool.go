@@ -76,7 +76,37 @@ func (tp *transactionsPool) addMempoolTransaction(transaction *model.MempoolTran
 	return nil
 }
 
+// removeFromChainedList removes the child transaction from the parent's chainedTransactionsByParentID slice.
+// It cleans up empty parent entries.
+func (tp *transactionsPool) removeFromChainedList(parentID externalapi.DomainTransactionID, child *model.MempoolTransaction) {
+	children, ok := tp.chainedTransactionsByParentID[parentID]
+	if !ok {
+		return
+	}
+
+	for i, c := range children {
+		if c == child {
+			// Remove by swapping with last element + truncate (order doesn't matter for this map)
+			lastIdx := len(children) - 1
+			children[i] = children[lastIdx]
+			tp.chainedTransactionsByParentID[parentID] = children[:lastIdx]
+
+			if len(tp.chainedTransactionsByParentID[parentID]) == 0 {
+				delete(tp.chainedTransactionsByParentID, parentID)
+			}
+			return
+		}
+	}
+}
+
 func (tp *transactionsPool) removeTransaction(transaction *model.MempoolTransaction) error {
+	// Clean up this transaction's pointer from all of its parents' chained lists.
+	// This fixes the memory leak where removed children stayed referenced forever.
+	for _, parent := range transaction.ParentTransactionsInPool() {
+		parentID := *parent.TransactionID()
+		tp.removeFromChainedList(parentID, transaction)
+	}
+
 	delete(tp.allTransactions, *transaction.TransactionID())
 
 	err := tp.transactionsOrderedByFeeRate.Remove(transaction)
@@ -91,6 +121,7 @@ func (tp *transactionsPool) removeTransaction(transaction *model.MempoolTransact
 
 	delete(tp.highPriorityTransactions, *transaction.TransactionID())
 
+	// This removes the entry for *this* transaction acting as a parent (its own children list).
 	delete(tp.chainedTransactionsByParentID, *transaction.TransactionID())
 
 	return nil
