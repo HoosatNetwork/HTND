@@ -34,7 +34,11 @@ func getEnvStr(key string, defaultVal string) string {
 }
 
 func init() {
-	os.Setenv("GOGC", getEnvStr("GOGC", "100"))
+	if v := getEnvStr("GOGC", "100"); v != "" {
+		if pct, err := strconv.Atoi(v); err == nil {
+			debug.SetGCPercent(pct)
+		}
+	}
 	debug.SetMemoryLimit(getEnvInt("GOMEMLIMIT", 8_000_000_000))
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
