@@ -109,50 +109,64 @@ func (csm *consensusStateManager) restorePastUTXO(
 	onEnd := logger.LogAndMeasureExecutionTime(log, "restorePastUTXO")
 	defer onEnd()
 
-	log.Debugf("restorePastUTXO (selected-parent walk) start for block %s", blockHash)
+	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
-	if blockHash.Equal(csm.genesisHash) {
-		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, blockHash)
+	var err error
+
+	log.Debugf("Collecting UTXO diffs for block %s", blockHash)
+	var utxoDiffs []externalapi.UTXODiff
+	nextBlockHash := blockHash
+	for {
+		log.Debugf("Collecting UTXO diff for block %s", nextBlockHash)
+		blockStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
 			return nil, err
 		}
-		return utxoDiff, nil
-	}
-
-	// Walk the selected parent chain (this gives a clean linear UTXO history)
-	var utxoDiffs []externalapi.UTXODiff
-	current := blockHash
-
-	for {
-		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, current)
+		if blockStatus == externalapi.StatusHeaderOnly {
+			return nil, errors.Errorf("cannot restore past UTXO for block %s: encountered header-only block %s on UTXO-diff child path", blockHash, nextBlockHash)
+		}
+		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
 			return nil, err
 		}
 		utxoDiffs = append(utxoDiffs, utxoDiff)
+		log.Debugf("Collected UTXO diff for block %s: toAdd: %d, toRemove: %d",
+			nextBlockHash, utxoDiff.ToAdd().Len(), utxoDiff.ToRemove().Len())
 
-		if current.Equal(csm.genesisHash) {
-			break
-		}
-
-		ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, current, false)
+		exists, err := csm.utxoDiffStore.HasUTXODiffChild(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
 			return nil, err
 		}
-		current = ghostdagData.SelectedParent()
-		if current == nil || current.Equal(model.VirtualBlockHash) {
+		if !exists {
+			log.Debugf("Block %s does not have a UTXO diff child, "+
+				"meaning we reached the virtual", nextBlockHash)
+			break
+		}
+
+		nextBlockHash, err = csm.utxoDiffStore.UTXODiffChild(csm.databaseContext, stagingArea, nextBlockHash)
+		if err != nil {
+			return nil, err
+		}
+		if nextBlockHash == nil {
+			log.Debugf("Block %s does not have a UTXO diff child, "+
+				"meaning we reached the virtual", nextBlockHash)
 			break
 		}
 	}
 
-	// Apply from genesis → target block (reverse of what we collected)
+	// apply the diffs in reverse order
+	log.Debugf("Applying the collected UTXO diffs for block %s in reverse order", blockHash)
 	accumulatedDiff := utxo.NewMutableUTXODiff()
+	log.Infof("Len of utxoDiffs %d", len(utxoDiffs))
 	for i := len(utxoDiffs) - 1; i >= 0; i-- {
-		err := accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
+		err = accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
 		if err != nil {
-			log.Errorf("restorePastUTXO: WithDiffInPlace failed while walking selected parent chain for %s", blockHash)
-			continue
+			log.Errorf("restorePastUTXO: WithDiffInPlace on index %d failed while walking selected parent chain for %s", len(utxoDiffs), blockHash)
+			break
+			// Consider returning empty utxodiff as accumulated diff return utxo.NewMutableUTXODiff().ToImmutable(), nil
 		}
 	}
+	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
 
 	return accumulatedDiff.ToImmutable(), nil
 }
