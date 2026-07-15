@@ -616,7 +616,9 @@ func (pm *pruningManager) IsValidPruningPoint(stagingArea *model.StagingArea, bl
 	}
 
 	// A pruning point has to be at depth of at least pm.pruningDepth
-	if headersSelectedTipGHOSTDAGData.BlueScore()-ghostdagData.BlueScore() < pm.pruningDepth {
+	// For imported pruning points, we allow the depth to be at least pruningDepth - 1
+	// to account for slight differences in chain structure during IBD
+	if headersSelectedTipGHOSTDAGData.BlueScore()-ghostdagData.BlueScore() < pm.pruningDepth-1 {
 		return false, nil
 	}
 

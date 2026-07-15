@@ -1201,24 +1201,21 @@ func (s *consensus) TrustedDataDataDAAHeader(trustedBlockHash, daaBlockHash *ext
 	}
 
 	ghostdagData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, daaBlockHash, false)
-	if database.IsNotFoundError(err) {
-		log.Infof("TrustedDataDataDAAHeader failed to retrieve with %s\n", daaBlockHash)
-		return nil, err
-	}
-	isNotFoundError := database.IsNotFoundError(err)
-	if !isNotFoundError && err != nil {
+	if err != nil && !database.IsNotFoundError(err) {
 		return nil, err
 	}
 
-	if !isNotFoundError {
+	if err == nil {
 		return &externalapi.TrustedDataDataDAAHeader{
 			Header:       header,
 			GHOSTDAGData: ghostdagData,
 		}, nil
 	}
 
+	// GHOSTDAG data not found in store, try to get it from blocksWithTrustedDataDAAWindowStore
 	ghostdagDataHashPair, err := s.blocksWithTrustedDataDAAWindowStore.DAAWindowBlock(s.databaseContext, stagingArea, trustedBlockHash, daaBlockWindowIndex)
 	if err != nil {
+		log.Infof("TrustedDataDataDAAHeader failed to retrieve with %s\n", daaBlockHash)
 		return nil, err
 	}
 
