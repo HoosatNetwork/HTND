@@ -23,6 +23,8 @@ type blockHeader struct {
 
 	isBlockLevelCached bool
 	blockLevel         int
+	isPoWValueCached   bool
+	powValue           *big.Int
 }
 
 func (bh *blockHeader) BlueScore() uint64 {
@@ -45,18 +47,26 @@ func (bh *blockHeader) ToImmutable() externalapi.BlockHeader {
 	return bh.clone()
 }
 
+func (bh *blockHeader) SetPoWValue(powValue *big.Int) {
+	bh.isPoWValueCached = true
+	bh.powValue = powValue
+}
+
 func (bh *blockHeader) SetNonce(nonce uint64) {
 	bh.isBlockLevelCached = false
+	bh.isPoWValueCached = false
 	bh.nonce = nonce
 }
 
 func (bh *blockHeader) SetTimeInMilliseconds(timeInMilliseconds int64) {
 	bh.isBlockLevelCached = false
+	bh.isPoWValueCached = false
 	bh.timeInMilliseconds = timeInMilliseconds
 }
 
 func (bh *blockHeader) SetHashMerkleRoot(hashMerkleRoot *externalapi.DomainHash) {
 	bh.isBlockLevelCached = false
+	bh.isPoWValueCached = false
 	bh.hashMerkleRoot = hashMerkleRoot
 }
 
@@ -187,8 +197,13 @@ func (bh *blockHeader) ToMutable() externalapi.MutableBlockHeader {
 
 func (bh *blockHeader) BlockLevel(maxBlockLevel int) int {
 	if !bh.isBlockLevelCached {
-		bh.blockLevel = pow.BlockLevel(bh, maxBlockLevel)
-		bh.isBlockLevelCached = true
+		if bh.isPoWValueCached {
+			bh.blockLevel = pow.BlockLevelFromValue(bh.powValue, maxBlockLevel)
+			bh.isBlockLevelCached = true
+		} else {
+			bh.blockLevel = pow.BlockLevel(bh, maxBlockLevel)
+			bh.isBlockLevelCached = true
+		}
 	}
 
 	return bh.blockLevel

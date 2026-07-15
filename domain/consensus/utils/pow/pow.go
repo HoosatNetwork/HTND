@@ -191,31 +191,32 @@ func (state *State) IncrementNonce() {
 
 // CheckProofOfWork check's if the block has a valid PoW according to the provided target
 // it does not check if the difficulty itself is valid or less than the maximum for the appropriate network
-func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip bool) bool {
+func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip bool) (bool, *big.Int) {
 	powNum, _ := state.CalculateProofOfWorkValue()
 	if state.BlockVersion < constants.PoWIntegrityMinVersion {
-		return powNum.Cmp(&state.Target) <= 0
+		return powNum.Cmp(&state.Target) <= 0, powNum
 	} else if powSkip && state.BlockVersion >= constants.PoWIntegrityMinVersion {
-		return powNum.Cmp(&state.Target) <= 0
+		return powNum.Cmp(&state.Target) <= 0, powNum
 	} else if state.BlockVersion >= constants.PoWIntegrityMinVersion {
 		powHash, err := externalapi.NewDomainHashFromString(block.PoWHash)
 		if err != nil {
-			return false
+			return false, powNum
 		}
 		if !powHash.Equal(new(externalapi.DomainHash)) {
 			submittedPowNum := toBig(powHash)
 			if submittedPowNum.Cmp(powNum) == 0 {
-				return powNum.Cmp(&state.Target) <= 0
+				return powNum.Cmp(&state.Target) <= 0, powNum
 			}
 		}
 	}
-	return false
+	return false, powNum
 }
 
 // CheckProofOfWorkByBits check's if the block has a valid PoW according to its Bits field
 // it does not check if the difficulty itself is valid or less than the maximum for the appropriate network
 func CheckProofOfWorkByBits(header externalapi.MutableBlockHeader, block *externalapi.DomainBlock, powSkip bool) bool {
-	return NewState(header).CheckProofOfWork(block, powSkip)
+	valid, _ := NewState(header).CheckProofOfWork(block, powSkip)
+	return valid
 }
 
 // ToBig converts a externalapi.DomainHash into a big.Int treated as a little endian string.
@@ -243,4 +244,11 @@ func BlockLevel(header externalapi.BlockHeader, maxBlockLevel int) int {
 		// If the block has a level lower than genesis make it zero.
 		maxBlockLevel-proofOfWorkValue.BitLen(), 0)
 	return level
+}
+
+func BlockLevelFromValue(powNum *big.Int, maxBlockLevel int) int {
+	if powNum == nil {
+		return maxBlockLevel
+	}
+	return max(maxBlockLevel-powNum.BitLen(), 0)
 }
