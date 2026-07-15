@@ -22,43 +22,14 @@ type dbManager struct {
 }
 
 func (dbw *dbManager) Get(key model.DBKey) ([]byte, error) {
-	databaseKey := dbKeyToDatabaseKey(key)
-	retryDelay := initialRetryDelay
-
-	for attempt := range maxGetRetryAttempts {
-		data, err := dbw.db.Get(databaseKey)
-		// If there was an error, return it immediately (no retry for errors)
-		if err != nil {
-			return nil, err
-		}
-
-		// If we got data (non-empty), return it
-		if len(data) > 0 {
-			if attempt > 0 {
-				log.Debugf("Successfully retrieved data for key %s after %d retry attempts", key, attempt)
-			}
-			return data, nil
-		}
-
-		// If this is the last attempt, return the empty data
-		if attempt == maxGetRetryAttempts-1 {
-			return data, nil
-		}
-
-		// Empty data returned, retry after delay
-		log.Debugf("Empty data returned for key %s on attempt %d/%d, retrying after %v",
-			key, attempt+1, maxGetRetryAttempts, retryDelay)
-		time.Sleep(retryDelay)
-
-		// Exponential backoff with maximum cap
-		retryDelay *= 2
-		if retryDelay > maxRetryDelay {
-			retryDelay = maxRetryDelay
-		}
+	data, err := dbw.db.Get(dbKeyToDatabaseKey(key))
+	if err != nil {
+		return nil, err
 	}
-
-	// This line should never be reached, but included for safety
-	return dbw.db.Get(databaseKey)
+	if len(data) == 0 {
+		log.Warnf("Key %s present with an empty value", key) // surface the anomaly instead of hiding it
+	}
+	return data, nil
 }
 
 func (dbw *dbManager) Has(key model.DBKey) (bool, error) {
