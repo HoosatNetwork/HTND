@@ -89,9 +89,9 @@ func (daaws *daaWindowStore) UnstageAll(stagingArea *model.StagingArea) {
 }
 
 func (daaws *daaWindowStore) key(key dbKey) model.DBKey {
-	keyIndexBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(keyIndexBytes, key.index)
-	return daaws.bucket.Bucket(key.blockHash.ByteSlice()).Key(keyIndexBytes)
+	var keyIndexBytes [8]byte
+	binary.LittleEndian.PutUint64(keyIndexBytes[:], key.index)
+	return daaws.bucket.Bucket(key.blockHash.ByteSlice()).Key(keyIndexBytes[:])
 }
 
 func (daaws *daaWindowStore) CacheLen() int {
