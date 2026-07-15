@@ -181,7 +181,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 
 func (s *consensus) periodicLogFrees() error {
 	minutes := 1
-	time.Sleep(time.Duration(minutes))
+	time.Sleep(time.Duration(minutes) * time.Minute)
 
 	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
 	for range ticker.C {

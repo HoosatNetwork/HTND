@@ -50,6 +50,7 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 		hash := pair.Hash
 		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
 		if err != nil {
+			window.free()
 			return blockWindow{}, err
 		}
 

@@ -83,6 +83,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		if utxoOutpointEntryPairsBuffer == nil {
 			errorMessage := &appmessage.GetUTXOsByAddressesResponseMessage{}
 			errorMessage.Error = appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
+			memory.Free(utxoOutpointEntryPairsBuffer)
 			return errorMessage, nil
 		}
 		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
