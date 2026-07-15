@@ -135,17 +135,17 @@ func (v *blockValidator) validateDifficulty(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
+	// if testnet you could guard this to only be ran for blocks with trusted data,
+	// so that IBD could be done instantly from genesis.
+	// if isBlockWithtrustedData {}
+	headerBits := header.Bits()
+	// Calculate the acceptable range for difficulty bits
+	maxBits := expectedBits + bitsTolerance
 
-	if isBlockWithTrustedData {
-		headerBits := header.Bits()
-		// Calculate the acceptable range for difficulty bits
-		maxBits := expectedBits + bitsTolerance
-
-		if headerBits > maxBits {
-			return errors.Wrapf(ruleerrors.ErrUnexpectedDifficulty,
-				"block difficulty of %d is ahead of the expected difficulty %d",
-				headerBits, expectedBits)
-		}
+	if headerBits > maxBits {
+		return errors.Wrapf(ruleerrors.ErrUnexpectedDifficulty,
+			"block difficulty of %d is ahead of the expected difficulty %d",
+			headerBits, expectedBits)
 	}
 
 	return nil
