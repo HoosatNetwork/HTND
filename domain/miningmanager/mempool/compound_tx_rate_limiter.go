@@ -23,13 +23,16 @@ type compoundTxSubmission struct {
 type addressTxTracker struct {
 	submissions []compoundTxSubmission
 	mutex       sync.RWMutex
+	lastSeen    time.Time
 }
 
 // compoundTxRateLimiter handles rate limiting for compound transactions per address
 type compoundTxRateLimiter struct {
-	config         *Config
-	addressTracker map[string]*addressTxTracker
-	globalMutex    sync.RWMutex
+	config          *Config
+	addressTracker  map[string]*addressTxTracker
+	globalMutex     sync.RWMutex
+	lastCleanup     time.Time
+	cleanupInterval time.Duration
 }
 
 func checkedDurationFromUint64Minutes(value uint64) (time.Duration, error) {
@@ -42,10 +45,21 @@ func checkedDurationFromUint64Minutes(value uint64) (time.Duration, error) {
 
 // newCompoundTxRateLimiter creates a new compound transaction rate limiter
 func newCompoundTxRateLimiter(config *Config) *compoundTxRateLimiter {
+	cleanupInterval := 5 * time.Minute
+	if config.CompoundTxRateLimitWindowMinutes > 0 {
+		// Run cleanup roughly 2-3 times per window
+		cleanupInterval = time.Duration(config.CompoundTxRateLimitWindowMinutes) * time.Minute / 3
+		if cleanupInterval < 2*time.Minute {
+			cleanupInterval = 2 * time.Minute
+		}
+	}
+
 	return &compoundTxRateLimiter{
-		config:         config,
-		addressTracker: make(map[string]*addressTxTracker),
-		globalMutex:    sync.RWMutex{},
+		config:          config,
+		addressTracker:  make(map[string]*addressTxTracker),
+		globalMutex:     sync.RWMutex{},
+		lastCleanup:     time.Now(),
+		cleanupInterval: cleanupInterval,
 	}
 }
 
@@ -157,13 +171,20 @@ func (rtl *compoundTxRateLimiter) getOrCreateTracker(address string) *addressTxT
 		// Double-check after acquiring write lock
 		if tracker, exists = rtl.addressTracker[address]; !exists {
 			tracker = &addressTxTracker{
-				submissions: make([]compoundTxSubmission, 0),
-				mutex:       sync.RWMutex{},
+				submissions: make([]compoundTxSubmission, 0, 8),
+				lastSeen:    time.Now(),
 			}
 			rtl.addressTracker[address] = tracker
 		}
 		rtl.globalMutex.Unlock()
 	}
+
+	// Update lastSeen (cheap under write lock)
+	rtl.globalMutex.Lock()
+	if t, ok := rtl.addressTracker[address]; ok {
+		t.lastSeen = time.Now()
+	}
+	rtl.globalMutex.Unlock()
 
 	return tracker
 }
@@ -179,7 +200,6 @@ func (rtl *compoundTxRateLimiter) cleanupOldSubmissions(tracker *addressTxTracke
 	}
 	cutoff := time.Now().Add(-windowDuration)
 
-	// Find the first submission within the window
 	validIndex := 0
 	for i, submission := range tracker.submissions {
 		if submission.timestamp.After(cutoff) {
@@ -189,9 +209,34 @@ func (rtl *compoundTxRateLimiter) cleanupOldSubmissions(tracker *addressTxTracke
 		validIndex = i + 1
 	}
 
-	// Keep only recent submissions
 	if validIndex > 0 {
 		tracker.submissions = tracker.submissions[validIndex:]
+	}
+}
+
+// cleanupEmptyTrackers removes trackers that have been empty for a long time.
+// Called opportunistically from hot paths.
+func (rtl *compoundTxRateLimiter) cleanupEmptyTrackers() {
+	rtl.globalMutex.Lock()
+	defer rtl.globalMutex.Unlock()
+
+	if time.Since(rtl.lastCleanup) < rtl.cleanupInterval {
+		return
+	}
+	rtl.lastCleanup = time.Now()
+
+	windowDuration, _ := checkedDurationFromUint64Minutes(rtl.config.CompoundTxRateLimitWindowMinutes)
+	cutoff := time.Now().Add(-windowDuration * 2) // conservative
+
+	for addr, tracker := range rtl.addressTracker {
+		tracker.mutex.RLock()
+		empty := len(tracker.submissions) == 0
+		lastSeen := tracker.lastSeen
+		tracker.mutex.RUnlock()
+
+		if empty && lastSeen.Before(cutoff) {
+			delete(rtl.addressTracker, addr)
+		}
 	}
 }
 
@@ -200,6 +245,8 @@ func (rtl *compoundTxRateLimiter) checkRateLimit(address string) bool {
 	if !rtl.config.CompoundTxRateLimitEnabled {
 		return true // Allow if rate limiting is disabled
 	}
+
+	rtl.cleanupEmptyTrackers()
 
 	tracker := rtl.getOrCreateTracker(address)
 	rtl.cleanupOldSubmissions(tracker)
@@ -216,6 +263,8 @@ func (rtl *compoundTxRateLimiter) recordTransaction(transaction *externalapi.Dom
 	if !rtl.config.CompoundTxRateLimitEnabled || !rtl.isCompoundTransaction(transaction) {
 		return
 	}
+
+	rtl.cleanupEmptyTrackers()
 
 	addresses := rtl.extractSenderAddresses(transaction)
 
@@ -246,6 +295,8 @@ func (rtl *compoundTxRateLimiter) recordTransactionAt(transaction *externalapi.D
 		return
 	}
 
+	rtl.cleanupEmptyTrackers()
+
 	addresses := rtl.extractSenderAddresses(transaction)
 
 	for _, address := range addresses {
@@ -273,6 +324,8 @@ func (rtl *compoundTxRateLimiter) isRateLimited(transaction *externalapi.DomainT
 	if !rtl.config.CompoundTxRateLimitEnabled || !rtl.isCompoundTransaction(transaction) {
 		return false, nil
 	}
+
+	rtl.cleanupEmptyTrackers()
 
 	addresses := rtl.extractSenderAddresses(transaction)
 	rateLimitedAddresses := make([]string, 0)
