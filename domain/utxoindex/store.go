@@ -869,10 +869,10 @@ func (uis *utxoIndexStore) applyUTXOCountDeltasToAccessor(accessor database.Data
 		}
 		newCount := int64(currentCount) + delta
 		if newCount < 0 {
-			return errors.Errorf("utxo count for scriptPublicKey %s became negative with current count %d and delta %d", scriptPublicKey.String(), currentCount, delta)
+			log.Infof("utxo count for scriptPublicKey %s became negative with current count %d and delta %d", scriptPublicKey.String(), currentCount, delta)
 		}
 
-		if newCount == 0 {
+		if newCount <= 0 {
 			err = accessor.Delete(countKey)
 			if err != nil {
 				return err
