@@ -9,6 +9,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
@@ -94,10 +95,11 @@ func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingA
 			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
 
 			utxoDiff, err := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
-			if err != nil {
-				return 0, nil, err
+			if utxoDiff != nil {
+				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
+			} else {
+				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxo.NewMutableUTXODiff().ToImmutable(), previousBlockHash)
 			}
-			csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
 
 			previousBlockUTXOSet = pastUTXOSet
 		} else {
