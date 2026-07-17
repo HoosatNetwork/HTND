@@ -52,7 +52,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 	}
 
 	if !blockHash.Equal(v.genesisHash) {
-		err = v.checkProofOfWork(header, block, trusted, powSkip)
+		header, err = v.checkProofOfWork(header, block, trusted, powSkip)
 		if err != nil {
 			return err
 		}
@@ -158,18 +158,19 @@ func (v *blockValidator) validateDifficulty(stagingArea *model.StagingArea,
 // The flags modify the behavior of this function as follows:
 //   - BFNoPoWCheck: The check to ensure the block hash is less than the target
 //     difficulty is not performed.
-func (v *blockValidator) checkProofOfWork(header externalapi.BlockHeader, block *externalapi.DomainBlock, trusted bool, powSkip bool) error {
+func (v *blockValidator) checkProofOfWork(header externalapi.BlockHeader, block *externalapi.DomainBlock, trusted bool, powSkip bool) (externalapi.BlockHeader, error) {
 	// The target difficulty must be larger than zero.
-	state := pow.NewState(header.ToMutable())
+	mutableHeader := header.ToMutable()
+	state := pow.NewState(mutableHeader)
 	target := &state.Target
 	if target.Sign() <= 0 {
-		return errors.Wrapf(ruleerrors.ErrNegativeTarget, "block target difficulty of %064x is too low",
+		return mutableHeader.ToImmutable(), errors.Wrapf(ruleerrors.ErrNegativeTarget, "block target difficulty of %064x is too low",
 			target)
 	}
 
 	// The target difficulty must be less than the maximum allowed.
 	if target.Cmp(v.powMax) > 0 {
-		return errors.Wrapf(ruleerrors.ErrTargetTooHigh, "block target difficulty of %064x is "+
+		return mutableHeader.ToImmutable(), errors.Wrapf(ruleerrors.ErrTargetTooHigh, "block target difficulty of %064x is "+
 			"higher than max of %064x", target, v.powMax)
 	}
 
@@ -178,13 +179,11 @@ func (v *blockValidator) checkProofOfWork(header externalapi.BlockHeader, block 
 	if !v.skipPoW {
 		valid, powNum := state.CheckProofOfWork(block, powSkip)
 		if !valid {
-			return errors.Wrap(ruleerrors.ErrInvalidPoW, fmt.Sprintf("block has invalid PoW, PoW Hash: %s, Block Version: %d, powSkip: %t, trusted: %t", block.PoWHash, header.Version(), powSkip, trusted))
+			return mutableHeader.ToImmutable(), errors.Wrap(ruleerrors.ErrInvalidPoW, fmt.Sprintf("block has invalid PoW, PoW Hash: %s, Block Version: %d, powSkip: %t, trusted: %t", block.PoWHash, header.Version(), powSkip, trusted))
 		}
-		mutableHeader := header.ToMutable()
 		mutableHeader.SetPoWValue(powNum)
-		header = mutableHeader.ToImmutable()
 	}
-	return nil
+	return mutableHeader.ToImmutable(), nil
 }
 
 func (v *blockValidator) checkParentNotVirtualGenesis(header externalapi.BlockHeader) error {
