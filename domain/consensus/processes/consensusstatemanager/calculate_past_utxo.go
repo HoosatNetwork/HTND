@@ -300,7 +300,8 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	log.Tracef("Adding transaction %s in block %s to the accumulated diff", transactionID, blockHash)
 	err = accumulatedUTXODiff.AddTransaction(transaction, blockDAAScore)
 	if err != nil {
-		return false, 0, err
+		log.Tracef("Failed to add transaction %s, because: ", err.Error())
+		return false, 0, nil
 	}
 
 	return true, accumulatedMassAfter, nil
