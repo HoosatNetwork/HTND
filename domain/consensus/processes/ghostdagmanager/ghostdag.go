@@ -255,23 +255,34 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 		}
 		*candidateAnticoneSize++
 
-		if *candidateAnticoneSize > k {
-			// k-cluster violation: The candidate's blue anticone exceeded k
+		// TODO: Increase allowed anticone size to be bigger than k, by adding offset. This will allow more blue blocks.
+		var maxAnticoneSize = k
+		if constants.GetBlockVersion() >= 7 {
+			maxAnticoneSize += 1
+		}
+
+		if *candidateAnticoneSize > maxAnticoneSize {
+			log.Infof("Max Anticone size %d", maxAnticoneSize)
+			log.Infof("Candidate Anticone size %d", *candidateAnticoneSize)
+			// k-cluster violation: The candidate's blue anticone exceeded maxAnticoneSize
 			return false, true, nil
 		}
 
-		if candidateBluesAnticoneSizes[*block] == k {
+		if candidateBluesAnticoneSizes[*block] == maxAnticoneSize {
+			log.Infof("Max Anticone size %d", maxAnticoneSize)
+			log.Infof("Candidate blues anticone size %d", candidateBluesAnticoneSizes[*block])
 			// k-cluster violation: A block in candidate's blue anticone already
-			// has k blue blocks in its own anticone
+			// has maxAnticoneSize blue blocks in its own anticone
 			return false, true, nil
 		}
 
 		// This is a sanity check that validates that a blue
-		// block's blue anticone is not already larger than K.
-		// Commented out for DAGKnight as k is dynamic
-		// if candidateBluesAnticoneSizes[*block] > k {
-		// 	return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
-		// }
+		// block's blue anticone is not already larger than maxAnticoneSize.
+		if candidateBluesAnticoneSizes[*block] > maxAnticoneSize {
+			log.Infof("Max Anticone size %d", maxAnticoneSize)
+			log.Infof("Candidate blues anticone size %d", candidateBluesAnticoneSizes[*block])
+			// return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
+		}
 	}
 
 	return false, false, nil
