@@ -25,7 +25,7 @@ func Benchmark_serializeUTXO(b *testing.B) {
 		Index: 0xffffffff,
 	}
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := SerializeUTXO(entry, outpoint)
 		if err != nil {
 			b.Fatal(err)

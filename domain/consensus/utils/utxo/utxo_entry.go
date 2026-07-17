@@ -57,7 +57,7 @@ func (u *utxoEntry) Equal(other externalapi.UTXOEntry) bool {
 	// make `other == nil` return false, so we check it
 	// explicitly.
 	downcastedOther := other.(*utxoEntry)
-	if u == nil || downcastedOther == nil {
+	if downcastedOther == nil {
 		return u == downcastedOther
 	}
 

@@ -19,20 +19,21 @@ func checkIntersection(collection1 utxoCollection, collection2 utxoCollection) b
 // checkIntersectionWithRule checks if there is an intersection between two utxoCollections satisfying arbitrary rule
 // returns the first outpoint in the two collections' intersection satisfying the rule, and a boolean indicating whether
 // such outpoint exists
-func checkIntersectionWithRule(collection1 utxoCollection, collection2 utxoCollection,
-	extraRule func(*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry) bool) (
-	*externalapi.DomainOutpoint, bool,
-) {
-	for outpoint, utxoEntry := range collection1 {
-		if diffEntry, ok := collection2.Get(&outpoint); ok {
-			if extraRule(&outpoint, utxoEntry, diffEntry) {
-				return &outpoint, true
-			}
-		}
-	}
+// comment out because unused
+// func checkIntersectionWithRule(collection1 utxoCollection, collection2 utxoCollection,
+// 	extraRule func(*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry) bool) (
+// 	*externalapi.DomainOutpoint, bool,
+// ) {
+// 	for outpoint, utxoEntry := range collection1 {
+// 		if diffEntry, ok := collection2.Get(&outpoint); ok {
+// 			if extraRule(&outpoint, utxoEntry, diffEntry) {
+// 				return &outpoint, true
+// 			}
+// 		}
+// 	}
 
-	return nil, false
-}
+// 	return nil, false
+// }
 
 // checkIntersectionWithRuleAndEntries is like checkIntersectionWithRule but also returns the entries for debugging
 func checkIntersectionWithRuleAndEntries(collection1 utxoCollection, collection2 utxoCollection,
