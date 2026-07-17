@@ -4,6 +4,7 @@ import (
 	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
 	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
 )
 
@@ -122,7 +123,8 @@ func (csm *consensusStateManager) updateSelectedTipUTXODiff(
 	}
 	newDiff, err := virtualUTXODiff.DiffFrom(selectedTipUTXODiff)
 	if err != nil {
-		return err
+		// don't return here, just use empty diff if diffFrom failed.
+		newDiff = utxo.NewUTXODiff()
 	}
 
 	log.Debugf("Staging new UTXO diff for virtual diff parent %s", selectedTip)
