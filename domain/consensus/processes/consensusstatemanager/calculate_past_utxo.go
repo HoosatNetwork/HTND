@@ -160,7 +160,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 	for i := len(utxoDiffs) - 1; i >= 0; i-- {
 		err = accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
 		if err != nil {
-			log.Errorf("restorePastUTXO: WithDiffInPlace on index %d failed while walking selected parent chain for %s", len(utxoDiffs), blockHash)
+			log.Debugf("restorePastUTXO: WithDiffInPlace on index %d failed while walking selected parent chain for %s", len(utxoDiffs), blockHash)
 			break
 			// Consider returning empty utxodiff as accumulated diff return utxo.NewMutableUTXODiff().ToImmutable(), nil
 		}
