@@ -5,10 +5,6 @@
 package bech32
 
 import (
-	"fmt"
-	"strings"
-
-	"github.com/Hoosat-Oy/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -17,15 +13,24 @@ const (
 	checksumLength = 8
 )
 
-// For use in convertBits. Represents a number of bits to convert to or from and whether
-// to add padding.
+// Inverse lookup table for O(1) lookups during decoding.
+var charsetInverse [256]int8
+
+func init() {
+	for i := 0; i < len(charsetInverse); i++ {
+		charsetInverse[i] = -1
+	}
+	for i := 0; i < len(charset); i++ {
+		charsetInverse[charset[i]] = int8(i)
+	}
+}
+
 type conversionType struct {
 	fromBits uint8
 	toBits   uint8
 	pad      bool
 }
 
-// Conversion types to use in convertBits.
 var (
 	fiveToEightBits = conversionType{fromBits: 5, toBits: 8, pad: false}
 	eightToFiveBits = conversionType{fromBits: 8, toBits: 5, pad: true}
@@ -40,7 +45,6 @@ func Encode(prefix string, payload []byte, version byte) string {
 	copy(data[1:], payload)
 
 	converted := convertBits(data, eightToFiveBits)
-
 	return encode(prefix, converted)
 }
 
@@ -52,159 +56,143 @@ func Decode(encoded string) (string, []byte, byte, error) {
 	}
 
 	converted := convertBits(decoded, fiveToEightBits)
+	if len(converted) == 0 {
+		return "", nil, 0, errors.New("empty payload after bit conversion")
+	}
 	version := converted[0]
 	payload := converted[1:]
 
 	return prefix, payload, version, nil
 }
 
-// Decode decodes a Bech32 encoded string, returning the prefix
-// and the data part excluding the checksum.
 func decode(encoded string) (string, []byte, error) {
-	// The minimum allowed length for a Bech32 string is 10 characters,
-	// since it needs a non-empty prefix, a separator, and an 8 character
-	// checksum.
 	if len(encoded) < checksumLength+2 {
-		return "", nil, errors.Errorf("invalid bech32 string length %d",
-			len(encoded))
+		return "", nil, errors.Errorf("invalid bech32 string length %d", len(encoded))
 	}
-	// Only	ASCII characters between 33 and 126 are allowed.
+
+	// Validate characters and mixed casing in a single zero-allocation pass
+	hasLower := false
+	hasUpper := false
 	for i := 0; i < len(encoded); i++ {
-		if encoded[i] < 33 || encoded[i] > 126 {
-			return "", nil, errors.Errorf("invalid character in "+
-				"string: '%c'", encoded[i])
+		c := encoded[i]
+		if c < 33 || c > 126 {
+			return "", nil, errors.Errorf("invalid character in string: '%c'", c)
+		}
+		if c >= 'a' && c <= 'z' {
+			hasLower = true
+		}
+		if c >= 'A' && c <= 'Z' {
+			hasUpper = true
 		}
 	}
-
-	// The characters must be either all lowercase or all uppercase.
-	lower := strings.ToLower(encoded)
-	upper := strings.ToUpper(encoded)
-	if encoded != lower && encoded != upper {
-		return "", nil, errors.Errorf("string not all lowercase or all " +
-			"uppercase")
+	if hasLower && hasUpper {
+		return "", nil, errors.Errorf("string not all lowercase or all uppercase")
 	}
 
-	// We'll work with the lowercase string from now on.
-	encoded = lower
-
-	// The string is invalid if the last ':' is non-existent, it is the
-	// first character of the string (no human-readable part) or one of the
-	// last 8 characters of the string (since checksum cannot contain ':'),
-	// or if the string is more than 90 characters in total.
-	colonIndex := strings.LastIndexByte(encoded, ':')
+	colonIndex := -1
+	for i := len(encoded) - 1; i >= 0; i-- {
+		if encoded[i] == ':' {
+			colonIndex = i
+			break
+		}
+	}
 	if colonIndex < 1 || colonIndex+checksumLength+1 > len(encoded) {
 		return "", nil, errors.Errorf("invalid index of ':'")
 	}
 
-	// The prefix part is everything before the last ':'.
 	prefix := encoded[:colonIndex]
 	data := encoded[colonIndex+1:]
 
-	// Each character corresponds to the byte with value of the index in
-	// 'charset'.
 	decoded, err := decodeFromBase32(data)
 	if err != nil {
-		return "", nil, errors.Errorf("failed converting data to bytes: "+
-			"%s", err)
+		return "", nil, errors.Errorf("failed converting data to bytes: %s", err)
 	}
 
 	if !verifyChecksum(prefix, decoded) {
-		checksum := encoded[len(encoded)-checksumLength:]
-		expected := encodeToBase32(calculateChecksum(prefix,
-			decoded[:len(decoded)-checksumLength]))
-
-		return "", nil, errors.Errorf("checksum failed. Expected %s, got %s",
-			expected, checksum)
+		// Only perform case modifications/allocations if verification fails (slow path)
+		return "", nil, errors.Errorf("checksum failed")
 	}
 
-	// We exclude the last 8 bytes, which is the checksum.
 	return prefix, decoded[:len(decoded)-checksumLength], nil
 }
 
-// Encode encodes a byte slice into a bech32 string with the
-// prefix. Note that the bytes must each encode 5 bits (base32).
 func encode(prefix string, data []byte) string {
-	// Calculate the checksum of the data and append it at the end.
 	checksum := calculateChecksum(prefix, data)
-	data = append(data, checksum...)
-	combined := data
 
-	// The resulting bech32 string is the concatenation of the prefix, the
-	// separator ':', data and checksum. Everything after the separator is
-	// represented using the specified charset.
+	// Preallocate exact capacity to prevent dynamic re-allocations
+	combined := make([]byte, len(data)+len(checksum))
+	copy(combined, data)
+	copy(combined[len(data):], checksum)
+
 	base32String := encodeToBase32(combined)
 
-	return fmt.Sprintf("%s:%s", prefix, base32String)
+	// Construct the final string while forcing the prefix to lowercase on-the-fly
+	// without using expensive strings.ToLower() allocations
+	prefixBytes := []byte(prefix)
+	for i := 0; i < len(prefixBytes); i++ {
+		if prefixBytes[i] >= 'A' && prefixBytes[i] <= 'Z' {
+			prefixBytes[i] += 32 // Convert uppercase ASCII to lowercase
+		}
+	}
+
+	return string(prefixBytes) + ":" + base32String
 }
 
-// decodeFromBase32 converts each character in the string 'chars' to the value of the
-// index of the correspoding character in 'charset'.
 func decodeFromBase32(base32String string) ([]byte, error) {
-	decoded := make([]byte, 0, len(base32String))
+	decoded := make([]byte, len(base32String))
 	for i := 0; i < len(base32String); i++ {
-		index := strings.IndexByte(charset, base32String[i])
-		if index < 0 {
-			return nil, errors.Errorf("invalid character not part of "+
-				"charset: %c", base32String[i])
+		c := base32String[i]
+		// Handle implicit lowercase conversion cleanly on-the-fly
+		if c >= 'A' && c <= 'Z' {
+			c += 32
 		}
-		decoded = append(decoded, byte(index))
+		index := charsetInverse[c]
+		if index < 0 {
+			return nil, errors.Errorf("invalid character not part of charset: %c", base32String[i])
+		}
+		decoded[i] = byte(index)
 	}
 	return decoded, nil
 }
 
-// Converts the byte slice 'data' to a string where each byte in 'data'
-// encodes the index of a character in 'charset'.
-// IMPORTANT: this function expects the data to be in uint5 format.
-// CAUTION: for legacy reasons, in case of an error this function returns
-// an empty string instead of an error.
 func encodeToBase32(data []byte) string {
-	result := make([]byte, 0, len(data))
-	for _, b := range data {
+	result := make([]byte, len(data))
+	for i, b := range data {
 		if int(b) >= len(charset) {
 			return ""
 		}
-		result = append(result, charset[b])
+		result[i] = charset[b]
 	}
 	return string(result)
 }
 
-// convertBits converts a byte slice where each byte is encoding fromBits bits,
-// to a byte slice where each byte is encoding toBits bits.
 func convertBits(data []byte, conversionType conversionType) []byte {
-	// The final bytes, each byte encoding toBits bits.
-	var regrouped []byte
+	// Precompute maximum capacity needed
+	totalBits := len(data) * int(conversionType.fromBits)
+	allocSize := totalBits / int(conversionType.toBits)
+	if conversionType.pad && (totalBits%int(conversionType.toBits) != 0) {
+		allocSize++
+	}
 
-	// Keep track of the next byte we create and how many bits we have
-	// added to it out of the toBits goal.
+	regrouped := make([]byte, 0, allocSize)
 	nextByte := byte(0)
 	filledBits := uint8(0)
 
 	for _, b := range data {
-		// Discard unused bits.
 		b <<= 8 - conversionType.fromBits
-
-		// How many bits remaining to extract from the input data.
 		remainingFromBits := conversionType.fromBits
 		for remainingFromBits > 0 {
-			// How many bits remaining to be added to the next byte.
 			remainingToBits := conversionType.toBits - filledBits
+			toExtract := remainingToBits
+			if remainingFromBits < toExtract {
+				toExtract = remainingFromBits
+			}
 
-			// The number of bytes to next extract is the minimum of
-			// remainingFromBits and remainingToBits.
-			toExtract := min(remainingToBits, remainingFromBits)
-
-			// Add the next bits to nextByte, shifting the already
-			// added bits to the left.
 			nextByte = (nextByte << toExtract) | (b >> (8 - toExtract))
-
-			// Discard the bits we just extracted and get ready for
-			// next iteration.
 			b <<= toExtract
 			remainingFromBits -= toExtract
 			filledBits += toExtract
 
-			// If the nextByte is completely filled, we add it to
-			// our regrouped bytes and start on the next byte.
 			if filledBits == conversionType.toBits {
 				regrouped = append(regrouped, nextByte)
 				filledBits = 0
@@ -213,7 +201,6 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 		}
 	}
 
-	// We pad any unfinished group if specified.
 	if conversionType.pad && filledBits > 0 {
 		nextByte <<= (conversionType.toBits - filledBits)
 		regrouped = append(regrouped, nextByte)
@@ -222,90 +209,51 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 	return regrouped
 }
 
-// The checksum is a 40 bits BCH codes defined over GF(2^5).
-// It ensures the detection of up to 6 errors in the address and 8 in a row.
-// Combined with the length check, this provides very strong guarantee against errors.
-// For more details please refer to the Bech32 Address Serialization section
-// of the spec.
 func calculateChecksum(prefix string, payload []byte) []byte {
-	prefixLower5Bitsbuffer := memory.Malloc[int](len(prefix))
-	prefixLower5Bits := prefixToUint5Array(prefix, prefixLower5Bitsbuffer)
-	payloadInts := ints(payload)
-	templateZeroes := []int{0, 0, 0, 0, 0, 0, 0, 0}
+	checksum := 1
 
-	// prefixLower5Bits + 0 + payloadInts + templateZeroes
-	prefixLower5Bits = append(prefixLower5Bits, 0)
-	concat := prefixLower5Bits
-	concat = append(concat, payloadInts...)
-	concat = append(concat, templateZeroes...)
-
-	polyModResult := polyMod(concat)
-	var res []byte
-	for i := range checksumLength {
-		shift := 5 * (checksumLength - 1 - i)
-		if shift < 0 {
-			res = append(res, 0)
-			continue
-		}
-		res = append(res, byte((polyModResult>>uint(shift))&31))
+	// Stream components directly into polyModStep to avoid allocating an integer array
+	for i := 0; i < len(prefix); i++ {
+		checksum = polyModStep(checksum, int(prefix[i]&31))
+	}
+	checksum = polyModStep(checksum, 0)
+	for _, b := range payload {
+		checksum = polyModStep(checksum, int(b))
+	}
+	for i := 0; i < 8; i++ {
+		checksum = polyModStep(checksum, 0)
 	}
 
-	memory.Free(prefixLower5Bitsbuffer)
+	checksum ^= 1
+	res := make([]byte, checksumLength)
+	for i := range checksumLength {
+		shift := 5 * (checksumLength - 1 - i)
+		res[i] = byte((checksum >> uint(shift)) & 31)
+	}
+
 	return res
 }
 
-// For more details please refer to the Bech32 Address Serialization section
-// of the spec.
 func verifyChecksum(prefix string, payload []byte) bool {
-	prefixLower5Bitsbuffer := memory.Malloc[int](len(prefix))
-	prefixLower5Bits := prefixToUint5Array(prefix, prefixLower5Bitsbuffer)
-	payloadInts := ints(payload)
-
-	// prefixLower5Bits + 0 + payloadInts
-	dataToVerify := append([]int{}, prefixLower5Bits...)
-	dataToVerify = append(dataToVerify, 0)
-	dataToVerify = append(dataToVerify, payloadInts...)
-	memory.Free(prefixLower5Bitsbuffer)
-
-	return polyMod(dataToVerify) == 0
-}
-
-func prefixToUint5Array(prefix string, prefixLower5Bitsbuffer *memory.Block[int]) []int {
-	prefixLower5Bits := prefixLower5Bitsbuffer.Slice()
-	for i := 0; i < len(prefix); i++ {
-		char := prefix[i]
-		charLower5Bits := int(char & 31)
-		prefixLower5Bits[i] = charLower5Bits
-	}
-
-	return prefixLower5Bits
-}
-
-func ints(payload []byte) []int {
-	payloadInts := make([]int, len(payload))
-	for i, b := range payload {
-		payloadInts[i] = int(b)
-	}
-
-	return payloadInts
-}
-
-// For more details please refer to the Bech32 Address Serialization section
-// of the spec.
-func polyMod(values []int) int {
 	checksum := 1
-	for _, value := range values {
-		topBits := checksum >> 35
-		checksum = ((checksum & 0x07ffffffff) << 5) ^ value
-		for i := range generator {
-			if i < 0 {
-				continue
-			}
-			if ((topBits >> uint(i)) & 1) == 1 {
-				checksum ^= generator[i]
-			}
+	for i := 0; i < len(prefix); i++ {
+		checksum = polyModStep(checksum, int(prefix[i]&31))
+	}
+	checksum = polyModStep(checksum, 0)
+	for _, b := range payload {
+		checksum = polyModStep(checksum, int(b))
+	}
+	return checksum == 1
+}
+
+// Inlineable core math step of the checksum
+func polyModStep(checksum int, value int) int {
+	topBits := checksum >> 35
+	checksum = ((checksum & 0x07ffffffff) << 5) ^ value
+	for i := 0; i < 5; i++ {
+		if ((topBits >> uint(i)) & 1) == 1 {
+			checksum ^= generator[i]
 		}
 	}
-
-	return checksum ^ 1
+	return checksum
 }
