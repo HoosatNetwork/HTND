@@ -826,7 +826,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			receivedBlocks[*blockHash] = block
 			log.Debugf("Received block %s and stored in cache", blockHash)
 		}
-
+		var madeProgress = false
 		// Process blocks in the order of expected hashes
 		for _, expectedHash := range hashesToRequest {
 			block, exists := receivedBlocks[*expectedHash]
@@ -837,10 +837,20 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			err = flow.Domain().Consensus().ValidateAndInsertBlock(block, updateVirtual, false)
 			if err != nil {
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
+					madeProgress = true
 					continue
 				}
-				log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
-				continue
+
+				missingParentsError := &ruleerrors.ErrMissingParents{}
+				if errors.As(err, missingParentsError) {
+					madeProgress = false
+					log.Infof("Rejected block %s from %s during IBD because missing parent: %+v", expectedHash, flow.peer, errors.WithStack(err))
+					break
+				} else {
+					madeProgress = false
+					log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
+					break
+				}
 			}
 			err = flow.OnNewBlock(block)
 			if err != nil {
@@ -855,6 +865,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 					return err
 				}
 			}
+			madeProgress = true
+		}
+		if madeProgress == false {
+			break
 		}
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
