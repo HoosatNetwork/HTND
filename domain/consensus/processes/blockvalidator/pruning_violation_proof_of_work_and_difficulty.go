@@ -53,6 +53,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 
 	if !blockHash.Equal(v.genesisHash) {
 		header, err = v.checkProofOfWork(header, block, trusted, powSkip)
+		v.blockHeaderStore.Stage(stagingArea, blockHash, header) // stage updated header with pow hash.
 		if err != nil {
 			return err
 		}
