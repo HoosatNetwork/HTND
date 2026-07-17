@@ -5,7 +5,6 @@ import (
 	"math"
 
 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionhelper"
 	"github.com/pkg/errors"
@@ -155,37 +154,22 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 }
 
 func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-	switch {
-	case mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()):
+	if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
 		mud.toRemove.remove(outpoint)
-	case mud.toAdd.Contains(outpoint):
-		// If the existing staged entry is identical to the one we're trying to add,
-		// treat this as a no-op. This can happen when the same transaction is
-		// encountered multiple times while composing diffs; identical entries
-		// should not cause an error.
-		existingEntry, _ := mud.toAdd.Get(outpoint)
-		if existingEntry.Equal(entry) {
-			return nil
-		}
-		return errors.Wrapf(ruleerrors.ErrDuplicateUTXOEntry, "Cannot add outpoint %s twice", outpoint)
-	default:
+	} else if mud.toAdd.Contains(outpoint) {
+		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
+	} else {
 		mud.toAdd.add(outpoint, entry)
 	}
 	return nil
 }
 
 func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-	switch {
-	case mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()):
+	if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
 		mud.toAdd.remove(outpoint)
-	case mud.toRemove.Contains(outpoint):
-		// If the existing staged removal entry is identical, no-op.
-		existingEntry, _ := mud.toRemove.Get(outpoint)
-		if existingEntry.Equal(entry) {
-			return nil
-		}
-		return errors.Wrapf(ruleerrors.ErrDuplicateUTXOEntry, "Cannot remove outpoint %s twice", outpoint)
-	default:
+	} else if mud.toRemove.Contains(outpoint) {
+		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)
+	} else {
 		mud.toRemove.add(outpoint, entry)
 	}
 	return nil
