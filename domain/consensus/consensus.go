@@ -1124,19 +1124,28 @@ func (s *consensus) resolveVirtualChunkNoLock(maxBlocksToResolve uint64) (*exter
 	s.virtualNotUpdated = !isCompletelyResolved
 
 	stagingArea := model.NewStagingArea()
-	err = s.pruningManager.UpdatePruningPointByVirtual(stagingArea)
-	if err != nil {
-		return nil, false, err
+
+	// OPTIMIZATION: Only evaluate pruning updates if the virtual resolution
+	// cycle is completely finished. Doing this on partial chunks wastes massive processing time.
+	if isCompletelyResolved {
+		err = s.pruningManager.UpdatePruningPointByVirtual(stagingArea)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
+	// Commits the staging area changes to the database. If not completely resolved,
+	// this avoids writing empty or repetitive intermediate pruning state data.
 	err = staging.CommitAllChanges(s.databaseContext, stagingArea)
 	if err != nil {
 		return nil, false, err
 	}
 
-	err = s.pruningManager.UpdatePruningPointIfRequired()
-	if err != nil {
-		return nil, false, err
+	if isCompletelyResolved {
+		err = s.pruningManager.UpdatePruningPointIfRequired()
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
 	err = s.sendVirtualChangedEvent(virtualChangeSet, true)
