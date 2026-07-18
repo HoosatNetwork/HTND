@@ -211,10 +211,12 @@ func TestUTXODiff(t *testing.T) {
 // Each test case represents a cell in the two tables outlined in the documentation for mutableUTXODiff.
 // Extended with multi-outpoint cases and explicit duplicate-outpoint scenarios.
 func TestUTXODiffRules(t *testing.T) {
-	_, _, _, outpoint0, outpoint1, outpoint2, utxoEntry0, utxoEntry1, utxoEntry2, utxoEntry0AltDAA := testFixtures()
-	// Keep the original single-outpoint names used by the classic table
-	utxoEntry1 = NewUTXOEntry(10, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, true, 0)
-	utxoEntry2 = NewUTXOEntry(20, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, true, 1)
+	// Replace utxoEntry1 and utxoEntry2 with _ since they are immediately overwritten below
+	_, _, _, outpoint0, outpoint1, outpoint2, utxoEntry0, _, _, utxoEntry0AltDAA := testFixtures()
+
+	// Keep the original single-outpoint names used by the classic table (now using := to declare them)
+	utxoEntry1 := NewUTXOEntry(10, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, true, 0)
+	utxoEntry2 := NewUTXOEntry(20, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, true, 1)
 
 	// Classic single-outpoint table (identical to original)
 	tests := []struct {
