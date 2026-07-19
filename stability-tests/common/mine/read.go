@@ -17,6 +17,7 @@ func readBlocks(jsonFile string) (<-chan JSONBlock, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 
 	gzipReader, err := gzip.NewReader(f)
 	if err != nil {

@@ -58,8 +58,10 @@ func (o Outpoint) String() string {
 	// digits, which will fit any uint32.
 	buf := make([]byte, 2*externalapi.DomainHashSize+1, 2*externalapi.DomainHashSize+1+10)
 	copy(buf, o.TxID.String())
+
 	buf[2*externalapi.DomainHashSize] = ':'
 	buf = strconv.AppendUint(buf, uint64(o.Index), 10)
+
 	return string(buf)
 }
 

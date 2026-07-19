@@ -175,10 +175,19 @@ func (na *NetAdapter) onP2PConnectedHandler(connection server.Connection) error 
 	defer na.p2pConnectionsLock.Unlock()
 
 	netConnection.setOnDisconnectedHandler(func() {
+		// 1. Remove from the active connections map
 		na.p2pConnectionsLock.Lock()
-		defer na.p2pConnectionsLock.Unlock()
-
 		delete(na.p2pConnections, netConnection)
+		na.p2pConnectionsLock.Unlock()
+
+		// 2. Immediately purge the router from the outbound cache if applicable
+		if connection.IsOutbound() {
+			na.outboundP2PRoutersLock.Lock()
+			delete(na.outboundP2PRouters, peerAddress)
+			na.outboundP2PRoutersLock.Unlock()
+
+			log.Debugf("Removed cached outbound router for peer: %s", peerAddress)
+		}
 	})
 
 	na.p2pConnections[netConnection] = struct{}{}

@@ -230,6 +230,7 @@ func templatesLoop(client *minerClient, miningAddr util.Address, errChan chan er
 	getBlockTemplate()
 	const tickerTime = 100 * time.Millisecond
 	ticker := time.NewTicker(tickerTime)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-client.newBlockTemplateNotificationChan:

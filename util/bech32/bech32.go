@@ -5,6 +5,8 @@
 package bech32
 
 import (
+	"strings"
+
 	"github.com/pkg/errors"
 )
 
@@ -109,7 +111,6 @@ func decode(encoded string) (string, []byte, error) {
 	}
 
 	if !verifyChecksum(prefix, decoded) {
-		// Only perform case modifications/allocations if verification fails (slow path)
 		return "", nil, errors.Errorf("checksum failed")
 	}
 
@@ -117,25 +118,31 @@ func decode(encoded string) (string, []byte, error) {
 }
 
 func encode(prefix string, data []byte) string {
-	checksum := calculateChecksum(prefix, data)
+	var checksum [checksumLength]byte
+	calculateChecksumBuf(prefix, data, checksum[:])
 
 	// Preallocate exact capacity to prevent dynamic re-allocations
-	combined := make([]byte, len(data)+len(checksum))
+	combined := make([]byte, len(data)+checksumLength)
 	copy(combined, data)
-	copy(combined[len(data):], checksum)
+	copy(combined[len(data):], checksum[:])
 
 	base32String := encodeToBase32(combined)
 
-	// Construct the final string while forcing the prefix to lowercase on-the-fly
-	// without using expensive strings.ToLower() allocations
-	prefixBytes := []byte(prefix)
-	for i := 0; i < len(prefixBytes); i++ {
-		if prefixBytes[i] >= 'A' && prefixBytes[i] <= 'Z' {
-			prefixBytes[i] += 32 // Convert uppercase ASCII to lowercase
-		}
-	}
+	// Avoid string formatting/concatenation leaks by building the string directly
+	var sb strings.Builder
+	sb.Grow(len(prefix) + 1 + len(base32String))
 
-	return string(prefixBytes) + ":" + base32String
+	for i := 0; i < len(prefix); i++ {
+		c := prefix[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32 // Convert uppercase ASCII to lowercase
+		}
+		sb.WriteByte(c)
+	}
+	sb.WriteByte(':')
+	sb.WriteString(base32String)
+
+	return sb.String()
 }
 
 func decodeFromBase32(base32String string) ([]byte, error) {
@@ -167,7 +174,6 @@ func encodeToBase32(data []byte) string {
 }
 
 func convertBits(data []byte, conversionType conversionType) []byte {
-	// Precompute maximum capacity needed
 	totalBits := len(data) * int(conversionType.fromBits)
 	allocSize := totalBits / int(conversionType.toBits)
 	if conversionType.pad && (totalBits%int(conversionType.toBits) != 0) {
@@ -209,10 +215,10 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 	return regrouped
 }
 
-func calculateChecksum(prefix string, payload []byte) []byte {
+// Fixed-size stack boundary implementation to fully prevent heap allocations
+func calculateChecksumBuf(prefix string, payload []byte, out []byte) {
 	checksum := 1
 
-	// Stream components directly into polyModStep to avoid allocating an integer array
 	for i := 0; i < len(prefix); i++ {
 		checksum = polyModStep(checksum, int(prefix[i]&31))
 	}
@@ -225,13 +231,10 @@ func calculateChecksum(prefix string, payload []byte) []byte {
 	}
 
 	checksum ^= 1
-	res := make([]byte, checksumLength)
-	for i := range checksumLength {
+	for i := 0; i < checksumLength; i++ {
 		shift := 5 * (checksumLength - 1 - i)
-		res[i] = byte((checksum >> uint(shift)) & 31)
+		out[i] = byte((checksum >> uint(shift)) & 31)
 	}
-
-	return res
 }
 
 func verifyChecksum(prefix string, payload []byte) bool {
@@ -246,7 +249,6 @@ func verifyChecksum(prefix string, payload []byte) bool {
 	return checksum == 1
 }
 
-// Inlineable core math step of the checksum
 func polyModStep(checksum int, value int) int {
 	topBits := checksum >> 35
 	checksum = ((checksum & 0x07ffffffff) << 5) ^ value

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"math"
 	"math/big"
+	"unsafe"
 
 	"github.com/pkg/errors"
 
@@ -326,7 +327,8 @@ func encodeHexString(buffer []byte, value []byte) ([]byte, string) {
 		buffer = buffer[:needed]
 	}
 	hex.Encode(buffer, value)
-	return buffer, string(buffer)
+	str := unsafe.String(&buffer[0], len(buffer))
+	return buffer, str
 }
 
 // DomainTransactionToRPCTransaction converts DomainTransactions to RPCTransactions

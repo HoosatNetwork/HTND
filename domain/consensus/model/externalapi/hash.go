@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/pkg/errors"
 )
@@ -79,6 +80,21 @@ func (hash DomainHash) String() string {
 	}
 	hex.Encode(dst, hash.hashArray[:])
 	s := string(dst)
+	dst = dst[:0]
+	domainHashStringPool.Put(&dst)
+	return s
+}
+
+func (hash DomainHash) UnsafeString() string {
+	hexLen := hex.EncodedLen(len(hash.hashArray[:]))
+	dst := *domainHashStringPool.Get().(*[]byte)
+	if cap(dst) < hexLen {
+		dst = make([]byte, hexLen)
+	} else {
+		dst = dst[:hexLen]
+	}
+	hex.Encode(dst, hash.hashArray[:])
+	s := unsafe.String(&dst[0], len(dst))
 	dst = dst[:0]
 	domainHashStringPool.Put(&dst)
 	return s

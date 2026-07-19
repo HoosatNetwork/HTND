@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"unsafe"
 
 	"github.com/pkg/errors"
 )
@@ -20,8 +21,8 @@ func checkDatabaseVersion(dbPath string) (err error) {
 		}
 		return err
 	}
-
-	databaseVersion, err := strconv.Atoi(string(versionBytes))
+	versionBytesStr := unsafe.String(&versionBytes[0], len(versionBytes))
+	databaseVersion, err := strconv.Atoi(versionBytesStr)
 	if err != nil {
 		return err
 	}

@@ -4,7 +4,7 @@
 
 package sorters
 
-import "sort"
+import "slices"
 
 // Int64Slice implements sort.Interface to allow a slice of timestamps to
 // be sorted.
@@ -29,4 +29,7 @@ func (s Int64Slice) Less(i, j int) bool {
 }
 
 // Sort is a convenience method: s.Sort() calls sort.Sort(s).
-func (s Int64Slice) Sort() { sort.Sort(s) }
+func (s Int64Slice) Sort() {
+	// 0 ALLOCATIONS: Generics preserve the concrete type on the stack!
+	slices.Sort(s)
+}

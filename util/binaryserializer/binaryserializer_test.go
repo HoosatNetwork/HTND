@@ -41,6 +41,7 @@ func TestBinaryFreeList(t *testing.T) {
 
 	Return(second)
 
+	const maxItems = 1024
 	// test there's no crash when channel is full because borrowed too much
 	buffers := make([][]byte, maxItems+1)
 	for i := range maxItems + 1 {

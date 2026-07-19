@@ -156,24 +156,19 @@ func ParseAndSetLogLevels(logLevel string) error {
 	// Split the specified string into subsystem/level pairs while detecting
 	// issues and update the log levels accordingly.
 	for logLevelPair := range strings.SplitSeq(logLevel, ",") {
-		if !strings.Contains(logLevelPair, "=") {
-			str := "The specified debug level contains an invalid " +
-				"subsystem/level pair [%s]"
-			return errors.Errorf(str, logLevelPair)
+		// Zero-allocation extraction replacing strings.Split
+		subsysID, targetLevel, found := strings.Cut(logLevelPair, "=")
+		if !found {
+			return errors.Errorf("The specified debug level contains an invalid subsystem/level pair [%s]", logLevelPair)
 		}
-
-		// Extract the specified subsystem and log level.
-		fields := strings.Split(logLevelPair, "=")
-		subsysID, logLevel := fields[0], fields[1]
 
 		// Validate subsystem.
 		if _, exists := getSubsystem(subsysID); !exists {
-			str := "The specified subsystem [%s] is invalid -- " +
-				"supported subsytems %s"
-			return errors.Errorf(str, subsysID, strings.Join(SupportedSubsystems(), ", "))
+			return errors.Errorf("The specified subsystem [%s] is invalid -- supported subsytems %s",
+				subsysID, strings.Join(SupportedSubsystems(), ", "))
 		}
 
-		err := SetLogLevel(subsysID, logLevel)
+		err := SetLogLevel(subsysID, targetLevel)
 		if err != nil {
 			return err
 		}

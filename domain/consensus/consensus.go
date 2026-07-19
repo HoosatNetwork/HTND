@@ -184,6 +184,7 @@ func (s *consensus) periodicLogFrees() error {
 	time.Sleep(time.Duration(minutes) * time.Minute)
 
 	ticker := time.NewTicker(time.Duration(minutes) * time.Minute)
+	defer ticker.Stop()
 	for range ticker.C {
 		memory.LogLeaks()
 	}

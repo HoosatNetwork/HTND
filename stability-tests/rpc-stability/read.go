@@ -11,8 +11,8 @@ func readCommands() (<-chan string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	scanner := bufio.NewScanner(f)
-
 	commandsChan := make(chan string)
 	spawn("readCommands", func() {
 		for scanner.Scan() {

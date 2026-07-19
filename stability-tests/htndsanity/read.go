@@ -16,6 +16,7 @@ func readArgs() <-chan []string {
 		if err != nil {
 			panic(errors.Wrapf(err, "error in Open"))
 		}
+		defer f.Close()
 
 		r := bufio.NewReader(f)
 		for {

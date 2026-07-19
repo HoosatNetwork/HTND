@@ -3,6 +3,7 @@ package difficulty
 import (
 	"math"
 	"math/big"
+	"sync"
 	"time"
 )
 
@@ -14,30 +15,29 @@ var (
 	// oneLsh256 is 1 shifted left 256 bits. It is defined here to avoid
 	// the overhead of creating it multiple times.
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
+
+	// intPool caches scratch big.Int objects to prevent heap leaks on hot paths.
+	intPool = sync.Pool{
+		New: func() any {
+			return new(big.Int)
+		},
+	}
 )
 
+// getScratchInt acquires a clean big.Int from the pool.
+func getScratchInt() *big.Int {
+	bi := intPool.Get().(*big.Int)
+	bi.SetInt64(0)
+	return bi
+}
+
+// putScratchInt returns a big.Int to the pool.
+func putScratchInt(bi *big.Int) {
+	intPool.Put(bi)
+}
+
 // CompactToBig converts a compact representation of a whole number N to an
-// unsigned 32-bit number. The representation is similar to IEEE754 floating
-// point numbers.
-//
-// Like IEEE754 floating point, there are three basic components: the sign,
-// the exponent, and the mantissa. They are broken out as follows:
-//
-//   - the most significant 8 bits represent the unsigned base 256 exponent
-//
-//   - bit 23 (the 24th bit) represents the sign bit
-//
-//   - the least significant 23 bits represent the mantissa
-//
-//     -------------------------------------------------
-//     |   Exponent     |    Sign    |    Mantissa     |
-//     -------------------------------------------------
-//     | 8 bits [31-24] | 1 bit [23] | 23 bits [22-00] |
-//     -------------------------------------------------
-//
-// The formula to calculate N is:
-//
-//	N = (-1^sign) * mantissa * 256^(exponent-3)
+// unsigned 32-bit number.
 func CompactToBig(compact uint32) *big.Int {
 	destination := big.NewInt(0)
 	CompactToBigWithDestination(compact, destination)
@@ -47,18 +47,11 @@ func CompactToBig(compact uint32) *big.Int {
 // CompactToBigWithDestination is a version of CompactToBig that
 // takes a destination parameter. This is useful for saving memory,
 // as then the destination big.Int can be reused.
-// See CompactToBig for further details.
 func CompactToBigWithDestination(compact uint32, destination *big.Int) {
-	// Extract the mantissa, sign bit, and exponent.
 	mantissa := compact & 0x007fffff
 	isNegative := compact&0x00800000 != 0
 	exponent := uint(compact >> 24)
 
-	// Since the base for the exponent is 256, the exponent can be treated
-	// as the number of bytes to represent the full 256-bit number. So,
-	// treat the exponent as the number of bytes and shift the mantissa
-	// right or left accordingly. This is equivalent to:
-	// N = mantissa * 256^(exponent-3)
 	if exponent <= 3 {
 		mantissa >>= 8 * (3 - exponent)
 		destination.SetInt64(int64(mantissa))
@@ -67,28 +60,22 @@ func CompactToBigWithDestination(compact uint32, destination *big.Int) {
 		destination.Lsh(destination, 8*(exponent-3))
 	}
 
-	// Make it negative if the sign bit is set.
 	if isNegative {
 		destination.Neg(destination)
 	}
 }
 
 // BigToCompact converts a whole number N to a compact representation using
-// an unsigned 32-bit number. The compact representation only provides 23 bits
-// of precision, so values larger than (2^23 - 1) only encode the most
-// significant digits of the number. See CompactToBig for details.
+// an unsigned 32-bit number.
 func BigToCompact(n *big.Int) uint32 {
-	// No need to do any work if it's zero.
 	if n.Sign() == 0 {
 		return 0
 	}
 
-	// Since the base for the exponent is 256, the exponent can be treated
-	// as the number of bytes. So, shift the number right or left
-	// accordingly. This is equivalent to:
-	// mantissa = mantissa / 256^(exponent-3)
 	var mantissa uint32
-	exponent := uint(len(n.Bytes()))
+	// Calculate the base-256 exponent using zero-allocation BitLen math instead of len(n.Bytes())
+	exponent := uint((n.BitLen() + 7) / 8)
+
 	if exponent <= 3 {
 		bits := n.Bits()
 		if len(bits) > 0 {
@@ -103,8 +90,9 @@ func BigToCompact(n *big.Int) uint32 {
 		}
 		mantissa <<= 8 * (3 - exponent)
 	} else {
-		// Use a copy to avoid modifying the caller's original number.
-		tn := new(big.Int).Set(n)
+		// Borrow a cached big.Int instance instead of instantiating new(big.Int)
+		tn := getScratchInt()
+		tn.Set(n)
 		tn.Rsh(tn, 8*(exponent-3))
 		bits := tn.Bits()
 		if len(bits) > 0 {
@@ -117,18 +105,14 @@ func BigToCompact(n *big.Int) uint32 {
 		} else {
 			mantissa = 0
 		}
+		putScratchInt(tn)
 	}
 
-	// When the mantissa already has the sign bit set, the number is too
-	// large to fit into the available 23-bits, so divide the number by 256
-	// and increment the exponent accordingly.
 	if mantissa&0x00800000 != 0 {
 		mantissa >>= 8
 		exponent++
 	}
 
-	// Pack the exponent, sign bit, and mantissa into an unsigned 32-bit
-	// int and return it.
 	exponentUint64 := uint64(exponent)
 	exponentUint32 := uint32(math.MaxUint32)
 	if exponentUint64 <= math.MaxUint32 {
@@ -141,49 +125,48 @@ func BigToCompact(n *big.Int) uint32 {
 	return compact
 }
 
-// CalcWork calculates a work value from difficulty bits. Hoosat increases
-// the difficulty for generating a block by decreasing the value which the
-// generated hash must be less than. This difficulty target is stored in each
-// block header using a compact representation as described in the documentation
-// for CompactToBig. Since a lower target difficulty value equates to higher
-// actual difficulty, the work value which will be accumulated must be the
-// inverse of the difficulty. Also, in order to avoid potential division by
-// zero and really small floating point numbers, the result adds 1 to the
-// denominator and multiplies the numerator by 2^256.
+// CalcWork calculates a work value from difficulty bits.
 func CalcWork(bits uint32) *big.Int {
-	// Return a work value of zero if the passed difficulty bits represent
-	// a negative number. Note this should not happen in practice with valid
-	// blocks, but an invalid block could trigger it.
-	difficultyNum := CompactToBig(bits)
+	difficultyNum := getScratchInt()
+	CompactToBigWithDestination(bits, difficultyNum)
+
 	if difficultyNum.Sign() <= 0 {
+		putScratchInt(difficultyNum)
 		return big.NewInt(0)
 	}
 
-	// (1 << 256) / (difficultyNum + 1)
-	denominator := new(big.Int).Add(difficultyNum, bigOne)
-	return new(big.Int).Div(oneLsh256, denominator)
+	denominator := getScratchInt()
+	denominator.Add(difficultyNum, bigOne)
+
+	result := big.NewInt(0)
+	result.Div(oneLsh256, denominator)
+
+	putScratchInt(difficultyNum)
+	putScratchInt(denominator)
+	return result
 }
 
 func getHashrate(target *big.Int, targetTimePerBlock time.Duration) *big.Int {
-	// From: https://bitcoin.stackexchange.com/a/5557/40800
-	// difficulty = hashrate / (2^256 / max_target / seconds_per_block)
-	// hashrate = difficulty * (2^256 / max_target / seconds_per_block)
-	// difficulty = max_target / target
-	// hashrate = (max_target / target) * (2^256 / max_target / seconds_per_block)
-	// hashrate = 2^256 / (target * seconds_per_block)
+	tmp := getScratchInt()
+	divisor := getScratchInt()
 
-	tmp := new(big.Int)
-	divisor := new(big.Int).Set(target)
+	divisor.Set(target)
 	divisor.Mul(divisor, tmp.SetInt64(targetTimePerBlock.Milliseconds()))
-	divisor.Div(divisor, tmp.SetInt64(int64(time.Second/time.Millisecond))) // Scale it up to seconds.
-	divisor.Div(oneLsh256, divisor)
-	return divisor
+	divisor.Div(divisor, tmp.SetInt64(int64(time.Second/time.Millisecond)))
+
+	result := big.NewInt(0)
+	result.Div(oneLsh256, divisor)
+
+	putScratchInt(tmp)
+	putScratchInt(divisor)
+	return result
 }
 
 // GetHashrateString returns the expected hashrate of the network on a certain difficulty target.
 func GetHashrateString(target *big.Int, targetTimePerBlock time.Duration) string {
 	hashrate := getHashrate(target, targetTimePerBlock)
 	in := hashrate.Text(10)
+
 	var postfix string
 	switch {
 	case len(in) <= 3:
