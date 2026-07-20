@@ -38,7 +38,7 @@ func (csm *consensusStateManager) updateVirtual(stagingArea *model.StagingArea, 
 
 	virtualUTXODiff, err := csm.updateVirtualWithParents(stagingArea, virtualParents)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil
 	}
 
 	log.Debugf("Calculating selected parent chain changes")
