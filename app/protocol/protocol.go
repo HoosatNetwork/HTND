@@ -95,14 +95,16 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 		log.Debugf("Registered p2p flows and running them for peer %s", peer)
 		flowsWaitGroup := &sync.WaitGroup{}
 		err = m.runFlows(flows, peer, errChan, flowsWaitGroup)
+
 		if err != nil {
+			router.Close()
 			m.handleError(err, netConnection, router.OutgoingRoute())
-			// We call `flowsWaitGroup.Wait()` in two places instead of deferring, because
-			// we already defer `m.routersWaitGroup.Done()`, so we try to avoid error prone
-			// and confusing use of multiple dependent defers.
 			flowsWaitGroup.Wait()
 			return
 		}
+
+		// Clean exit path
+		router.Close()
 		flowsWaitGroup.Wait()
 	})
 }
