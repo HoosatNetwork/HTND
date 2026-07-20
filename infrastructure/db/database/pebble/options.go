@@ -38,7 +38,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	const (
 		defaultMemTableMB           = 512
-		defaultMemTablesBeforeStall = 8
+		defaultMemTablesBeforeStall = 4096 / defaultMemTableMB
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -65,7 +65,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Target SST file size at base level
 	// ────────────────────────────────────────────────
-	baseFileSize := memTableBytes / 4
+	baseFileSize := memTableBytes / 2
 	const (
 		minBaseFileSize = 32 << 20
 		maxBaseFileSize = 128 << 20
@@ -85,7 +85,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Block cache – aim higher in 2026 (8–16 GiB realistic)
 	// ────────────────────────────────────────────────
-	cacheBytes := int64(2048) << 20 // 2 GiB default – increase for better hit rate
+	cacheBytes := int64(4096) << 20 // 2 GiB default – increase for better hit rate
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
 	}
