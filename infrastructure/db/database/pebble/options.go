@@ -37,8 +37,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Memtable tuning
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 512
-		defaultMemTablesBeforeStall = 4096 / defaultMemTableMB
+		defaultMemTableMB           = 256
+		defaultMemTablesBeforeStall = 6
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -65,7 +65,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Target SST file size at base level
 	// ────────────────────────────────────────────────
-	baseFileSize := memTableBytes / 2
+	baseFileSize := memTableBytes / 4
 	const (
 		minBaseFileSize = 32 << 20
 		maxBaseFileSize = 128 << 20
@@ -85,7 +85,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Block cache – aim higher in 2026 (8–16 GiB realistic)
 	// ────────────────────────────────────────────────
-	cacheBytes := int64(4096) << 20 // 2 GiB default – increase for better hit rate
+	cacheBytes := int64(4096) << 20 // 4 GiB default – increase for better hit rate
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
 	}
@@ -108,9 +108,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		FlushSplitBytes: baseFileSize,
 
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 64),      // was 16 → start here, try up to 128–256 if still building up
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 200),    // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 64), // was 16 → align with compaction trigger
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 12),      // was 16 → start here, try up to 128–256 if still building up
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 36),     // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16), // was 16 → align with compaction trigger
 
 		TargetFileSizes: [7]int64{
 			baseFileSize,       // L0
@@ -131,7 +131,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		// WALBytesPerSync: 4 << 20,
 		// BytesPerSync:    4 << 20,
 
-		CompactionConcurrencyRange: func() (int, int) { return 4, 8 }, // was 4,8 → more workers help during backlog
+		CompactionConcurrencyRange: func() (int, int) { return 3, 6 }, // was 4,8 → more workers help during backlog
 
 		Levels: [7]pebble.LevelOptions{
 			{ // L0
