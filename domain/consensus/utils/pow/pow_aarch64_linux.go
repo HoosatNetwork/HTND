@@ -200,7 +200,8 @@ func (state *State) CheckProofOfWork(block *externalapi.DomainBlock, powSkip boo
 }
 
 func CheckProofOfWorkByBits(header externalapi.MutableBlockHeader, block *externalapi.DomainBlock, powSkip bool) bool {
-	return NewState(header).CheckProofOfWork(block, powSkip)
+	valid, _ := NewState(header).CheckProofOfWork(block, powSkip)
+	return valid
 }
 
 func toBig(hash *externalapi.DomainHash) *big.Int {
