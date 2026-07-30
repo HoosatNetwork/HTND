@@ -328,7 +328,12 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 	} else {
 		iterator, err = pm.dagTraversalManager.SelectedChildIterator(stagingArea, ghostdagData.SelectedParent(), lowHash, true)
 		if err != nil {
-			return nil, nil, err
+			// Instead of erroring if SelectedChildIterator decides to crash because
+			// low hash is not in the selected parent hash of the highhash- So we
+			// use highhash as block iterator from one block, so that we don't
+			// advance further and gracefully handle error.
+			iterator = &blockIteratorFromOneBlock{hash: ghostdagData.SelectedParent()}
+			// return nil, nil, err
 		}
 	}
 	defer iterator.Close()
