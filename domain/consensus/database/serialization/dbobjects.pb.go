@@ -7,12 +7,11 @@
 package serialization
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1784,7 +1783,7 @@ const file_dbobjects_proto_rawDesc = "" +
 	"\x05count\x18\x01 \x01(\x04R\x05count\"\x90\x01\n" +
 	"\x1bDbBlockGHOSTDAGDataHashPair\x12)\n" +
 	"\x04hash\x18\x01 \x01(\v2\x15.serialization.DbHashR\x04hash\x12F\n" +
-	"\fGhostdagData\x18\x02 \x01(\v2\".serialization.DbBlockGhostdagDataR\fGhostdagDataB)Z'github.com/HoosatNetwork/HTND/serializationb\x06proto3"
+	"\fGhostdagData\x18\x02 \x01(\v2\".serialization.DbBlockGhostdagDataR\fGhostdagDataB-Z+github.com/HoosatNetwork/HTND/serializationb\x06proto3"
 
 var (
 	file_dbobjects_proto_rawDescOnce sync.Once

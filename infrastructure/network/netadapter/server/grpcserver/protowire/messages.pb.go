@@ -7,12 +7,11 @@
 package protowire
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -2501,7 +2500,7 @@ const file_messages_proto_rawDesc = "" +
 	"\x03P2P\x12K\n" +
 	"\rMessageStream\x12\x19.protowire.HoosatdMessage\x1a\x19.protowire.HoosatdMessage\"\x00(\x010\x012R\n" +
 	"\x03RPC\x12K\n" +
-	"\rMessageStream\x12\x19.protowire.HoosatdMessage\x1a\x19.protowire.HoosatdMessage\"\x00(\x010\x01B%Z#github.com/HoosatNetwork/HTND/protowireb\x06proto3"
+	"\rMessageStream\x12\x19.protowire.HoosatdMessage\x1a\x19.protowire.HoosatdMessage\"\x00(\x010\x01B)Z'github.com/HoosatNetwork/HTND/protowireb\x06proto3"
 
 var (
 	file_messages_proto_rawDescOnce sync.Once

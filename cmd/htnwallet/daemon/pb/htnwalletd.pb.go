@@ -7,12 +7,11 @@
 package pb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1635,7 +1634,7 @@ const file_htnwalletd_proto_rawDesc = "" +
 	"\x04Sign\x12\x17.htnwalletd.SignRequest\x1a\x18.htnwalletd.SignResponse\"\x00\x12M\n" +
 	"\n" +
 	"GetVersion\x12\x1d.htnwalletd.GetVersionRequest\x1a\x1e.htnwalletd.GetVersionResponse\"\x00\x12\x92\x01\n" +
-	"!CreateUnsignedCompoundTransaction\x124.htnwalletd.CreateUnsignedCompoundTransactionRequest\x1a5.htnwalletd.CreateUnsignedCompoundTransactionResponse\"\x00B3Z1github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pbb\x06proto3"
+	"!CreateUnsignedCompoundTransaction\x124.htnwalletd.CreateUnsignedCompoundTransactionRequest\x1a5.htnwalletd.CreateUnsignedCompoundTransactionResponse\"\x00B7Z5github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pbb\x06proto3"
 
 var (
 	file_htnwalletd_proto_rawDescOnce sync.Once

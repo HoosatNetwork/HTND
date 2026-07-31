@@ -7,12 +7,11 @@
 package protoserialization
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -652,7 +651,7 @@ const file_wallet_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\rR\aversion\"x\n" +
 	"\x11TransactionOutput\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\x04R\x05value\x12M\n" +
-	"\x0fscriptPublicKey\x18\x02 \x01(\v2#.protoserialization.ScriptPublicKeyR\x0fscriptPublicKeyBWZUgithub.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization/protoserializationb\x06proto3"
+	"\x0fscriptPublicKey\x18\x02 \x01(\v2#.protoserialization.ScriptPublicKeyR\x0fscriptPublicKeyB[ZYgithub.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization/protoserializationb\x06proto3"
 
 var (
 	file_wallet_proto_rawDescOnce sync.Once

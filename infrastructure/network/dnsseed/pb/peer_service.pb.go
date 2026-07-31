@@ -7,12 +7,11 @@
 package pb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -194,7 +193,7 @@ const file_peer_service_proto_rawDesc = "" +
 	"\x02IP\x18\x02 \x01(\fR\x02IP\x12\x12\n" +
 	"\x04port\x18\x03 \x01(\rR\x04port2L\n" +
 	"\vPeerService\x12=\n" +
-	"\fGetPeersList\x12\x14.GetPeersListRequest\x1a\x15.GetPeersListResponse\"\x00B\x1eZ\x1cgithub.com/HoosatNetwork/HTND/pbb\x06proto3"
+	"\fGetPeersList\x12\x14.GetPeersListRequest\x1a\x15.GetPeersListResponse\"\x00B\"Z github.com/HoosatNetwork/HTND/pbb\x06proto3"
 
 var (
 	file_peer_service_proto_rawDescOnce sync.Once
