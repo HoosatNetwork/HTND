@@ -45,7 +45,16 @@ type DBReader interface {
 
 // DBWriter is an interface to write to the database
 type DBWriter interface {
-	DBReader
+	// Get gets the value for the given key. It returns
+	// ErrNotFound if the given key does not exist.
+	Get(key DBKey) ([]byte, error)
+
+	// Has returns true if the database does contains the
+	// given key.
+	Has(key DBKey) (bool, error)
+
+	// Cursor begins a new cursor over the given bucket.
+	Cursor(bucket DBBucket) (DBCursor, error)
 
 	// Put sets the value for the given key. It overwrites
 	// any previous value for that key.
@@ -59,7 +68,24 @@ type DBWriter interface {
 // DBTransaction is a proxy over domain data
 // access that requires an open database transaction
 type DBTransaction interface {
-	DBWriter
+	// Get gets the value for the given key. It returns
+	// ErrNotFound if the given key does not exist.
+	Get(key DBKey) ([]byte, error)
+
+	// Has returns true if the database does contains the
+	// given key.
+	Has(key DBKey) (bool, error)
+
+	// Cursor begins a new cursor over the given bucket.
+	Cursor(bucket DBBucket) (DBCursor, error)
+
+	// Put sets the value for the given key. It overwrites
+	// any previous value for that key.
+	Put(key DBKey, value []byte) error
+
+	// Delete deletes the value for the given key. Will not
+	// return an error if the key doesn't exist.
+	Delete(key DBKey) error
 
 	// Rollback rolls back whatever changes were made to the
 	// database within this transaction.
@@ -78,7 +104,24 @@ type DBTransaction interface {
 // DBManager defines the interface of a database that can begin
 // transactions and read data.
 type DBManager interface {
-	DBWriter
+	// Get gets the value for the given key. It returns
+	// ErrNotFound if the given key does not exist.
+	Get(key DBKey) ([]byte, error)
+
+	// Has returns true if the database does contains the
+	// given key.
+	Has(key DBKey) (bool, error)
+
+	// Cursor begins a new cursor over the given bucket.
+	Cursor(bucket DBBucket) (DBCursor, error)
+
+	// Put sets the value for the given key. It overwrites
+	// any previous value for that key.
+	Put(key DBKey, value []byte) error
+
+	// Delete deletes the value for the given key. Will not
+	// return an error if the key doesn't exist.
+	Delete(key DBKey) error
 
 	// Begin begins a new database transaction.
 	Begin() (DBTransaction, error)
