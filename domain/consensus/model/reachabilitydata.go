@@ -39,7 +39,12 @@ type ReachabilityData interface {
 
 // MutableReachabilityData represents a block's MutableReachabilityData, with ability to edit it
 type MutableReachabilityData interface {
-	ReachabilityData
+	Children() []*externalapi.DomainHash
+	Parent() *externalapi.DomainHash
+	Interval() *ReachabilityInterval
+	FutureCoveringSet() FutureCoveringTreeNodeSet
+	CloneMutable() MutableReachabilityData
+	Equal(other ReachabilityData) bool
 
 	AddChild(child *externalapi.DomainHash)
 	SetParent(parent *externalapi.DomainHash)
