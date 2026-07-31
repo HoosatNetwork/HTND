@@ -19,7 +19,7 @@ func BlockHash(block *externalapi.DomainBlock) *externalapi.DomainHash {
 }
 
 // HeaderHash returns the given header's hash
-func HeaderHash(header externalapi.BaseBlockHeader) *externalapi.DomainHash {
+func HeaderHash(header externalapi.BlockHeader) *externalapi.DomainHash {
 	// Encode the header and hash everything prior to the number of
 	// transactions.
 	writer := hashes.NewBlockHashWriter()
@@ -34,7 +34,7 @@ func HeaderHash(header externalapi.BaseBlockHeader) *externalapi.DomainHash {
 	return writer.Finalize()
 }
 
-func serializeHeader(w io.Writer, header externalapi.BaseBlockHeader) error {
+func serializeHeader(w io.Writer, header externalapi.BlockHeader) error {
 	timestamp := header.TimeInMilliseconds()
 	blueWork := header.BlueWork().Bytes()
 

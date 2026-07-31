@@ -312,10 +312,7 @@ func main() {
 
 		var headerHashes []string
 		if *limit != 0 && n > 0 {
-			m := max(*limit, 0)
-			if m > n {
-				m = n
-			}
+			m := min(max(*limit, 0), n)
 			for i := 0; i < m; i++ {
 				headerHashes = append(headerHashes, consensushashing.HeaderHash(headers[i]).String())
 			}
