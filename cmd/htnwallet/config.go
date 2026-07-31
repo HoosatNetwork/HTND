@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
 	"github.com/pkg/errors"
 
 	"github.com/jessevdk/go-flags"

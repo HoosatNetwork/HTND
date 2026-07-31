@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/client"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/keys"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/client"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
 	"github.com/pkg/errors"
 )
 

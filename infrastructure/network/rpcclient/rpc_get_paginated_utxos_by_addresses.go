@@ -1,6 +1,6 @@
 package rpcclient
 
-import "github.com/Hoosat-Oy/HTND/app/appmessage"
+import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetUTXOsByAddresses sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetPaginatedUTXOsByAddresses(addresses []string, offset uint32, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error) {

@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app"
+	"github.com/HoosatNetwork/HTND/app"
 )
 
 func getEnvInt(key string, defaultVal int) int64 {

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/mining"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/mining"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
 )
 
 func newMiningRand() *rand.Rand {

@@ -10,7 +10,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/Hoosat-Oy/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/util/mstime"
 )
 
 func checkedPortUint16(port int) uint16 {

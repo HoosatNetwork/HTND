@@ -1,13 +1,13 @@
 package rpccontext
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/protocol"
-	"github.com/Hoosat-Oy/HTND/domain"
-	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/addressmanager"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/connmanager"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/app/protocol"
+	"github.com/HoosatNetwork/HTND/domain"
+	"github.com/HoosatNetwork/HTND/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/connmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
 )
 
 // Context represents the RPC context

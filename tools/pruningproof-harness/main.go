@@ -10,16 +10,16 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	externalapi "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
-	"github.com/Hoosat-Oy/HTND/domain/prefixmanager"
-	prefixpkg "github.com/Hoosat-Oy/HTND/domain/prefixmanager/prefix"
-	dbpkg "github.com/Hoosat-Oy/HTND/infrastructure/db/database"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/pebble"
-	infralogger "github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/domain/consensus"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	externalapi "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
+	prefixpkg "github.com/HoosatNetwork/HTND/domain/prefixmanager/prefix"
+	dbpkg "github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
+	infralogger "github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 type LevelInfo struct {

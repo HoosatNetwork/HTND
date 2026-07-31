@@ -1,13 +1,13 @@
 package libhtnwallet
 
 import (
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/bip32"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/serialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/bip32"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 	"github.com/pkg/errors"
 )
 

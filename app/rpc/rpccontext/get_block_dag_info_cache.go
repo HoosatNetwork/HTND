@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 )
 
 // GetBlockDAGInfoCache is a small TTL cache for the GetBlockDAGInfo RPC response.

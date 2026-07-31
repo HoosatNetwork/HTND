@@ -6,22 +6,22 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
-	"github.com/Hoosat-Oy/HTND/domain/miningmanager/mempool"
+	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
 
-	"github.com/Hoosat-Oy/HTND/app/protocol"
-	"github.com/Hoosat-Oy/HTND/app/rpc"
-	"github.com/Hoosat-Oy/HTND/domain"
-	"github.com/Hoosat-Oy/HTND/domain/consensus"
-	"github.com/Hoosat-Oy/HTND/domain/utxoindex"
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
-	infrastructuredatabase "github.com/Hoosat-Oy/HTND/infrastructure/db/database"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/addressmanager"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/connmanager"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/id"
-	"github.com/Hoosat-Oy/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/app/protocol"
+	"github.com/HoosatNetwork/HTND/app/rpc"
+	"github.com/HoosatNetwork/HTND/domain"
+	"github.com/HoosatNetwork/HTND/domain/consensus"
+	"github.com/HoosatNetwork/HTND/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/connmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/util/panics"
 )
 
 func checkedDurationFromHours(value uint64) (time.Duration, error) {

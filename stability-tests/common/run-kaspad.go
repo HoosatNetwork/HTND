@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 )
 
 // RunHoosatdForTesting runs htnd for testing purposes

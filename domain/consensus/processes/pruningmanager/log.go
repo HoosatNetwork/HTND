@@ -1,5 +1,5 @@
 package pruningmanager
 
-import "github.com/Hoosat-Oy/HTND/infrastructure/logger"
+import "github.com/HoosatNetwork/HTND/infrastructure/logger"
 
 var log = logger.RegisterSubSystem("PRNM")

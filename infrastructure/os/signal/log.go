@@ -5,7 +5,7 @@
 package signal
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 var kasdLog = logger.RegisterSubSystem("HSATD")

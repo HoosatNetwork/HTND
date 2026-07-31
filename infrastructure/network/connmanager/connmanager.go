@@ -6,15 +6,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/dnsseed"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/dnsseed"
 	"github.com/pkg/errors"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
 )
 
 // connectionRequest represents a user request (either through CLI or RPC) to connect to a certain node

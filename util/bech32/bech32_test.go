@@ -7,7 +7,7 @@ package bech32_test
 import (
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/util/bech32"
+	"github.com/HoosatNetwork/HTND/util/bech32"
 )
 
 var checkEncodingStringTests = []struct {

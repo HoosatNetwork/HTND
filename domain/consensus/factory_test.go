@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/prefixmanager/prefix"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/domain/prefixmanager/prefix"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
 
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 )
 
 func TestNewConsensus(t *testing.T) {

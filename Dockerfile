@@ -5,8 +5,8 @@ FROM golang:1.26 AS build
 ENV GOEXPERIMENT=simd,jsonv2
 
 
-RUN mkdir -p /go/src/github.com/Hoosat-Oy/HTND
-WORKDIR /go/src/github.com/Hoosat-Oy/HTND
+RUN mkdir -p /go/src/github.com/HoosatNetwork/HTND
+WORKDIR /go/src/github.com/HoosatNetwork/HTND
 
 RUN apt-get update && apt-get install -y curl git openssh-client binutils gcc musl-dev
 
@@ -34,11 +34,11 @@ RUN apt-get update && \
   rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from the build stage
-COPY --from=build /go/src/github.com/Hoosat-Oy/HTND/HTND /app/HTND
-COPY --from=build /go/src/github.com/Hoosat-Oy/HTND/htnwallet /app/htnwallet
-COPY --from=build /go/src/github.com/Hoosat-Oy/HTND/htnctl /app/htnctl
-COPY --from=build /go/src/github.com/Hoosat-Oy/HTND/htnminer /app/htnminer
-COPY --from=build /go/src/github.com/Hoosat-Oy/HTND/genkeypair /app/genkeypair
+COPY --from=build /go/src/github.com/HoosatNetwork/HTND/HTND /app/HTND
+COPY --from=build /go/src/github.com/HoosatNetwork/HTND/htnwallet /app/htnwallet
+COPY --from=build /go/src/github.com/HoosatNetwork/HTND/htnctl /app/htnctl
+COPY --from=build /go/src/github.com/HoosatNetwork/HTND/htnminer /app/htnminer
+COPY --from=build /go/src/github.com/HoosatNetwork/HTND/genkeypair /app/genkeypair
 
 RUN mkdir -p /nonexistent/.htnd && chown nobody:nogroup /nonexistent/.htnd && chmod 700 /nonexistent/.htnd
 

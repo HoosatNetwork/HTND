@@ -1,6 +1,6 @@
 package rpcclient
 
-import "github.com/Hoosat-Oy/HTND/app/appmessage"
+import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetFeeEstimate sends an RPC request for fee estimation and returns the RPC server's response.
 func (c *RPCClient) GetFeeEstimate() (*appmessage.GetFeeEstimateResponseMessage, error) {

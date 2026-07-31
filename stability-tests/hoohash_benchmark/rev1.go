@@ -9,8 +9,8 @@ import (
 	"math/bits"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
 	"golang.org/x/crypto/blake2b"
 	// Import other necessary packages
 )

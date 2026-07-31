@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/bip32"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/utils"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/bip32"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/utils"
 	"github.com/pkg/errors"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/keys"
 )
 
 func create(conf *createConfig) error {

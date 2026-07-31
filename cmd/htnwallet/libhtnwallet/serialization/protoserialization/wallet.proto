@@ -1,7 +1,7 @@
 syntax = "proto3";
 package protoserialization;
 
-option go_package = "github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/serialization/protoserialization";
+option go_package = "github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization/protoserialization";
 
 message PartiallySignedTransaction{
   TransactionMessage tx = 1;

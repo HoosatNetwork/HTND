@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
 )
 
 func parseAddressTypeFlag(flagValue string) (pb.AddressType, error) {

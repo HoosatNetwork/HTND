@@ -1,6 +1,6 @@
 package connmanager
 
-import "github.com/Hoosat-Oy/HTND/app/appmessage"
+import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // checkOutgoingConnections goes over all activeOutgoing and makes sure they are still active.
 // Then it opens connections so that we have targetOutgoing active connections

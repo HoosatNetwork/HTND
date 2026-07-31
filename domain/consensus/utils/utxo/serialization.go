@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionid"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
 	"github.com/pkg/errors"
 )
 

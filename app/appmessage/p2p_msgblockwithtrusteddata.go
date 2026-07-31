@@ -3,7 +3,7 @@ package appmessage
 import (
 	"math/big"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // MsgBlockWithTrustedData represents a hoosat BlockWithTrustedData message

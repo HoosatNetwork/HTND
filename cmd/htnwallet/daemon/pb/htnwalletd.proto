@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb";
+option go_package = "github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb";
 package htnwalletd;
 
 service htnwalletd {
@@ -61,7 +61,7 @@ message CreateUnsignedCompoundTransactionResponse {
 
 message ShowAddressesRequest {
   AddressType addressType = 1;
-  bool includeBoth = 2;
+  bool includeAll = 2;
 }
 
 message ShowAddressesResponse {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/client"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/client"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
 )
 
 func showAddresses(conf *showAddressesConfig) error {
@@ -25,7 +25,7 @@ func showAddresses(conf *showAddressesConfig) error {
 
 	request := &pb.ShowAddressesRequest{AddressType: addressType}
 	if conf.IncludaAll {
-		request.IncludaAll = true
+		request.IncludeAll = true
 	}
 
 	response, err := daemonClient.ShowAddresses(ctx, request)

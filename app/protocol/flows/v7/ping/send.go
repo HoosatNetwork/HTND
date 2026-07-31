@@ -3,14 +3,14 @@ package ping
 import (
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/protocol/flowcontext"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/app/protocol/flowcontext"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
 	"github.com/pkg/errors"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
-	"github.com/Hoosat-Oy/HTND/util/random"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/util/random"
 )
 
 // SendPingsContext is the interface for the context needed for the SendPings flow.

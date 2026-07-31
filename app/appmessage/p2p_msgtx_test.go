@@ -11,12 +11,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/subnetworks"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionid"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/davecgh/go-spew/spew"
 )
 

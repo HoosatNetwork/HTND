@@ -93,7 +93,7 @@ jobs:
       - name: Create coverage file
         shell: bash
         run: |
-          packages=$(go list ./... | grep -v '^github.com/Hoosat-Oy/HTND/stability-tests')
+          packages=$(go list ./... | grep -v '^github.com/HoosatNetwork/HTND/stability-tests')
           coverpkg=$(printf '%s\n' "$packages" | paste -sd, -)
           go test -v -covermode=atomic -coverpkg "$coverpkg" -coverprofile coverage.txt $packages
 

@@ -7,9 +7,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/Hoosat-Oy/HTND/stability-tests/common"
-	"github.com/Hoosat-Oy/HTND/stability-tests/common/rpc"
-	"github.com/Hoosat-Oy/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/util/profiling"
 )
 
 var timeout = 10 * time.Minute

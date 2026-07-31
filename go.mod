@@ -1,4 +1,4 @@
-module github.com/Hoosat-Oy/HTND
+module github.com/HoosatNetwork/HTND
 
 go 1.26.5
 

@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/crypto/blake2b"
 
-	"github.com/Hoosat-Oy/HTND/util"
-	"github.com/Hoosat-Oy/HTND/util/bech32"
+	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/util/bech32"
 )
 
 func TestAddresses(t *testing.T) {

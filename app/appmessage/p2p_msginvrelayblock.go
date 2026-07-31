@@ -1,7 +1,7 @@
 package appmessage
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // MsgInvRelayBlock implements the Message interface and represents a hoosat

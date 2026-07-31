@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	utilMath "github.com/Hoosat-Oy/HTND/util/math"
+	utilMath "github.com/HoosatNetwork/HTND/util/math"
 )
 
 const (

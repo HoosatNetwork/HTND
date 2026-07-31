@@ -3,13 +3,13 @@ package libhtnwallet
 import (
 	"strconv"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/bip32"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet/serialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/subnetworks"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
-	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/bip32"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/util"
 	"github.com/pkg/errors"
 )
 

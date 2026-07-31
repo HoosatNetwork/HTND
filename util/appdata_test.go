@@ -12,7 +12,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/HoosatNetwork/HTND/util"
 )
 
 // TestAppDataDir tests the API for AppDir to ensure it gives expected

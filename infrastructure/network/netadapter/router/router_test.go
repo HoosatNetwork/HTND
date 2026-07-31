@@ -3,7 +3,7 @@ package router
 import (
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 )
 
 func TestAddIncomingRouteWithEmptyMessageTypesReturnsRoute(t *testing.T) {

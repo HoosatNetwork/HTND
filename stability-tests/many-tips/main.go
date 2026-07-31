@@ -11,15 +11,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/mining"
-	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/mining"
+	"github.com/HoosatNetwork/HTND/util"
 	"github.com/kaspanet/go-secp256k1"
 
-	"github.com/Hoosat-Oy/HTND/stability-tests/common"
-	"github.com/Hoosat-Oy/HTND/stability-tests/common/rpc"
-	"github.com/Hoosat-Oy/HTND/util/panics"
-	"github.com/Hoosat-Oy/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/util/profiling"
 	"github.com/pkg/errors"
 )
 

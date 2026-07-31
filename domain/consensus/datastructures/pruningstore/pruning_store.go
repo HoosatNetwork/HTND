@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/lrucacheuint64tohash"
-	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database/binaryserialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucacheuint64tohash"
+	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/pkg/errors"
 )
 

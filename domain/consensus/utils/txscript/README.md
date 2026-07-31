@@ -2,7 +2,7 @@ txscript
 ========
 
 [![ISC License](http://img.shields.io/badge/license-ISC-blue.svg)](https://choosealicense.com/licenses/isc/)
-[![GoDoc](https://godoc.org/github.com/Hoosat-Oy/HTND/txscript?status.png)](http://godoc.org/github.com/Hoosat-Oy/HTND/txscript)
+[![GoDoc](https://godoc.org/github.com/HoosatNetwork/HTND/txscript?status.png)](http://godoc.org/github.com/HoosatNetwork/HTND/txscript)
 
 Package txscript implements the Hoosat transaction script language. There is
 a comprehensive test suite.
@@ -15,10 +15,10 @@ although it is still fairly powerful.
 
 ## Examples
 
-* [Standard Pay-to-pubkey Script](http://godoc.org/github.com/Hoosat-Oy/HTND/txscript#example-PayToAddrScript)  
+* [Standard Pay-to-pubkey Script](http://godoc.org/github.com/HoosatNetwork/HTND/txscript#example-PayToAddrScript)  
   Demonstrates creating a script which pays to a hoosat address. It also
   prints the created script hex and uses the DisasmString function to display
   the disassembled script.
 
-* [Extracting Details from Standard Scripts](http://godoc.org/github.com/Hoosat-Oy/HTND/txscript#example-ExtractPkScriptAddrs)  
+* [Extracting Details from Standard Scripts](http://godoc.org/github.com/HoosatNetwork/HTND/txscript#example-ExtractPkScriptAddrs)  
   Demonstrates extracting information from a standard public key script.

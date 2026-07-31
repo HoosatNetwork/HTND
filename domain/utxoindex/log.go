@@ -5,7 +5,7 @@
 package utxoindex
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 var log = logger.RegisterSubSystem("UTIN")

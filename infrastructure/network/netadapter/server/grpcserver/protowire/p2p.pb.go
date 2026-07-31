@@ -7,11 +7,12 @@
 package protowire
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -3227,7 +3228,7 @@ const file_p2p_proto_rawDesc = "" +
 	"\x13ghostdagDataIndices\x18\x03 \x03(\x04R\x13ghostdagDataIndices\"\x93\x01\n" +
 	"\x12TrustedDataMessage\x123\n" +
 	"\tdaaWindow\x18\x01 \x03(\v2\x15.protowire.DaaBlockV4R\tdaaWindow\x12H\n" +
-	"\fghostdagData\x18\x02 \x03(\v2$.protowire.BlockGhostdagDataHashPairR\fghostdagDataB%Z#github.com/Hoosat-Oy/HTND/protowireb\x06proto3"
+	"\fghostdagData\x18\x02 \x03(\v2$.protowire.BlockGhostdagDataHashPairR\fghostdagDataB%Z#github.com/HoosatNetwork/HTND/protowireb\x06proto3"
 
 var (
 	file_p2p_proto_rawDescOnce sync.Once

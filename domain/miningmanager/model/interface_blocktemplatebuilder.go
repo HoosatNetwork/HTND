@@ -1,7 +1,7 @@
 package model
 
 import (
-	consensusexternalapi "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	consensusexternalapi "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // BlockTemplateBuilder builds block templates for miners to consume

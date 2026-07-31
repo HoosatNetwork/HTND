@@ -1,6 +1,6 @@
 package consensusreference
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // ConsensusReference holds a reference to a consensus object.
 // The consensus object may be swapped with a new one entirely

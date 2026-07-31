@@ -1,6 +1,6 @@
 package appmessage
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // TransactionStatus describes the current state of a transaction in the node.
 type TransactionStatus byte

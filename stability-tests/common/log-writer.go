@@ -3,7 +3,7 @@ package common
 import (
 	"strings"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 // LogWriter writes to the given log with the given log level and prefix

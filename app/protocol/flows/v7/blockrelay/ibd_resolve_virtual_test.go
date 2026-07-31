@@ -4,8 +4,8 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 )
 
 func TestWrapResolveVirtualErrorRuleError(t *testing.T) {

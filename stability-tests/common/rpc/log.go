@@ -1,7 +1,7 @@
 package rpc
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 // log is a logger that is initialized with no output filters. This

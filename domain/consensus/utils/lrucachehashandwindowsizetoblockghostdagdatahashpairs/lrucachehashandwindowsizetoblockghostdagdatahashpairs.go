@@ -3,7 +3,7 @@ package lrucachehashandwindowsizetoblockghostdagdatahashpairs
 import (
 	// "sync"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 type lruKey struct {

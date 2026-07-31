@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-	"github.com/Hoosat-Oy/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database/binaryserialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 

@@ -1,8 +1,8 @@
 package transactionrelay
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
 
 type handleRequestedTransactionsFlow struct {

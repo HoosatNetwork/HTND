@@ -1,8 +1,8 @@
 package prefixmanager
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/prefixmanager/prefix"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/domain/prefixmanager/prefix"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 )
 
 var (

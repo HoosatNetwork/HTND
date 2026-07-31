@@ -4,11 +4,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database/binaryserialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	consensusutxo "github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/ldb"
-	"github.com/Hoosat-Oy/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database/binaryserialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	consensusutxo "github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/util/memory"
 )
 
 func TestHasUTXOsUsesTrackedCounts(t *testing.T) {
@@ -169,8 +169,8 @@ func TestUTXOsReturnsReallocatedBufferForCallerCleanup(t *testing.T) {
 // 	"sync"
 // 	"testing"
 
-// 	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-// 	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+// 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+// 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 // )
 
 // // Test thread-safety of scriptLRUCache

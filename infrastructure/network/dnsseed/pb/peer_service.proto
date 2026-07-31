@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/Hoosat-Oy/HTND/pb";
+option go_package = "github.com/HoosatNetwork/HTND/pb";
 
 service PeerService {
   rpc GetPeersList(GetPeersListRequest) returns (GetPeersListResponse) {}

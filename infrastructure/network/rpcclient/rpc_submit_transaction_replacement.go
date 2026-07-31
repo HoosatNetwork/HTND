@@ -3,7 +3,7 @@ package rpcclient
 import (
 	"strings"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 )
 
 // SubmitTransactionReplacement sends an RPC request respective to the function's name and returns the RPC server's response.

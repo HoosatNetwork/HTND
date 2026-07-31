@@ -17,11 +17,12 @@
 package protowire
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -7058,7 +7059,7 @@ const file_rpc_proto_rawDesc = "" +
 	"\x1aTRANSACTION_STATUS_PENDING\x10\x02\x12\x1d\n" +
 	"\x19TRANSACTION_STATUS_ORPHAN\x10\x03\x12\x1f\n" +
 	"\x1bTRANSACTION_STATUS_ACCEPTED\x10\x04\x12 \n" +
-	"\x1cTRANSACTION_STATUS_CONFIRMED\x10\x05B%Z#github.com/Hoosat-Oy/HTND/protowireb\x06proto3"
+	"\x1cTRANSACTION_STATUS_CONFIRMED\x10\x05B%Z#github.com/HoosatNetwork/HTND/protowireb\x06proto3"
 
 var (
 	file_rpc_proto_rawDescOnce sync.Once

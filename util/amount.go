@@ -8,7 +8,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/pkg/errors"
 )
 

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/transactionid"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 func (mud *mutableUTXODiff) equal(other *mutableUTXODiff) bool {

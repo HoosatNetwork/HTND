@@ -3,9 +3,9 @@ package pruningstore
 import (
 	"testing"
 
-	consensusdb "github.com/Hoosat-Oy/HTND/domain/consensus/database"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/testutils"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
+	consensusdb "github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/testutils"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 )
 
 func TestPruningStoreCandidateAndPruningPointProgression(t *testing.T) {

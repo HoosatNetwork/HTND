@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
 	"github.com/pkg/errors"
 )
 

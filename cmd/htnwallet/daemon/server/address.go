@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/util"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +60,7 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 			cosignerIndex: s.keysFile.CosignerIndex,
 			keyChain:      libhtnwallet.ExternalKeychain,
 		}
-		if request.GetIncludaAll() && !s.isMultisig() {
+		if request.GetIncludeAll() && !s.isMultisig() {
 			addressStrings, err := s.walletAddressStringsForScan(walletAddr)
 			if err != nil {
 				return nil, err

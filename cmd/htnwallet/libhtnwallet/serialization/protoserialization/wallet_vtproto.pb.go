@@ -6,12 +6,11 @@ package protoserialization
 
 import (
 	fmt "fmt"
-	io "io"
-	unsafe "unsafe"
-
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	io "io"
+	unsafe "unsafe"
 )
 
 const (
@@ -297,7 +296,6 @@ func (this *PartiallySignedTransaction) EqualMessageVT(thatMsg proto.Message) bo
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PartiallySignedInput) EqualVT(that *PartiallySignedInput) bool {
 	if this == that {
 		return true
@@ -343,7 +341,6 @@ func (this *PartiallySignedInput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *PubKeySignaturePair) EqualVT(that *PubKeySignaturePair) bool {
 	if this == that {
 		return true
@@ -366,7 +363,6 @@ func (this *PubKeySignaturePair) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *SubnetworkId) EqualVT(that *SubnetworkId) bool {
 	if this == that {
 		return true
@@ -386,7 +382,6 @@ func (this *SubnetworkId) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionMessage) EqualVT(that *TransactionMessage) bool {
 	if this == that {
 		return true
@@ -452,7 +447,6 @@ func (this *TransactionMessage) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionInput) EqualVT(that *TransactionInput) bool {
 	if this == that {
 		return true
@@ -481,7 +475,6 @@ func (this *TransactionInput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *Outpoint) EqualVT(that *Outpoint) bool {
 	if this == that {
 		return true
@@ -504,7 +497,6 @@ func (this *Outpoint) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionId) EqualVT(that *TransactionId) bool {
 	if this == that {
 		return true
@@ -524,7 +516,6 @@ func (this *TransactionId) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *ScriptPublicKey) EqualVT(that *ScriptPublicKey) bool {
 	if this == that {
 		return true
@@ -547,7 +538,6 @@ func (this *ScriptPublicKey) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (this *TransactionOutput) EqualVT(that *TransactionOutput) bool {
 	if this == that {
 		return true
@@ -570,7 +560,6 @@ func (this *TransactionOutput) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
-
 func (m *PartiallySignedTransaction) MarshalVT() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -1995,7 +1984,6 @@ func (m *PartiallySignedTransaction) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PartiallySignedInput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2202,7 +2190,6 @@ func (m *PartiallySignedInput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PubKeySignaturePair) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2320,7 +2307,6 @@ func (m *PubKeySignaturePair) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *SubnetworkId) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2406,7 +2392,6 @@ func (m *SubnetworkId) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionMessage) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2653,7 +2638,6 @@ func (m *TransactionMessage) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionInput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2813,7 +2797,6 @@ func (m *TransactionInput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Outpoint) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2920,7 +2903,6 @@ func (m *Outpoint) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionId) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3006,7 +2988,6 @@ func (m *TransactionId) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3111,7 +3092,6 @@ func (m *ScriptPublicKey) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionOutput) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3218,7 +3198,6 @@ func (m *TransactionOutput) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PartiallySignedTransaction) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3340,7 +3319,6 @@ func (m *PartiallySignedTransaction) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PartiallySignedInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3548,7 +3526,6 @@ func (m *PartiallySignedInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PubKeySignaturePair) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3667,7 +3644,6 @@ func (m *PubKeySignaturePair) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *SubnetworkId) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3750,7 +3726,6 @@ func (m *SubnetworkId) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3994,7 +3969,6 @@ func (m *TransactionMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4151,7 +4125,6 @@ func (m *TransactionInput) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Outpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4258,7 +4231,6 @@ func (m *Outpoint) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionId) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4341,7 +4313,6 @@ func (m *TransactionId) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4443,7 +4414,6 @@ func (m *ScriptPublicKey) UnmarshalVTUnsafe(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionOutput) UnmarshalVTUnsafe(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
 )
 
 func TestUnwrapPongMessageRejectsUnexpectedMessage(t *testing.T) {
