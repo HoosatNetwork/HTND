@@ -376,8 +376,16 @@ var MainnetParams = Params{
 
 	DisableDifficultyAdjustment: false,
 
-	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12, 12},
+	MaxCoinbasePayloadLength: defaultMaxCoinbasePayloadLength,
+	MaxBlockParents: []externalapi.KType{
+		defaultMaxBlockParents,
+		defaultMaxBlockParents,
+		defaultMaxBlockParents,
+		defaultMaxBlockParents,
+		12,
+		12,
+		12,
+	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -403,7 +411,14 @@ var MainnetParams = Params{
 
 // TestnetParams defines the network parameters for the test Hoosat network.
 var TestnetParams = Params{
-	K:           []externalapi.KType{defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, defaultGHOSTDAGK, 40, 40},
+	K: []externalapi.KType{
+		defaultGHOSTDAGK,
+		defaultGHOSTDAGK,
+		defaultGHOSTDAGK,
+		defaultGHOSTDAGK,
+		40,
+		40,
+		40},
 	Name:        "hoosat-testnet",
 	Net:         appmessage.Testnet,
 	RPCPort:     "42422",
@@ -427,13 +442,43 @@ var TestnetParams = Params{
 	PreDeflationaryPhaseBaseSubsidy: defaultPreDeflationaryPhaseBaseSubsidy,
 	DeflationaryPhaseBaseSubsidy:    defaultDeflationaryPhaseBaseSubsidy,
 	DeflationaryPhaseCurveFactor:    defaultDeflationaryPhaseCurveFactor,
-	TargetTimePerBlock:              []time.Duration{defaultTargetTimePerBlock, defaultTargetTimePerBlock, defaultTargetTimePerBlock, defaultTargetTimePerBlock, 200 * time.Millisecond, 200 * time.Millisecond},
-	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
-	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2651, 2641},
-	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	POWScores:                       []uint64{1, 50, 100, 150, 200},
-	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
-	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
+	TargetTimePerBlock: []time.Duration{
+		defaultTargetTimePerBlock,
+		defaultTargetTimePerBlock,
+		defaultTargetTimePerBlock,
+		defaultTargetTimePerBlock,
+		200 * time.Millisecond,
+		200 * time.Millisecond,
+		200 * time.Millisecond,
+	},
+	FinalityDuration: []time.Duration{
+		defaultFinalityDuration,
+		defaultFinalityDuration,
+		defaultFinalityDuration,
+		defaultFinalityDuration,
+		10800 * time.Second,
+		10800 * time.Second,
+		10800 * time.Second,
+	},
+	DifficultyAdjustmentWindowSize: []int{
+		defaultDifficultyAdjustmentWindowSize,
+		defaultDifficultyAdjustmentWindowSize,
+		defaultDifficultyAdjustmentWindowSize,
+		defaultDifficultyAdjustmentWindowSize,
+		2651,
+		2641,
+		2641},
+	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
+	POWScores:                   []uint64{1, 50, 100, 150, 200, 250},
+	PruningMultiplier:           []uint64{0, 0, 0, 0, 1, 1, 1},
+	MaxBlockMass: []uint64{
+		defaultMaxBlockMass,
+		defaultMaxBlockMass,
+		defaultMaxBlockMass,
+		defaultMaxBlockMass,
+		1_000_000,
+		1_000_000,
+		1_000_000},
 
 	// Consensus rule change deployments.
 	//
@@ -460,8 +505,16 @@ var TestnetParams = Params{
 
 	DisableDifficultyAdjustment: false,
 
-	MaxCoinbasePayloadLength:                defaultMaxCoinbasePayloadLength,
-	MaxBlockParents:                         []externalapi.KType{defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, defaultMaxBlockParents, 12, 12},
+	MaxCoinbasePayloadLength: defaultMaxCoinbasePayloadLength,
+	MaxBlockParents: []externalapi.KType{
+		defaultMaxBlockParents,
+		defaultMaxBlockParents,
+		defaultMaxBlockParents,
+		defaultMaxBlockParents,
+		12,
+		12,
+		12,
+	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
 	MassPerSigOp:                            defaultMassPerSigOp,
@@ -474,7 +527,14 @@ var TestnetParams = Params{
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	MaxBlockLevel: 225,
-	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
+	MergeDepth: []uint64{
+		defaultMergeDepth,
+		defaultMergeDepth,
+		defaultMergeDepth,
+		3600,
+		3600,
+		3600,
+		3600},
 }
 
 var TestnetParamsB5 = Params{
