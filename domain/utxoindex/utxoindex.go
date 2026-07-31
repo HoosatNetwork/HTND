@@ -181,10 +181,13 @@ func (ui *UTXOIndex) Reset() error {
 	if err != nil {
 		return err
 	}
+	log.Infof("Cleared UTXO index and initialize circulating supply key")
+	log.Infof("Start processing virtual UTXOs")
 
 	var fromOutpoint *externalapi.DomainOutpoint
+	const step = 1000
+	stepsTaken := 1
 	for {
-		const step = 1000
 		virtualUTXOs, err := ui.domain.Consensus().GetVirtualUTXOs(virtualInfo.ParentHashes, fromOutpoint, step)
 		if err != nil {
 			return err
@@ -196,11 +199,17 @@ func (ui *UTXOIndex) Reset() error {
 		}
 
 		if len(virtualUTXOs) < step {
+			log.Infof("Processed %s virtual UTXOs", len(virtualUTXOs)*stepsTaken)
 			break
 		}
 
 		fromOutpoint = virtualUTXOs[len(virtualUTXOs)-1].Outpoint
+
+		log.Infof("Processed %s virtual UTXOs", step*stepsTaken)
+		stepsTaken++
 	}
+
+	log.Infof("Finished processing virtual UTXOs")
 
 	// This has to be done last to mark that the reset went smoothly and no reset has to be called next time.
 	err = ui.store.updateAndCommitVirtualParentsWithoutTransaction(virtualInfo.ParentHashes)
