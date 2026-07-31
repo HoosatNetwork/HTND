@@ -29,7 +29,9 @@ type Server interface {
 
 // P2PServer represents a p2p server.
 type P2PServer interface {
-	Server
+	Start() error
+	Stop() error
+	SetOnConnectedHandler(onConnectedHandler OnConnectedHandler)
 	Connect(address string) (Connection, error)
 }
 
