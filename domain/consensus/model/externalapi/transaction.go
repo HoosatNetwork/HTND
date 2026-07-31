@@ -11,7 +11,7 @@ import (
 )
 
 var scriptPublicKeyStringPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		buffer := make([]byte, 0, 1024)
 		return &buffer
 	},

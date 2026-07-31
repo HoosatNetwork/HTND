@@ -14,14 +14,14 @@ var (
 )
 
 func BenchmarkDomainHashString(b *testing.B) {
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		result1 := baseHash.String()
 		b.Logf("Test %s", result1)
 	}
 }
 
 func BenchmarkDomainHashUnsafeString(b *testing.B) {
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		result1 := baseHash.UnsafeString()
 		b.Logf("Test %s", result1)
 	}

@@ -19,10 +19,10 @@ const (
 var charsetInverse [256]int8
 
 func init() {
-	for i := 0; i < len(charsetInverse); i++ {
+	for i := range len(charsetInverse) {
 		charsetInverse[i] = -1
 	}
-	for i := 0; i < len(charset); i++ {
+	for i := range len(charset) {
 		charsetInverse[charset[i]] = int8(i)
 	}
 }
@@ -189,10 +189,7 @@ func convertBits(data []byte, conversionType conversionType) []byte {
 		remainingFromBits := conversionType.fromBits
 		for remainingFromBits > 0 {
 			remainingToBits := conversionType.toBits - filledBits
-			toExtract := remainingToBits
-			if remainingFromBits < toExtract {
-				toExtract = remainingFromBits
-			}
+			toExtract := min(remainingFromBits, remainingToBits)
 
 			nextByte = (nextByte << toExtract) | (b >> (8 - toExtract))
 			b <<= toExtract
@@ -226,12 +223,12 @@ func calculateChecksumBuf(prefix string, payload []byte, out []byte) {
 	for _, b := range payload {
 		checksum = polyModStep(checksum, int(b))
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		checksum = polyModStep(checksum, 0)
 	}
 
 	checksum ^= 1
-	for i := 0; i < checksumLength; i++ {
+	for i := range checksumLength {
 		shift := 5 * (checksumLength - 1 - i)
 		out[i] = byte((checksum >> uint(shift)) & 31)
 	}
@@ -252,7 +249,7 @@ func verifyChecksum(prefix string, payload []byte) bool {
 func polyModStep(checksum int, value int) int {
 	topBits := checksum >> 35
 	checksum = ((checksum & 0x07ffffffff) << 5) ^ value
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if ((topBits >> uint(i)) & 1) == 1 {
 			checksum ^= generator[i]
 		}

@@ -54,7 +54,7 @@ func New(blockCoinbaseMaturity uint64,
 		sigCacheECDSA:                           txscript.NewSigCacheECDSA(sigCacheSize),
 		txMassCalculator:                        txMassCalculator,
 		enginePool: &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &txscript.Engine{}
 			},
 		},

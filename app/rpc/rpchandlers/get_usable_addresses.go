@@ -74,7 +74,7 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 }
 
 var usableAddressesPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		slice := make([]string, 0, 2)
 		return &slice
 	},

@@ -156,7 +156,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			}
 			additionalInputsCount := 49
 			additionalBootstraps := make([]*externalapi.DomainTransaction, 0, additionalInputsCount)
-			for i := 0; i < additionalInputsCount; i++ {
+			for i := range additionalInputsCount {
 				tx := testutils.CreateTransactionWithOutput(1_000_000 + checkedUint64FromInt(i+1))
 				if err := testutils.StageTransactionOutputsToVirtual(tc, tx, 0); err != nil {
 					t.Fatalf("StageTransactionOutputsToVirtual(additional): %+v", err)

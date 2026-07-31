@@ -16,7 +16,6 @@ func TestExtractIP(t *testing.T) {
 	}
 
 	for input, expected := range tests {
-		input, expected := input, expected
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 

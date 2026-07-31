@@ -283,7 +283,7 @@ func main() {
 				} else {
 					b := *buckets
 					width := float64(maxBlue-minBlue) / float64(b)
-					for i := 0; i < b; i++ {
+					for i := range b {
 						lo := uint64(math.Floor(float64(minBlue) + float64(i)*width))
 						hi := uint64(math.Floor(float64(minBlue) + float64(i+1)*width))
 						if i == b-1 {
@@ -294,10 +294,7 @@ func main() {
 					}
 					for _, h := range headers {
 						bs := h.BlueScore()
-						idx := int(math.Floor((float64(bs) - float64(minBlue)) / width))
-						if idx < 0 {
-							idx = 0
-						}
+						idx := max(int(math.Floor((float64(bs)-float64(minBlue))/width)), 0)
 						if idx >= b {
 							idx = b - 1
 						}
@@ -315,10 +312,7 @@ func main() {
 
 		var headerHashes []string
 		if *limit != 0 && n > 0 {
-			m := *limit
-			if m < 0 {
-				m = 0
-			}
+			m := max(*limit, 0)
 			if m > n {
 				m = n
 			}

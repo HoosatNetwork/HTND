@@ -162,10 +162,7 @@ func TestLRUCache_ConcurrentAccess_DoesNotPanic(t *testing.T) {
 	stop := &atomic.Bool{}
 	var wg sync.WaitGroup
 
-	workers := runtime.NumCPU() * 4
-	if workers < 8 {
-		workers = 8
-	}
+	workers := max(runtime.NumCPU()*4, 8)
 
 	// Writers
 	for w := 0; w < workers/2; w++ {

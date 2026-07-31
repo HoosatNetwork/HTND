@@ -139,10 +139,7 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 		// We need to clamp the timestamp difference to 1 so that we'll never get a 0 target.
 		Mul(newTarget, div.SetInt64(math.MaxInt64(windowMaxTimeStamp-windowMinTimestamp, 1))).
 		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds()))
-	l := targetsWindow.len()
-	if l < 0 {
-		l = 0
-	}
+	l := max(targetsWindow.len(), 0)
 	windowLength, err := strconv.ParseUint(strconv.Itoa(l), 10, 64)
 	if err != nil {
 		return 0, err

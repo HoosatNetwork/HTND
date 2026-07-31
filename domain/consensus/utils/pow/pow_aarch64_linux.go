@@ -1,5 +1,4 @@
 //go:build linux && arm64 && cgo
-// +build linux,arm64,cgo
 
 package pow
 

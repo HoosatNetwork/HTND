@@ -2,6 +2,7 @@ package connmanager
 
 import (
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -320,10 +321,8 @@ func (c *ConnectionManager) addressesMatch(firstAddress, secondAddress string) (
 	}
 
 	for _, firstIP := range firstIPs {
-		for _, secondIP := range secondIPs {
-			if firstIP.Equal(secondIP) {
-				return true, nil
-			}
+		if slices.ContainsFunc(secondIPs, firstIP.Equal) {
+			return true, nil
 		}
 	}
 

@@ -24,7 +24,7 @@ var (
 const getBlocksCacheTTL = time.Second
 
 var blocksPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		blocks := make([]*appmessage.RPCBlock, 0, 2)
 		return &blocks
 	},

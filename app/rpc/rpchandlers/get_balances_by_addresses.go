@@ -22,7 +22,7 @@ var (
 const balancesByAddressesCacheTTL = time.Second
 
 var balancesByAddressesPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		slice := make([]*appmessage.BalancesByAddressesEntry, 0, 2)
 		return &slice
 	},

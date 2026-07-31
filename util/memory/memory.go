@@ -89,10 +89,7 @@ func Realloc[T any](b *Block[T], n int) *Block[T] {
 	}
 
 	newBlock := Malloc[T](n)
-	copyLen := n
-	if b.len < copyLen {
-		copyLen = b.len
-	}
+	copyLen := min(b.len, n)
 	copy(newBlock.Slice()[:copyLen], b.Slice()[:copyLen])
 	log.Debugf("Realloc old_id=%d new_id=%d type=%T old_len=%d new_len=%d old_ptr=%p new_ptr=%p", b.id, newBlock.id, *new(T), b.len, n, b.ptr, newBlock.ptr)
 	Free(b)

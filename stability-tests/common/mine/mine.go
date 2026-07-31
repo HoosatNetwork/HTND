@@ -168,7 +168,7 @@ func cryptoRandSeed() int64 {
 	}
 	// Convert bytes to int64
 	var seed int64
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		seed = (seed << 8) | int64(b[i])
 	}
 	return seed

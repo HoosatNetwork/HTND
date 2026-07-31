@@ -14,7 +14,7 @@ import (
 const DomainHashSize = 32
 
 var domainHashStringPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		buffer := make([]byte, 0, 64) // 32*2 for hex
 		return &buffer
 	},

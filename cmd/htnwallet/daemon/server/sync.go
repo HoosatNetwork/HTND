@@ -90,7 +90,7 @@ func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 		if err != nil {
 			return nil, err
 		}
-		for cosignerIndex := uint32(0); cosignerIndex < cosignerCount; cosignerIndex++ {
+		for cosignerIndex := range cosignerCount {
 			for _, keychain := range keyChains {
 				address := &walletAddress{
 					index:         index,

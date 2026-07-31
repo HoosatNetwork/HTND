@@ -377,7 +377,7 @@ func verifyUTXODiffChildChainTerminates(t *testing.T, tc testapi.TestConsensus, 
 	visited := map[externalapi.DomainHash]struct{}{}
 	current := start
 
-	for steps := 0; steps < 1_000_000; steps++ {
+	for range 1_000_000 {
 		if _, ok := visited[*current]; ok {
 			t.Fatalf("UTXO diff child chain contains a cycle at %s", current)
 		}

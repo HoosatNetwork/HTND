@@ -9,21 +9,21 @@ import (
 )
 
 var hashSetPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		hashSet := make(map[externalapi.DomainHash]struct{}, 16)
 		return &hashSet
 	},
 }
 
 var domainHashSlicePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		slice := make([]*externalapi.DomainHash, 0, 16)
 		return &slice
 	},
 }
 
 var blockHeaderSlicePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		slice := make([]externalapi.BlockHeader, 0, 16)
 		return &slice
 	},
@@ -42,7 +42,7 @@ type candidateEntry struct {
 type candidateMap map[externalapi.DomainHash]candidateEntry
 
 var candidateMapPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		m := make(candidateMap, 16)
 		return &m
 	},
@@ -54,7 +54,7 @@ type virtualGenesisChild struct {
 }
 
 var virtualGenesisChildSlicePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		slice := make([]virtualGenesisChild, 0, 16)
 		return &slice
 	},
@@ -339,7 +339,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 	}
 
 	parents := make([]externalapi.BlockLevelParents, 0, len(candidatesByLevel))
-	for blockLevel := 0; blockLevel < len(candidatesByLevel); blockLevel++ {
+	for blockLevel := range candidatesByLevel {
 		candidatesPtr := candidatesByLevel[blockLevel]
 		if candidatesPtr == nil {
 			break

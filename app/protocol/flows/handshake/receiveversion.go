@@ -143,7 +143,7 @@ func validatePeerVersion(forceSameVersion bool, remoteUserAgent string) error {
 }
 
 func extractUserAgentVersion(userAgent string, agentName string) (string, bool) {
-	for _, agent := range strings.Split(userAgent, "/") {
+	for agent := range strings.SplitSeq(userAgent, "/") {
 		if !strings.HasPrefix(agent, agentName+":") {
 			continue
 		}

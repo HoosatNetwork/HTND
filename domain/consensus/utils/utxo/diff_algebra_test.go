@@ -939,7 +939,7 @@ func TestUTXODiffWithManyOutpoints(t *testing.T) {
 		ent externalapi.UTXOEntry
 	}, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Build a valid 64-char hex string (32-byte DomainTransactionID)
 		// using only 0-9a-f characters.
 		hexChar := "0123456789abcdef"[i%16]

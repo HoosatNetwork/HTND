@@ -48,10 +48,7 @@ func newCompoundTxRateLimiter(config *Config) *compoundTxRateLimiter {
 	cleanupInterval := 5 * time.Minute
 	if config.CompoundTxRateLimitWindowMinutes > 0 {
 		// Run cleanup roughly 2-3 times per window
-		cleanupInterval = time.Duration(config.CompoundTxRateLimitWindowMinutes) * time.Minute / 3
-		if cleanupInterval < 2*time.Minute {
-			cleanupInterval = 2 * time.Minute
-		}
+		cleanupInterval = max(time.Duration(config.CompoundTxRateLimitWindowMinutes)*time.Minute/3, 2*time.Minute)
 	}
 
 	return &compoundTxRateLimiter{
