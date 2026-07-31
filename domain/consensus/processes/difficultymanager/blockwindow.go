@@ -57,13 +57,7 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 		var hTime int64
 		var bits uint32
 
-		if fastHeader, ok := header.(externalapi.FastBlockHeader); ok {
-			hTime, bits = fastHeader.TimeAndBits()
-		} else {
-			// Fallback for non-standard implementations
-			hTime = header.TimeInMilliseconds()
-			bits = header.Bits()
-		}
+		hTime, bits = header.TimeAndBits()
 		window.blocks[i] = difficultyBlock{
 			timeInMilliseconds: hTime,
 			bits:               bits,

@@ -52,16 +52,28 @@ func (block *DomainBlock) Equal(other *DomainBlock) bool {
 
 // BlockHeader represents an immutable block header.
 type BlockHeader interface {
-	BaseBlockHeader
+	Version() uint16
+	Parents() []BlockLevelParents
+	DirectParents() BlockLevelParents
+	HashMerkleRoot() *DomainHash
+	AcceptedIDMerkleRoot() *DomainHash
+	UTXOCommitment() *DomainHash
+	TimeInMilliseconds() int64
+	Bits() uint32
+	Nonce() uint64
+	TimeAndBits() (int64, uint32)
+	DAAScore() uint64
+	BlueScore() uint64
+	BlueWork() *big.Int
+	PruningPoint() *DomainHash
+	BlockLevel(maxBlockLevel int) int
+	Equal(other BlockHeader) bool
 	ToMutable() MutableBlockHeader
 }
 
-type FastBlockHeader interface {
-	TimeAndBits() (int64, uint32)
-}
-
-// BaseBlockHeader represents the header part of a Hoosat block
-type BaseBlockHeader interface {
+// MutableBlockHeader represents a block header that can be mutated, but only
+// the fields that are relevant to mining (Nonce and TimeInMilliseconds).
+type MutableBlockHeader interface {
 	Version() uint16
 	Parents() []BlockLevelParents
 	DirectParents() BlockLevelParents
@@ -76,13 +88,7 @@ type BaseBlockHeader interface {
 	BlueWork() *big.Int
 	PruningPoint() *DomainHash
 	BlockLevel(maxBlockLevel int) int
-	Equal(other BaseBlockHeader) bool
-}
-
-// MutableBlockHeader represents a block header that can be mutated, but only
-// the fields that are relevant to mining (Nonce and TimeInMilliseconds).
-type MutableBlockHeader interface {
-	BaseBlockHeader
+	Equal(other BlockHeader) bool
 	ToImmutable() BlockHeader
 	SetNonce(nonce uint64)
 	SetPoWValue(powValue *big.Int)
