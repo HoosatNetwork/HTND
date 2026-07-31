@@ -6,7 +6,6 @@ import (
 
 // BlocksWithTrustedDataDAAWindowStore stores the DAA window of blocks with trusted data
 type BlocksWithTrustedDataDAAWindowStore interface {
-	Store
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, index uint64, ghostdagData *externalapi.BlockGHOSTDAGDataHashPair)

@@ -4,7 +4,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // AcceptanceDataStore represents a store of AcceptanceData
 type AcceptanceDataStore interface {
-	Store
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, acceptanceData externalapi.AcceptanceData)
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)

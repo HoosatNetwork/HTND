@@ -4,7 +4,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // BlockStore represents a store of blocks
 type BlockStore interface {
-	Store
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, block *externalapi.DomainBlock)
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)

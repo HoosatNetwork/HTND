@@ -4,7 +4,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // MultisetStore represents a store of Multisets
 type MultisetStore interface {
-	Store
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, multiset Multiset)
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)

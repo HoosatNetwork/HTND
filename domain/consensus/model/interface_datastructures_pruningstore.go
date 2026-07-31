@@ -8,7 +8,6 @@ import (
 
 // PruningStore represents a store for the current pruning state
 type PruningStore interface {
-	Store
 	StagePruningPoint(dbContext DBWriter, stagingArea *StagingArea, pruningPointBlockHash *externalapi.DomainHash) error
 	StagePruningPointByIndex(dbContext DBReader, stagingArea *StagingArea,
 		pruningPointBlockHash *externalapi.DomainHash, index uint64) error

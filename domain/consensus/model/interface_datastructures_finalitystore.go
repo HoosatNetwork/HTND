@@ -6,7 +6,6 @@ import (
 
 // FinalityStore represents a store for finality data
 type FinalityStore interface {
-	Store
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)
 	StageFinalityPoint(stagingArea *StagingArea, blockHash *externalapi.DomainHash, finalityPointHash *externalapi.DomainHash)

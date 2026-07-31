@@ -4,7 +4,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // UTXODiffStore represents a store of UTXODiffs
 type UTXODiffStore interface {
-	Store
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, utxoDiff externalapi.UTXODiff, utxoDiffChild *externalapi.DomainHash)
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)

@@ -4,7 +4,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // HeadersSelectedChainStore represents a store of the headers selected chain
 type HeadersSelectedChainStore interface {
-	Store
 	Stage(dbContext DBReader, stagingArea *StagingArea, chainChanges *externalapi.SelectedChainPath) error
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)

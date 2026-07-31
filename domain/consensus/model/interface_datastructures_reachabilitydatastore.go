@@ -4,7 +4,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // ReachabilityDataStore represents a store of ReachabilityData
 type ReachabilityDataStore interface {
-	Store
 	StageReachabilityData(stagingArea *StagingArea, blockHash *externalapi.DomainHash, reachabilityData ReachabilityData)
 	StageReachabilityReindexRoot(stagingArea *StagingArea, reachabilityReindexRoot *externalapi.DomainHash)
 	IsStaged(stagingArea *StagingArea) bool
