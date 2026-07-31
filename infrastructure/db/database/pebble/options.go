@@ -37,7 +37,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Memtable tuning
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 256
+		defaultMemTableMB           = 64
 		defaultMemTablesBeforeStall = 6
 	)
 
@@ -65,7 +65,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Target SST file size at base level
 	// ────────────────────────────────────────────────
-	baseFileSize := memTableBytes / 4
+	baseFileSize := memTableBytes
 	const (
 		minBaseFileSize = 32 << 20
 		maxBaseFileSize = 128 << 20
@@ -108,9 +108,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		FlushSplitBytes: baseFileSize,
 
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 12),      // was 16 → start here, try up to 128–256 if still building up
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 36),     // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16), // was 16 → align with compaction trigger
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 4),       // was 16 → start here, try up to 128–256 if still building up
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 4),      // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 24), // was 16 → align with compaction trigger
 
 		TargetFileSizes: [7]int64{
 			baseFileSize,       // L0
@@ -123,7 +123,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		},
 
 		MaxManifestFileSize: 128 << 20,
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 32768),
 
 		// WAL is not needed for integration tests and disabling it avoids WAL
 		// rotation paths that can be problematic under constrained CI environments.
@@ -138,7 +138,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
-				FilterPolicy:   bloomPolicy,
+				FilterPolicy:   nil,
 			},
 			{ // L1
 				BlockSize:      16 << 10,
