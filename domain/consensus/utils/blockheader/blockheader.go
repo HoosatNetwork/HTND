@@ -27,6 +27,10 @@ type blockHeader struct {
 	powValue           *big.Int
 }
 
+func (bh *blockHeader) TimeAndBits() (int64, uint32) {
+	return bh.timeInMilliseconds, bh.bits
+}
+
 func (bh *blockHeader) BlueScore() uint64 {
 	return bh.blueScore
 }

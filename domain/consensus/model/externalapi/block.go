@@ -56,6 +56,10 @@ type BlockHeader interface {
 	ToMutable() MutableBlockHeader
 }
 
+type FastBlockHeader interface {
+	TimeAndBits() (int64, uint32)
+}
+
 // BaseBlockHeader represents the header part of a Hoosat block
 type BaseBlockHeader interface {
 	Version() uint16

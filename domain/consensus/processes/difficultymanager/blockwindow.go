@@ -54,21 +54,31 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 			return blockWindow{}, err
 		}
 
+		var hTime int64
+		var bits uint32
+
+		if fastHeader, ok := header.(externalapi.FastBlockHeader); ok {
+			hTime, bits = fastHeader.TimeAndBits()
+		} else {
+			// Fallback for non-standard implementations
+			hTime = header.TimeInMilliseconds()
+			bits = header.Bits()
+		}
 		window.blocks[i] = difficultyBlock{
-			timeInMilliseconds: header.TimeInMilliseconds(),
-			bits:               header.Bits(),
+			timeInMilliseconds: hTime,
+			bits:               bits,
 		}
 
 		blueWork := pair.GHOSTDAGData.BlueWork()
-		if header.TimeInMilliseconds() < window.minTimestamp ||
-			(header.TimeInMilliseconds() == window.minTimestamp && ghostdagLess(blueWork, hash, minBlueWork, minHash)) {
-			window.minTimestamp = header.TimeInMilliseconds()
+		if hTime < window.minTimestamp ||
+			(hTime == window.minTimestamp && ghostdagLess(blueWork, hash, minBlueWork, minHash)) {
+			window.minTimestamp = hTime
 			window.minTimestampIndex = i
 			minBlueWork = blueWork
 			minHash = hash
 		}
-		if header.TimeInMilliseconds() > window.maxTimestamp {
-			window.maxTimestamp = header.TimeInMilliseconds()
+		if hTime > window.maxTimestamp {
+			window.maxTimestamp = hTime
 		}
 	}
 	return window, nil
