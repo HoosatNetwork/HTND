@@ -199,13 +199,13 @@ func (ui *UTXOIndex) Reset() error {
 		}
 
 		if len(virtualUTXOs) < step {
-			log.Infof("Processed %s virtual UTXOs", len(virtualUTXOs)*stepsTaken)
+			log.Infof("Processed %d virtual UTXOs", len(virtualUTXOs)+step*stepsTaken)
 			break
 		}
 
 		fromOutpoint = virtualUTXOs[len(virtualUTXOs)-1].Outpoint
 
-		log.Infof("Processed %s virtual UTXOs", step*stepsTaken)
+		log.Infof("Processed %d virtual UTXOs", step*stepsTaken)
 		stepsTaken++
 	}
 

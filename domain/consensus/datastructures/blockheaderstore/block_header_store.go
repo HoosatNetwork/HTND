@@ -1,10 +1,13 @@
 package blockheaderstore
 
 import (
+	"unsafe"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/pkg/errors"
@@ -76,8 +79,8 @@ func (bhs *blockHeaderStore) IsStaged(stagingArea *model.StagingArea) bool {
 
 func (bhs *blockHeaderStore) UnstageAll(stagingArea *model.StagingArea) {
 	stagingShard := bhs.stagingShard(stagingArea)
-	stagingShard.toAdd = make(map[externalapi.DomainHash]externalapi.BlockHeader)
-	stagingShard.toDelete = make(map[externalapi.DomainHash]struct{})
+	clear(stagingShard.toAdd)
+	clear(stagingShard.toDelete)
 }
 
 // BlockHeader gets the block header associated with the given blockHash
@@ -167,7 +170,10 @@ func (bhs *blockHeaderStore) Delete(stagingArea *model.StagingArea, blockHash *e
 }
 
 func (bhs *blockHeaderStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	return bhs.bucket.Key(hash.ByteSlice())
+	// Reinterpret the pointer to DomainHash directly as a byte slice.
+	// This accesses the underlying memory without calling ByteArray() or making a copy.
+	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
+	return bhs.bucket.Key(hashBytes)
 }
 
 func (bhs *blockHeaderStore) serializeHeader(header externalapi.BlockHeader) ([]byte, error) {

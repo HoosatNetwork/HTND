@@ -20,6 +20,8 @@ var (
 	BanMinVersion          uint16 = 5
 )
 
+const DomainHashSize = 32
+
 func BlockVersionProgressed(old uint32, new uint16) {
 	if old >= 3 && new == 6 {
 		// Generated with https://patorjk.com/software/taag/#p=display&f=Graffiti&t=Zenith+Hard+Fork+Active&x=none&v=4&h=4&w=80&we=false

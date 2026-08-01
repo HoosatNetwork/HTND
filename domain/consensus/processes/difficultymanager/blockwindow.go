@@ -46,14 +46,19 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 
 	var minBlueWork *big.Int
 	var minHash *externalapi.DomainHash
-	for i, pair := range windowPairs {
-		hash := pair.Hash
-		header, err := dm.headerStore.BlockHeader(dm.databaseContext, stagingArea, hash)
-		if err != nil {
-			window.free()
-			return blockWindow{}, err
-		}
 
+	hashes := make([]*externalapi.DomainHash, 0, len(windowPairs))
+	for _, pair := range windowPairs {
+		hashes = append(hashes, pair.Hash)
+	}
+
+	headers, err := dm.headerStore.BlockHeaders(dm.databaseContext, stagingArea, hashes)
+	if err != nil {
+		window.free()
+		return blockWindow{}, err
+	}
+
+	for i, header := range headers {
 		var hTime int64
 		var bits uint32
 
@@ -63,13 +68,13 @@ func (dm *difficultyManager) blockWindow(stagingArea *model.StagingArea, startin
 			bits:               bits,
 		}
 
-		blueWork := pair.GHOSTDAGData.BlueWork()
+		blueWork := windowPairs[i].GHOSTDAGData.BlueWork()
 		if hTime < window.minTimestamp ||
-			(hTime == window.minTimestamp && ghostdagLess(blueWork, hash, minBlueWork, minHash)) {
+			(hTime == window.minTimestamp && ghostdagLess(blueWork, windowPairs[i].Hash, minBlueWork, minHash)) {
 			window.minTimestamp = hTime
 			window.minTimestampIndex = i
 			minBlueWork = blueWork
-			minHash = hash
+			minHash = windowPairs[i].Hash
 		}
 		if hTime > window.maxTimestamp {
 			window.maxTimestamp = hTime

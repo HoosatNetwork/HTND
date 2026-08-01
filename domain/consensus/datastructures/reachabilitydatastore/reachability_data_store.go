@@ -1,9 +1,12 @@
 package reachabilitydatastore
 
 import (
+	"unsafe"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/util/staging"
@@ -147,7 +150,10 @@ func (rds *reachabilityDataStore) ReachabilityReindexRoot(dbContext model.DBRead
 }
 
 func (rds *reachabilityDataStore) reachabilityDataBlockHashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	return rds.reachabilityDataBucket.Key(hash.ByteSlice())
+	// Reinterpret the pointer to DomainHash directly as a byte slice.
+	// This accesses the underlying memory without calling ByteArray() or making a copy.
+	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
+	return rds.reachabilityDataBucket.Key(hashBytes)
 }
 
 func (rds *reachabilityDataStore) serializeReachabilityData(reachabilityData model.ReachabilityData) ([]byte, error) {
