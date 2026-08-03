@@ -1,7 +1,10 @@
 package serialization
 
 import (
+	unsafe "unsafe"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 )
 
 // DbBlockLevelParentsToDomainBlockLevelParents converts a DbBlockLevelParents to a BlockLevelParents
@@ -21,7 +24,8 @@ func DbBlockLevelParentsToDomainBlockLevelParents(dbBlockLevelParents *DbBlockLe
 func DomainBlockLevelParentsToDbBlockLevelParents(domainBlockLevelParents externalapi.BlockLevelParents) *DbBlockLevelParents {
 	parentHashes := make([]*DbHash, len(domainBlockLevelParents))
 	for i, parentHash := range domainBlockLevelParents {
-		parentHashes[i] = &DbHash{Hash: parentHash.ByteSlice()}
+		hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(parentHash)), constants.DomainHashSize)
+		parentHashes[i] = &DbHash{Hash: hashBytes}
 	}
 	return &DbBlockLevelParents{ParentHashes: parentHashes}
 }

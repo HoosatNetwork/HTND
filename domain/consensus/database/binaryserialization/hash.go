@@ -1,13 +1,17 @@
 package binaryserialization
 
 import (
+	"unsafe"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/pkg/errors"
 )
 
 // SerializeHash serializes hash to a slice of bytes
 func SerializeHash(hash *externalapi.DomainHash) []byte {
-	return hash.ByteSlice()
+	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
+	return hashBytes
 }
 
 // DeserializeHash deserializes a slice of bytes to a hash
@@ -19,7 +23,8 @@ func DeserializeHash(hashBytes []byte) (*externalapi.DomainHash, error) {
 func SerializeHashes(hashes []*externalapi.DomainHash) []byte {
 	buff := make([]byte, len(hashes)*externalapi.DomainHashSize)
 	for i, hash := range hashes {
-		copy(buff[externalapi.DomainHashSize*i:], hash.ByteSlice())
+		hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
+		copy(buff[externalapi.DomainHashSize*i:], hashBytes)
 	}
 
 	return buff
