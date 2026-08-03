@@ -11,19 +11,9 @@ import (
 	"github.com/cockroachdb/pebble/v2/sstable"
 )
 
-// Options returns a Pebble configuration heavily tuned for blockchain node workload:
-//   - Very high rate of point lookups (UTXO spends, script/hash lookups, headers, etc.)
-//   - Sustained high write throughput during IBD, catch-up sync and parallel block processing
-//   - Assumes NVMe SSD + 16–64 GiB RAM class hardware in 2026
-//
-// Key modern features (as of 2026 Pebble):
-// - FormatMajorVersion: pebble.FormatNewest → enables columnar blocks (colblk) by default for faster point/range reads
-// - Value separation → enabled by default (values ≥256 bytes stored in separate blob files) → major write-amp reduction
-// - No need to set ValueSeparationPolicy unless customizing threshold
 func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
-	// Bloom filter configuration
-	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
+	// Bloom filter configuration (16 bits ~0.06% FP)
 	// ────────────────────────────────────────────────
 	bloomBitsPerKey := 16
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
@@ -36,105 +26,66 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Memtable tuning
 	// ────────────────────────────────────────────────
-	const (
-		defaultMemTableMB           = 64
-		defaultMemTablesBeforeStall = 6
-	)
-
+	const defaultMemTableMB = 64
 	memTableBytes := int64(defaultMemTableMB) << 20
 	if v := os.Getenv("HTND_MEMTABLE_SIZE_MB"); v != "" {
 		if mb, err := strconv.Atoi(v); err == nil && mb > 16 {
 			memTableBytes = int64(mb) << 20
 		}
 	}
-	if memTableBytes < 0 {
-		memTableBytes = 0
-	}
-	memTableBytesUint64, err := strconv.ParseUint(strconv.FormatInt(memTableBytes, 10), 10, 64)
-	if err != nil {
-		panic(err)
-	}
 
-	memTableStopThreshold := defaultMemTablesBeforeStall
-	if v := os.Getenv("HTND_MEMTABLE_STOP_THRESHOLD"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 2 {
-			memTableStopThreshold = n
-		}
-	}
-
-	// ────────────────────────────────────────────────
-	// Target SST file size at base level
-	// ────────────────────────────────────────────────
 	baseFileSize := memTableBytes
-	const (
-		minBaseFileSize = 32 << 20
-		maxBaseFileSize = 128 << 20
-	)
-	if baseFileSize < minBaseFileSize {
-		baseFileSize = minBaseFileSize
-	}
-	if baseFileSize > maxBaseFileSize {
-		baseFileSize = maxBaseFileSize
-	}
-	if v := os.Getenv("HTND_BASE_FILE_SIZE_MB"); v != "" {
-		if mb, err := strconv.Atoi(v); err == nil && mb >= 16 {
-			baseFileSize = int64(mb) << 20
-		}
+	if baseFileSize < 32<<20 {
+		baseFileSize = 32 << 20
+	} else if baseFileSize > 128<<20 {
+		baseFileSize = 128 << 20
 	}
 
 	// ────────────────────────────────────────────────
-	// Block cache – aim higher in 2026 (8–16 GiB realistic)
+	// Block cache
 	// ────────────────────────────────────────────────
-	cacheBytes := int64(4096) << 20 // 4 GiB default – increase for better hit rate
+	cacheBytes := int64(4096) << 20 // 4 GiB default
 	if cacheSizeMiB > 0 {
 		cacheBytes = int64(cacheSizeMiB) << 20
-	}
-	if v := os.Getenv("HTND_PEBBLE_CACHE_MB"); v != "" {
-		if mb, err := strconv.Atoi(v); err == nil && mb > 256 {
-			cacheBytes = int64(mb) << 20
-		}
 	}
 
 	// ────────────────────────────────────────────────
 	// Core Pebble options
 	// ────────────────────────────────────────────────
 	opts := &pebble.Options{
-		FormatMajorVersion: pebble.FormatNewest, // Enables columnar blocks + value separation by default
+		FormatMajorVersion: pebble.FormatNewest,
 
 		Cache: pebble.NewCache(cacheBytes),
 
-		MemTableSize:                memTableBytesUint64,
-		MemTableStopWritesThreshold: memTableStopThreshold,
+		MemTableSize:                uint64(memTableBytes),
+		MemTableStopWritesThreshold: getEnvInt("HTND_MEMTABLE_STOP_THRESHOLD", 8),
 
 		FlushSplitBytes: baseFileSize,
 
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 4),       // was 16 → start here, try up to 128–256 if still building up
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 4),      // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 24), // was 16 → align with compaction trigger
+		// Healthy L0 pacing: start compacting at 4 files, stall writes at 32
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 4),
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 32),
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 8),
 
 		TargetFileSizes: [7]int64{
-			baseFileSize,       // L0
-			baseFileSize * 4,   // L1
-			baseFileSize * 10,  // L2
-			baseFileSize * 25,  // L3
-			baseFileSize * 50,  // L4
-			baseFileSize * 100, // L5
-			baseFileSize * 200, // L6
+			baseFileSize,      // L0
+			baseFileSize * 2,  // L1
+			baseFileSize * 4,  // L2
+			baseFileSize * 8,  // L3
+			baseFileSize * 16, // L4
+			baseFileSize * 32, // L5
+			baseFileSize * 64, // L6
 		},
 
 		MaxManifestFileSize: 128 << 20,
 		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 32768),
 
-		// WAL is not needed for integration tests and disabling it avoids WAL
-		// rotation paths that can be problematic under constrained CI environments.
 		DisableWAL: envBool("HTND_PEBBLE_DISABLE_WAL") || envBool("HTND_TEST_MODE"),
-		// WALBytesPerSync: 4 << 20,
-		// BytesPerSync:    4 << 20,
 
-		CompactionConcurrencyRange: func() (int, int) { return 3, 6 }, // was 4,8 → more workers help during backlog
+		CompactionConcurrencyRange: func() (int, int) { return 2, 6 },
 
 		Levels: [7]pebble.LevelOptions{
-			{ // L0
+			{ // L0 — Enable Bloom Filters to stop point-lookup degradation!
 				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
@@ -155,7 +106,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			{ // L3
 				BlockSize:      16 << 10,
 				IndexBlockSize: 128 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{ // L4
@@ -179,55 +130,25 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		},
 	}
 
-	// Optional: enable flush splitting
-	// if envBool("HTND_PEBBLE_DISABLE_FLUSH_SPLIT") {
-	// 	opts.FlushSplitBytes = baseFileSize
-	// }
-
 	// ────────────────────────────────────────────────
-	// Experimental / advanced controls
+	// Experimental & Performance Overrides
 	// ────────────────────────────────────────────────
+	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 4)
 
-	// How many L0 compactions can run concurrently
-	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 12)
+	// Disable read-triggered compaction to stop NVMe IO spikes during sync
+	opts.Experimental.ReadCompactionRate = 0
 
-	// Trigger extra compaction workers when debt (pending bytes) is high
-	// opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
-
-	// Read-triggered compactions: compact hot-read data more aggressively
-	// Helpful during long IBD phases with repeated ancestor / window lookups
-	opts.Experimental.ReadCompactionRate = 256 << 20
-	opts.Experimental.ReadSamplingMultiplier = 2
-
-	// if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
-	// 	if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
-	// 		opts.Experimental.ReadCompactionRate = int64(kb) << 10
-	// 	}
-	// }
-	// if v := os.Getenv("HTND_READ_SAMPLING_MULTIPLIER"); v != "" {
-	// 	if m, err := strconv.Atoi(v); err == nil && m >= 1 {
-	// 		opts.Experimental.ReadSamplingMultiplier = int64(m)
-	// 	}
-	// }
-
+	// Disable Value Separation for point-lookup heavy workloads.
+	// (Or set MinimumSize to >= 32768 if storing large multi-KB payloads)
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		return pebble.ValueSeparationPolicy{
-			Enabled:               true,
-			MinimumSize:           1024, // 1 KiB – reduces write amplification for typical value sizes (UTXO entries, scripts, etc.)
-			MaxBlobReferenceDepth: 100,
-			RewriteMinimumAge:     24 * time.Hour,
-			TargetGarbageRatio:    0.20,
+			Enabled: false, // FIXED: Set to false to eliminate double I/O lookups
 		}
 	}
 
-	// ────────────────────────────────────────────────
-	// Optional detailed event logging (useful for tuning & debugging)
-	// Logging (optional)
-	// ────────────────────────────────────────────────
 	if envBool("HTND_PEBBLE_LOG_EVENTS") {
 		minDurMs := getEnvInt("HTND_PEBBLE_LOG_EVENTS_MIN_MS", 250)
 		minDuration := time.Duration(minDurMs) * time.Millisecond
-
 		opts.Logger = pebbleLoggerAdapter{}
 		opts.EventListener = newLoggingEventListener(minDuration)
 	}
