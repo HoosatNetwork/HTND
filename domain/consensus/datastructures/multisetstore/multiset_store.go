@@ -101,7 +101,7 @@ func (ms *multisetStore) serializeMultiset(multiset model.Multiset) ([]byte, err
 
 func (ms *multisetStore) deserializeMultiset(multisetBytes []byte) (model.Multiset, error) {
 	dbMultiset := &serialization.DbMultiset{}
-	err := dbMultiset.UnmarshalVT(multisetBytes)
+	err := dbMultiset.UnmarshalVTUnsafe(multisetBytes)
 	if err != nil {
 		return nil, err
 	}

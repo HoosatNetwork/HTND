@@ -71,7 +71,7 @@ func (daaws *daaWindowStore) DAAWindowBlock(dbContext model.DBReader, stagingAre
 
 func deserializePairBytes(pairBytes []byte) (*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	dbPair := &serialization.DbBlockGHOSTDAGDataHashPair{}
-	err := dbPair.UnmarshalVT(pairBytes)
+	err := dbPair.UnmarshalVTUnsafe(pairBytes)
 	if err != nil {
 		return nil, err
 	}

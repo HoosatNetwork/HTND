@@ -93,7 +93,7 @@ func (ads *acceptanceDataStore) serializeAcceptanceData(acceptanceData externala
 
 func (ads *acceptanceDataStore) deserializeAcceptanceData(acceptanceDataBytes []byte) (externalapi.AcceptanceData, error) {
 	dbAcceptanceData := &serialization.DbAcceptanceData{}
-	err := dbAcceptanceData.UnmarshalVT(acceptanceDataBytes)
+	err := dbAcceptanceData.UnmarshalVTUnsafe(acceptanceDataBytes)
 	if err != nil {
 		return nil, err
 	}

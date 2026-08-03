@@ -221,7 +221,7 @@ func (ps *pruningStore) serializeHash(hash *externalapi.DomainHash) ([]byte, err
 
 func (ps *pruningStore) deserializePruningPoint(pruningPointBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := dbHash.UnmarshalVT(pruningPointBytes)
+	err := dbHash.UnmarshalVTUnsafe(pruningPointBytes)
 	if err != nil {
 		return nil, err
 	}

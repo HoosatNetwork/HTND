@@ -74,7 +74,7 @@ func (psp PubKeySignaturePair) Clone() *PubKeySignaturePair {
 // DeserializePartiallySignedTransaction deserializes a byte slice into PartiallySignedTransaction.
 func DeserializePartiallySignedTransaction(serializedPartiallySignedTransaction []byte) (*PartiallySignedTransaction, error) {
 	protoPartiallySignedTransaction := &protoserialization.PartiallySignedTransaction{}
-	err := protoPartiallySignedTransaction.UnmarshalVT(serializedPartiallySignedTransaction)
+	err := protoPartiallySignedTransaction.UnmarshalVTUnsafe(serializedPartiallySignedTransaction)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func SerializePartiallySignedTransaction(partiallySignedTransaction *PartiallySi
 // DeserializeDomainTransaction Deserialize a Transaction to an *externalapi.DomainTransaction
 func DeserializeDomainTransaction(serializedTransactionMessage []byte) (*externalapi.DomainTransaction, error) {
 	protoTransactionMessage := &protoserialization.TransactionMessage{}
-	err := protoTransactionMessage.UnmarshalVT(serializedTransactionMessage)
+	err := protoTransactionMessage.UnmarshalVTUnsafe(serializedTransactionMessage)
 	if err != nil {
 		return nil, err
 	}

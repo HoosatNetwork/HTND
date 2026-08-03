@@ -45,7 +45,10 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 			if !isViolatingFinality {
 				log.Debugf("Block %s doesn't violate finality. Resolving its block status", blockHash)
 				var blockStatus externalapi.BlockStatus
-				blockStatus, reversalData, err = csm.resolveBlockStatus(stagingArea, blockHash, true)
+				// Keep the block-resolution path in a single staging area so block insertion
+				// does not create unnecessary per-block commits while still preserving the
+				// same UTXO-status and diff-child semantics.
+				blockStatus, reversalData, err = csm.resolveBlockStatus(stagingArea, blockHash, false)
 				if err != nil {
 					return nil, nil, nil, err
 				}

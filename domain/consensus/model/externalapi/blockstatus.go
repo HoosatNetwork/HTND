@@ -21,6 +21,15 @@ const (
 	// StatusInvalid indicates that the block is invalid.
 	StatusInvalid BlockStatus = iota
 
+	// StatusViolatingFinality indicates the block is violating finality
+	StatusViolatingFinality
+
+	// StatusErrorInTipsInDecreasingOrder which means either ghostdag or dagknight tip ordering error happened.
+	StatusErrorInTipsInDecreasingOrder
+
+	// StatusBlockStatusNotFound is an error when block status can not be found from the database.
+	StatusBlockStatusNotFound
+
 	// StatusUTXOValid indicates the block is valid from any UTXO related aspects and has passed all the other validations as well.
 	StatusUTXOValid
 

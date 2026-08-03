@@ -201,7 +201,7 @@ func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]by
 
 func (uds *utxoDiffStore) deserializeUTXODiff(utxoDiffBytes []byte) (externalapi.UTXODiff, error) {
 	dbUTXODiff := &serialization.DbUtxoDiff{}
-	err := dbUTXODiff.UnmarshalVT(utxoDiffBytes)
+	err := dbUTXODiff.UnmarshalVTUnsafe(utxoDiffBytes)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -219,7 +219,7 @@ func (uds *utxoDiffStore) serializeUTXODiffChild(utxoDiffChild *externalapi.Doma
 
 func (uds *utxoDiffStore) deserializeUTXODiffChild(utxoDiffChildBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := dbHash.UnmarshalVT(utxoDiffChildBytes)
+	err := dbHash.UnmarshalVTUnsafe(utxoDiffChildBytes)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

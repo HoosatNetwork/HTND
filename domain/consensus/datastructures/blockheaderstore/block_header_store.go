@@ -183,7 +183,7 @@ func (bhs *blockHeaderStore) serializeHeader(header externalapi.BlockHeader) ([]
 
 func (bhs *blockHeaderStore) deserializeHeader(headerBytes []byte) (externalapi.BlockHeader, error) {
 	dbBlockHeader := &serialization.DbBlockHeader{}
-	err := dbBlockHeader.UnmarshalVT(headerBytes)
+	err := dbBlockHeader.UnmarshalVTUnsafe(headerBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (bhs *blockHeaderStore) count(stagingShard *blockHeaderStagingShard) uint64
 
 func (bhs *blockHeaderStore) deserializeHeaderCount(countBytes []byte) (uint64, error) {
 	dbBlockHeaderCount := &serialization.DbBlockHeaderCount{}
-	err := dbBlockHeaderCount.UnmarshalVT(countBytes)
+	err := dbBlockHeaderCount.UnmarshalVTUnsafe(countBytes)
 	if err != nil {
 		return 0, err
 	}

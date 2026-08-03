@@ -3,7 +3,6 @@ package consensusstatemanager
 import (
 	"sort"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
@@ -72,15 +71,16 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	} else {
 		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	}
+	log.Infof("Number of tips %d", len(orderedTips))
 	if err != nil {
-		return nil, externalapi.StatusInvalid, err
+		return nil, externalapi.StatusErrorInTipsInDecreasingOrder, err
 	}
 
 	for _, tip := range orderedTips {
 		log.Debugf("Resolving tip %s", tip)
 		isViolatingFinality, shouldNotify, err := csm.isViolatingFinality(stagingArea, tip)
 		if err != nil {
-			return nil, externalapi.StatusInvalid, err
+			return nil, externalapi.StatusViolatingFinality, err
 		}
 
 		if isViolatingFinality {
@@ -92,16 +92,20 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 		}
 
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
-		if database.IsNotFoundError(err) {
-			log.Infof("findNextPendingTip failed to retrieve with %s\n", tip)
-			return nil, externalapi.StatusInvalid, err
-		}
 		if err != nil {
-			return nil, externalapi.StatusInvalid, err
+			return nil, externalapi.StatusBlockStatusNotFound, err
 		}
 		if status == externalapi.StatusUTXOValid || status == externalapi.StatusUTXOPendingVerification {
 			return tip, status, nil
 		}
+	}
+	log.Infof("None of the tips were valid or pending, so printing all the statuses")
+	for _, tip := range orderedTips {
+		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
+		if err != nil {
+			log.Infof("Error happened fetching status: %s", err)
+		}
+		log.Infof("Status: %s", status)
 	}
 
 	return nil, externalapi.StatusInvalid, nil
@@ -145,7 +149,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	}
 
 	if pendingTip == nil {
-		log.Warnf("None of the DAG tips are valid")
+		log.Warnf("None of the DAG tips are valid, because of %s", pendingTipStatus)
 		return nil, true, nil
 	}
 
@@ -195,8 +199,11 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		log.Debugf("Has more than %d blocks to resolve. Setting the resolve processing point to %s", maxBlocksToResolve, processingPoint)
 	}
 
+	// Keep the whole resolve chunk in a single staging area so late-IBD resolution
+	// avoids repeated database commits for every intermediate block. This preserves
+	// the same UTXO diff and status semantics while reducing I/O overhead.
 	processingPointStatus, reversalData, err := csm.resolveBlockStatus(
-		resolveStagingArea, processingPoint, true)
+		resolveStagingArea, processingPoint, false)
 	if err != nil {
 		return nil, false, err
 	}
