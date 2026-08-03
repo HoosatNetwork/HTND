@@ -183,7 +183,7 @@ func (bhs *blockHeaderStore) serializeHeader(header externalapi.BlockHeader) ([]
 
 func (bhs *blockHeaderStore) deserializeHeader(headerBytes []byte) (externalapi.BlockHeader, error) {
 	dbBlockHeader := &serialization.DbBlockHeader{}
-	err := dbBlockHeader.UnmarshalVTUnsafe(headerBytes)
+	err := dbBlockHeader.UnmarshalVT(headerBytes)
 	if err != nil {
 		return nil, err
 	}

@@ -95,7 +95,7 @@ func (gds *ghostdagDataStore) serializeBlockGHOSTDAGData(blockGHOSTDAGData *exte
 
 func (gds *ghostdagDataStore) deserializeBlockGHOSTDAGData(blockGHOSTDAGDataBytes []byte) (*externalapi.BlockGHOSTDAGData, error) {
 	dbBlockGHOSTDAGData := &serialization.DbBlockGhostdagData{}
-	err := dbBlockGHOSTDAGData.UnmarshalVTUnsafe(blockGHOSTDAGDataBytes)
+	err := dbBlockGHOSTDAGData.UnmarshalVT(blockGHOSTDAGDataBytes)
 	if err != nil {
 		return nil, err
 	}
