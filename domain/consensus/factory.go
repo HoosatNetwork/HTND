@@ -236,6 +236,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	blockParentBuilder := blockparentbuilder.New(
 		dbManager,
 		blockHeaderStore,
+		blockStatusStore,
 		dagTopologyManager,
 		parentsManager,
 		reachabilityDataStore,

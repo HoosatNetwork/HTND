@@ -63,6 +63,7 @@ var virtualGenesisChildSlicePool = sync.Pool{
 type blockParentBuilder struct {
 	databaseContext       model.DBManager
 	blockHeaderStore      model.BlockHeaderStore
+	blockStatusStore      model.BlockStatusStore
 	dagTopologyManager    model.DAGTopologyManager
 	parentsManager        model.ParentsManager
 	reachabilityDataStore model.ReachabilityDataStore
@@ -76,6 +77,7 @@ type blockParentBuilder struct {
 func New(
 	databaseContext model.DBManager,
 	blockHeaderStore model.BlockHeaderStore,
+	blockStatusStore model.BlockStatusStore,
 	dagTopologyManager model.DAGTopologyManager,
 	parentsManager model.ParentsManager,
 
@@ -88,6 +90,7 @@ func New(
 	return &blockParentBuilder{
 		databaseContext:    databaseContext,
 		blockHeaderStore:   blockHeaderStore,
+		blockStatusStore:   blockStatusStore,
 		dagTopologyManager: dagTopologyManager,
 		parentsManager:     parentsManager,
 
@@ -353,6 +356,13 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 
 		levelBlocks := make(externalapi.BlockLevelParents, 0, len(candidates))
 		for _, candidate := range candidates {
+			status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, candidate.hash)
+			if err != nil {
+				return nil, err
+			}
+			if status != externalapi.StatusUTXOValid {
+				continue
+			}
 			levelBlocks = append(levelBlocks, candidate.hash)
 		}
 
