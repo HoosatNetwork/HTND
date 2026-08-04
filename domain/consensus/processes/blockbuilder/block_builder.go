@@ -276,7 +276,7 @@ func (bb *blockBuilder) newBlockParents(stagingArea *model.StagingArea, daaScore
 	if err != nil {
 		return nil, err
 	}
-	return bb.blockParentBuilder.BuildParents(stagingArea, daaScore, virtualBlockRelations.Parents)
+	return bb.blockParentBuilder.BuildParents(stagingArea, daaScore, virtualBlockRelations.Parents, true)
 }
 
 func (bb *blockBuilder) newBlockTime(stagingArea *model.StagingArea) (int64, error) {

@@ -102,7 +102,7 @@ func New(
 }
 
 func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
-	daaScore uint64, directParentHashes []*externalapi.DomainHash,
+	daaScore uint64, directParentHashes []*externalapi.DomainHash, newBlockParents bool,
 ) ([]externalapi.BlockLevelParents, error) {
 	_ = daaScore
 
@@ -356,12 +356,14 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 
 		levelBlocks := make(externalapi.BlockLevelParents, 0, len(candidates))
 		for _, candidate := range candidates {
-			status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, candidate.hash)
-			if err != nil {
-				continue
-			}
-			if status != externalapi.StatusUTXOValid {
-				continue
+			if newBlockParents == true {
+				status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, candidate.hash)
+				if err != nil {
+					continue
+				}
+				if status != externalapi.StatusUTXOValid {
+					continue
+				}
 			}
 			levelBlocks = append(levelBlocks, candidate.hash)
 		}

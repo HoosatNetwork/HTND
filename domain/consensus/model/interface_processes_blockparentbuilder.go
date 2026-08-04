@@ -7,5 +7,6 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 type BlockParentBuilder interface {
 	BuildParents(stagingArea *StagingArea,
 		daaScore uint64,
-		directParentHashes []*externalapi.DomainHash) ([]externalapi.BlockLevelParents, error)
+		directParentHashes []*externalapi.DomainHash,
+		newBlockParents bool) ([]externalapi.BlockLevelParents, error)
 }

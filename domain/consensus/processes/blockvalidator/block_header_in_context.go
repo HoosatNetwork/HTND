@@ -199,7 +199,7 @@ func (v *blockValidator) checkMergeSizeLimit(_ *model.StagingArea, ghostdagData 
 }
 
 func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
-	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents())
+	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents(), false)
 	if err != nil {
 		return err
 	}
