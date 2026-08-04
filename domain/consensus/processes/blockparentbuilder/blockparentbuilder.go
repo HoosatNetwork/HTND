@@ -358,7 +358,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		for _, candidate := range candidates {
 			status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, candidate.hash)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			if status != externalapi.StatusUTXOValid {
 				continue
