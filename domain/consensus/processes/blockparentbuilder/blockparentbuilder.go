@@ -361,14 +361,15 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 				if err != nil {
 					continue
 				}
-				if status != externalapi.StatusUTXOValid {
+				if status == externalapi.StatusDisqualifiedFromChain {
 					continue
 				}
 			}
 			levelBlocks = append(levelBlocks, candidate.hash)
 		}
-
-		parents = append(parents, levelBlocks)
+		if len(levelBlocks) > 0 {
+			parents = append(parents, levelBlocks)
+		}
 	}
 	return parents, nil
 }
