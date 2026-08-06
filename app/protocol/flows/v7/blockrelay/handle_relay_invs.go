@@ -81,7 +81,7 @@ func HandleRelayInvs(context RelayInvsContext, connectionManager *connmanager.Co
 		netConnection:     netConnection,
 		invsQueue:         make([]invRelayBlock, 0, 1000),
 		invChan:           make(chan invRelayBlock, 2048),
-		blockChan:         make(chan *appmessage.MsgBlock, 2048),    // Increased from 8 to prevent blocking
+		blockChan:         make(chan *appmessage.MsgBlock, 2048),        // Increased from 8 to prevent blocking
 		locatorChan:       make(chan *appmessage.MsgBlockLocator, 2048), // Increased from 8 to prevent blocking
 		incomingDone:      make(chan struct{}),
 	}
@@ -271,7 +271,8 @@ func (flow *handleRelayInvsFlow) start() error {
 			if !isNearlySynced {
 				// flow.unreadInv(inv)
 				log.Debugf("Skipping inv hash %s while IBD is in progress.", inv.Hash)
-				continue  // Removed 250ms sleep to improve IBD performance
+				continue // Removed 250ms sleep to improve IBD performance
+			}
 		}
 
 		log.Debugf("Requesting block %s", inv.Hash)
