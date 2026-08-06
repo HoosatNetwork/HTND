@@ -449,7 +449,7 @@ var TestnetParams = Params{
 		defaultTargetTimePerBlock,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
-		10 * time.Millisecond,
+		100 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,

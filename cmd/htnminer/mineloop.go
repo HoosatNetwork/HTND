@@ -20,7 +20,7 @@ import (
 
 var hashesTried uint64
 
-const logHashRateInterval = 10 * time.Second
+const logHashRateInterval = 60 * time.Second
 
 type PowTransfer struct {
 	Block   *externalapi.DomainBlock
@@ -46,7 +46,7 @@ func mineLoop(client *minerClient, numberOfBlocks uint64, targetBlocksPerSecond 
 	for t := 0; t < *threads; t++ {
 		go func() {
 			spawn("blocksLoop", func() {
-				const windowSize = 10
+				const windowSize = 150
 				hasBlockRateTarget := targetBlocksPerSecond != 0
 				var windowTicker, blockTicker *time.Ticker
 				// We use tickers to limit the block rate:
