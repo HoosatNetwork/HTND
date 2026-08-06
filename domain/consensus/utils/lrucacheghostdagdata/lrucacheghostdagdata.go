@@ -1,6 +1,8 @@
 package lrucacheghostdagdata
 
 import (
+	"sync"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
@@ -19,13 +21,14 @@ type entry struct {
 	next *entry
 }
 
-// LRUCache is an intrusive-list based LRU cache (thread-unsafe)
+// LRUCache is an intrusive-list based LRU cache (thread-safe)
 type LRUCache struct {
+	mu       sync.RWMutex
 	cache    map[lruKey]*entry
 	head     *entry // most recently used
 	tail     *entry // least recently used
 	capacity int
-	length   int // explicit count → Len() is O(1)
+	length   int // explicit count \u2192 Len() is O(1)
 }
 
 // New creates a new LRU cache
@@ -71,77 +74,6 @@ func (c *LRUCache) moveToFront(e *entry) {
 	}
 }
 
-// Add inserts or updates the value for the given key (promotes to front)
-func (c *LRUCache) Add(blockHash *externalapi.DomainHash, isTrustedData bool, value *externalapi.BlockGHOSTDAGData) {
-	k := lruKey{
-		blockHash:     *blockHash,
-		isTrustedData: isTrustedData,
-	}
-
-	if e, ok := c.cache[k]; ok {
-		e.value = value
-		c.moveToFront(e)
-		return
-	}
-
-	// new entry
-	e := &entry{
-		key:   k,
-		value: value,
-	}
-
-	c.moveToFront(e)
-	c.cache[k] = e
-	c.length++
-
-	if c.length > c.capacity {
-		c.evict()
-	}
-}
-
-// Get returns the value if present and promotes it to MRU
-func (c *LRUCache) Get(blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, bool) {
-	k := lruKey{
-		blockHash:     *blockHash,
-		isTrustedData: isTrustedData,
-	}
-
-	e, ok := c.cache[k]
-	if !ok {
-		return nil, false
-	}
-
-	c.moveToFront(e)
-	return e.value, true
-}
-
-// Has checks existence without promotion
-func (c *LRUCache) Has(blockHash *externalapi.DomainHash, isTrustedData bool) bool {
-	k := lruKey{
-		blockHash:     *blockHash,
-		isTrustedData: isTrustedData,
-	}
-	_, ok := c.cache[k]
-	return ok
-}
-
-// Remove deletes the entry if it exists
-func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, isTrustedData bool) {
-	k := lruKey{
-		blockHash:     *blockHash,
-		isTrustedData: isTrustedData,
-	}
-
-	e, ok := c.cache[k]
-	if !ok {
-		return
-	}
-
-	c.unlink(e)
-	delete(c.cache, k)
-	c.length--
-}
-
 // evict removes the LRU (tail) entry
 func (c *LRUCache) evict() {
 	if c.tail == nil {
@@ -172,8 +104,94 @@ func (c *LRUCache) unlink(e *entry) {
 	e.next = nil
 }
 
+// Add inserts or updates the value for the given key (promotes to front)
+func (c *LRUCache) Add(blockHash *externalapi.DomainHash, isTrustedData bool, value *externalapi.BlockGHOSTDAGData) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+
+	if e, ok := c.cache[k]; ok {
+		e.value = value
+		c.moveToFront(e)
+		return
+	}
+
+	// new entry
+	e := &entry{
+		key:   k,
+		value: value,
+	}
+
+	c.moveToFront(e)
+	c.cache[k] = e
+	c.length++
+
+	if c.length > c.capacity {
+		c.evict()
+	}
+}
+
+// Get returns the value if present and promotes it to MRU
+func (c *LRUCache) Get(blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+
+	e, ok := c.cache[k]
+	if !ok {
+		return nil, false
+	}
+
+	c.moveToFront(e)
+	return e.value, true
+}
+
+// Has checks existence without promotion
+func (c *LRUCache) Has(blockHash *externalapi.DomainHash, isTrustedData bool) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+	_, ok := c.cache[k]
+	return ok
+}
+
+// Remove deletes the entry if it exists
+func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, isTrustedData bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	k := lruKey{
+		blockHash:     *blockHash,
+		isTrustedData: isTrustedData,
+	}
+
+	e, ok := c.cache[k]
+	if !ok {
+		return
+	}
+
+	c.unlink(e)
+	delete(c.cache, k)
+	c.length--
+}
+
 // Clear empties the cache
 func (c *LRUCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// new map lets old entries GC naturally
 	c.cache = make(map[lruKey]*entry, c.capacity>>1)
 	c.head = nil
@@ -183,5 +201,8 @@ func (c *LRUCache) Clear() {
 
 // Len returns the current number of items
 func (c *LRUCache) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.length
 }
