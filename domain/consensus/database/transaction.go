@@ -13,42 +13,16 @@ type dbTransaction struct {
 
 func (d *dbTransaction) Get(key model.DBKey) ([]byte, error) {
 	databaseKey := dbKeyToDatabaseKey(key)
-	retryDelay := initialRetryDelay
-
-	for attempt := range maxGetRetryAttempts {
-		data, err := d.transaction.Get(databaseKey)
-		// If there was an error, return it immediately (no retry for errors)
-		if err != nil {
-			return nil, err
-		}
-
-		// If we got data (non-empty), return it
-		if len(data) > 0 {
-			if attempt > 0 {
-				log.Debugf("Successfully retrieved data for key %s after %d retry attempts (transaction)", key, attempt)
-			}
-			return data, nil
-		}
-
-		// If this is the last attempt, return the empty data
-		if attempt == maxGetRetryAttempts-1 {
-			return data, nil
-		}
-
-		// Empty data returned, retry after delay
-		log.Debugf("Empty data returned for key %s on attempt %d/%d, retrying after %v (transaction)",
-			key, attempt+1, maxGetRetryAttempts, retryDelay)
-		time.Sleep(retryDelay)
-
-		// Exponential backoff with maximum cap
-		retryDelay *= 2
-		if retryDelay > maxRetryDelay {
-			retryDelay = maxRetryDelay
-		}
+	
+	// Single attempt - no retries. In a high-performance system, database operations
+	// should be fast and reliable. If we get empty data, it means the key doesn't exist.
+	// Retries with sleep delays cause unacceptable latency in high-throughput scenarios.
+	data, err := d.transaction.Get(databaseKey)
+	if err != nil {
+		return nil, err
 	}
-
-	// This line should never be reached, but included for safety
-	return d.transaction.Get(databaseKey)
+	
+	return data, nil
 }
 
 func (d *dbTransaction) Has(key model.DBKey) (bool, error) {

@@ -1,19 +1,13 @@
 package database
 
 import (
-	"time"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
-const (
-	// Retry configuration for Get operations when returning empty values
-	maxGetRetryAttempts = 3
-	initialRetryDelay   = 10 * time.Millisecond
-	maxRetryDelay       = 500 * time.Millisecond
-)
+// Database retry constants removed - database operations should be fast and reliable
+// without retries that introduce unacceptable latency in high-throughput scenarios.
 
 var log = logger.RegisterSubSystem("DBMG")
 
