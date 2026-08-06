@@ -671,7 +671,8 @@ func (pm *pruningManager) ArePruningPointsViolatingFinality(stagingArea *model.S
 }
 
 func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.StagingArea) (bool, error) {
-	lastPruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+	// Check that a pruning point exists (we may not use lastPruningPoint directly, but this validates the store)
+	_, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
 	if err != nil {
 		log.Errorf("pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea): %s", err)
 		return false, err
@@ -684,17 +685,32 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 		return false, err
 	}
 
-	// Build the list of expected pruning points from selected tip to last pruning point
+	// Build the list of expected pruning points from selected tip back through the chain
+	// We need to collect all distinct pruning points in the correct order to match against the stored list
+	// The expected list should be in the same order as the stored list (from oldest to newest)
+	// but we're walking backwards, so we'll reverse at the end
 	current := headersSelectedTip
-	for !current.Equal(lastPruningPoint) {
+	reachedGenesis := false
+	for {
+		// Skip virtual blocks as they don't have headers
+		if current.Equal(model.VirtualBlockHash) || current.Equal(model.VirtualGenesisBlockHash) {
+			break
+		}
+
 		header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current)
 		if err != nil {
 			log.Errorf("pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current): %s", err)
 			return false, err
 		}
 
+		// Collect pruning points - we'll reverse the list later
 		if len(expectedPruningPoints) == 0 || !expectedPruningPoints[len(expectedPruningPoints)-1].Equal(header.PruningPoint()) {
 			expectedPruningPoints = append(expectedPruningPoints, header.PruningPoint())
+		}
+
+		if current.Equal(pm.genesisHash) {
+			reachedGenesis = true
+			break
 		}
 
 		currentGHOSTDAGData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, current, false)
@@ -710,9 +726,25 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 		current = currentGHOSTDAGData.SelectedParent()
 	}
 
+	// If we reached genesis, ensure it's in the expected list
+	if reachedGenesis && (len(expectedPruningPoints) == 0 || !expectedPruningPoints[len(expectedPruningPoints)-1].Equal(pm.genesisHash)) {
+		expectedPruningPoints = append(expectedPruningPoints, pm.genesisHash)
+	} else if !reachedGenesis && len(expectedPruningPoints) == 0 {
+		// If we didn't reach genesis and have no expected pruning points,
+		// this is likely a pruned node - we can't validate the full chain
+		log.Warn("ArePruningPointsInValidChain: chain does not reach genesis, cannot fully validate")
+		return false, nil
+	}
+
+	// Reverse the expected list so it's in order from genesis to current
+	// (same order as stored pruning points)
+	for i, j := 0, len(expectedPruningPoints)-1; i < j; i, j = i+1, j-1 {
+		expectedPruningPoints[i], expectedPruningPoints[j] = expectedPruningPoints[j], expectedPruningPoints[i]
+	}
+
 	if len(expectedPruningPoints) == 0 {
 		log.Errorf("Expected pruning points list is empty, can't match against stored pruning points")
-		return false, nil
+		return false, errors.New("Expected pruning points list is empty, can't match against stored pruning points")
 	}
 
 	// Validate stored pruning points against expected pruning points
@@ -722,31 +754,31 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 		return false, err
 	}
 
-	for i := lastPruningPointIndex; ; i-- {
+	// Now compare stored pruning points with expected pruning points
+	// Both lists should be in order from genesis (index 0) to current (index lastPruningPointIndex)
+	// Validate min of the two lengths to handle pruned nodes
+	numToValidate := int(lastPruningPointIndex) + 1
+	if len(expectedPruningPoints) < numToValidate {
+		numToValidate = len(expectedPruningPoints)
+		log.Warnf("ArePruningPointsInValidChain: chain only has %d pruning points but store has %d, validating %d", len(expectedPruningPoints), lastPruningPointIndex+1, numToValidate)
+	}
+
+	for i := uint64(0); i < uint64(numToValidate); i++ {
 		pruningPoint, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, i)
 		if err != nil {
 			log.Errorf("pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, %d): %s", i, err)
 			return false, err
 		}
 
-		// Compare with the last expected pruning point
-		// expectedPruningPoint := expectedPruningPoints[len(expectedPruningPoints)-1]
-		expectedPruningPoints = expectedPruningPoints[:len(expectedPruningPoints)-1]
-		// if !pruningPoint.Equal(expectedPruningPoint) {
-		// 	log.Errorf("Pruning point %s is not expected pruning point %s at index %d", pruningPoint.String(), expectedPruningPoint.String(), i)
-		// 	return false, nil
-		// }
-
-		if i == 0 {
-			if len(expectedPruningPoints) != 0 {
-				log.Errorf("Expected pruning points list is not empty after processing all pruning points")
-				return false, nil
-			}
-			if !pruningPoint.Equal(pm.genesisHash) {
-				log.Errorf("Pruning point at index 0 is not genesis block")
-				return false, nil
-			}
+		if int(i) >= len(expectedPruningPoints) {
+			log.Warn("ArePruningPointsInValidChain: no more expected pruning points at index %d", i)
 			break
+		}
+
+		expectedPruningPoint := expectedPruningPoints[i]
+		if !pruningPoint.Equal(expectedPruningPoint) {
+			log.Errorf("Pruning point %s is not expected pruning point %s at index %d", pruningPoint.String(), expectedPruningPoint.String(), i)
+			return false, errors.New("Pruning point is not expected pruning point at index")
 		}
 	}
 
