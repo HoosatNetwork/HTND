@@ -48,7 +48,7 @@ func NewState(header externalapi.MutableBlockHeader) *State {
 	timestamp, nonce := header.TimeInMilliseconds(), header.Nonce()
 	header.SetTimeInMilliseconds(0)
 	header.SetNonce(0)
-	prevHeader := consensushashing.HeaderHash(header)
+	prevHeader := consensushashing.HeaderHash(header.ToImmutable())
 	header.SetTimeInMilliseconds(timestamp)
 	header.SetNonce(nonce)
 
