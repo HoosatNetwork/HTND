@@ -41,6 +41,27 @@ func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainH
 	return *key
 }
 
+// makeOrderDAGKey creates a key for UMCVoting cache
+func makeOrderDAGKey(g []*externalapi.DomainHash) externalapi.DomainHash {
+	h := md5.New()
+
+	sortedG := make([]*externalapi.DomainHash, len(g))
+	copy(sortedG, g)
+	sort.Slice(sortedG, func(i, j int) bool {
+		return sortedG[i].String() < sortedG[j].String()
+	})
+	for _, gh := range sortedG {
+		h.Write(gh.ByteSlice())
+	}
+
+	digest := h.Sum(nil)
+	var keyBytes [32]byte
+	copy(keyBytes[:16], digest)
+	copy(keyBytes[16:], digest)
+	key, _ := externalapi.NewDomainHashFromByteSlice(keyBytes[:])
+	return *key
+}
+
 func filterNil(s []*externalapi.DomainHash) []*externalapi.DomainHash {
 	valid := make([]*externalapi.DomainHash, 0, len(s))
 	for _, x := range s {
@@ -74,11 +95,25 @@ func (gm *ghostdagManager) getTipsInG(stagingArea *model.StagingArea, G []*exter
 	return tips
 }
 
+type orderDAGKey struct {
+	// Hash of sorted block hashes
+	hash externalapi.DomainHash
+}
+
+type orderDAGResult struct {
+	selectedTip *externalapi.DomainHash
+	ordering    []*externalapi.DomainHash
+}
+
 // OrderDAG implements Algorithm 2: KNIGHT DAG ordering algorithm from the DAGKnight paper
 // This algorithm orders the blocks in a DAG by iteratively selecting the "best" tip based on rank and tie-breaking.
 // Input: G - a block DAG represented as a set of block hashes
 // Output: The selected tip of G, and a total ordering over all blocks in G
 func (gm *ghostdagManager) OrderDAG(stagingArea *model.StagingArea, G []*externalapi.DomainHash) (*externalapi.DomainHash, []*externalapi.DomainHash, error) {
+	key := makeOrderDAGKey(G)
+	if result, ok := gm.orderDAGCache.Get(&key); ok {
+		return result.selectedTip, result.ordering, nil
+	}
 	// Step 1: Filter out any nil blocks from G to ensure validity
 	G = filterNil(G)
 
@@ -189,6 +224,8 @@ func (gm *ghostdagManager) OrderDAG(stagingArea *model.StagingArea, G []*externa
 
 	ordering = append(ordering, anticoneP...)
 
+	result := orderDAGResult{selectedTip: p, ordering: ordering}
+	gm.orderDAGCache.Add(&key, result)
 	return p, ordering, nil
 }
 
