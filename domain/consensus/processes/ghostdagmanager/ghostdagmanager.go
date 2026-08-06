@@ -49,6 +49,7 @@ func New(
 		genesisHash:              genesisHash,
 		umcVotingCache:           lrucache.New[int](500, true),
 		ghostdagComputationCache: lrucache.New[*externalapi.BlockGHOSTDAGData](2000, true),
+		orderDAGCache:            lrucache.New[orderDAGResult](500, true),
 	}
 }
 
