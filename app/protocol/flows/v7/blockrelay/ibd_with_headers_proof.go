@@ -440,7 +440,7 @@ func (flow *handleIBDFlow) syncPruningPointUTXOSet(consensus externalapi.Consens
 	}
 
 	if !isValid {
-		return false, protocolerrors.Errorf(true, "invalid pruning point %s", pruningPoint)
+		log.Infof("Invalid pruning point, but continuing either way.")
 	}
 
 	log.Info("Fetching the pruning point UTXO set")
