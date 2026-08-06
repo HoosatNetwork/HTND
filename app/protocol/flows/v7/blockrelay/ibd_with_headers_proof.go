@@ -486,6 +486,12 @@ func (flow *handleIBDFlow) fetchMissingUTXOSet(consensus externalapi.Consensus, 
 		if errors.Is(err, ruleerrors.ErrSuggestedPruningViolatesFinality) {
 			return false, nil
 		}
+		// For ErrBadPruningPointUTXOSet, this is likely due to missing UTXO diffs from disqualified blocks.
+		// This is a recoverable error - the node should try a different peer rather than banning.
+		if errors.Is(err, ruleerrors.ErrBadPruningPointUTXOSet) {
+			log.Infof("Pruning point UTXO set hash mismatch. This is likely due to missing UTXO diffs from disqualified blocks. Will try another node.")
+			return false, protocolerrors.New(false, "pruning point UTXO set hash mismatch: "+err.Error())
+		}
 		return false, protocolerrors.ConvertToBanningProtocolErrorIfRuleError(err, "error with pruning point UTXO set")
 	}
 
