@@ -1,7 +1,7 @@
 package ghostdagmanager
 
 import (
-	"crypto/md5"
+	"hash/fnv"
 	"sort"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
@@ -11,7 +11,7 @@ import (
 
 // makeUMCVotingKey creates a key for UMCVoting cache
 func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainHash {
-	h := md5.New()
+	h := fnv.New128a()
 
 	sortedG := make([]*externalapi.DomainHash, len(g))
 	copy(sortedG, g)
@@ -35,15 +35,14 @@ func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainH
 
 	digest := h.Sum(nil)
 	var keyBytes [32]byte
-	copy(keyBytes[:16], digest)
-	copy(keyBytes[16:], digest)
+	copy(keyBytes[:], digest)
 	key, _ := externalapi.NewDomainHashFromByteSlice(keyBytes[:])
 	return *key
 }
 
 // makeOrderDAGKey creates a key for UMCVoting cache
 func makeOrderDAGKey(g []*externalapi.DomainHash) externalapi.DomainHash {
-	h := md5.New()
+	h := fnv.New128a()
 
 	sortedG := make([]*externalapi.DomainHash, len(g))
 	copy(sortedG, g)
@@ -56,8 +55,7 @@ func makeOrderDAGKey(g []*externalapi.DomainHash) externalapi.DomainHash {
 
 	digest := h.Sum(nil)
 	var keyBytes [32]byte
-	copy(keyBytes[:16], digest)
-	copy(keyBytes[16:], digest)
+	copy(keyBytes[:], digest)
 	key, _ := externalapi.NewDomainHashFromByteSlice(keyBytes[:])
 	return *key
 }
