@@ -777,6 +777,12 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	// This prevents the map from having to dynamically grow and wait for the damn GC to arrive
 	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
+		// Re-check if we're nearly synced at the start of each batch to update the updateVirtual flag
+		// This allows the node to transition from non-nearly-synced to nearly-synced during IBD
+		updateVirtual, err = flow.Domain().Consensus().IsNearlySynced()
+		if err != nil {
+			return err
+		}
 		var hashesToRequest []*externalapi.DomainHash
 		if offset+ibdBatchSize < len(hashes) {
 			hashesToRequest = hashes[offset : offset+ibdBatchSize]
