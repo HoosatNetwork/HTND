@@ -22,13 +22,13 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 		return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint, "%s is not a valid pruning point", newPruningPointHash)
 	}
 
-	// arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea)
-	// if err != nil {
-	// 	return err
-	// }
-	// if !arePruningPointsInValidChain {
-	// 	return errors.Wrapf(ruleerrors.ErrInvalidPruningPointsChain, "pruning points do not compose a valid chain to genesis")
-	// }
+	arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea)
+	if err != nil {
+		return err
+	}
+	if !arePruningPointsInValidChain {
+		return errors.Wrapf(ruleerrors.ErrInvalidPruningPointsChain, "pruning points do not compose a valid chain to genesis")
+	}
 
 	log.Infof("Updating consensus state manager according to the new pruning point %s", newPruningPointHash)
 	err = bp.consensusStateManager.ImportPruningPointUTXOSet(stagingArea, newPruningPointHash)
