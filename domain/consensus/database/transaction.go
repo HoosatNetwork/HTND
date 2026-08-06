@@ -1,8 +1,6 @@
 package database
 
 import (
-	"time"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 )
@@ -13,7 +11,7 @@ type dbTransaction struct {
 
 func (d *dbTransaction) Get(key model.DBKey) ([]byte, error) {
 	databaseKey := dbKeyToDatabaseKey(key)
-	
+
 	// Single attempt - no retries. In a high-performance system, database operations
 	// should be fast and reliable. If we get empty data, it means the key doesn't exist.
 	// Retries with sleep delays cause unacceptable latency in high-throughput scenarios.
@@ -21,7 +19,7 @@ func (d *dbTransaction) Get(key model.DBKey) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return data, nil
 }
 
