@@ -198,8 +198,22 @@ func (v *blockValidator) checkMergeSizeLimit(_ *model.StagingArea, ghostdagData 
 	return nil
 }
 
+func (v *blockValidator) blockVersionForDAAScore(daaScore uint64) uint16 {
+	var blockVersion uint16 = 1
+	for _, powScore := range v.POWScores {
+		if daaScore >= powScore {
+			blockVersion++
+		}
+	}
+	return blockVersion
+}
+
 func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
-	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents(), false)
+	newBlockParents := false
+	if v.blockVersionForDAAScore(header.DAAScore()) >= 7 {
+		newBlockParents = true
+	}
+	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents(), newBlockParents)
 	if err != nil {
 		return err
 	}

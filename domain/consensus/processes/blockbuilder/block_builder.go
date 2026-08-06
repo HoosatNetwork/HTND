@@ -276,7 +276,11 @@ func (bb *blockBuilder) newBlockParents(stagingArea *model.StagingArea, daaScore
 	if err != nil {
 		return nil, err
 	}
-	return bb.blockParentBuilder.BuildParents(stagingArea, daaScore, virtualBlockRelations.Parents, true)
+	newBlockParents := false
+	if bb.blockVersionForDAAScore(daaScore) >= 7 {
+		newBlockParents = true
+	}
+	return bb.blockParentBuilder.BuildParents(stagingArea, daaScore, virtualBlockRelations.Parents, newBlockParents)
 }
 
 func (bb *blockBuilder) newBlockTime(stagingArea *model.StagingArea) (int64, error) {

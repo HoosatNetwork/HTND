@@ -35,10 +35,10 @@ func (sl BlockLevelParents) Contains(blockHash *DomainHash) bool {
 	return false
 }
 
-// ParentsEqual returns true if all BlockLevelParents in `a` match `b` pairwise.
-// `a` is allowed to be missing parents that `b` has (i.e. len(a) <= len(b)).
+// ParentsEqual returns true if all the BlockLevelParents in `a` and `b` are
+// equal pairwise
 func ParentsEqual(a, b []BlockLevelParents) bool {
-	if len(a) > len(b) {
+	if len(a) != len(b) {
 		return false
 	}
 	for i, blockLevelParents := range a {
