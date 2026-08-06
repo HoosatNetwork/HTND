@@ -45,6 +45,14 @@ func (bg *blockGHOSTDAGData) toModel() *externalapi.BlockGHOSTDAGData {
 //
 // For further details see the article https://eprint.iacr.org/2018/104.pdf
 func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) error {
+	// Check cache first to avoid redundant computations
+	if cachedData, ok := gm.ghostdagComputationCache.Get(blockHash); ok {
+		log.Tracef("GHOSTDAG cache hit for block %s", blockHash)
+		gm.ghostdagDataStore.Stage(stagingArea, blockHash, cachedData, false)
+		return nil
+	}
+	log.Tracef("GHOSTDAG cache miss for block %s", blockHash)
+
 	newBlockData := &blockGHOSTDAGData{
 		blueWork:           new(big.Int),
 		mergeSetBlues:      make([]*externalapi.DomainHash, 0),
@@ -151,6 +159,9 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 	}
 
 	gm.ghostdagDataStore.Stage(stagingArea, blockHash, newBlockData.toModel(), false)
+	
+	// Cache the computed result for future use
+	gm.ghostdagComputationCache.Add(blockHash, newBlockData.toModel())
 
 	return nil
 }

@@ -20,6 +20,9 @@ type ghostdagManager struct {
 
 	// Cache only UMCVoting results (DAGKnight)
 	umcVotingCache *lrucache.LRUCache[int]
+	
+	// Cache for GHOSTDAG computation results to avoid redundant calculations
+	ghostdagComputationCache *lrucache.LRUCache[*externalapi.BlockGHOSTDAGData]
 }
 
 // New instantiates a new GHOSTDAGManager
@@ -43,6 +46,7 @@ func New(
 		k:                   k,
 		genesisHash:         genesisHash,
 		umcVotingCache:      lrucache.New[int](500, true),
+		ghostdagComputationCache: lrucache.New[*externalapi.BlockGHOSTDAGData](2000, true),
 	}
 }
 
