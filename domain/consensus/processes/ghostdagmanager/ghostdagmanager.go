@@ -20,11 +20,7 @@ type ghostdagManager struct {
 
 	// Cache only UMCVoting results (DAGKnight)
 	umcVotingCache *lrucache.LRUCache[int]
-
-	// Cache for GHOSTDAG computation results to avoid redundant calculations
-	ghostdagComputationCache *lrucache.LRUCache[*externalapi.BlockGHOSTDAGData]
-
-	orderDAGCache *lrucache.LRUCache[orderDAGResult]
+	orderDAGCache  *lrucache.LRUCache[orderDAGResult]
 }
 
 // New instantiates a new GHOSTDAGManager
@@ -39,17 +35,16 @@ func New(
 	genesisHash *externalapi.DomainHash,
 ) model.GHOSTDAGManager {
 	return &ghostdagManager{
-		databaseContext:          databaseContext,
-		dagTopologyManager:       dagTopologyManager,
-		dagTraversalManager:      dagTraversalManager,
-		ghostdagDataStore:        ghostdagDataStore,
-		headerStore:              headerStore,
-		consensusStateStore:      consensusStateStore,
-		k:                        k,
-		genesisHash:              genesisHash,
-		umcVotingCache:           lrucache.New[int](500, true),
-		ghostdagComputationCache: lrucache.New[*externalapi.BlockGHOSTDAGData](2000, true),
-		orderDAGCache:            lrucache.New[orderDAGResult](500, true),
+		databaseContext:     databaseContext,
+		dagTopologyManager:  dagTopologyManager,
+		dagTraversalManager: dagTraversalManager,
+		ghostdagDataStore:   ghostdagDataStore,
+		headerStore:         headerStore,
+		consensusStateStore: consensusStateStore,
+		k:                   k,
+		genesisHash:         genesisHash,
+		umcVotingCache:      lrucache.New[int](500, true),
+		orderDAGCache:       lrucache.New[orderDAGResult](500, true),
 	}
 }
 

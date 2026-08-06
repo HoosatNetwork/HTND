@@ -3,6 +3,8 @@ package blockprocessor
 import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/pkg/errors"
 )
 
 func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
@@ -16,8 +18,8 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 	}
 
 	if !isValidPruningPoint {
-		log.Infof("Invalid pruning point %s, but continuing either way.", newPruningPointHash)
-		// return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint, "%s is not a valid pruning point", newPruningPointHash)
+		// log.Infof("Invalid pruning point %s, but continuing either way.", newPruningPointHash)
+		return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint, "%s is not a valid pruning point", newPruningPointHash)
 	}
 
 	// arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea)

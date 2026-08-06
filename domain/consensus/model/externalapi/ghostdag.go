@@ -28,31 +28,13 @@ func NewBlockGHOSTDAGData(
 	bluesAnticoneSizes map[DomainHash]KType,
 	dynamicK KType,
 ) *BlockGHOSTDAGData {
-	// Create deep copies to avoid sharing mutable state
-	mergeSetBluesCopy := make([]*DomainHash, len(mergeSetBlues))
-	copy(mergeSetBluesCopy, mergeSetBlues)
-
-	mergeSetRedsCopy := make([]*DomainHash, len(mergeSetReds))
-	copy(mergeSetRedsCopy, mergeSetReds)
-
-	bluesAnticoneSizesCopy := make(map[DomainHash]KType, len(bluesAnticoneSizes))
-	for k, v := range bluesAnticoneSizes {
-		bluesAnticoneSizesCopy[k] = v
-	}
-
-	// Create a copy of blueWork if it's not nil
-	var blueWorkCopy *big.Int
-	if blueWork != nil {
-		blueWorkCopy = new(big.Int).Set(blueWork)
-	}
-
 	return &BlockGHOSTDAGData{
 		blueScore:          blueScore,
-		blueWork:           blueWorkCopy,
+		blueWork:           blueWork,
 		selectedParent:     selectedParent,
-		mergeSetBlues:      mergeSetBluesCopy,
-		mergeSetReds:       mergeSetRedsCopy,
-		bluesAnticoneSizes: bluesAnticoneSizesCopy,
+		mergeSetBlues:      mergeSetBlues,
+		mergeSetReds:       mergeSetReds,
+		bluesAnticoneSizes: bluesAnticoneSizes,
 		dynamicK:           dynamicK,
 	}
 }

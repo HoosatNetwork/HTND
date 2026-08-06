@@ -225,24 +225,41 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	updateVirtualStagingArea := model.NewStagingArea()
 
-	virtualParents := []*externalapi.DomainHash{processingPoint}
-	// If `isCompletelyResolved`, set virtual correctly with all tips which have less blue work than pending
-	if isCompletelyResolved {
-		lowerTips, err := csm.getGHOSTDAGLowerTips(readStagingArea, pendingTip)
-		if err != nil {
-			return nil, false, err
-		}
-		log.Debugf("Picking virtual parents from relevant tips len: %d", len(lowerTips))
-
-		virtualParents, err = csm.pickVirtualParents(readStagingArea, lowerTips)
-		if err != nil {
-			return nil, false, err
-		}
-		log.Debugf("Picked virtual parents: %s", virtualParents)
+	// Always get the relevant tips and pick virtual parents from them
+	// This ensures virtual parents are always actual tips, not intermediate blocks
+	lowerTips, err := csm.getGHOSTDAGLowerTips(readStagingArea, pendingTip)
+	if err != nil {
+		return nil, false, err
 	}
+	log.Debugf("Picking virtual parents from relevant tips len: %d", len(lowerTips))
+
+	virtualParents, err := csm.pickVirtualParents(readStagingArea, lowerTips)
+	if err != nil {
+		// No valid tips to use as virtual parents yet
+		log.Debugf("Cannot update virtual: no valid parent candidates. Will try again after resolving more blocks.")
+		return nil, false, nil
+	}
+	log.Debugf("Picked virtual parents: %s", virtualParents)
+
+	// Re-check if we're completely resolved after picking virtual parents
+	// This handles the case where all tips are now valid
+	if !isCompletelyResolved {
+		// Check if the pending tip is now resolved and is in the virtual parents
+		pendingTipInParents := false
+		for _, parent := range virtualParents {
+			if parent.Equal(pendingTip) {
+				pendingTipInParents = true
+				break
+			}
+		}
+		if pendingTipInParents && processingPointStatus == externalapi.StatusUTXOValid {
+			isCompletelyResolved = true
+		}
+	}
+
 	virtualUTXODiff, err := csm.updateVirtualWithParents(updateVirtualStagingArea, virtualParents)
 	if err != nil {
-		return nil, false, nil
+		return nil, false, err
 	}
 
 	err = staging.CommitAllChanges(csm.databaseContext, updateVirtualStagingArea)
