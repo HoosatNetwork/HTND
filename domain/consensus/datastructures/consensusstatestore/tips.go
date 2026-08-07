@@ -52,7 +52,7 @@ func (css *consensusStateStore) deserializeTips(tipsBytes []byte) ([]*externalap
 	error,
 ) {
 	dbTips := &serialization.DbTips{}
-	err := dbTips.UnmarshalVTUnsafe(tipsBytes)
+	err := dbTips.UnmarshalVT(tipsBytes)
 	if err != nil {
 		return nil, err
 	}

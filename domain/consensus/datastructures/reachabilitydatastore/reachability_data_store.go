@@ -162,7 +162,7 @@ func (rds *reachabilityDataStore) serializeReachabilityData(reachabilityData mod
 
 func (rds *reachabilityDataStore) deserializeReachabilityData(reachabilityDataBytes []byte) (model.ReachabilityData, error) {
 	dbReachabilityData := &serialization.DbReachabilityData{}
-	err := dbReachabilityData.UnmarshalVTUnsafe(reachabilityDataBytes)
+	err := dbReachabilityData.UnmarshalVT(reachabilityDataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (rds *reachabilityDataStore) serializeReachabilityReindexRoot(reachabilityR
 
 func (rds *reachabilityDataStore) deserializeReachabilityReindexRoot(reachabilityReindexRootBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := dbHash.UnmarshalVTUnsafe(reachabilityReindexRootBytes)
+	err := dbHash.UnmarshalVT(reachabilityReindexRootBytes)
 	if err != nil {
 		return nil, err
 	}

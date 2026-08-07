@@ -101,7 +101,7 @@ func (bss *blockStatusStore) serializeBlockStatus(status externalapi.BlockStatus
 
 func (bss *blockStatusStore) deserializeBlockStatus(statusBytes []byte) (externalapi.BlockStatus, error) {
 	dbBlockStatus := &serialization.DbBlockStatus{}
-	err := dbBlockStatus.UnmarshalVTUnsafe(statusBytes)
+	err := dbBlockStatus.UnmarshalVT(statusBytes)
 	if err != nil {
 		return 0, err
 	}

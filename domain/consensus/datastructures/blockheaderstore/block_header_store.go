@@ -202,7 +202,7 @@ func (bhs *blockHeaderStore) count(stagingShard *blockHeaderStagingShard) uint64
 
 func (bhs *blockHeaderStore) deserializeHeaderCount(countBytes []byte) (uint64, error) {
 	dbBlockHeaderCount := &serialization.DbBlockHeaderCount{}
-	err := dbBlockHeaderCount.UnmarshalVTUnsafe(countBytes)
+	err := dbBlockHeaderCount.UnmarshalVT(countBytes)
 	if err != nil {
 		return 0, err
 	}

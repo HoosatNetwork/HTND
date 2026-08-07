@@ -15,7 +15,7 @@ func serializeUTXOEntry(entry externalapi.UTXOEntry) ([]byte, error) {
 
 func deserializeOutpoint(outpointBytes []byte) (*externalapi.DomainOutpoint, error) {
 	dbOutpoint := &serialization.DbOutpoint{}
-	err := dbOutpoint.UnmarshalVTUnsafe(outpointBytes)
+	err := dbOutpoint.UnmarshalVT(outpointBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func deserializeOutpoint(outpointBytes []byte) (*externalapi.DomainOutpoint, err
 
 func deserializeUTXOEntry(entryBytes []byte) (externalapi.UTXOEntry, error) {
 	dbEntry := &serialization.DbUtxoEntry{}
-	err := dbEntry.UnmarshalVTUnsafe(entryBytes)
+	err := dbEntry.UnmarshalVT(entryBytes)
 	if err != nil {
 		return nil, err
 	}

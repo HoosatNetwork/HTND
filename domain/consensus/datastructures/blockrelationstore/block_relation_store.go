@@ -103,7 +103,7 @@ func (brs *blockRelationStore) serializeBlockRelations(blockRelations *model.Blo
 
 func (brs *blockRelationStore) deserializeBlockRelations(blockRelationsBytes []byte) (*model.BlockRelations, error) {
 	dbBlockRelations := &serialization.DbBlockRelations{}
-	err := dbBlockRelations.UnmarshalVTUnsafe(blockRelationsBytes)
+	err := dbBlockRelations.UnmarshalVT(blockRelationsBytes)
 	if err != nil {
 		return nil, err
 	}

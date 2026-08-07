@@ -190,7 +190,7 @@ func (bs *blockStore) serializeBlock(block *externalapi.DomainBlock) ([]byte, er
 
 func (bs *blockStore) deserializeBlock(blockBytes []byte) (*externalapi.DomainBlock, error) {
 	dbBlock := &serialization.DbBlock{}
-	err := dbBlock.UnmarshalVTUnsafe(blockBytes)
+	err := dbBlock.UnmarshalVT(blockBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (bs *blockStore) count(stagingShard *blockStagingShard) uint64 {
 
 func (bs *blockStore) deserializeBlockCount(countBytes []byte) (uint64, error) {
 	dbBlockCount := &serialization.DbBlockCount{}
-	err := dbBlockCount.UnmarshalVTUnsafe(countBytes)
+	err := dbBlockCount.UnmarshalVT(countBytes)
 	if err != nil {
 		return 0, err
 	}

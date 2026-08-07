@@ -88,7 +88,7 @@ func (hsts *headerSelectedTipStore) serializeHeadersSelectedTip(selectedTip *ext
 
 func (hsts *headerSelectedTipStore) deserializeHeadersSelectedTip(selectedTipBytes []byte) (*externalapi.DomainHash, error) {
 	dbHash := &serialization.DbHash{}
-	err := dbHash.UnmarshalVTUnsafe(selectedTipBytes)
+	err := dbHash.UnmarshalVT(selectedTipBytes)
 	if err != nil {
 		return nil, err
 	}
