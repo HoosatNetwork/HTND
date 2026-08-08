@@ -71,7 +71,7 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	} else {
 		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	}
-	log.Infof("Number of tips %d", len(orderedTips))
+	log.Debugf("Number of tips %d", len(orderedTips))
 	if err != nil {
 		return nil, externalapi.StatusErrorInTipsInDecreasingOrder, err
 	}
@@ -99,7 +99,7 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 			return tip, status, nil
 		}
 	}
-	log.Infof("None of the tips were valid or pending, so printing all the statuses")
+	log.Infof("None of the current pending tips were valid, so printing all the statuses")
 	for _, tip := range orderedTips {
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
 		if err != nil {

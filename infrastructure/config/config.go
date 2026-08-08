@@ -52,7 +52,7 @@ const (
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
 	defaultProtocolVersion        = 7
-	defaultIBDTimeout             = 120 * time.Minute
+	defaultIBDTimeout             = 480 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
 	defaultIBDDequeueTimeout      = 1 * time.Minute
