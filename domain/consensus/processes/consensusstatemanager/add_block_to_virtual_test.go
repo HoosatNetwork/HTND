@@ -14,6 +14,7 @@ import (
 )
 
 func TestVirtualDiff(t *testing.T) {
+
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestVirtualDiff")

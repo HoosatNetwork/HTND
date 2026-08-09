@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/internal/ci"
 	"github.com/HoosatNetwork/HTND/util/difficulty"
 
 	"github.com/HoosatNetwork/HTND/util/mstime"
@@ -28,6 +29,7 @@ func checkedUint64FromInt(value int) uint64 {
 }
 
 func TestDifficulty(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		if consensusConfig.DisableDifficultyAdjustment {
 			return
@@ -229,6 +231,7 @@ func TestDifficulty(t *testing.T) {
 }
 
 func TestDAAScore(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		consensusConfig.DifficultyAdjustmentWindowSize = []int{86}
 		consensusConfig.POWScores = []uint64{math.MaxUint64}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/internal/ci"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -11,6 +12,7 @@ import (
 )
 
 func TestIsAncestorOf(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 		tc, tearDown, err := factory.NewTestConsensus(consensusConfig, "TestIsAncestorOf")

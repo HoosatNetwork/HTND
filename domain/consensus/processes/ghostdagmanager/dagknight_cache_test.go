@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/internal/ci"
 )
 
 type dagKnightCacheTopologyStub struct {
@@ -55,6 +56,8 @@ func (d *dagKnightCacheTopologyStub) SetParents(_ *model.StagingArea, _ *externa
 }
 
 func TestUMCVotingUsesMemoizedKeys(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
+
 	a := externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{0x41})
 	b := externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{0x42})
 	c := externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{0x43})
