@@ -251,40 +251,13 @@ func TestDisqualifiedChainStagesUTXODiff(t *testing.T) {
 			disqualifiedChild.Header.PruningPoint(),
 		)
 
+		// With the new behavior, children of disqualified parents should be rejected
 		err = tc.ValidateAndInsertBlock(disqualifiedChild, true, true)
-		if err != nil {
-			t.Fatalf("ValidateAndInsertBlock child of disqualified parent: %+v", err)
+		if err == nil {
+			t.Fatalf("Expected error when inserting child of disqualified parent, but got none")
 		}
-
-		disqualifiedChildHash := consensushashing.BlockHash(disqualifiedChild)
-
-		childStatus, err := tc.BlockStatusStore().Get(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
-		if err != nil {
-			t.Fatalf("BlockStatusStore().Get: %+v", err)
-		}
-		if childStatus != externalapi.StatusDisqualifiedFromChain {
-			t.Fatalf("Expected child status %s but got %s", externalapi.StatusDisqualifiedFromChain, childStatus)
-		}
-
-		_, err = tc.UTXODiffStore().UTXODiff(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
-		if err != nil {
-			t.Fatalf("Expected disqualified child to have a staged UTXO diff: %+v", err)
-		}
-
-		hasChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
-		if err != nil {
-			t.Fatalf("HasUTXODiffChild: %+v", err)
-		}
-		if !hasChild {
-			t.Fatalf("Expected disqualified child to have a UTXO diff child")
-		}
-
-		utxoDiffChild, err := tc.UTXODiffStore().UTXODiffChild(tc.DatabaseContext(), stagingArea, disqualifiedChildHash)
-		if err != nil {
-			t.Fatalf("UTXODiffChild: %+v", err)
-		}
-		if !utxoDiffChild.Equal(disqualifiedBlockHash) {
-			t.Fatalf("Expected disqualified child diff child to be %s but got %s", disqualifiedBlockHash, utxoDiffChild)
+		if !errors.Is(err, ruleerrors.ErrInvalidBlockParent) {
+			t.Fatalf("Expected ErrInvalidBlockParent when inserting child of disqualified parent, but got: %+v", err)
 		}
 	})
 }

@@ -152,8 +152,8 @@ func (v *blockValidator) checkParentsStatus(stagingArea *model.StagingArea, head
 			return err
 		}
 
-		// Reject blocks with parents that are not yet fully validated
-		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain || status == externalapi.StatusUTXOPendingVerification {
+		// Reject blocks with parents that are disqualified or invalid
+		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
 			return errors.Wrapf(ruleerrors.ErrInvalidBlockParent, "block has parent %s with invalid status %s",
 				parentHash, status)
 		}
