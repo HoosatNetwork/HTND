@@ -134,7 +134,7 @@ func (v *blockValidator) hasValidatedHeader(stagingArea *model.StagingArea, bloc
 	return status == externalapi.StatusHeaderOnly, nil
 }
 
-// checkParentsStatus validates that none of the block's parents are disqualified or invalid
+// checkParentsStatus validates that none of the block's parents are disqualified, invalid, or pending
 func (v *blockValidator) checkParentsStatus(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
 	directParents := header.DirectParents()
 	if len(directParents) == 0 {
@@ -152,7 +152,8 @@ func (v *blockValidator) checkParentsStatus(stagingArea *model.StagingArea, head
 			return err
 		}
 
-		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
+		// Reject blocks with parents that are not yet fully validated
+		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain || status == externalapi.StatusUTXOPendingVerification {
 			return errors.Wrapf(ruleerrors.ErrInvalidBlockParent, "block has parent %s with invalid status %s",
 				parentHash, status)
 		}
