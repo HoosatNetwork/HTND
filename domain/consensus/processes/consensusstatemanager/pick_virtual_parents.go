@@ -174,6 +174,20 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 		if selectedParentCandidateStatus == externalapi.StatusUTXOValid {
 			return selectedParentCandidate, nil
 		}
+		if selectedParentCandidateStatus == externalapi.StatusUTXOPendingVerification {
+			// For blocks with pending verification status, we need to ensure they have a UTXO diff
+			// before selecting them as virtual parents. If they don't have a UTXO diff yet,
+			// they haven't been fully processed and shouldn't be selected. Skip them like
+			// header-only blocks.
+			_, err = csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, selectedParentCandidate)
+			if err == nil {
+				// Block has a UTXO diff, so it's safe to select
+				return selectedParentCandidate, nil
+			}
+			// If we can't get the UTXO diff (error), skip this candidate
+			// and continue to the next one
+			continue
+		}
 
 		// Header-only blocks are not considered for the "all children disqualified" rule,
 		// so we can skip propagating disqualification through their parents.
@@ -220,8 +234,11 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 					continue
 				}
 				// If we find a child that's not disqualified, the parent cannot be pushed yet
+				// Note: StatusUTXOPendingVerification blocks are treated as disqualified for this check
+				// to maintain consistency with how they're handled elsewhere in this function.
 				if childStatus != externalapi.StatusDisqualifiedFromChain &&
-					childStatus != externalapi.StatusInvalid {
+					childStatus != externalapi.StatusInvalid &&
+					childStatus != externalapi.StatusUTXOPendingVerification {
 					allChildrenDisqualified = false
 					break
 				}
