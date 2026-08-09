@@ -144,13 +144,8 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 
 	disqualifiedCandidates := hashset.New()
 
-	// Hot-path optimizations:
-	// 1. Cache status lookups to avoid repeating DB reads for the same hashes.
-	// 2. For each parent, cache the number of relevant children (non-virtual, non-header-only).
-	// 3. Track per-parent disqualified-child counts and push a parent once its relevant children are all disqualified.
+	// Cache status lookups to avoid repeating DB reads for the same hashes.
 	statusCache := make(map[externalapi.DomainHash]externalapi.BlockStatus)
-	relevantChildCountCache := make(map[externalapi.DomainHash]uint32)
-	disqualifiedChildCount := make(map[externalapi.DomainHash]uint32)
 	pushedToHeap := make(map[externalapi.DomainHash]struct{})
 
 	getStatus := func(hash *externalapi.DomainHash) (externalapi.BlockStatus, error) {
@@ -164,35 +159,6 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 		}
 		statusCache[key] = status
 		return status, nil
-	}
-
-	getRelevantChildCount := func(parent *externalapi.DomainHash) (uint32, error) {
-		key := *parent
-		if count, ok := relevantChildCountCache[key]; ok {
-			return count, nil
-		}
-
-		allChildren, err := csm.dagTopologyManager.Children(stagingArea, parent)
-		if err != nil {
-			return 0, err
-		}
-
-		var count uint32
-		for _, child := range allChildren {
-			if child.Equal(model.VirtualBlockHash) {
-				continue
-			}
-			childStatus, err := getStatus(child)
-			if err != nil {
-				return 0, err
-			}
-			if childStatus == externalapi.StatusHeaderOnly {
-				continue
-			}
-			count++
-		}
-		relevantChildCountCache[key] = count
-		return count, nil
 	}
 
 	for {
@@ -226,24 +192,47 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 				continue
 			}
 
-			relevantChildrenCount, err := getRelevantChildCount(parent)
-			if err != nil {
-				return nil, err
-			}
-
+			// Only push the parent if ALL of its relevant (non-virtual, non-header-only) children
+			// are disqualified or invalid. This prevents pushing parents prematurely when there
+			// are still valid children that should be preferred.
+			// We check the actual status of all children, not just those in the current iteration.
 			parentKey := *parent
-			disqualifiedChildCount[parentKey]++
-			if disqualifiedChildCount[parentKey] < relevantChildrenCount {
-				continue
-			}
 			if _, ok := pushedToHeap[parentKey]; ok {
 				continue
 			}
-			pushedToHeap[parentKey] = struct{}{}
 
-			err = candidatesHeap.Push(parent)
+			allChildren, err := csm.dagTopologyManager.Children(stagingArea, parent)
 			if err != nil {
 				return nil, err
+			}
+
+			allChildrenDisqualified := true
+			for _, child := range allChildren {
+				if child.Equal(model.VirtualBlockHash) {
+					continue
+				}
+				childStatus, err := getStatus(child)
+				if err != nil {
+					return nil, err
+				}
+				// Header-only blocks don't affect parent qualification
+				if childStatus == externalapi.StatusHeaderOnly {
+					continue
+				}
+				// If we find a child that's not disqualified, the parent cannot be pushed yet
+				if childStatus != externalapi.StatusDisqualifiedFromChain &&
+					childStatus != externalapi.StatusInvalid {
+					allChildrenDisqualified = false
+					break
+				}
+			}
+
+			if allChildrenDisqualified {
+				pushedToHeap[parentKey] = struct{}{}
+				err = candidatesHeap.Push(parent)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
