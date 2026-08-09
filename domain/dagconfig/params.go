@@ -311,12 +311,14 @@ var MainnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -329,9 +331,13 @@ var MainnetParams = Params{
 		2640,
 		2640,
 		2640,
+		2640,
 	},
 	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
-	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
+	// Block version schedule:
+	//   v1→v2 @ 17500000, v2→v3 @ 21821800, v3→v4 @ 29335426, v4→v5 @ 43334184,
+	//   v5→v6 @ 192792190, v6→v7 @ 213340776,
+	//   v7→v8 @ 214600000 (SelectedParentFixActivationDAAScore — reward-attribution fix)
 	POWScores: []uint64{
 		17500000,
 		21821800,
@@ -339,14 +345,16 @@ var MainnetParams = Params{
 		43334184,
 		192792190,
 		213340776,
+		214600000,
 	},
 
-	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1, 1},
+	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1, 1, 1},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000},
@@ -385,6 +393,7 @@ var MainnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -402,6 +411,7 @@ var MainnetParams = Params{
 		defaultMergeDepth,
 		defaultMergeDepth,
 		defaultMergeDepth,
+		3600,
 		3600,
 		3600,
 		3600,

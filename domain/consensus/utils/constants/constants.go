@@ -32,6 +32,16 @@ func BlockVersionProgressed(old uint32, new uint16) {
 		log.Info("/_______ \\___  >___|  /__||__| |___|  /  \\___|_  /(____  /__|  \\____ |   \\___  / \\____/|__|  |__|_ \\ \\____|__  /\\___  >__| |__| \\_/  \\___  >")
 		log.Info("        \\/   \\/     \\/              \\/         \\/      \\/           \\/       \\/                   \\/         \\/     \\/                   \\/ ")
 	}
+	if old >= 7 && new == 8 {
+		log.Info("██████╗ ███████╗██╗    ██╗ █████╗ ██████╗ ██████╗     ███████╗██╗██╗  ██╗")
+		log.Info("██╔══██╗██╔════╝██║    ██║██╔══██╗██╔══██╗██╔══██╗    ██╔════╝██║╚██╗██╔╝")
+		log.Info("██████╔╝█████╗  ██║ █╗ ██║███████║██████╔╝██║  ██║    █████╗  ██║ ╚███╔╝ ")
+		log.Info("██╔══██╗██╔══╝  ██║███╗██║██╔══██║██╔══██╗██║  ██║    ██╔══╝  ██║ ██╔██╗ ")
+		log.Info("██║  ██║███████╗╚███╔███╔╝██║  ██║██║  ██║██████╔╝    ██║     ██║██╔╝ ██╗")
+		log.Info("╚═╝  ╚═╝╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝     ╚═╝     ╚═╝╚═╝  ╚═╝")
+		log.Info("Block version 8 active — selected-parent reward attribution fix activated.")
+		log.Info("DAGKnight coinbase rewards are now correctly attributed to the originating blue block.")
+	}
 }
 
 // GetBlockVersion returns the current block version (atomic load).

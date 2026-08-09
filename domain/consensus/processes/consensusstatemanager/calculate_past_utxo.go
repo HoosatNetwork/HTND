@@ -3,6 +3,7 @@ package consensusstatemanager
 import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
@@ -198,9 +199,13 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	log.Tracef("The past median time for block %s is: %d", blockHash, selectedParentMedianTime)
 
 	// Fetch the GHOSTDAG data so we can identify the selected parent by hash rather
-	// than by position. Reward attribution (coinbase acceptance) must be tied to the
-	// originating blue block's coinbase, not to whichever block happens to be first
-	// in the sorted merge-set slice.
+	// than by position for blocks at or above the activation score.
+	// Reward attribution (coinbase acceptance) must be tied to the originating blue
+	// block's coinbase, not to whichever block happens to be first in the sorted
+	// merge-set slice.  This invariant was broken by commit 7148270f (DAGKnight
+	// rewrite) which made MergeSetBlues()[0] no longer reliably the selected parent.
+	// For blocks below SelectedParentFixActivationDAAScore we preserve the pre-fix
+	// behaviour (i == 0) so that all nodes agree on already-committed chain history.
 	blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 	if err != nil {
 		return nil, nil, err
@@ -217,10 +222,17 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 			BlockHash:                 mergeSetBlockHash,
 			TransactionAcceptanceData: make([]*externalapi.TransactionAcceptanceData, len(mergeSetBlock.Transactions)),
 		}
-		// Identify the selected parent by comparing hashes against GHOSTDAG metadata.
-		// Do NOT rely on slice position (i == 0): the selected parent may appear
-		// anywhere in MergeSetBlues after DAGKnight ordering changes.
-		isSelectedParent := mergeSetBlockHash.Equal(selectedParentHash)
+		// For blocks at or above SelectedParentFixActivationDAAScore, identify the
+		// selected parent by comparing hashes against GHOSTDAG metadata (safe and
+		// correct).  For earlier blocks, fall back to the legacy i==0 positional
+		// heuristic so that re-validation agrees with the chain all nodes committed
+		// to while running the buggy 7148270f code.
+		var isSelectedParent bool
+		if daaScore >= constants.SelectedParentFixActivationDAAScore {
+			isSelectedParent = mergeSetBlockHash.Equal(selectedParentHash)
+		} else {
+			isSelectedParent = i == 0
+		}
 		log.Tracef("Is merge set block %s the selected parent: %t", mergeSetBlockHash, isSelectedParent)
 
 		for j, transaction := range mergeSetBlock.Transactions {

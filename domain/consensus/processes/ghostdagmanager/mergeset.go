@@ -5,6 +5,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
@@ -104,13 +105,39 @@ func (gm *ghostdagManager) GetSortedMergeSet(stagingArea *model.StagingArea,
 	if len(blueMergeSet) == 0 {
 		return sortedMergeSet, nil
 	}
-	// The selected parent must always come first in the sorted merge set so that
-	// applyMergeSetBlocks can correctly attribute coinbase rewards. Selected-parent
-	// identity is authoritative from GHOSTDAG metadata, not from slice position.
-	selectedParent := currentGhostdagData.SelectedParent()
+
+	// Determine which block to place first. For blocks at or above
+	// SelectedParentFixActivationDAAScore we use the authoritative GHOSTDAG
+	// SelectedParent() so that the first element is always the true selected
+	// parent regardless of the order in MergeSetBlues (which DAGKnight reordering
+	// may have shuffled). For earlier blocks we fall back to MergeSetBlues()[0] —
+	// the legacy behaviour — so that re-validation agrees with the chain that all
+	// nodes committed to while running the pre-fix code.
+	//
+	// DAAScore is looked up from the block header. For the virtual block (which has
+	// no stored header) we default to the new behaviour because the virtual block is
+	// always current and therefore above the activation score.
+	useFixedOrdering := true // default for virtual / header-not-found cases
+	if !current.Equal(model.VirtualBlockHash) {
+		header, headerErr := gm.headerStore.BlockHeader(gm.databaseContext, stagingArea, current)
+		if headerErr == nil {
+			useFixedOrdering = header.DAAScore() >= constants.SelectedParentFixActivationDAAScore
+		}
+	}
+
+	var selectedParent *externalapi.DomainHash
+	if useFixedOrdering {
+		// Post-activation: selected parent is authoritative from GHOSTDAG metadata.
+		selectedParent = currentGhostdagData.SelectedParent()
+	} else {
+		// Pre-activation: preserve legacy ordering where MergeSetBlues()[0] was
+		// treated as the selected parent by applyMergeSetBlocks.
+		selectedParent = blueMergeSet[0]
+	}
 	sortedMergeSet = append(sortedMergeSet, selectedParent)
-	// Build the remaining blue slice, excluding the selected parent (it may appear
-	// anywhere in MergeSetBlues, not necessarily at index 0).
+
+	// Build the remaining blue slice, excluding the selected parent by hash so the
+	// function is correct even when the selected parent is not at index 0.
 	remainingBlues := make([]*externalapi.DomainHash, 0, len(blueMergeSet))
 	for _, b := range blueMergeSet {
 		if !b.Equal(selectedParent) {
