@@ -116,4 +116,20 @@ const (
 	// MaxKColouringSize is the maximum number of blocks for KColouring computation.
 	// KColouring is recursive and expensive, so limiting its input size is critical.
 	MaxKColouringSize = 100
+
+	// SelectedParentFixActivationDAAScore is the DAA score at which the consensus-safe
+	// fix for selected-parent reward attribution activates on mainnet.
+	//
+	// Background: commit 7148270f introduced DAGKnight ordering changes that broke the
+	// invariant that MergeSetBlues()[0] is always the selected parent.  As a result,
+	// applyMergeSetBlocks was mis-attributing coinbase rewards for blocks accepted after
+	// that commit (roughly August 9 2026).  The fix (identifying the selected parent by
+	// GHOSTDAG hash rather than by slice position) must be activated at a coordinated
+	// DAAScore so that all nodes re-validate pre-activation blocks using the old logic
+	// and only switch to the corrected logic for post-activation blocks.
+	//
+	// Calculation: virtualDaaScore at detection ≈ 213,703,941 (August 9 2026 ~18:00 UTC)
+	// +864,000 (5 BPS × 48 hours) → 214,567,941 → rounded up to 214,600,000.
+	// Node operators must upgrade before this score is reached.
+	SelectedParentFixActivationDAAScore = uint64(214_600_000)
 )
