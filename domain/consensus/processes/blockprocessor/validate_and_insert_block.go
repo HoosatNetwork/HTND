@@ -385,5 +385,5 @@ func (bp *blockProcessor) hasValidatedHeader(stagingArea *model.StagingArea, blo
 		return false, err
 	}
 
-	return status == externalapi.StatusHeaderOnly, nil
+	return status != externalapi.StatusInvalid, nil
 }

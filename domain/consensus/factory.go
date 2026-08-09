@@ -612,8 +612,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
-	c.RepairBlockStatuses()
-	c.ReresolveInvalidBlocks()
+	// c.RepairBlockStatuses()
+	// c.ReresolveInvalidBlocks()
 
 	err = pruningManager.UpdatePruningPointIfRequired()
 	if err != nil {

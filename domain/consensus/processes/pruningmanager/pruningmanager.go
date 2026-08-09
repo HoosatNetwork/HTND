@@ -771,7 +771,7 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 		}
 
 		if int(i) >= len(expectedPruningPoints) {
-			log.Warn("ArePruningPointsInValidChain: no more expected pruning points at index %d", i)
+			log.Warnf("ArePruningPointsInValidChain: no more expected pruning points at index %d", i)
 			break
 		}
 
