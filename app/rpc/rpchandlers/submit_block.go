@@ -196,8 +196,8 @@ func logBlockAcceptance(context *rpccontext.Context, block *externalapi.DomainBl
 		log.Warnf("Accepted block %s via submit with %d tx, but failed to get block info: %v",
 			blockHash, txCount, err)
 	} else {
-		log.Infof("Accepted block %s via submit with %d tx (dynamic K: %d)",
-			blockHash, txCount, blockInfo.DynamicK)
+		log.Infof("Accepted block %s via submit with %d tx (dynamic K: %d) Status %s",
+			blockHash, txCount, blockInfo.DynamicK, blockInfo.BlockStatus)
 	}
 	log.Debugf("Accepted PoW hash %s", block.PoWHash)
 }
