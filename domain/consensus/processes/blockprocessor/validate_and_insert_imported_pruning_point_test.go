@@ -489,6 +489,7 @@ func makeFakeUTXOs() []*externalapi.OutpointAndUTXOEntryPair {
 }
 
 func TestGetPruningPointUTXOs(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		// This is done to reduce the pruning depth to 8 blocks
 		finalityDepth := 4
