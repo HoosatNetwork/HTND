@@ -314,7 +314,7 @@ func (csm *consensusStateManager) RestorePastUTXOSetIterator(stagingArea *model.
 	onEnd := logger.LogAndMeasureExecutionTime(log, "RestorePastUTXOSetIterator")
 	defer onEnd()
 
-	blockStatus, _, err := csm.resolveBlockStatus(stagingArea, blockHash, true)
+	blockStatus, _, err := csm.ResolveBlockStatus(stagingArea, blockHash, true)
 	if err != nil {
 		return nil, err
 	}

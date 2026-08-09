@@ -5,6 +5,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
@@ -34,6 +35,18 @@ func HandleGetBlockDAGInfo(context *rpccontext.Context, _ *router.Router, _ appm
 	response.HeaderCount = syncInfo.HeaderCount
 
 	tipHashes, err := consensus.Tips()
+	for _, tip := range tipHashes {
+		info, err := consensus.GetBlockInfo(tip)
+		if err != nil {
+			response.Error = appmessage.RPCErrorf("Could not get tip status: %s", err)
+			return response, nil
+		}
+		if info.BlockStatus != externalapi.StatusDisqualifiedFromChain {
+			log.Infof("Tip %s status %s", tip, info.BlockStatus)
+
+		}
+	}
+	log.Infof("Len of tipHashes %d", len(tipHashes))
 	if err != nil {
 		response.Error = appmessage.RPCErrorf("Could not get tips: %s", err)
 		return response, nil

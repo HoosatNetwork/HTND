@@ -10,6 +10,6 @@ type TestConsensusStateManager interface {
 	model.ConsensusStateManager
 	AddUTXOToMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
 		outpoint *externalapi.DomainOutpoint) error
-	ResolveBlockStatus(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+	ResolveBlockStatusTest(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 		useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, error)
 }

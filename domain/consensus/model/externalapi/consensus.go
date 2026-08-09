@@ -59,5 +59,8 @@ type Consensus interface {
 	IsChainBlock(blockHash *DomainHash) (bool, error)
 	VirtualMergeDepthRoot() (*DomainHash, error)
 	IsNearlySynced() (bool, error)
+	ResolveBlockStatus(blockHash *DomainHash, useSeparateStagingAreaPerBlock bool) (BlockStatus, error)
+	RepairBlockStatuses() error
+	ReresolveInvalidBlocks() error
 	GetBlockByTransactionID(transactionID *DomainTransactionID) (*DomainBlock, error)
 }

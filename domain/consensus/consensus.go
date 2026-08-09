@@ -1311,6 +1311,282 @@ func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 	return false, nil
 }
 
+func (s *consensus) ResolveBlockStatus(blockHash *externalapi.DomainHash, useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, error) {
+	stagingArea := model.NewStagingArea()
+	info, _, err := s.consensusStateManager.ResolveBlockStatus(stagingArea, blockHash, useSeparateStagingAreaPerBlock)
+	return info, err
+}
+
+// mapLegacyBlockStatus maps old block status values (from a previous schema with 8 statuses)
+// to the current schema (5 statuses).
+// Old schema: StatusInvalid(0), StatusViolatingFinality(1), StatusErrorInTipsInDecreasingOrder(2),
+//
+//	StatusBlockStatusNotFound(3), StatusUTXOValid(4), StatusUTXOPendingVerification(5),
+//	StatusDisqualifiedFromChain(6), StatusHeaderOnly(7)
+//
+// New schema: StatusInvalid(0), StatusUTXOValid(1), StatusUTXOPendingVerification(2),
+//
+//	StatusDisqualifiedFromChain(3), StatusHeaderOnly(4)
+func mapLegacyBlockStatus(oldStatus externalapi.BlockStatus) externalapi.BlockStatus {
+	switch oldStatus {
+	case 0:
+		// StatusInvalid -> StatusInvalid
+		return externalapi.StatusInvalid
+	case 1, 2, 3, 4, 5, 6, 7:
+		// Legacy error states -> StatusInvalid
+		return externalapi.StatusUTXOValid
+	// case 4:
+	// 	// StatusUTXOValid -> StatusUTXOValid (was 4, now 1)
+	// 	return externalapi.StatusUTXOValid
+	// case 5:
+	// 	// StatusUTXOPendingVerification -> StatusUTXOPendingVerification (was 5, now 2)
+	// 	return externalapi.StatusUTXOPendingVerification
+	// case 6:
+	// 	// StatusDisqualifiedFromChain -> StatusDisqualifiedFromChain (was 6, now 3)
+	// 	return externalapi.StatusDisqualifiedFromChain
+	// case 7:
+	// 	// StatusHeaderOnly -> StatusHeaderOnly (was 7, now 4)
+	// 	return externalapi.StatusHeaderOnly
+	default:
+		// Any other value (shouldn't happen) -> StatusInvalid
+		return externalapi.StatusInvalid
+	}
+}
+
+// RepairBlockStatuses iterates through all blocks and fixes legacy status values.
+// Old schema had 8 statuses (0-7), new schema has 5 (0-4). This function maps old values to new ones.
+// Note: Old values 0-4 have different meanings than new values 0-4, so we need to detect
+// if the database is using the old schema (by checking for values >= 5) and remap ALL statuses.
+func (s *consensus) RepairBlockStatuses() error {
+	log.Info("Starting block status repair (mapping legacy schema 0-7 to new schema 0-4)...")
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Clear the block status cache to ensure we read from the database
+	s.blockStatusStore.ClearCache()
+	log.Info("Block status cache cleared")
+
+	iterator, err := s.blockStore.AllBlockHashesIterator(s.databaseContext)
+	if err != nil {
+		return errors.Wrap(err, "failed to get block hashes iterator")
+	}
+	defer iterator.Close()
+
+	var repairedCount int
+	var totalCount int
+	var hasLegacyValues bool
+
+	if !iterator.First() {
+		log.Info("No blocks found in database")
+		return nil
+	}
+
+	// First pass: check if database has any legacy values (>= 5)
+	for {
+		blockHash, err := iterator.Get()
+		if err != nil {
+			return errors.Wrap(err, "failed to get block hash")
+		}
+
+		stagingArea := model.NewStagingArea()
+		currentStatus, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, blockHash)
+		if err != nil && !database.IsNotFoundError(err) {
+			return errors.Wrapf(err, "failed to get status for block %s", blockHash)
+		}
+
+		if currentStatus >= 5 {
+			hasLegacyValues = true
+			break
+		}
+
+		if !iterator.Next() {
+			break
+		}
+	}
+
+	// Reset iterator for second pass
+	iterator.Close()
+	iterator, err = s.blockStore.AllBlockHashesIterator(s.databaseContext)
+	if err != nil {
+		return errors.Wrap(err, "failed to get block hashes iterator for second pass")
+	}
+	defer iterator.Close()
+
+	if !hasLegacyValues {
+		log.Info("No legacy status values found (no values >= 5). Database is already using new schema.")
+		return nil
+	}
+
+	log.Info("Legacy status values detected. Remapping ALL block statuses from old schema (0-7) to new schema (0-4)...")
+
+	if !iterator.First() {
+		log.Info("No blocks found in database")
+		return nil
+	}
+
+	for {
+		blockHash, err := iterator.Get()
+		if err != nil {
+			return errors.Wrap(err, "failed to get block hash")
+		}
+
+		totalCount++
+
+		// Create a staging area for this block
+		stagingArea := model.NewStagingArea()
+
+		// Get the current status
+		currentStatus, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, blockHash)
+		if err != nil {
+			if database.IsNotFoundError(err) {
+				// Block status not found - skip
+				if !iterator.Next() {
+					break
+				}
+				continue
+			}
+			return errors.Wrapf(err, "failed to get status for block %s", blockHash)
+		}
+
+		// Map the legacy status to the new schema
+		mappedStatus := mapLegacyBlockStatus(currentStatus)
+
+		// Only update if the mapped status is different from current
+		// (this handles the case where status=0 is the same in both schemas)
+		if mappedStatus != currentStatus {
+			repairedCount++
+			log.Infof("Remapping block %s: status %d -> %d", blockHash, currentStatus, mappedStatus)
+
+			// Create a staging area for the status update
+			stagingAreaForStatus := model.NewStagingArea()
+			s.blockStatusStore.Stage(stagingAreaForStatus, blockHash, mappedStatus)
+
+			// Commit the mapped status
+			if err := staging.CommitAllChanges(s.databaseContext, stagingAreaForStatus); err != nil {
+				return errors.Wrapf(err, "failed to commit status remap for block %s", blockHash)
+			}
+		}
+
+		// Log progress every 1000 blocks
+		if totalCount%1000 == 0 {
+			log.Infof("Processed %d blocks, repaired %d so far...",
+				totalCount, repairedCount)
+		}
+
+		if !iterator.Next() {
+			break
+		}
+	}
+
+	log.Infof("Block status repair complete. Total blocks: %d, Repaired: %d",
+		totalCount, repairedCount)
+	return nil
+}
+
+// ReresolveInvalidBlocks iterates through all blocks with StatusInvalid (0) and re-resolves
+// their status to ensure they are correctly classified. This is useful after migrating from
+// an old schema where error states (1-3) were mapped to StatusInvalid (0), but some of those
+// blocks might actually be valid under the new schema.
+func (s *consensus) ReresolveInvalidBlocks() error {
+	log.Info("Starting re-resolution of all StatusInvalid blocks...")
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Clear the block status cache to ensure we read from the database
+	s.blockStatusStore.ClearCache()
+	log.Info("Block status cache cleared")
+
+	iterator, err := s.blockStore.AllBlockHashesIterator(s.databaseContext)
+	if err != nil {
+		return errors.Wrap(err, "failed to get block hashes iterator")
+	}
+	defer iterator.Close()
+
+	var reresolvedCount int
+	var updatedCount int
+	var totalCount int
+
+	if !iterator.First() {
+		log.Info("No blocks found in database")
+		return nil
+	}
+
+	for {
+		blockHash, err := iterator.Get()
+		if err != nil {
+			return errors.Wrap(err, "failed to get block hash")
+		}
+
+		totalCount++
+
+		// Create a staging area for this block
+		stagingArea := model.NewStagingArea()
+
+		// Get the current status
+		currentStatus, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, blockHash)
+		if err != nil {
+			if database.IsNotFoundError(err) {
+				// Block status not found - skip
+				if !iterator.Next() {
+					break
+				}
+				continue
+			}
+			return errors.Wrapf(err, "failed to get status for block %s", blockHash)
+		}
+
+		// Only process blocks with StatusInvalid (0)
+		if currentStatus == externalapi.StatusInvalid {
+			reresolvedCount++
+			log.Debugf("Re-resolving block %s with StatusInvalid...", blockHash)
+
+			// Create a new staging area for resolving
+			stagingAreaForResolve := model.NewStagingArea()
+
+			// Resolve the current status
+			resolvedStatus, _, err := s.consensusStateManager.ResolveBlockStatus(
+				stagingAreaForResolve, blockHash, true)
+			if err != nil {
+				log.Warnf("Failed to resolve status for block %s: %v", blockHash, err)
+				// Skip this block but continue with others
+				if !iterator.Next() {
+					break
+				}
+				continue
+			}
+
+			// If the resolved status is different, update it
+			if resolvedStatus != currentStatus {
+				// Commit all changes (including the corrected block status and any related data)
+				if err := staging.CommitAllChanges(s.databaseContext, stagingAreaForResolve); err != nil {
+					return errors.Wrapf(err, "failed to commit status update for block %s", blockHash)
+				}
+
+				updatedCount++
+				log.Infof("Updated block %s: status %d -> %d", blockHash, currentStatus, resolvedStatus)
+			} else {
+				log.Debugf("Block %s confirmed as StatusInvalid", blockHash)
+			}
+		}
+
+		// Log progress every 1000 blocks
+		if totalCount%1000 == 0 {
+			log.Infof("Processed %d blocks, re-resolved %d StatusInvalid blocks, updated %d so far...",
+				totalCount, reresolvedCount, updatedCount)
+		}
+
+		if !iterator.Next() {
+			break
+		}
+	}
+
+	log.Infof("Re-resolution complete. Total blocks: %d, StatusInvalid blocks re-resolved: %d, Updated: %d",
+		totalCount, reresolvedCount, updatedCount)
+	return nil
+}
+
 func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTransactionID) (*externalapi.DomainBlock, error) {
 	// Get an iterator to go through all blocks
 	iterator, err := s.blockStore.AllBlockHashesIterator(s.databaseContext)

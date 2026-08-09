@@ -102,4 +102,18 @@ const (
 	// UnacceptedDAAScore is used to for UTXOEntries that were created by transactions in the mempool, or otherwise
 	// not-yet-accepted transactions.
 	UnacceptedDAAScore = math.MaxUint64
+
+	// MaxDAGKnightTips is the maximum number of tips to pass to DAGKnight OrderDAG.
+	// With O(n^2) complexity, keeping this under ~200 ensures reasonable performance.
+	// 200 tips = ~20K pairwise comparisons, 500 tips = ~125K, 1000 tips = ~500K.
+	MaxDAGKnightTips = 24
+
+	// MaxOrderDAGSize is the absolute maximum number of blocks that OrderDAG will process.
+	// If the input exceeds this, it will be limited by taking top blocks by blue score.
+	// This prevents pathological cases where deep recursion with large sets causes slowdowns.
+	MaxOrderDAGSize = 200
+
+	// MaxKColouringSize is the maximum number of blocks for KColouring computation.
+	// KColouring is recursive and expensive, so limiting its input size is critical.
+	MaxKColouringSize = 100
 )

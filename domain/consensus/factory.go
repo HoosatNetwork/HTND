@@ -233,18 +233,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	dagTraversalManager := dagTraversalManagers[0]
 	// Processes
 	parentsManager := parentssanager.New(config.GenesisHash, config.MaxBlockLevel)
-	blockParentBuilder := blockparentbuilder.New(
-		dbManager,
-		blockHeaderStore,
-		blockStatusStore,
-		dagTopologyManager,
-		parentsManager,
-		reachabilityDataStore,
-		pruningStore,
-
-		config.GenesisHash,
-		config.MaxBlockLevel,
-	)
 
 	txMassCalculator := txmass.NewCalculator(config.MassPerTxByte, config.MassPerScriptPubKeyByte, config.MassPerSigOp)
 
@@ -389,6 +377,20 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.K,
 		config.DifficultyAdjustmentWindowSize,
 		config.TargetTimePerBlock,
+	)
+
+	blockParentBuilder := blockparentbuilder.New(
+		dbManager,
+		blockHeaderStore,
+		blockStatusStore,
+		dagTopologyManager,
+		parentsManager,
+		consensusStateManager,
+		reachabilityDataStore,
+		pruningStore,
+
+		config.GenesisHash,
+		config.MaxBlockLevel,
 	)
 
 	blockValidator := blockvalidator.New(
@@ -610,6 +612,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
+	c.RepairBlockStatuses()
+	c.ReresolveInvalidBlocks()
+
 	err = pruningManager.UpdatePruningPointIfRequired()
 	if err != nil {
 		return nil, false, err
@@ -804,5 +809,6 @@ func (f *factory) dagProcesses(config *Config,
 		// Set the DAG traversal manager in the ghostdag manager to resolve circular dependency
 		ghostdagManagers[i].SetDAGTraversalManager(dagTraversalManagers[i])
 	}
+
 	return dagTopologyManagers, ghostdagManagers, dagTraversalManagers
 }

@@ -48,7 +48,7 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 				// Keep the block-resolution path in a single staging area so block insertion
 				// does not create unnecessary per-block commits while still preserving the
 				// same UTXO-status and diff-child semantics.
-				blockStatus, reversalData, err = csm.resolveBlockStatus(stagingArea, blockHash, false)
+				blockStatus, reversalData, err = csm.ResolveBlockStatus(stagingArea, blockHash, false)
 				if err != nil {
 					return nil, nil, nil, err
 				}

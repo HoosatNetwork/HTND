@@ -21,6 +21,9 @@ type ghostdagManager struct {
 	// Cache only UMCVoting results (DAGKnight)
 	umcVotingCache *lrucache.LRUCache[int]
 	orderDAGCache  *lrucache.LRUCache[orderDAGResult]
+	chainPathCache *lrucache.LRUCache[[]*externalapi.DomainHash]
+	lcaCache       *lrucache.LRUCache[*externalapi.DomainHash]
+	agreesCache    *lrucache.LRUCache[bool]
 }
 
 // New instantiates a new GHOSTDAGManager
@@ -45,6 +48,9 @@ func New(
 		genesisHash:         genesisHash,
 		umcVotingCache:      lrucache.New[int](500, true),
 		orderDAGCache:       lrucache.New[orderDAGResult](500, true),
+		chainPathCache:      lrucache.New[[]*externalapi.DomainHash](2000, true),
+		lcaCache:            lrucache.New[*externalapi.DomainHash](5000, true),
+		agreesCache:         lrucache.New[bool](10000, true),
 	}
 }
 

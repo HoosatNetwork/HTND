@@ -338,7 +338,7 @@ var MainnetParams = Params{
 		29335426,
 		43334184,
 		192792190,
-		223344556,
+		213340776,
 	},
 
 	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1, 1},

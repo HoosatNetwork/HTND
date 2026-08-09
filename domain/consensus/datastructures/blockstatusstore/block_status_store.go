@@ -123,3 +123,7 @@ func (bss *blockStatusStore) UnstageAll(stagingArea *model.StagingArea) {
 func (bss *blockStatusStore) CacheLen() int {
 	return bss.cache.Len()
 }
+
+func (bss *blockStatusStore) ClearCache() {
+	bss.cache.Clear()
+}

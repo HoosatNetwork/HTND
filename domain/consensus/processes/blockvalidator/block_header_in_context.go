@@ -65,12 +65,12 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	}
 
 	// TODO: Think if there is better way to check for indirect parents than the whole reachability.
-	if !isBlockWithTrustedData {
-		err = v.checkIndirectParents(stagingArea, header)
-		if err != nil {
-			return err
-		}
-	}
+	// if !isBlockWithTrustedData {
+	// 	err = v.checkIndirectParents(stagingArea, header)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	err = v.mergeDepthManager.CheckBoundedMergeDepth(stagingArea, blockHash, ghostdagData, header, isBlockWithTrustedData)
 	if err != nil {
@@ -206,22 +206,22 @@ func (v *blockValidator) blockVersionForDAAScore(daaScore uint64) uint16 {
 	return blockVersion
 }
 
-func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
-	newBlockParents := false
-	if v.blockVersionForDAAScore(header.DAAScore()) >= 7 {
-		newBlockParents = true
-	}
-	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents(), newBlockParents)
-	if err != nil {
-		return err
-	}
+// func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
+// 	newBlockParents := false
+// 	if v.blockVersionForDAAScore(header.DAAScore()) >= 7 {
+// 		newBlockParents = true
+// 	}
+// 	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents(), newBlockParents)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	areParentsEqual := externalapi.ParentsEqual(header.Parents(), expectedParents)
-	if !areParentsEqual {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedParents, "unexpected indirect block parents")
-	}
-	return nil
-}
+// 	areParentsEqual := externalapi.ParentsEqual(header.Parents(), expectedParents)
+// 	if !areParentsEqual {
+// 		return errors.Wrapf(ruleerrors.ErrUnexpectedParents, "unexpected indirect block parents")
+// 	}
+// 	return nil
+// }
 
 //lint:ignore U1000 check is intentionally disabled for now (see ValidateHeaderInContext).
 func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,

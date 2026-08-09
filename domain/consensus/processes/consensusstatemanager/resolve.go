@@ -71,16 +71,16 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	} else {
 		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	}
-	log.Debugf("Number of tips %d", len(orderedTips))
+	log.Infof("Number of tips %d", len(orderedTips))
 	if err != nil {
-		return nil, externalapi.StatusErrorInTipsInDecreasingOrder, err
+		return nil, externalapi.StatusInvalid, err
 	}
 
 	for _, tip := range orderedTips {
 		log.Debugf("Resolving tip %s", tip)
 		isViolatingFinality, shouldNotify, err := csm.isViolatingFinality(stagingArea, tip)
 		if err != nil {
-			return nil, externalapi.StatusViolatingFinality, err
+			return nil, externalapi.StatusInvalid, err
 		}
 
 		if isViolatingFinality {
@@ -93,13 +93,13 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
 		if err != nil {
-			return nil, externalapi.StatusBlockStatusNotFound, err
+			return nil, externalapi.StatusInvalid, err
 		}
 		if status == externalapi.StatusUTXOValid || status == externalapi.StatusUTXOPendingVerification {
 			return tip, status, nil
 		}
 	}
-	log.Infof("None of the current pending tips were valid, so printing all the statuses")
+	log.Infof("None of the tips were valid or pending, so printing all the statuses")
 	for _, tip := range orderedTips {
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
 		if err != nil {
@@ -202,7 +202,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	// Keep the whole resolve chunk in a single staging area so late-IBD resolution
 	// avoids repeated database commits for every intermediate block. This preserves
 	// the same UTXO diff and status semantics while reducing I/O overhead.
-	processingPointStatus, reversalData, err := csm.resolveBlockStatus(
+	processingPointStatus, reversalData, err := csm.ResolveBlockStatus(
 		resolveStagingArea, processingPoint, false)
 	if err != nil {
 		return nil, false, err
@@ -225,41 +225,24 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	updateVirtualStagingArea := model.NewStagingArea()
 
-	// Always get the relevant tips and pick virtual parents from them
-	// This ensures virtual parents are always actual tips, not intermediate blocks
-	lowerTips, err := csm.getGHOSTDAGLowerTips(readStagingArea, pendingTip)
-	if err != nil {
-		return nil, false, err
-	}
-	log.Debugf("Picking virtual parents from relevant tips len: %d", len(lowerTips))
-
-	virtualParents, err := csm.pickVirtualParents(readStagingArea, lowerTips)
-	if err != nil {
-		// No valid tips to use as virtual parents yet
-		log.Debugf("Cannot update virtual: no valid parent candidates. Will try again after resolving more blocks.")
-		return nil, false, nil
-	}
-	log.Debugf("Picked virtual parents: %s", virtualParents)
-
-	// Re-check if we're completely resolved after picking virtual parents
-	// This handles the case where all tips are now valid
-	if !isCompletelyResolved {
-		// Check if the pending tip is now resolved and is in the virtual parents
-		pendingTipInParents := false
-		for _, parent := range virtualParents {
-			if parent.Equal(pendingTip) {
-				pendingTipInParents = true
-				break
-			}
+	virtualParents := []*externalapi.DomainHash{processingPoint}
+	// If `isCompletelyResolved`, set virtual correctly with all tips which have less blue work than pending
+	if isCompletelyResolved {
+		lowerTips, err := csm.getGHOSTDAGLowerTips(readStagingArea, pendingTip)
+		if err != nil {
+			return nil, false, err
 		}
-		if pendingTipInParents && processingPointStatus == externalapi.StatusUTXOValid {
-			isCompletelyResolved = true
-		}
-	}
+		log.Debugf("Picking virtual parents from relevant tips len: %d", len(lowerTips))
 
+		virtualParents, err = csm.pickVirtualParents(readStagingArea, lowerTips)
+		if err != nil {
+			return nil, false, err
+		}
+		log.Debugf("Picked virtual parents: %s", virtualParents)
+	}
 	virtualUTXODiff, err := csm.updateVirtualWithParents(updateVirtualStagingArea, virtualParents)
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil
 	}
 
 	err = staging.CommitAllChanges(csm.databaseContext, updateVirtualStagingArea)

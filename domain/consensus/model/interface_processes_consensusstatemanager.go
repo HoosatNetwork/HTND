@@ -1,6 +1,8 @@
 package model
 
-import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+import (
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+)
 
 // ConsensusStateManager manages the node's consensus state
 type ConsensusStateManager interface {
@@ -15,4 +17,5 @@ type ConsensusStateManager interface {
 	ReverseUTXODiffs(tipHash *externalapi.DomainHash, reversalData *UTXODiffReversalData) error
 	ResolveVirtual(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error)
 	ValidateUTXODiffChildChains() error
+	ResolveBlockStatus(stagingArea *StagingArea, blockHash *externalapi.DomainHash, useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, *UTXODiffReversalData, error)
 }

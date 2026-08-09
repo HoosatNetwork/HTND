@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (csm *consensusStateManager) resolveBlockStatus(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	useSeparateStagingAreaPerBlock bool,
 ) (externalapi.BlockStatus, *model.UTXODiffReversalData, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveBlockStatus for %s", blockHash))

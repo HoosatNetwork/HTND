@@ -66,6 +66,7 @@ type blockParentBuilder struct {
 	blockStatusStore      model.BlockStatusStore
 	dagTopologyManager    model.DAGTopologyManager
 	parentsManager        model.ParentsManager
+	consensusStateManager model.ConsensusStateManager
 	reachabilityDataStore model.ReachabilityDataStore
 	pruningStore          model.PruningStore
 
@@ -80,6 +81,7 @@ func New(
 	blockStatusStore model.BlockStatusStore,
 	dagTopologyManager model.DAGTopologyManager,
 	parentsManager model.ParentsManager,
+	consensusStateManager model.ConsensusStateManager,
 
 	reachabilityDataStore model.ReachabilityDataStore,
 	pruningStore model.PruningStore,
@@ -88,11 +90,12 @@ func New(
 	maxBlockLevel int,
 ) model.BlockParentBuilder {
 	return &blockParentBuilder{
-		databaseContext:    databaseContext,
-		blockHeaderStore:   blockHeaderStore,
-		blockStatusStore:   blockStatusStore,
-		dagTopologyManager: dagTopologyManager,
-		parentsManager:     parentsManager,
+		databaseContext:       databaseContext,
+		blockHeaderStore:      blockHeaderStore,
+		blockStatusStore:      blockStatusStore,
+		dagTopologyManager:    dagTopologyManager,
+		parentsManager:        parentsManager,
+		consensusStateManager: consensusStateManager,
 
 		reachabilityDataStore: reachabilityDataStore,
 		pruningStore:          pruningStore,
@@ -145,6 +148,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		blockHeaderSlicePool.Put(directParentHeadersPtr)
 	}()
 	firstParentInFutureOfPruningPointIndex := 0
+	var firstParentInFutureOfPruningPoint *externalapi.DomainHash
 	foundFirstParentInFutureOfPruningPoint := false
 	for i, directParentHash := range directParentHashesCopy {
 		isInFutureOfPruningPoint, err := bpb.dagTopologyManager.IsAncestorOf(stagingArea, pruningPoint, directParentHash)
@@ -157,6 +161,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		}
 
 		firstParentInFutureOfPruningPointIndex = i
+		firstParentInFutureOfPruningPoint = directParentHash
 		foundFirstParentInFutureOfPruningPoint = true
 		break
 	}
@@ -361,11 +366,14 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 				if err != nil {
 					continue
 				}
-				if status == externalapi.StatusDisqualifiedFromChain {
+				if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
 					continue
 				}
 			}
 			levelBlocks = append(levelBlocks, candidate.hash)
+		}
+		if len(levelBlocks) == 0 && newBlockParents == true {
+			levelBlocks = append(levelBlocks, firstParentInFutureOfPruningPoint)
 		}
 		if len(levelBlocks) > 0 {
 			parents = append(parents, levelBlocks)
