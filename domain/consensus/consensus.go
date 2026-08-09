@@ -1353,12 +1353,11 @@ func mapLegacyBlockStatus(oldStatus externalapi.BlockStatus) externalapi.BlockSt
 	}
 }
 
-// RepairBlockStatuses iterates through all blocks and fixes legacy status values.
-// Old schema had 8 statuses (0-7), new schema has 5 (0-4). This function maps old values to new ones.
-// Note: Old values 0-4 have different meanings than new values 0-4, so we need to detect
-// if the database is using the old schema (by checking for values >= 5) and remap ALL statuses.
+// RepairBlockStatuses iterates through all blocks and sets them to StatusUTXOValid
+// unless they are StatusInvalid. This is useful for repairing databases where blocks
+// were incorrectly marked as disqualified.
 func (s *consensus) RepairBlockStatuses() error {
-	log.Info("Starting block status repair (mapping legacy schema 0-7 to new schema 0-4)...")
+	log.Info("Starting block status repair (setting all non-invalid blocks to StatusUTXOValid)...")
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -1375,50 +1374,6 @@ func (s *consensus) RepairBlockStatuses() error {
 
 	var repairedCount int
 	var totalCount int
-	var hasLegacyValues bool
-
-	if !iterator.First() {
-		log.Info("No blocks found in database")
-		return nil
-	}
-
-	// First pass: check if database has any legacy values (>= 5)
-	for {
-		blockHash, err := iterator.Get()
-		if err != nil {
-			return errors.Wrap(err, "failed to get block hash")
-		}
-
-		stagingArea := model.NewStagingArea()
-		currentStatus, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, blockHash)
-		if err != nil && !database.IsNotFoundError(err) {
-			return errors.Wrapf(err, "failed to get status for block %s", blockHash)
-		}
-
-		if currentStatus >= 5 {
-			hasLegacyValues = true
-			break
-		}
-
-		if !iterator.Next() {
-			break
-		}
-	}
-
-	// Reset iterator for second pass
-	iterator.Close()
-	iterator, err = s.blockStore.AllBlockHashesIterator(s.databaseContext)
-	if err != nil {
-		return errors.Wrap(err, "failed to get block hashes iterator for second pass")
-	}
-	defer iterator.Close()
-
-	if !hasLegacyValues {
-		log.Info("No legacy status values found (no values >= 5). Database is already using new schema.")
-		return nil
-	}
-
-	log.Info("Legacy status values detected. Remapping ALL block statuses from old schema (0-7) to new schema (0-4)...")
 
 	if !iterator.First() {
 		log.Info("No blocks found in database")
@@ -1449,20 +1404,24 @@ func (s *consensus) RepairBlockStatuses() error {
 			return errors.Wrapf(err, "failed to get status for block %s", blockHash)
 		}
 
-		// Map the legacy status to the new schema
-		mappedStatus := mapLegacyBlockStatus(currentStatus)
+		// Set to StatusUTXOValid unless it's StatusInvalid
+		var newStatus externalapi.BlockStatus
+		if currentStatus == externalapi.StatusInvalid {
+			newStatus = externalapi.StatusInvalid
+		} else {
+			newStatus = externalapi.StatusUTXOValid
+		}
 
-		// Only update if the mapped status is different from current
-		// (this handles the case where status=0 is the same in both schemas)
-		if mappedStatus != currentStatus {
+		// Only update if the status needs to change
+		if newStatus != currentStatus {
 			repairedCount++
-			log.Infof("Remapping block %s: status %d -> %d", blockHash, currentStatus, mappedStatus)
+			log.Infof("Repairing block %s: status %d -> %d", blockHash, currentStatus, newStatus)
 
 			// Create a staging area for the status update
 			stagingAreaForStatus := model.NewStagingArea()
-			s.blockStatusStore.Stage(stagingAreaForStatus, blockHash, mappedStatus)
+			s.blockStatusStore.Stage(stagingAreaForStatus, blockHash, newStatus)
 
-			// Commit the mapped status
+			// Commit the repaired status
 			if err := staging.CommitAllChanges(s.databaseContext, stagingAreaForStatus); err != nil {
 				return errors.Wrapf(err, "failed to commit status remap for block %s", blockHash)
 			}
