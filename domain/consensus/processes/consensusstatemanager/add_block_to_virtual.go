@@ -160,9 +160,22 @@ func (csm *consensusStateManager) calculateNewTips(
 	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
 	newTips = append(newTips, newTipHash)
 	for _, currentTip := range currentTips {
-		if !newTipParentsSet.Contains(currentTip) {
-			newTips = append(newTips, currentTip)
+		if newTipParentsSet.Contains(currentTip) {
+			continue
 		}
+		// Skip disqualified tips to prevent them from accumulating in the tips list
+		// since they cannot be extended by new blocks
+		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, currentTip)
+		if err != nil {
+			log.Warnf("Unable to get status for tip %s, keeping it in tips list: %v", currentTip, err)
+			newTips = append(newTips, currentTip)
+			continue
+		}
+		if status == externalapi.StatusDisqualifiedFromChain {
+			log.Debugf("Removing disqualified tip %s from tips list", currentTip)
+			continue
+		}
+		newTips = append(newTips, currentTip)
 	}
 	log.Debugf("The new number of tips is: %d", len(newTips))
 
