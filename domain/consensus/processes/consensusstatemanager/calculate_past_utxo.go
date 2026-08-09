@@ -197,6 +197,16 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	}
 	log.Tracef("The past median time for block %s is: %d", blockHash, selectedParentMedianTime)
 
+	// Fetch the GHOSTDAG data so we can identify the selected parent by hash rather
+	// than by position. Reward attribution (coinbase acceptance) must be tied to the
+	// originating blue block's coinbase, not to whichever block happens to be first
+	// in the sorted merge-set slice.
+	blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	selectedParentHash := blockGHOSTDAGData.SelectedParent()
+
 	multiblockAcceptanceData := make(externalapi.AcceptanceData, len(mergeSetBlocks))
 	accumulatedUTXODiff := selectedParentPastUTXODiff.CloneMutable()
 	accumulatedMass := uint64(0)
@@ -207,7 +217,10 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 			BlockHash:                 mergeSetBlockHash,
 			TransactionAcceptanceData: make([]*externalapi.TransactionAcceptanceData, len(mergeSetBlock.Transactions)),
 		}
-		isSelectedParent := i == 0
+		// Identify the selected parent by comparing hashes against GHOSTDAG metadata.
+		// Do NOT rely on slice position (i == 0): the selected parent may appear
+		// anywhere in MergeSetBlues after DAGKnight ordering changes.
+		isSelectedParent := mergeSetBlockHash.Equal(selectedParentHash)
 		log.Tracef("Is merge set block %s the selected parent: %t", mergeSetBlockHash, isSelectedParent)
 
 		for j, transaction := range mergeSetBlock.Transactions {

@@ -242,7 +242,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	}
 	virtualUTXODiff, err := csm.updateVirtualWithParents(updateVirtualStagingArea, virtualParents)
 	if err != nil {
-		return nil, false, nil
+		return nil, false, err
 	}
 
 	err = staging.CommitAllChanges(csm.databaseContext, updateVirtualStagingArea)

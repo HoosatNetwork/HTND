@@ -104,8 +104,20 @@ func (gm *ghostdagManager) GetSortedMergeSet(stagingArea *model.StagingArea,
 	if len(blueMergeSet) == 0 {
 		return sortedMergeSet, nil
 	}
-	selectedParent, blueMergeSet := blueMergeSet[0], blueMergeSet[1:]
+	// The selected parent must always come first in the sorted merge set so that
+	// applyMergeSetBlocks can correctly attribute coinbase rewards. Selected-parent
+	// identity is authoritative from GHOSTDAG metadata, not from slice position.
+	selectedParent := currentGhostdagData.SelectedParent()
 	sortedMergeSet = append(sortedMergeSet, selectedParent)
+	// Build the remaining blue slice, excluding the selected parent (it may appear
+	// anywhere in MergeSetBlues, not necessarily at index 0).
+	remainingBlues := make([]*externalapi.DomainHash, 0, len(blueMergeSet))
+	for _, b := range blueMergeSet {
+		if !b.Equal(selectedParent) {
+			remainingBlues = append(remainingBlues, b)
+		}
+	}
+	blueMergeSet = remainingBlues
 	i, j := 0, 0
 	for i < len(blueMergeSet) && j < len(redMergeSet) {
 		currentBlue := blueMergeSet[i]
