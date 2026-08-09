@@ -1537,10 +1537,11 @@ func (s *consensus) ReresolveInvalidBlocks() error {
 			return errors.Wrapf(err, "failed to get status for block %s", blockHash)
 		}
 
-		// Only process blocks with StatusInvalid (0)
-		if currentStatus == externalapi.StatusInvalid {
+		// Process blocks with StatusInvalid or StatusDisqualifiedFromChain
+		// that might need re-resolution after changes to consensus rules or state
+		if currentStatus == externalapi.StatusInvalid || currentStatus == externalapi.StatusDisqualifiedFromChain {
 			reresolvedCount++
-			log.Debugf("Re-resolving block %s with StatusInvalid...", blockHash)
+			log.Debugf("Re-resolving block %s with status %s...", blockHash, currentStatus)
 
 			// Create a new staging area for resolving
 			stagingAreaForResolve := model.NewStagingArea()
@@ -1573,7 +1574,7 @@ func (s *consensus) ReresolveInvalidBlocks() error {
 
 		// Log progress every 1000 blocks
 		if totalCount%1000 == 0 {
-			log.Infof("Processed %d blocks, re-resolved %d StatusInvalid blocks, updated %d so far...",
+			log.Infof("Processed %d blocks, re-resolved %d blocks with invalid/disqualified status, updated %d so far...",
 				totalCount, reresolvedCount, updatedCount)
 		}
 
@@ -1582,7 +1583,7 @@ func (s *consensus) ReresolveInvalidBlocks() error {
 		}
 	}
 
-	log.Infof("Re-resolution complete. Total blocks: %d, StatusInvalid blocks re-resolved: %d, Updated: %d",
+	log.Infof("Re-resolution complete. Total blocks: %d, blocks with invalid/disqualified status re-resolved: %d, Updated: %d",
 		totalCount, reresolvedCount, updatedCount)
 	return nil
 }
