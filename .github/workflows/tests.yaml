@@ -10,10 +10,10 @@ on:
 jobs:
 
   build:
+    timeout-minutes: 90
     runs-on: ${{ matrix.os }}
     env:
       GOFLAGS: -tags=ci
-    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
