@@ -85,7 +85,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		MaxManifestFileSize: 128 << 20,
 		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 32768),
 
-		DisableWAL: !envBool("HTND_PEBBLE_DISABLE_WAL"),
+		DisableWAL: envBool("HTND_PEBBLE_DISABLE_WAL") || envBool("HTND_TEST_MODE"),
 
 		CompactionConcurrencyRange: func() (int, int) { return 4, 12 },
 
