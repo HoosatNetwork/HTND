@@ -189,6 +189,10 @@ var (
 	// is also an ancestor of another parent
 	ErrInvalidParentsRelation = newRuleError("ErrInvalidParentsRelation")
 
+	// ErrInvalidBlockParent indicates that a block has a parent with an invalid status
+	// (e.g., StatusInvalid or StatusDisqualifiedFromChain)
+	ErrInvalidBlockParent = newRuleError("ErrInvalidBlockParent")
+
 	// ErrTooManyParents indicates that a block points to more then `MaxNumParentBlocks` parents
 	ErrTooManyParents = newRuleError("ErrTooManyParents")
 

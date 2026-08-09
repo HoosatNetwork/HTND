@@ -77,6 +77,12 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
+	// Check that none of the parents are disqualified or invalid
+	err = v.checkParentsStatus(stagingArea, header)
+	if err != nil {
+		return err
+	}
+
 	if !isBlockWithTrustedData {
 		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
 		err = v.checkDAAScore(stagingArea, blockHash, header)
@@ -126,6 +132,33 @@ func (v *blockValidator) hasValidatedHeader(stagingArea *model.StagingArea, bloc
 	}
 
 	return status == externalapi.StatusHeaderOnly, nil
+}
+
+// checkParentsStatus validates that none of the block's parents are disqualified or invalid
+func (v *blockValidator) checkParentsStatus(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
+	directParents := header.DirectParents()
+	if len(directParents) == 0 {
+		// Genesis block has no parents
+		return nil
+	}
+
+	for _, parentHash := range directParents {
+		status, err := v.blockStatusStore.Get(v.databaseContext, stagingArea, parentHash)
+		if database.IsNotFoundError(err) {
+			log.Infof("checkParentsStatus failed to retrieve with %s\n", parentHash)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+
+		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
+			return errors.Wrapf(ruleerrors.ErrInvalidBlockParent, "block has parent %s with invalid status %s",
+				parentHash, status)
+		}
+	}
+
+	return nil
 }
 
 // checkParentsIncest validates that no parent is an ancestor of another parent
