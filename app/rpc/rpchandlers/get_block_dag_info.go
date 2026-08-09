@@ -42,8 +42,7 @@ func HandleGetBlockDAGInfo(context *rpccontext.Context, _ *router.Router, _ appm
 			return response, nil
 		}
 		if info.BlockStatus != externalapi.StatusDisqualifiedFromChain {
-			log.Infof("Tip %s status %s", tip, info.BlockStatus)
-
+			log.Debugf("Tip %s status %s", tip, info.BlockStatus)
 		}
 	}
 	log.Infof("Len of tipHashes %d", len(tipHashes))
