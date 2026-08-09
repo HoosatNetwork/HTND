@@ -372,8 +372,12 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 			}
 			levelBlocks = append(levelBlocks, candidate.hash)
 		}
-		if len(levelBlocks) == 0 && newBlockParents == true {
-			levelBlocks = append(levelBlocks, firstParentInFutureOfPruningPoint)
+		if len(levelBlocks) == 0 && newBlockParents == true && blockLevel == 0 {
+			// Only use the fallback parent for level 0 if it's valid
+			status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, firstParentInFutureOfPruningPoint)
+			if err == nil && status != externalapi.StatusInvalid && status != externalapi.StatusDisqualifiedFromChain {
+				levelBlocks = append(levelBlocks, firstParentInFutureOfPruningPoint)
+			}
 		}
 		if len(levelBlocks) > 0 {
 			parents = append(parents, levelBlocks)
