@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/internal/ci"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 
@@ -32,6 +33,7 @@ type testJSON struct {
 }
 
 func TestPruning(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	expectedPruningPointByNet := map[string]map[string]string{
 		"chain-for-test-pruning.json": {
 			dagconfig.MainnetParams.Name: "1582",
