@@ -159,8 +159,8 @@ type Flags struct {
 	AutoUpdateEnabled       bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases"`
 	AutoUpdateCheckInterval time.Duration `long:"autoupdate-interval" description:"Interval between update checks (e.g., 24h, 72h)" default:"24h"`
 	AutoUpdateChannel        string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
-	AutoUpdateDownload       bool          `long:"autoupdate-download" description:"Automatically download available updates" default:"true"`
-	AutoUpdateInstall        bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)" default:"false"`
+	AutoUpdateDownload       bool          `long:"autoupdate-download" description:"Automatically download available updates"`
+	AutoUpdateInstall        bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -237,11 +237,11 @@ func defaultFlags() *Flags {
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
-		AutoUpdateEnabled:             false,
+		AutoUpdateEnabled:             true,
 		AutoUpdateCheckInterval:       24 * time.Hour,
 		AutoUpdateChannel:            "stable",
 		AutoUpdateDownload:           true,
-		AutoUpdateInstall:            false,
+		AutoUpdateInstall:            true,
 	}
 }
 
