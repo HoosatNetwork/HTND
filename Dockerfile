@@ -47,4 +47,4 @@ RUN chown nobody:nogroup /app/* && chmod +x /app/*
 
 USER nobody
 ENTRYPOINT ["/app/HTND"]
-CMD ["--utxoindex", "--saferpc"]
+CMD ["--utxoindex", "--saferpc", "--autoupdate=false", "--autoupdate-download=fase", "--autoupdate-install=false"]
