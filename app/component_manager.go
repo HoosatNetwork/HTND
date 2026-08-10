@@ -15,6 +15,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain"
 	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/infrastructure/autoupdate"
 	"github.com/HoosatNetwork/HTND/infrastructure/config"
 	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
@@ -40,6 +41,7 @@ type ComponentManager struct {
 	rpcManager        *rpc.Manager
 	connectionManager *connmanager.ConnectionManager
 	netAdapter        *netadapter.NetAdapter
+	updater           *autoupdate.Updater
 
 	started, shutdown int32
 }
@@ -59,6 +61,11 @@ func (a *ComponentManager) Start() {
 	}
 
 	a.connectionManager.Start()
+
+	// Start the auto-updater
+	if a.updater != nil {
+		a.updater.Start()
+	}
 }
 
 // Stop gracefully shuts down all the htnd services.
@@ -70,6 +77,11 @@ func (a *ComponentManager) Stop() {
 	}
 
 	log.Warnf("htnd shutting down")
+
+	// Stop the auto-updater first
+	if a.updater != nil {
+		a.updater.Stop()
+	}
 
 	// Stop RPC statistics tracking
 	rpc.RPCStats.Stop()
@@ -164,6 +176,23 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	}
 	rpcManager := setupRPC(cfg, domain, netAdapter, protocolManager, connectionManager, addressManager, utxoIndex, domain.ConsensusEventsChannel(), interrupt)
 
+	// Create auto-updater if enabled
+	var updater *autoupdate.Updater
+	if cfg.AutoUpdateEnabled {
+		updaterConfig := &autoupdate.Config{
+			Enabled:        cfg.AutoUpdateEnabled,
+			CheckInterval:  cfg.AutoUpdateCheckInterval,
+			GitHubOwner:    "HoosatNetwork",
+			GitHubRepo:     "HTND",
+			UpdateChannel:  cfg.AutoUpdateChannel,
+			AutoDownload:   cfg.AutoUpdateDownload,
+			AutoInstall:    cfg.AutoUpdateInstall,
+			NotifyOnly:     false,
+		}
+		updater = autoupdate.NewUpdater(updaterConfig)
+		log.Infof("Auto-updater initialized (channel: %s, interval: %v)", updaterConfig.UpdateChannel, updaterConfig.CheckInterval)
+	}
+
 	return &ComponentManager{
 		cfg:               cfg,
 		protocolManager:   protocolManager,
@@ -171,6 +200,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		connectionManager: connectionManager,
 		netAdapter:        netAdapter,
 		addressManager:    addressManager,
+		updater:           updater,
 	}, nil
 }
 
@@ -210,4 +240,9 @@ func (a *ComponentManager) P2PNodeID() *id.ID {
 // AddressManager returns the AddressManager associated with this ComponentManager
 func (a *ComponentManager) AddressManager() *addressmanager.AddressManager {
 	return a.addressManager
+}
+
+// Updater returns the Updater associated with this ComponentManager, or nil if auto-update is disabled
+func (a *ComponentManager) Updater() *autoupdate.Updater {
+	return a.updater
 }

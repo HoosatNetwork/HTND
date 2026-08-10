@@ -155,6 +155,13 @@ type Flags struct {
 
 	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
+	// Auto-update configuration
+	AutoUpdateEnabled       bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases"`
+	AutoUpdateCheckInterval time.Duration `long:"autoupdate-interval" description:"Interval between update checks (e.g., 24h, 72h)" default:"24h"`
+	AutoUpdateChannel        string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
+	AutoUpdateDownload       bool          `long:"autoupdate-download" description:"Automatically download available updates" default:"true"`
+	AutoUpdateInstall        bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)" default:"false"`
+
 	NetworkFlags
 	ServiceOptions *ServiceOptions
 }
@@ -230,6 +237,11 @@ func defaultFlags() *Flags {
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
+		AutoUpdateEnabled:             false,
+		AutoUpdateCheckInterval:       24 * time.Hour,
+		AutoUpdateChannel:            "stable",
+		AutoUpdateDownload:           true,
+		AutoUpdateInstall:            false,
 	}
 }
 
