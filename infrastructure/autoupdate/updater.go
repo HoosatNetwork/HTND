@@ -436,10 +436,13 @@ func (u *Updater) installUpdate(version string) {
 
 	// Trigger restart if configured
 	if u.config.AutoInstall {
-		log.Info("Auto-restart is enabled, but manual restart is required for the update to take effect")
-		// Note: For true auto-restart, we'd need to implement a more complex
-		// process that spawns a new instance and shuts down the old one.
-		// For now, we just log that a restart is needed.
+		log.Info("Auto-restarting node with new version...")
+		if err := u.RestartNode(); err != nil {
+			u.statusMutex.Lock()
+			u.status.LastUpdateError = err.Error()
+			u.statusMutex.Unlock()
+			log.Errorf("Failed to restart node: %v", err)
+		}
 	}
 }
 
