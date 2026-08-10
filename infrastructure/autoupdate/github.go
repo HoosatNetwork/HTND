@@ -89,7 +89,7 @@ func (gc *GitHubClient) GetLatestRelease(ctx context.Context, channel string) (*
 	}
 
 	req.Header.Set("User-Agent", gc.userAgent)
-	req.Header.Set("Accept", "application/v2+json")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := gc.client.Do(req)
 	if err != nil {
@@ -127,7 +127,7 @@ func (gc *GitHubClient) GetAllReleases(ctx context.Context) ([]GitHubRelease, er
 	}
 
 	req.Header.Set("User-Agent", gc.userAgent)
-	req.Header.Set("Accept", "application/v2+json")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := gc.client.Do(req)
 	if err != nil {
