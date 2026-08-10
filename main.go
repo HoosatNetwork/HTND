@@ -5,9 +5,11 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
-	httppprof "net/http/pprof"
+	httpprof "net/http/pprof"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -15,6 +17,8 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app"
+	"github.com/HoosatNetwork/HTND/infrastructure/autoupdate"
+	"github.com/HoosatNetwork/HTND/version"
 )
 
 func getEnvInt(key string, defaultVal int) int64 {
@@ -43,18 +47,64 @@ func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
+// reportPanicToGitHub creates a GitHub issue for panics using shared GitHubClient
+func reportPanicToGitHub(githubClient *autoupdate.GitHubClient, panicMsg interface{}, stack []byte) {
+	go func() {
+		title := fmt.Sprintf("[PANIC] HTND v%s", version.Version())
+		body := fmt.Sprintf(`**Node Crashed with Panic**
+
+**Node Information:**
+- Version: %s
+- OS: %s
+- Architecture: %s
+- Timestamp: %s
+
+**Panic Message:**
+%v
+
+**Stack Trace:**
+%s
+`,
+			version.Version(), runtime.GOOS, runtime.GOARCH, time.Now().UTC().Format(time.RFC3339),
+			panicMsg, string(stack))
+
+		// Use shared GitHubClient to create issue
+		_, err := githubClient.CreateIssue(context.Background(), title, body, []string{"bug", "panic", "auto-reported"})
+		if err != nil {
+			log.Printf("Failed to report panic to GitHub: %v", err)
+		}
+	}()
+}
+
 func main() {
+	// Get default autoupdate config to access token
+	autoUpdateCfg := autoupdate.DefaultConfig()
+	
+	// Initialize GitHub client for error reporting
+	githubClient := autoupdate.NewGitHubClient("HoosatNetwork", "HTND")
+	githubClient.SetToken(autoUpdateCfg.GitHubToken)
+
+	// Recover from panics and report to GitHub
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			reportPanicToGitHub(githubClient, r, stack)
+			// Re-panic to maintain normal crash behavior
+			panic(r)
+		}
+	}()
+
 	if os.Getenv("HTND_PROFILER") != "" {
-		runtime.SetBlockProfileRate(1)     // Set block profile rate to 1 to enable block profiling
-		runtime.SetMutexProfileFraction(1) // Set mutex profile fraction to 1 to enable mutex profiling
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
 		go func() {
 			mux := http.NewServeMux()
 			mux.Handle("/", http.RedirectHandler("/debug/pprof", http.StatusSeeOther))
-			mux.HandleFunc("/debug/pprof/", httppprof.Index)
-			mux.HandleFunc("/debug/pprof/cmdline", httppprof.Cmdline)
-			mux.HandleFunc("/debug/pprof/profile", httppprof.Profile)
-			mux.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
-			mux.HandleFunc("/debug/pprof/trace", httppprof.Trace)
+			mux.HandleFunc("/debug/pprof/", httpprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", httpprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", httpprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", httpprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", httpprof.Trace)
 
 			srv := &http.Server{
 				Addr:         "127.0.0.1:6060",

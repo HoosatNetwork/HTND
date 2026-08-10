@@ -5,7 +5,10 @@
 package autoupdate
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +16,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -34,11 +38,15 @@ type GitHubRelease struct {
 
 // GitHubClient handles communication with GitHub API
 type GitHubClient struct {
-	client      *http.Client
-	owner       string
-	repo        string
-	userAgent   string
-	rateLimiter *RateLimiter
+	client        *http.Client
+	owner         string
+	repo          string
+	userAgent     string
+	rateLimiter  *RateLimiter
+	token        string
+	errorReports map[string]time.Time
+	errorReportMu sync.Mutex
+	reportCooldown time.Duration
 }
 
 // RateLimiter implements a simple rate limiter for GitHub API
@@ -53,10 +61,12 @@ func NewGitHubClient(owner, repo string) *GitHubClient {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		owner:       owner,
-		repo:        repo,
-		userAgent:   fmt.Sprintf("HTND-AutoUpdater/%s-%s", runtime.GOOS, runtime.GOARCH),
-		rateLimiter: NewRateLimiter(1 * time.Second), // GitHub rate limit: 60 requests/hour for unauthenticated
+		owner:         owner,
+		repo:          repo,
+		userAgent:     fmt.Sprintf("HTND-AutoUpdater/%s-%s", runtime.GOOS, runtime.GOARCH),
+		rateLimiter:  NewRateLimiter(1 * time.Second),
+		errorReports: make(map[string]time.Time),
+		reportCooldown: 24 * time.Hour,
 	}
 }
 
@@ -65,6 +75,31 @@ func NewRateLimiter(minInterval time.Duration) *RateLimiter {
 	return &RateLimiter{
 		lastRequest: time.Now().Add(-minInterval),
 		minInterval: minInterval,
+	}
+}
+
+// authTransport adds Authorization header to HTTP requests
+type authTransport struct {
+	Token string
+	Base  http.RoundTripper
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.Token != "" {
+		req.Header.Set("Authorization", "token "+t.Token)
+	}
+	return t.Base.RoundTrip(req)
+}
+
+// SetToken configures GitHub authentication for issue reporting
+func (gc *GitHubClient) SetToken(token string) {
+	gc.token = token
+	gc.client = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &authTransport{
+			Token: token,
+			Base:  http.DefaultTransport,
+		},
 	}
 }
 
@@ -351,4 +386,193 @@ func CompareVersions(v1, v2 string) int {
 // IsNewerVersion checks if newVersion is newer than currentVersion
 func IsNewerVersion(currentVersion, newVersion string) bool {
 	return CompareVersions(newVersion, currentVersion) > 0
+}
+
+// GitHubIssue represents a GitHub issue
+type GitHubIssue struct {
+	Title string   `json:"title"`
+	Body  string   `json:"body"`
+	Labels []string `json:"labels"`
+}
+
+// errorFingerprint creates a consistent hash for an error to prevent duplicate reports
+func (gc *GitHubClient) errorFingerprint(err error) string {
+	errStr := err.Error()
+	normalized := strings.ToLower(errStr)
+	hash := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(hash[:])
+}
+
+// shouldReportError implements per-error rate limiting (24h cooldown)
+func (gc *GitHubClient) shouldReportError(err error) bool {
+	fingerprint := gc.errorFingerprint(err)
+
+	gc.errorReportMu.Lock()
+	defer gc.errorReportMu.Unlock()
+
+	if gc.errorReports == nil {
+		gc.errorReports = make(map[string]time.Time)
+	}
+
+	if lastReport, exists := gc.errorReports[fingerprint]; exists {
+		if time.Since(lastReport) < gc.reportCooldown {
+			return false
+		}
+	}
+
+	gc.errorReports[fingerprint] = time.Now()
+	return true
+}
+
+// generateIssueTitle creates a clean, consistent issue title
+func (gc *GitHubClient) generateIssueTitle(err error) string {
+	errStr := err.Error()
+
+	// Extract the error type (first word or before first colon/semicolon)
+	var title string
+	for _, sep := range []string{":", ";", "\n", "\t"} {
+		if idx := strings.Index(errStr, sep); idx >= 0 {
+			title = strings.TrimSpace(errStr[:idx])
+			break
+		}
+	}
+	if title == "" {
+		title = errStr
+	}
+
+	// Clean up
+	title = strings.ReplaceAll(title, "\n", " ")
+	title = strings.ReplaceAll(title, "\t", " ")
+	title = strings.TrimSpace(title)
+
+	return fmt.Sprintf("[AutoUpdate] %s", title)
+}
+
+// generateIssueBody creates detailed error report
+func (gc *GitHubClient) generateIssueBody(err error, nodeVersion, nodeOS, nodeArch string) string {
+	return fmt.Sprintf(`**Automatically reported by HTND node via auto-updater**
+
+**Node Information:**
+- Version: %s
+- OS: %s
+- Architecture: %s
+- Timestamp: %s
+
+**Error Details:**
+%s
+
+**Full Error:**
+%+v
+`,
+		nodeVersion, nodeOS, nodeArch, time.Now().UTC().Format(time.RFC3339), err.Error(), err)
+}
+
+// CreateIssue creates a new GitHub issue (requires token)
+func (gc *GitHubClient) CreateIssue(ctx context.Context, title, body string, labels []string) (*GitHubIssue, error) {
+	gc.rateLimiter.Wait()
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues", gc.owner, gc.repo)
+	issue := GitHubIssue{
+		Title:  title,
+		Body:   body,
+		Labels: labels,
+	}
+
+	jsonData, err := json.Marshal(issue)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal issue")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create request")
+	}
+
+	req.Header.Set("User-Agent", gc.userAgent)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := gc.client.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create issue")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, errors.Errorf("GitHub API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var createdIssue GitHubIssue
+	if err := json.NewDecoder(resp.Body).Decode(&createdIssue); err != nil {
+		return nil, errors.Wrap(err, "failed to decode issue response")
+	}
+
+	return &createdIssue, nil
+}
+
+// IssueExists checks if an issue with the same title already exists
+func (gc *GitHubClient) IssueExists(ctx context.Context, title string) (bool, error) {
+	gc.rateLimiter.Wait()
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues?state=all&per_page=100", gc.owner, gc.repo)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to create request")
+	}
+
+	req.Header.Set("User-Agent", gc.userAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := gc.client.Do(req)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to check issues")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, errors.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var issues []GitHubIssue
+	if err := json.NewDecoder(resp.Body).Decode(&issues); err != nil {
+		return false, errors.Wrap(err, "failed to decode issues")
+	}
+
+	for _, issue := range issues {
+		if issue.Title == title {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// ReportError files a GitHub issue if it doesn't already exist on GitHub
+func (gc *GitHubClient) ReportError(ctx context.Context, err error, nodeVersion, nodeOS, nodeArch string) error {
+	// Don't report without token
+	if gc.token == "" {
+		return errors.New("no GitHub token configured for error reporting")
+	}
+
+	title := gc.generateIssueTitle(err)
+	body := gc.generateIssueBody(err, nodeVersion, nodeOS, nodeArch)
+
+	// Check GitHub for existing issue with same title (avoid duplicates)
+	exists, err := gc.IssueExists(ctx, title)
+	if err != nil {
+		return errors.Wrap(err, "failed to check for existing issue")
+	}
+	if exists {
+		return nil
+	}
+
+	// Create new issue (ignore 422 error which means issue already exists from race condition)
+	_, err = gc.CreateIssue(ctx, title, body, []string{"bug", "auto-reported", "autoupdate"})
+	if err != nil && strings.Contains(err.Error(), "already_exists") {
+		// Issue was created by another node in the meantime - that's fine
+		return nil
+	}
+	return err
 }

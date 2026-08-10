@@ -27,11 +27,11 @@ type UpdateStatus struct {
 	AvailableVersion  string
 	LastCheckTime     time.Time
 	LastCheckError    string
-	UpdateInProgress   bool
-	DownloadProgress   float64
-	DownloadCompleted  bool
-	InstallPending     bool
-	LastUpdateError    string
+	UpdateInProgress  bool
+	DownloadProgress  float64
+	DownloadCompleted bool
+	InstallPending    bool
+	LastUpdateError   string
 }
 
 // Updater is the main auto-update manager
@@ -43,8 +43,8 @@ type Updater struct {
 	statusMutex sync.RWMutex
 
 	// Channels for communication
-	updateAvailableChan chan struct {}
-	shutdownChan        chan struct {}
+	updateAvailableChan chan struct{}
+	shutdownChan        chan struct{}
 	wg                  sync.WaitGroup
 
 	// Callbacks
@@ -53,10 +53,10 @@ type Updater struct {
 	onUpdateComplete  func(newVersion string, err error)
 
 	// State
-	ctx                context.Context
-	cancel             context.CancelFunc
-	updateDir          string
-	currentBinaryPath  string
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	updateDir            string
+	currentBinaryPath    string
 	downloadedBinaryPath string
 }
 
@@ -85,16 +85,23 @@ func NewUpdater(cfg *Config) *Updater {
 	// Create update directory
 	updateDir := filepath.Join(filepath.Dir(currentBinaryPath), "updates")
 
+	githubClient := NewGitHubClient(cfg.GitHubOwner, cfg.GitHubRepo)
+
+	// Configure GitHub token for error reporting if provided
+	if cfg.GitHubToken != "" {
+		githubClient.SetToken(cfg.GitHubToken)
+	}
+
 	return &Updater{
-		config:             cfg,
-		github:             NewGitHubClient(cfg.GitHubOwner, cfg.GitHubRepo),
-		downloader:         NewDownloader(),
-		updateAvailableChan: make(chan struct {}, 1),
-		shutdownChan:       make(chan struct{}),
-		ctx:                ctx,
-		cancel:             cancel,
-		updateDir:          updateDir,
-		currentBinaryPath:  currentBinaryPath,
+		config:              cfg,
+		github:              githubClient,
+		downloader:          NewDownloader(),
+		updateAvailableChan: make(chan struct{}, 1),
+		shutdownChan:        make(chan struct{}),
+		ctx:                 ctx,
+		cancel:              cancel,
+		updateDir:           updateDir,
+		currentBinaryPath:   currentBinaryPath,
 		status: UpdateStatus{
 			CurrentVersion: version.Version(),
 			LastCheckTime:  time.Now().Add(-cfg.CheckInterval),
@@ -188,6 +195,7 @@ func (u *Updater) checkForUpdates() {
 		u.status.LastCheckError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Failed to get latest release: %v", err)
+		u.reportErrorToGitHub(err)
 		return
 	}
 
@@ -256,6 +264,7 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Failed to find asset for current platform: %v", err)
+		u.reportErrorToGitHub(err)
 		return
 	}
 
@@ -271,6 +280,7 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Failed to download update: %v", err)
+		u.reportErrorToGitHub(err)
 		return
 	}
 
@@ -291,8 +301,8 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 	if u.config.AutoInstall {
 		// Generate random delay between InstallDelayMin and InstallDelayMax
 		delay := u.config.InstallDelayMin +
-			time.Duration(rand.Int63n(int64(u.config.InstallDelayMax - u.config.InstallDelayMin)))
-		
+			time.Duration(rand.Int63n(int64(u.config.InstallDelayMax-u.config.InstallDelayMin)))
+
 		log.Infof("Waiting %v before auto-installing update %s", delay, release.TagName)
 		time.Sleep(delay)
 		u.installUpdate(release.TagName)
@@ -341,6 +351,7 @@ func (u *Updater) installUpdate(version string) {
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Failed to extract archive: %v", err)
+		u.reportErrorToGitHub(err)
 		if u.onUpdateComplete != nil {
 			u.onUpdateComplete("", err)
 		}
@@ -354,6 +365,7 @@ func (u *Updater) installUpdate(version string) {
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Failed to find binary in extracted archive: %v", err)
+		u.reportErrorToGitHub(err)
 		// Try to clean up
 		CleanupExtractedFiles(extractDir)
 		if u.onUpdateComplete != nil {
@@ -370,6 +382,7 @@ func (u *Updater) installUpdate(version string) {
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Binary verification failed: %v", err)
+		u.reportErrorToGitHub(err)
 		CleanupExtractedFiles(extractDir)
 		if u.onUpdateComplete != nil {
 			u.onUpdateComplete("", err)
@@ -390,6 +403,7 @@ func (u *Updater) installUpdate(version string) {
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
 		log.Errorf("Failed to install binary: %v", err)
+		u.reportErrorToGitHub(err)
 		// Restore backup if it exists
 		if _, err := os.Stat(backupPath); err == nil {
 			if restoreErr := restoreBackup(backupPath, u.currentBinaryPath); restoreErr != nil {
@@ -499,6 +513,24 @@ func (u *Updater) SetOnUpdateProgress(callback func(progress float64)) {
 // SetOnUpdateComplete sets the callback for when update is complete
 func (u *Updater) SetOnUpdateComplete(callback func(newVersion string, err error)) {
 	u.onUpdateComplete = callback
+}
+
+// reportErrorToGitHub reports an error to GitHub if token is configured
+func (u *Updater) reportErrorToGitHub(err error) {
+	if u.config.GitHubToken == "" {
+		return
+	}
+	go func() {
+		if reportErr := u.github.ReportError(
+			u.ctx,
+			err,
+			version.Version(),
+			runtime.GOOS,
+			runtime.GOARCH,
+		); reportErr != nil {
+			log.Debugf("Failed to report error to GitHub: %v", reportErr)
+		}
+	}()
 }
 
 // verifyBinary performs basic verification of a binary

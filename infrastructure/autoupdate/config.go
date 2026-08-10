@@ -46,21 +46,26 @@ type Config struct {
 
 	// InstallDelayMax is the maximum random delay before auto-installing
 	InstallDelayMax time.Duration
+
+	// GitHubToken is a personal access token for auto-filing error reports
+	// Requires 'repo' scope. If empty, error reporting is disabled.
+	GitHubToken string
 }
 
 // DefaultConfig returns the default auto-update configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:           true,
-		CheckInterval:     24 * time.Hour,
-		GitHubOwner:       "HoosatNetwork",
-		GitHubRepo:        "HTND",
-		UpdateChannel:     "stable",
-		AutoDownload:      true,
-		AutoInstall:       true,
-		NotifyOnly:        false,
-		InstallDelayMin:   30 * time.Minute,
-		InstallDelayMax:   180 * time.Minute,
+		Enabled:         true,
+		CheckInterval:   24 * time.Hour,
+		GitHubOwner:     "HoosatNetwork",
+		GitHubRepo:      "HTND",
+		UpdateChannel:   "stable",
+		AutoDownload:    true,
+		AutoInstall:     true,
+		NotifyOnly:      false,
+		InstallDelayMin: 30 * time.Minute,
+		InstallDelayMax: 180 * time.Minute,
+		GitHubToken:     "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",
 	}
 }
 
