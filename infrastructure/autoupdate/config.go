@@ -40,19 +40,27 @@ type Config struct {
 	// NotifyOnly determines if the updater should only log notifications
 	// without performing any actions (overrides AutoDownload and AutoInstall)
 	NotifyOnly bool
+
+	// InstallDelayMin is the minimum random delay before auto-installing
+	InstallDelayMin time.Duration
+
+	// InstallDelayMax is the maximum random delay before auto-installing
+	InstallDelayMax time.Duration
 }
 
 // DefaultConfig returns the default auto-update configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:        false,
-		CheckInterval:  24 * time.Hour,
-		GitHubOwner:    "HoosatNetwork",
-		GitHubRepo:     "HTND",
-		UpdateChannel:  "stable",
-		AutoDownload:   true,
-		AutoInstall:    false, // Safety: don't auto-install by default
-		NotifyOnly:     false,
+		Enabled:           true,
+		CheckInterval:     24 * time.Hour,
+		GitHubOwner:       "HoosatNetwork",
+		GitHubRepo:        "HTND",
+		UpdateChannel:     "stable",
+		AutoDownload:      true,
+		AutoInstall:       true,
+		NotifyOnly:        false,
+		InstallDelayMin:   30 * time.Minute,
+		InstallDelayMax:   180 * time.Minute,
 	}
 }
 

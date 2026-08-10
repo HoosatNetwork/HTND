@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,6 +72,9 @@ func NewUpdater(cfg *Config) *Updater {
 		cfg.UpdateChannel = "stable"
 		log.Warnf("Invalid update channel '%s', defaulting to 'stable'", cfg.UpdateChannel)
 	}
+
+	// Initialize random seed
+	rand.Seed(time.Now().UnixNano())
 
 	// Create context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -283,8 +287,14 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 		u.onUpdateProgress(100)
 	}
 
-	// If auto-install is enabled, install the update
+	// If auto-install is enabled, install the update after random delay
 	if u.config.AutoInstall {
+		// Generate random delay between InstallDelayMin and InstallDelayMax
+		delay := u.config.InstallDelayMin +
+			time.Duration(rand.Int63n(int64(u.config.InstallDelayMax - u.config.InstallDelayMin)))
+		
+		log.Infof("Waiting %v before auto-installing update %s", delay, release.TagName)
+		time.Sleep(delay)
 		u.installUpdate(release.TagName)
 	}
 }
