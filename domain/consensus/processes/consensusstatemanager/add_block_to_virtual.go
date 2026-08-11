@@ -172,8 +172,17 @@ func (csm *consensusStateManager) calculateNewTips(
 		if newTipParentsSet.Contains(currentTip) {
 			continue
 		}
-		// Keep all tips including disqualified ones, as they might have valid parents
-		// that can be used for virtual parent selection
+
+		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, currentTip)
+		if err != nil {
+			continue
+		}
+
+		if status == externalapi.StatusDisqualifiedFromChain || status == externalapi.StatusInvalid {
+			// Just drop it. Do NOT walk its parents.
+			log.Debugf("Dropping disqualified/invalid tip %s", currentTip)
+			continue
+		}
 		newTips = append(newTips, currentTip)
 	}
 	log.Debugf("The new number of tips is: %d", len(newTips))
