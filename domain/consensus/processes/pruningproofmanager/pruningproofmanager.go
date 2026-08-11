@@ -319,11 +319,12 @@ func (ppm *pruningProofManager) blockAtDepth(stagingArea *model.StagingArea, gho
 	currentBlockGHOSTDAGData := highBlockGHOSTDAGData
 	// If we used `BlockIterator` we'd need to do more calls to `ghostdagDataStore` so we can get the blueScore
 	for currentBlockGHOSTDAGData.BlueScore() >= requiredBlueScore {
-		if currentBlockGHOSTDAGData.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
+		selectedParent := currentBlockGHOSTDAGData.SelectedParent()
+		if selectedParent == nil || selectedParent.Equal(model.VirtualGenesisBlockHash) {
 			break
 		}
 
-		currentBlockHash = currentBlockGHOSTDAGData.SelectedParent()
+		currentBlockHash = selectedParent
 		currentBlockGHOSTDAGData, err = ghostdagDataStore.Get(ppm.databaseContext, stagingArea, currentBlockHash, false)
 		if err != nil {
 			return nil, err
@@ -344,7 +345,7 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 
 	level0Headers := pruningPointProof.Headers[0]
 	pruningPointHeader := level0Headers[len(level0Headers)-1]
-	pruningPoint := consensushashing.HeaderHash(pruningPointHeader)
+	// pruningPoint := consensushashing.HeaderHash(pruningPointHeader)
 	pruningPointBlockLevel := pruningPointHeader.BlockLevel(ppm.maxBlockLevel)
 	maxLevel := len(ppm.parentsManager.Parents(pruningPointHeader)) - 1
 	if maxLevel >= len(pruningPointProof.Headers) {
@@ -524,9 +525,6 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			}
 		}
 
-		log.Debugf("Finished validating level %d from the pruning point proof (headers=%d selectedTip=%s duration=%s)",
-			blockLevel, totalHeaders, selectedTip, time.Since(levelStartTime).Truncate(time.Second))
-
 		// If no headers were processed (totalHeaders == 0), selectedTip will be nil.
 		// In this case, we need to set a default selected tip.
 		if selectedTip == nil {
@@ -539,6 +537,12 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 				selectedTip = model.VirtualGenesisBlockHash
 			}
 		}
+
+		// Set selectedTipByLevel before we need to access it for the next level
+		selectedTipByLevel[blockLevel] = selectedTip
+
+		log.Debugf("Finished validating level %d from the pruning point proof (headers=%d selectedTip=%s duration=%s)",
+			blockLevel, totalHeaders, selectedTip, time.Since(levelStartTime).Truncate(time.Second))
 
 		if blockLevel < maxLevel {
 			blockAtDepthMAtNextLevel, err := ppm.blockAtDepth(stagingArea, ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
@@ -565,7 +569,6 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 					"level %d is not a parent of the pruning point", selectedTip, blockLevel)
 			}
 		}
-		selectedTipByLevel[blockLevel] = selectedTip
 	}
 
 	currentDAGPruningPoint, err := ppm.pruningStore.PruningPoint(ppm.databaseContext, model.NewStagingArea())
@@ -627,7 +630,7 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			}
 
 			current = currentGHOSTDAGData.SelectedParent()
-			if current.Equal(model.VirtualGenesisBlockHash) {
+			if current == nil || current.Equal(model.VirtualGenesisBlockHash) {
 				break
 			}
 
