@@ -219,6 +219,7 @@ func (s *consensus) displayCacheSizes() {
 			cacheLen += s.ghostdagDataStores[i].CacheLen()
 		}
 		log.Infof("GHOSTDAGDataStore[x] cache size sum: %d", cacheLen)
+		log.Infof("ResolveBlockStatus cache size: %d", s.consensusStateManager.ResolveBlockStatusCacheLen())
 		log.Infof("PruningStore cache size: %d", s.pruningStore.CacheLen())
 		log.Infof("WindowHeapSliceStore cache size: %d", s.windowHeapSliceStore.CacheLen())
 	}

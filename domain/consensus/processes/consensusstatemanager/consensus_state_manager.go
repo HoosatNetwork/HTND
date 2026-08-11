@@ -3,7 +3,14 @@ package consensusstatemanager
 import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 )
+
+// resolveBlockStatusCacheEntry stores the cached result of ResolveBlockStatus
+type resolveBlockStatusCacheEntry struct {
+	status       externalapi.BlockStatus
+	reversalData *model.UTXODiffReversalData
+}
 
 // consensusStateManager manages the node's consensus state
 type consensusStateManager struct {
@@ -40,6 +47,9 @@ type consensusStateManager struct {
 	windowHeapSliceStore      model.WindowHeapSliceStore
 
 	stores []model.Store
+
+	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
+	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
 }
 
 // New instantiates a new ConsensusStateManager
@@ -75,6 +85,7 @@ func New(
 	headersSelectedChainStore model.HeadersSelectedChainStore,
 	mergeDepthRootStore model.MergeDepthRootStore,
 	windowHeapSliceStore model.WindowHeapSliceStore,
+	resolveBlockStatusCacheSize int,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
 		maxBlockParents:   maxBlockParents,
@@ -109,6 +120,7 @@ func New(
 		headersSelectedChainStore: headersSelectedChainStore,
 		mergeDepthRootStore:       mergeDepthRootStore,
 		windowHeapSliceStore:      windowHeapSliceStore,
+		resolveBlockStatusCache: lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
 
 		stores: []model.Store{
 			consensusStateStore,

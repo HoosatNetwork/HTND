@@ -340,7 +340,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		finalityStore,
 		headersSelectedChainStore,
 		mergeDepthRootStore,
-		windowHeapSliceStore)
+		windowHeapSliceStore,
+		5000)
 	if err != nil {
 		return nil, false, err
 	}

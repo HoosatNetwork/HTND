@@ -18,4 +18,6 @@ type ConsensusStateManager interface {
 	ResolveVirtual(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error)
 	ValidateUTXODiffChildChains() error
 	ResolveBlockStatus(stagingArea *StagingArea, blockHash *externalapi.DomainHash, useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, *UTXODiffReversalData, error)
+	// ResolveBlockStatusCacheLen returns the number of entries in the ResolveBlockStatus cache
+	ResolveBlockStatusCacheLen() int
 }

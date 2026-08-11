@@ -9,156 +9,155 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
 
-func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+func (csm *consensusStateManager) ResolveBlockStatus(
+	stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash,
 	useSeparateStagingAreaPerBlock bool,
 ) (externalapi.BlockStatus, *model.UTXODiffReversalData, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveBlockStatus for %s", blockHash))
 	defer onEnd()
 
-	// Check if this block can be fully resolved. Blocks whose selected parent chain
-	// doesn't contain the pruning point cannot be resolved because they would require
-	// fetching UTXO diffs from the past of the pruning point, which may have been pruned.
+	// ------------------------------------------------------------------
+	// Check cache first
+	// ------------------------------------------------------------------
+	if cachedEntry, ok := csm.resolveBlockStatusCache.Get(blockHash); ok {
+		log.Debugf("ResolveBlockStatus cache hit for %s", blockHash)
+		return cachedEntry.status, cachedEntry.reversalData, nil
+	}
+
+	// ------------------------------------------------------------------
+	// Early exit: blocks whose selected-parent chain does not contain the
+	// pruning point cannot be fully resolved (would require pruned UTXO data).
+	// ------------------------------------------------------------------
 	pruningPoint, err := csm.pruningStore.PruningPoint(csm.databaseContext, stagingArea)
 	if err != nil {
-		// If there's no pruning point yet (e.g., during initial sync or test setup),
-		// we can resolve all blocks normally
-		log.Debugf("No pruning point exists yet, proceeding with normal resolution for block %s", blockHash)
-	} else {
-		// Skip full resolution for blocks not in the selected parent chain of the pruning point
-		// (unless it's genesis, which must always be resolved)
-		if !csm.genesisHash.Equal(blockHash) {
-			isInSelectedChainOfPruningPoint, err := csm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, pruningPoint, blockHash)
-			if err != nil {
-				return 0, nil, err
-			}
-			if !isInSelectedChainOfPruningPoint {
-				log.Debugf("Block %s is not in the selected parent chain of the pruning point %s, cannot fully resolve UTXO status. Returning StatusUTXOPendingVerification", blockHash, pruningPoint)
-				return externalapi.StatusUTXOPendingVerification, nil, nil
-			}
+		// No pruning point yet (initial sync / tests) → resolve normally.
+		log.Debugf("No pruning point exists yet, proceeding with normal resolution for %s", blockHash)
+	} else if !csm.genesisHash.Equal(blockHash) {
+		isInSelectedChain, err := csm.dagTopologyManager.IsInSelectedParentChainOf(
+			stagingArea, pruningPoint, blockHash)
+		if err != nil {
+			return 0, nil, err
+		}
+		if !isInSelectedChain {
+			log.Debugf("Block %s is not in the selected-parent chain of pruning point %s → StatusUTXOPendingVerification",
+				blockHash, pruningPoint)
+			// Cache the result
+			csm.resolveBlockStatusCache.Add(blockHash, resolveBlockStatusCacheEntry{status: externalapi.StatusUTXOPendingVerification, reversalData: nil})
+			return externalapi.StatusUTXOPendingVerification, nil, nil
 		}
 	}
 
-	log.Debugf("Getting a list of all blocks in the selected "+
-		"parent chain of %s that have no yet resolved their status", blockHash)
+	// ------------------------------------------------------------------
+	// Collect the unresolved chain
+	// ------------------------------------------------------------------
+	log.Debugf("Collecting unresolved blocks in the selected-parent chain of %s", blockHash)
 	unverifiedBlocks, err := csm.getUnverifiedChainBlocks(stagingArea, blockHash)
 	if err != nil {
 		return 0, nil, err
 	}
-	log.Debugf("Got %d unverified blocks in the selected parent "+
-		"chain of %s: %s", len(unverifiedBlocks), blockHash, unverifiedBlocks)
+	log.Debugf("Found %d unresolved blocks for %s", len(unverifiedBlocks), blockHash)
 
-	// If there's no unverified blocks in the given block's chain - this means the given block already has a
-	// UTXO-verified status, and therefore it should be retrieved from the store and returned
+	// Already fully resolved → just return the stored status.
 	if len(unverifiedBlocks) == 0 {
-		log.Debugf("There are not unverified blocks in %s's selected parent chain. "+
-			"This means that the block already has a UTXO-verified status.", blockHash)
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, blockHash)
-		if database.IsNotFoundError(err) {
-			log.Infof("resolveBlockStatusfailed to retrieve with %s\n", blockHash)
-			return 0, nil, err
-		}
 		if err != nil {
+			if database.IsNotFoundError(err) {
+				log.Infof("ResolveBlockStatus: status not found for already-resolved block %s", blockHash)
+			}
 			return 0, nil, err
 		}
-		log.Debugf("Block %s's status resolved to: %s", blockHash, status)
+		log.Debugf("Block %s already has UTXO-verified status: %s", blockHash, status)
+		// Cache the result
+		csm.resolveBlockStatusCache.Add(blockHash, resolveBlockStatusCacheEntry{status: status, reversalData: nil})
 		return status, nil, nil
 	}
 
-	log.Debugf("Finding the status of the selected parent of %s", blockHash)
-	selectedParentHash, selectedParentStatus, selectedParentUTXOSet, err := csm.selectedParentInfo(stagingArea, unverifiedBlocks)
+	// ------------------------------------------------------------------
+	// Obtain the starting point (selected parent of the unresolved chain)
+	// ------------------------------------------------------------------
+	log.Debugf("Resolving selected-parent info for the chain of %s", blockHash)
+	selectedParentHash, selectedParentStatus, selectedParentUTXOSet, err :=
+		csm.selectedParentInfo(stagingArea, unverifiedBlocks)
 	if err != nil {
 		return 0, nil, err
 	}
-	log.Debugf("The status of the selected parent of %s is: %s", blockHash, selectedParentStatus)
+	log.Debugf("Selected parent of %s is %s with status %s",
+		blockHash, selectedParentHash, selectedParentStatus)
 
-	log.Debugf("Resolving the unverified blocks' status in reverse order (past to present)")
-	var blockStatus externalapi.BlockStatus
-
-	previousBlockHash := selectedParentHash
-	previousBlockUTXOSet := selectedParentUTXOSet
-	var oneBeforeLastResolvedBlockUTXOSet externalapi.UTXODiff
-	var oneBeforeLastResolvedBlockHash *externalapi.DomainHash
+	// ------------------------------------------------------------------
+	// Walk the chain from past → present and resolve each block
+	// ------------------------------------------------------------------
+	var (
+		blockStatus                    externalapi.BlockStatus
+		previousBlockHash              = selectedParentHash
+		previousBlockUTXOSet           = selectedParentUTXOSet
+		oneBeforeLastResolvedBlockHash *externalapi.DomainHash
+		oneBeforeLastResolvedBlockUTXO externalapi.UTXODiff
+	)
 
 	for i := len(unverifiedBlocks) - 1; i >= 0; i-- {
 		unverifiedBlockHash := unverifiedBlocks[i]
-
-		stagingAreaForCurrentBlock := stagingArea
 		isResolveTip := i == 0
-		useSeparateStagingArea := useSeparateStagingAreaPerBlock && !isResolveTip
-		if useSeparateStagingArea {
+
+		// Optional per-block staging area (everything except the tip).
+		stagingAreaForCurrentBlock := stagingArea
+		if useSeparateStagingAreaPerBlock && !isResolveTip {
 			stagingAreaForCurrentBlock = model.NewStagingArea()
 		}
 
 		if selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
+			// Special path: propagate disqualification while still producing
+			// a continuous UTXO-diff chain (needed for later restorePastUTXO).
 			blockStatus = externalapi.StatusDisqualifiedFromChain
-			if previousBlockUTXOSet == nil {
-				return 0, nil, errors.Errorf("missing selected parent past UTXO for disqualified block %s (selected parent %s)", unverifiedBlockHash, previousBlockHash)
-			}
-
-			blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingAreaForCurrentBlock, unverifiedBlockHash, false)
-			if err != nil {
-				return 0, nil, err
-			}
-
-			pastUTXOSet, acceptanceData, multiset, err := csm.calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(
-				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockUTXOSet, blockGHOSTDAGData)
-			if err != nil {
-				return 0, nil, err
-			}
-			if pastUTXOSet == nil {
-				return 0, nil, errors.Errorf("calculated past UTXO is nil for disqualified block %s", unverifiedBlockHash)
-			}
-
-			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
-			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
-
-			utxoDiff, _ := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
-			if utxoDiff != nil {
-				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
-			} else {
-				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxo.NewMutableUTXODiff().ToImmutable(), previousBlockHash)
-			}
-
-			previousBlockUTXOSet = pastUTXOSet
 		} else {
-			oneBeforeLastResolvedBlockUTXOSet = previousBlockUTXOSet
+			// Normal path – remember the state just before the tip for later reversal.
+			oneBeforeLastResolvedBlockUTXO = previousBlockUTXOSet
 			oneBeforeLastResolvedBlockHash = previousBlockHash
 
 			blockStatus, previousBlockUTXOSet, err = csm.resolveSingleBlockStatus(
-				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockHash, previousBlockUTXOSet, isResolveTip)
+				stagingAreaForCurrentBlock,
+				unverifiedBlockHash,
+				previousBlockHash,
+				previousBlockUTXOSet,
+				isResolveTip,
+			)
 			if err != nil {
 				return 0, nil, err
 			}
 		}
 
+		// Stage the resolved status and advance the “selected parent” for the next iteration.
 		csm.blockStatusStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, blockStatus)
 		selectedParentStatus = blockStatus
-		log.Debugf("Block %s status resolved to `%s`, finished %d/%d of unverified blocks",
-			unverifiedBlockHash, blockStatus, len(unverifiedBlocks)-i, len(unverifiedBlocks))
 
-		if useSeparateStagingArea {
-			err := staging.CommitAllChanges(csm.databaseContext, stagingAreaForCurrentBlock)
-			if err != nil {
+		log.Debugf("Block %s → %s  (%d/%d)",
+			unverifiedBlockHash, blockStatus,
+			len(unverifiedBlocks)-i, len(unverifiedBlocks))
+
+		if useSeparateStagingAreaPerBlock && !isResolveTip {
+			if err := staging.CommitAllChanges(csm.databaseContext, stagingAreaForCurrentBlock); err != nil {
 				return 0, nil, err
 			}
 		}
+
 		previousBlockHash = unverifiedBlockHash
 	}
 
+	// ------------------------------------------------------------------
+	// Prepare reversal data (only when we produced a valid tip and the chain
+	// was longer than one block). This lets the caller later shorten the
+	// UTXODiffChild paths.
+	// ------------------------------------------------------------------
 	var reversalData *model.UTXODiffReversalData
 	if blockStatus == externalapi.StatusUTXOValid && len(unverifiedBlocks) > 1 {
-		log.Debugf("Preparing data for reversing the UTXODiff")
-		// During resolveSingleBlockStatus, all unverifiedBlocks (excluding the tip) were assigned their selectedParent
-		// as their UTXODiffChild.
-		// Now that the whole chain has been resolved - we can reverse the UTXODiffs, to create shorter UTXODiffChild paths.
-		// However, we can't do this right now, because the tip of the chain is not yet committed, so we prepare the
-		// needed data (tip's selectedParent and selectedParent's UTXODiff)
-		selectedParentUTXODiff, err := previousBlockUTXOSet.DiffFrom(oneBeforeLastResolvedBlockUTXOSet)
+		log.Debugf("Preparing UTXODiff reversal data for the resolved chain of %s", blockHash)
+
+		selectedParentUTXODiff, err := previousBlockUTXOSet.DiffFrom(oneBeforeLastResolvedBlockUTXO)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -169,47 +168,55 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 		}
 	}
 
+	// Cache the result
+	csm.resolveBlockStatusCache.Add(blockHash, resolveBlockStatusCacheEntry{status: blockStatus, reversalData: reversalData})
 	return blockStatus, reversalData, nil
 }
 
 // selectedParentInfo returns the hash and status of the selectedParent of the last block in the unverifiedBlocks
 // chain, in addition, if the status is UTXOValid, it return it's pastUTXOSet
 func (csm *consensusStateManager) selectedParentInfo(
-	stagingArea *model.StagingArea, unverifiedBlocks []*externalapi.DomainHash) (
-	*externalapi.DomainHash, externalapi.BlockStatus, externalapi.UTXODiff, error,
-) {
-	log.Tracef("findSelectedParentStatus start")
-	defer log.Tracef("findSelectedParentStatus end")
+	stagingArea *model.StagingArea, unverifiedBlocks []*externalapi.DomainHash,
+) (*externalapi.DomainHash, externalapi.BlockStatus, externalapi.UTXODiff, error) {
+	log.Tracef("selectedParentInfo start")
+	defer log.Tracef("selectedParentInfo end")
 
 	lastUnverifiedBlock := unverifiedBlocks[len(unverifiedBlocks)-1]
+
+	// Special-case genesis: it is always UTXO-valid by definition.
 	if lastUnverifiedBlock.Equal(csm.genesisHash) {
-		log.Debugf("the most recent unverified block is the genesis block, "+
-			"which by definition has status: %s", externalapi.StatusUTXOValid)
+		log.Debugf("most recent unverified block is genesis → status %s", externalapi.StatusUTXOValid)
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, lastUnverifiedBlock)
 		if err != nil {
 			return nil, 0, nil, err
 		}
 		return lastUnverifiedBlock, externalapi.StatusUTXOValid, utxoDiff, nil
 	}
-	lastUnverifiedBlockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, lastUnverifiedBlock, false)
-	if database.IsNotFoundError(err) {
-		log.Infof("selectedParentInfo failed to retrieve with %s\n", lastUnverifiedBlock)
-		return nil, 0, nil, err
-	}
+
+	lastUnverifiedBlockGHOSTDAGData, err := csm.ghostdagDataStore.Get(
+		csm.databaseContext, stagingArea, lastUnverifiedBlock, false)
 	if err != nil {
+		if database.IsNotFoundError(err) {
+			log.Infof("selectedParentInfo: GHOSTDAG data not found for %s", lastUnverifiedBlock)
+		}
 		return nil, 0, nil, err
 	}
+
 	selectedParent := lastUnverifiedBlockGHOSTDAGData.SelectedParent()
-	selectedParentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, selectedParent)
-	if database.IsNotFoundError(err) {
-		log.Infof("selectedParentInfo failed to retrieve with %s\n", selectedParent)
-		return nil, 0, nil, err
-	}
+
+	selectedParentStatus, err := csm.blockStatusStore.Get(
+		csm.databaseContext, stagingArea, selectedParent)
 	if err != nil {
+		if database.IsNotFoundError(err) {
+			log.Infof("selectedParentInfo: status not found for selected parent %s", selectedParent)
+		}
 		return nil, 0, nil, err
 	}
-	// Don't try to restore past UTXO for header-only blocks or blocks with non-UTXO-valid status
-	if selectedParentStatus != externalapi.StatusUTXOValid && selectedParentStatus != externalapi.StatusDisqualifiedFromChain {
+
+	// Only restore the (potentially expensive) past UTXO when the selected
+	// parent is UTXO-valid is something other than StatusUTXOValid. For every other status
+	// (header-only, etc.) we return early with a nil UTXODiff.
+	if selectedParentStatus != externalapi.StatusUTXOValid {
 		return selectedParent, selectedParentStatus, nil, nil
 	}
 
@@ -217,6 +224,7 @@ func (csm *consensusStateManager) selectedParentInfo(
 	if err != nil {
 		return nil, 0, nil, err
 	}
+
 	return selectedParent, selectedParentStatus, selectedParentUTXOSet, nil
 }
 
@@ -345,7 +353,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		if err != nil && !database.IsNotFoundError(err) {
 			return 0, nil, err
 		}
-		
+
 		var oldSelectedTipUTXOSet externalapi.UTXODiff
 		if database.IsNotFoundError(err) || oldSelectedTipStatus != externalapi.StatusUTXOValid {
 			// If oldSelectedTip is not UTXO-valid, we can't restore its past UTXO
