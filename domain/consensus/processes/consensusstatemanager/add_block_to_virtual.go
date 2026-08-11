@@ -73,7 +73,7 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 	// 	return nil, nil, nil, errors.Wrapf(ruleerrors.ErrDuplicateBlock, "block %s is disqualified or invalid", blockHash)
 	// }
 	log.Debugf("Adding block %s to the DAG tips", blockHash)
-	newTips, err := csm.addTip(stagingArea, blockHash)
+	newTips, err := csm.addTip(stagingArea, blockHash, blockStatus)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -125,12 +125,12 @@ func (csm *consensusStateManager) isCandidateToBeNextVirtualSelectedParent(
 	return blockHash.Equal(nextVirtualSelectedParent), nil
 }
 
-func (csm *consensusStateManager) addTip(stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash) (newTips []*externalapi.DomainHash, err error) {
+func (csm *consensusStateManager) addTip(stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash, newTipStatus externalapi.BlockStatus) (newTips []*externalapi.DomainHash, err error) {
 	log.Tracef("addTip start for new tip %s", newTipHash)
 	defer log.Tracef("addTip end for new tip %s", newTipHash)
 
 	log.Debugf("Calculating the new tips for new tip %s", newTipHash)
-	newTips, err = csm.calculateNewTips(stagingArea, newTipHash)
+	newTips, err = csm.calculateNewTips(stagingArea, newTipHash, newTipStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (csm *consensusStateManager) addTip(stagingArea *model.StagingArea, newTipH
 }
 
 func (csm *consensusStateManager) calculateNewTips(
-	stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash,
+	stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash, newTipStatus externalapi.BlockStatus,
 ) ([]*externalapi.DomainHash, error) {
 	log.Tracef("calculateNewTips start for new tip %s", newTipHash)
 	defer log.Tracef("calculateNewTips end for new tip %s", newTipHash)
@@ -169,7 +169,14 @@ func (csm *consensusStateManager) calculateNewTips(
 	}
 
 	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
-	newTips = append(newTips, newTipHash)
+
+	// Check the new block's status before adding to tips
+	if newTipStatus == externalapi.StatusDisqualifiedFromChain || newTipStatus == externalapi.StatusInvalid {
+		log.Debugf("Dropping disqualified/invalid new tip %s", newTipHash)
+	} else {
+		newTips = append(newTips, newTipHash)
+	}
+
 	for _, currentTip := range currentTips {
 		if newTipParentsSet.Contains(currentTip) {
 			continue
