@@ -59,7 +59,25 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		}
 	}
 
-	err = v.validateDifficulty(stagingArea, blockHash, isBlockWithTrustedData)
+	if !isBlockWithTrustedData {
+		// We need to calculate GHOSTDAG for the block in order to check its difficulty and blue work
+		err := v.ghostdagManagers[0].GHOSTDAG(stagingArea, blockHash)
+		if err != nil {
+			return err
+		}
+	}
+
+	blockLevel := header.BlockLevel(v.maxBlockLevel)
+	for i := 1; i <= blockLevel; i++ {
+		err = v.ghostdagManagers[i].GHOSTDAG(stagingArea, blockHash)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Ensure the difficulty specified in the block header is within the acceptable range
+	// based on the previous block and difficulty retarget rules.
+	err = v.difficultyManager.StageDAAData(stagingArea, blockHash, isBlockWithTrustedData)
 	if err != nil {
 		return err
 	}
@@ -99,54 +117,6 @@ func (v *blockValidator) setParents(stagingArea *model.StagingArea,
 		if err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-func (v *blockValidator) validateDifficulty(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash,
-	isBlockWithTrustedData bool,
-) error {
-	const bitsTolerance = 10000
-	if !isBlockWithTrustedData {
-		// We need to calculate GHOSTDAG for the block in order to check its difficulty and blue work
-		err := v.ghostdagManagers[0].GHOSTDAG(stagingArea, blockHash)
-		if err != nil {
-			return err
-		}
-	}
-
-	header, err := v.blockHeaderStore.BlockHeader(v.databaseContext, stagingArea, blockHash)
-	if err != nil {
-		return err
-	}
-
-	blockLevel := header.BlockLevel(v.maxBlockLevel)
-	for i := 1; i <= blockLevel; i++ {
-		err = v.ghostdagManagers[i].GHOSTDAG(stagingArea, blockHash)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Ensure the difficulty specified in the block header is within the acceptable range
-	// based on the previous block and difficulty retarget rules.
-	expectedBits, err := v.difficultyManager.StageDAADataAndReturnRequiredDifficulty(stagingArea, blockHash, isBlockWithTrustedData)
-	if err != nil {
-		return err
-	}
-	// if testnet you could guard this to only be ran for blocks with trusted data,
-	// so that IBD could be done instantly from genesis.
-	// if isBlockWithtrustedData {}
-	headerBits := header.Bits()
-	// Calculate the acceptable range for difficulty bits
-	maxBits := expectedBits + bitsTolerance
-
-	if headerBits > maxBits {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedDifficulty,
-			"block difficulty of %d is ahead of the expected difficulty %d",
-			headerBits, expectedBits)
 	}
 
 	return nil

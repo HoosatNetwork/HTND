@@ -122,8 +122,12 @@ func (csm *consensusStateManager) restorePastUTXO(
 		if err != nil {
 			return nil, err
 		}
+		// During IBD with headers proof, we might encounter header-only blocks in the UTXO-diff child path.
+		// These blocks don't have UTXO diffs, so we treat them as if they don't have a UTXO-diff child
+		// (i.e., we've reached the end of the chain that has UTXO diffs).
 		if blockStatus == externalapi.StatusHeaderOnly {
-			return nil, errors.Errorf("cannot restore past UTXO for block %s: encountered header-only block %s on UTXO-diff child path", blockHash, nextBlockHash)
+			log.Debugf("Block %s is header-only, treating as end of UTXO-diff chain for block %s", nextBlockHash, blockHash)
+			break
 		}
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {

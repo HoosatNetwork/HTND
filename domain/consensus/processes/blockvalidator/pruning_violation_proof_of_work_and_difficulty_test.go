@@ -373,6 +373,15 @@ func (dm *mocDifficultyManager) StageDAADataAndReturnRequiredDifficulty(stagingA
 	return dm.testDifficulty, nil
 }
 
+// StageDAAData returns the difficulty required for the test
+func (dm *mocDifficultyManager) StageDAAData(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, _ bool) error {
+	// Populate daaBlocksStore with fake values
+	dm.daaBlocksStore.StageDAAScore(stagingArea, blockHash, dm.genesisDaaScore)
+	dm.daaBlocksStore.StageBlockDAAAddedBlocks(stagingArea, blockHash, nil)
+
+	return nil
+}
+
 func (dm *mocDifficultyManager) EstimateNetworkHashesPerSecond(_ *externalapi.DomainHash, _ int) (uint64, error) {
 	return 0, nil
 }

@@ -208,6 +208,7 @@ func (csm *consensusStateManager) selectedParentInfo(
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	// Don't try to restore past UTXO for header-only blocks or blocks with non-UTXO-valid status
 	if selectedParentStatus != externalapi.StatusUTXOValid && selectedParentStatus != externalapi.StatusDisqualifiedFromChain {
 		return selectedParent, selectedParentStatus, nil, nil
 	}
@@ -338,9 +339,24 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 	}
 
 	if isResolveTip {
-		oldSelectedTipUTXOSet, err := csm.restorePastUTXO(stagingArea, oldSelectedTip)
-		if err != nil {
+		// Check if oldSelectedTip has a UTXO-valid status before trying to restore past UTXO
+		// During IBD with headers proof, oldSelectedTip might be a header-only block from the pruning point proof
+		oldSelectedTipStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, oldSelectedTip)
+		if err != nil && !database.IsNotFoundError(err) {
 			return 0, nil, err
+		}
+		
+		var oldSelectedTipUTXOSet externalapi.UTXODiff
+		if database.IsNotFoundError(err) || oldSelectedTipStatus != externalapi.StatusUTXOValid {
+			// If oldSelectedTip is not UTXO-valid, we can't restore its past UTXO
+			// This can happen during IBD with headers proof where the virtual's selected parent
+			// is a header-only block from the pruning point proof
+			oldSelectedTipUTXOSet = nil
+		} else {
+			oldSelectedTipUTXOSet, err = csm.restorePastUTXO(stagingArea, oldSelectedTip)
+			if err != nil {
+				return 0, nil, err
+			}
 		}
 		isNewSelectedTip, err := csm.isNewSelectedTip(stagingArea, blockHash, oldSelectedTip)
 		if err != nil {
@@ -348,26 +364,42 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		}
 
 		if isNewSelectedTip {
-			log.Debugf("Block %s is the new selected tip, therefore setting it as old selected tip's diffChild", blockHash)
+			log.Debugf("Block %s is the new selected tip", blockHash)
 
-			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
-			if err != nil {
-				return 0, nil, err
+			// If oldSelectedTipUTXOSet is nil (old selected tip is header-only), we can't calculate
+			// the diff. This can happen during IBD with headers proof.
+			if oldSelectedTipUTXOSet != nil {
+				updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
+				if err != nil {
+					return 0, nil, err
+				}
+				log.Debugf("Setting the old selected tip's (%s) diffChild to be the new selected tip (%s)",
+					oldSelectedTip, blockHash)
+				csm.stageDiff(stagingArea, oldSelectedTip, updatedOldSelectedTipUTXOSet, blockHash)
+			} else {
+				log.Debugf("Old selected tip %s is header-only, skipping UTXO diff child update", oldSelectedTip)
 			}
-			log.Debugf("Setting the old selected tip's (%s) diffChild to be the new selected tip (%s)",
-				oldSelectedTip, blockHash)
-			csm.stageDiff(stagingArea, oldSelectedTip, updatedOldSelectedTipUTXOSet, blockHash)
 
 			log.Tracef("Staging the utxoDiff of block %s, with virtual as diffChild", blockHash)
 			csm.stageDiff(stagingArea, blockHash, pastUTXOSet, nil)
 		} else {
 			log.Debugf("Block %s is the tip of currently resolved chain, but not the new selected tip,"+
 				"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
-			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
-			if err != nil {
-				return 0, nil, err
+			// If oldSelectedTipUTXOSet is nil, we can't calculate the diff
+			if oldSelectedTipUTXOSet != nil {
+				utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
+				if err != nil {
+					return 0, nil, err
+				}
+				csm.stageDiff(stagingArea, blockHash, utxoDiff, oldSelectedTip)
+			} else {
+				// oldSelectedTip is header-only, so we set the diffChild to the selected parent instead
+				utxoDiff, err := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
+				if err != nil {
+					return 0, nil, err
+				}
+				csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 			}
-			csm.stageDiff(stagingArea, blockHash, utxoDiff, oldSelectedTip)
 		}
 	} else {
 		// If the block is not the tip of the currently resolved chain, we set it's diffChild to be the selectedParent,
