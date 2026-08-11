@@ -545,19 +545,23 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			blockLevel, totalHeaders, selectedTip, time.Since(levelStartTime).Truncate(time.Second))
 
 		if blockLevel < maxLevel {
-			blockAtDepthMAtNextLevel, err := ppm.blockAtDepth(stagingArea, ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
-			if err != nil {
-				return err
-			}
+			// Skip blockAtDepth validation if the next level's selected tip is VirtualGenesisBlockHash
+			// (meaning no blocks exist at that level in the proof)
+			if selectedTipByLevel[blockLevel+1] != nil && !selectedTipByLevel[blockLevel+1].Equal(model.VirtualGenesisBlockHash) {
+				blockAtDepthMAtNextLevel, err := ppm.blockAtDepth(stagingArea, ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
+				if err != nil {
+					return err
+				}
 
-			hasBlockAtDepthMAtNextLevel, err := blockRelationStores[blockLevel+1].Has(ppm.databaseContext, stagingArea, blockAtDepthMAtNextLevel)
-			if err != nil {
-				return err
-			}
+				hasBlockAtDepthMAtNextLevel, err := blockRelationStores[blockLevel+1].Has(ppm.databaseContext, stagingArea, blockAtDepthMAtNextLevel)
+				if err != nil {
+					return err
+				}
 
-			if !hasBlockAtDepthMAtNextLevel {
-				return errors.Wrapf(ruleerrors.ErrPruningProofMissingBlockAtDepthMFromNextLevel, "proof level %d "+
-					"is missing the block at depth m in level %d", blockLevel, blockLevel+1)
+				if !hasBlockAtDepthMAtNextLevel {
+					return errors.Wrapf(ruleerrors.ErrPruningProofMissingBlockAtDepthMFromNextLevel, "proof level %d "+
+						"is missing the block at depth m in level %d", blockLevel, blockLevel+1)
+				}
 			}
 		}
 
