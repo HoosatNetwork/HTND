@@ -27,6 +27,32 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Bool is a custom boolean type that can parse string values like "true", "false", "1", "0", etc.
+// This allows boolean flags to be set to false via command line (e.g., --flag=false or --flag false)
+type Bool bool
+
+// UnmarshalFlag implements the flags.Unmarshaler interface for Bool
+func (b *Bool) UnmarshalFlag(value string) error {
+	// Handle empty string (flag present without value, e.g., --autoupdate)
+	if value == "" {
+		*b = true
+		return nil
+	}
+
+	// Parse the string value
+	switch strings.ToLower(value) {
+	case "true", "1", "yes", "y", "on":
+		*b = true
+	case "false", "0", "no", "n", "off":
+		*b = false
+	default:
+		// If the value is not recognized, treat presence as true
+		// This maintains backward compatibility with --flag (no value)
+		*b = true
+	}
+	return nil
+}
+
 const (
 	defaultConfigFilename      = "htnd.conf"
 	defaultLogLevel            = "info"
@@ -156,11 +182,11 @@ type Flags struct {
 	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
 	// Auto-update configuration
-	AutoUpdateEnabled       bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases"`
+	AutoUpdateEnabled       Bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases"`
 	AutoUpdateCheckInterval time.Duration `long:"autoupdate-interval" description:"Interval between update checks (e.g., 24h, 72h)" default:"24h"`
 	AutoUpdateChannel        string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
-	AutoUpdateDownload       bool          `long:"autoupdate-download" description:"Automatically download available updates"`
-	AutoUpdateInstall        bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
+	AutoUpdateDownload       Bool          `long:"autoupdate-download" description:"Automatically download available updates"`
+	AutoUpdateInstall        Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions

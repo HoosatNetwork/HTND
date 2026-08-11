@@ -178,15 +178,15 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 
 	// Create auto-updater if enabled
 	var updater *autoupdate.Updater
-	if cfg.AutoUpdateEnabled {
+	if bool(cfg.AutoUpdateEnabled) {
 		updaterConfig := &autoupdate.Config{
-			Enabled:        cfg.AutoUpdateEnabled,
+			Enabled:        bool(cfg.AutoUpdateEnabled),
 			CheckInterval:  cfg.AutoUpdateCheckInterval,
 			GitHubOwner:    "HoosatNetwork",
 			GitHubRepo:     "HTND",
 			UpdateChannel:  cfg.AutoUpdateChannel,
-			AutoDownload:   cfg.AutoUpdateDownload,
-			AutoInstall:    cfg.AutoUpdateInstall,
+			AutoDownload:   bool(cfg.AutoUpdateDownload),
+			AutoInstall:    bool(cfg.AutoUpdateInstall),
 			NotifyOnly:     false,
 		}
 		updater = autoupdate.NewUpdater(updaterConfig)

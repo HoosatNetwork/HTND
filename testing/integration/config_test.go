@@ -129,7 +129,7 @@ func commonConfig() *config.Config {
 	commonConfig.TargetOutboundPeers = 0
 	commonConfig.DisableDNSSeed = true
 	commonConfig.Simnet = true
-	commonConfig.AutoUpdateEnabled = false
+	commonConfig.AutoUpdateEnabled = config.Bool(false)
 
 	return commonConfig
 }
