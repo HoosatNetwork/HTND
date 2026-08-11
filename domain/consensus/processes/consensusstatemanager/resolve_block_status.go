@@ -20,6 +20,29 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveBlockStatus for %s", blockHash))
 	defer onEnd()
 
+	// Check if this block can be fully resolved. Blocks whose selected parent chain
+	// doesn't contain the pruning point cannot be resolved because they would require
+	// fetching UTXO diffs from the past of the pruning point, which may have been pruned.
+	pruningPoint, err := csm.pruningStore.PruningPoint(csm.databaseContext, stagingArea)
+	if err != nil {
+		// If there's no pruning point yet (e.g., during initial sync or test setup),
+		// we can resolve all blocks normally
+		log.Debugf("No pruning point exists yet, proceeding with normal resolution for block %s", blockHash)
+	} else {
+		// Skip full resolution for blocks not in the selected parent chain of the pruning point
+		// (unless it's genesis, which must always be resolved)
+		if !csm.genesisHash.Equal(blockHash) {
+			isInSelectedChainOfPruningPoint, err := csm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, pruningPoint, blockHash)
+			if err != nil {
+				return 0, nil, err
+			}
+			if !isInSelectedChainOfPruningPoint {
+				log.Debugf("Block %s is not in the selected parent chain of the pruning point %s, cannot fully resolve UTXO status. Returning StatusUTXOPendingVerification", blockHash, pruningPoint)
+				return externalapi.StatusUTXOPendingVerification, nil, nil
+			}
+		}
+	}
+
 	log.Debugf("Getting a list of all blocks in the selected "+
 		"parent chain of %s that have no yet resolved their status", blockHash)
 	unverifiedBlocks, err := csm.getUnverifiedChainBlocks(stagingArea, blockHash)

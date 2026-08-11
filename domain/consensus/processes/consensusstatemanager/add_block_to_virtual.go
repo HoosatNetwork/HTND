@@ -58,6 +58,15 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 		} else {
 			log.Debugf("Block %s is not the next virtual selected parent, "+
 				"therefore its status remains `%s`", blockHash, externalapi.StatusUTXOPendingVerification)
+			var blockStatus externalapi.BlockStatus
+			// Keep the block-resolution path in a single staging area so block insertion
+			// does not create unnecessary per-block commits while still preserving the
+			// same UTXO-status and diff-child semantics.
+			blockStatus, reversalData, err = csm.ResolveBlockStatus(stagingArea, blockHash, false)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			log.Debugf("Block %s resolved to status `%s`", blockHash, blockStatus)
 		}
 	}
 

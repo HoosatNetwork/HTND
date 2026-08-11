@@ -519,8 +519,8 @@ func TestResolveBlockStatusSanity(t *testing.T) {
 		}
 
 		// Add another chain of blocks over the genesis that's shorter than
-		// the original chain by 1. Here we expect all the statuses to be
-		// StatusUTXOPendingVerification
+		// the original chain by 1. With the new behavior of resolving all blocks,
+		// these blocks should now have StatusUTXOValid as well
 		currentHash = genesisHash
 		for i := 0; i < chainLength-1; i++ {
 			addedBlockHash, _, err := consensus.AddBlock([]*externalapi.DomainHash{currentHash}, nil, nil)
@@ -531,9 +531,10 @@ func TestResolveBlockStatusSanity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error getting block %d (%s) status: %s", i, addedBlockHash, err)
 			}
-			if blockStatus != externalapi.StatusUTXOPendingVerification {
+			// With the new behavior, all blocks should be resolved
+			if blockStatus != externalapi.StatusUTXOValid {
 				t.Fatalf("block %d (%s) has unexpected status. "+
-					"Want: %s, got: %s", i, addedBlockHash, externalapi.StatusUTXOPendingVerification, blockStatus)
+					"Want: %s, got: %s", i, addedBlockHash, externalapi.StatusUTXOValid, blockStatus)
 			}
 			currentHash = addedBlockHash
 			allHashes = append(allHashes, addedBlockHash)
