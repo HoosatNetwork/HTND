@@ -180,7 +180,7 @@ func (csm *consensusStateManager) calculateNewTips(
 
 		if status == externalapi.StatusDisqualifiedFromChain || status == externalapi.StatusInvalid {
 			// Just drop it. Do NOT walk its parents.
-			log.Debugf("Dropping disqualified/invalid tip %s", currentTip)
+			log.Infof("Dropping disqualified/invalid tip %s", currentTip)
 			continue
 		}
 		newTips = append(newTips, currentTip)
