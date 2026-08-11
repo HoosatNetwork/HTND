@@ -148,7 +148,6 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		blockHeaderSlicePool.Put(directParentHeadersPtr)
 	}()
 	firstParentInFutureOfPruningPointIndex := 0
-	var firstParentInFutureOfPruningPoint *externalapi.DomainHash
 	foundFirstParentInFutureOfPruningPoint := false
 	for i, directParentHash := range directParentHashesCopy {
 		isInFutureOfPruningPoint, err := bpb.dagTopologyManager.IsAncestorOf(stagingArea, pruningPoint, directParentHash)
@@ -161,7 +160,6 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		}
 
 		firstParentInFutureOfPruningPointIndex = i
-		firstParentInFutureOfPruningPoint = directParentHash
 		foundFirstParentInFutureOfPruningPoint = true
 		break
 	}
@@ -361,23 +359,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 
 		levelBlocks := make(externalapi.BlockLevelParents, 0, len(candidates))
 		for _, candidate := range candidates {
-			if newBlockParents == true {
-				status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, candidate.hash)
-				if err != nil {
-					continue
-				}
-				if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
-					continue
-				}
-			}
 			levelBlocks = append(levelBlocks, candidate.hash)
-		}
-		if len(levelBlocks) == 0 && newBlockParents == true && blockLevel == 0 {
-			// Only use the fallback parent for level 0 if it's valid
-			status, err := bpb.blockStatusStore.Get(bpb.databaseContext, stagingArea, firstParentInFutureOfPruningPoint)
-			if err == nil && status != externalapi.StatusInvalid && status != externalapi.StatusDisqualifiedFromChain {
-				levelBlocks = append(levelBlocks, firstParentInFutureOfPruningPoint)
-			}
 		}
 		if len(levelBlocks) > 0 {
 			parents = append(parents, levelBlocks)
