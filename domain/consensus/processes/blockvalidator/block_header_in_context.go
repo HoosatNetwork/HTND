@@ -78,10 +78,10 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	}
 
 	// Check that none of the parents are disqualified or invalid
-	err = v.checkParentsStatus(stagingArea, header)
-	if err != nil {
-		return err
-	}
+	// err = v.checkParentsStatus(stagingArea, header)
+	// if err != nil {
+	// 	return err
+	// }
 
 	if !isBlockWithTrustedData {
 		// TODO: Enable these on block v6 after finding reason for the issues with the blocks
@@ -153,7 +153,7 @@ func (v *blockValidator) checkParentsStatus(stagingArea *model.StagingArea, head
 		}
 
 		// Reject blocks with parents that are disqualified or invalid
-		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
+		if status == externalapi.StatusInvalid {
 			return errors.Wrapf(ruleerrors.ErrInvalidBlockParent, "block has parent %s with invalid status %s",
 				parentHash, status)
 		}
