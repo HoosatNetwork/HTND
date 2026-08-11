@@ -527,6 +527,19 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 		log.Debugf("Finished validating level %d from the pruning point proof (headers=%d selectedTip=%s duration=%s)",
 			blockLevel, totalHeaders, selectedTip, time.Since(levelStartTime).Truncate(time.Second))
 
+		// If no headers were processed (totalHeaders == 0), selectedTip will be nil.
+		// In this case, we need to set a default selected tip.
+		if selectedTip == nil {
+			if blockLevel <= pruningPointBlockLevel {
+				// For levels at or below pruning point level, use the pruning point itself
+				selectedTip = consensushashing.HeaderHash(pruningPointHeader)
+			} else {
+				// For levels above pruning point level, use VirtualGenesisBlockHash as a sentinel
+				// This indicates that there are no blocks at this level in the proof
+				selectedTip = model.VirtualGenesisBlockHash
+			}
+		}
+
 		if blockLevel < maxLevel {
 			blockAtDepthMAtNextLevel, err := ppm.blockAtDepth(stagingArea, ghostdagDataStores[blockLevel+1], selectedTipByLevel[blockLevel+1], ppm.pruningProofM)
 			if err != nil {
@@ -544,9 +557,13 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 			}
 		}
 
-		if !selectedTip.Equal(pruningPoint) && !ppm.parentsManager.ParentsAtLevel(pruningPointHeader, blockLevel).Contains(selectedTip) {
-			return errors.Wrapf(ruleerrors.ErrPruningProofMissesBlocksBelowPruningPoint, "the selected tip %s at "+
-				"level %d is not a parent of the pruning point", selectedTip, blockLevel)
+		// For levels above pruning point level, the selected tip must be a parent of the pruning point
+		// or VirtualGenesisBlockHash (if no blocks exist at this level)
+		if blockLevel > pruningPointBlockLevel {
+			if !selectedTip.Equal(model.VirtualGenesisBlockHash) && !ppm.parentsManager.ParentsAtLevel(pruningPointHeader, blockLevel).Contains(selectedTip) {
+				return errors.Wrapf(ruleerrors.ErrPruningProofMissesBlocksBelowPruningPoint, "the selected tip %s at "+
+					"level %d is not a parent of the pruning point", selectedTip, blockLevel)
+			}
 		}
 		selectedTipByLevel[blockLevel] = selectedTip
 	}
@@ -567,10 +584,19 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 				return errors.Wrapf(ruleerrors.ErrPruningProofSelectedTipIsNotThePruningPoint, "the pruning "+
 					"proof selected tip %s at level %d is not the pruning point", selectedTip, blockLevel)
 			}
-		} else if !ppm.parentsManager.ParentsAtLevel(pruningPointHeader, blockLevel).Contains(selectedTip) {
-			return errors.Wrapf(ruleerrors.ErrPruningProofSelectedTipNotParentOfPruningPoint, "the pruning "+
-				"proof selected tip %s at level %d is not a parent of the of the pruning point on the same "+
-				"level", selectedTip, blockLevel)
+		} else {
+			// For levels above pruning point level, the selected tip must be a parent of the pruning point
+			// at that level, or VirtualGenesisBlockHash (if no blocks exist at this level)
+			if !selectedTip.Equal(model.VirtualGenesisBlockHash) && !ppm.parentsManager.ParentsAtLevel(pruningPointHeader, blockLevel).Contains(selectedTip) {
+				return errors.Wrapf(ruleerrors.ErrPruningProofSelectedTipNotParentOfPruningPoint, "the pruning "+
+					"proof selected tip %s at level %d is not a parent of the of the pruning point on the same "+
+					"level", selectedTip, blockLevel)
+			}
+		}
+
+		// Skip further validation if selected tip is VirtualGenesisBlockHash (no blocks at this level)
+		if selectedTip.Equal(model.VirtualGenesisBlockHash) {
+			continue
 		}
 
 		selectedTipGHOSTDAGData, err := ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, selectedTip, false)
