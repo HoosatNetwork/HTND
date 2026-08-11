@@ -18,6 +18,7 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 	onEnd := logger.LogAndMeasureExecutionTime(log, "csm.AddBlock")
 	defer onEnd()
 
+	var blockStatus externalapi.BlockStatus
 	var reversalData *model.UTXODiffReversalData
 	if updateVirtual {
 		log.Debugf("Resolving whether the block %s is the next virtual selected parent", blockHash)
@@ -44,7 +45,6 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 
 			if !isViolatingFinality {
 				log.Debugf("Block %s doesn't violate finality. Resolving its block status", blockHash)
-				var blockStatus externalapi.BlockStatus
 				// Keep the block-resolution path in a single staging area so block insertion
 				// does not create unnecessary per-block commits while still preserving the
 				// same UTXO-status and diff-child semantics.
@@ -58,7 +58,6 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 		} else {
 			log.Debugf("Block %s is not the next virtual selected parent, "+
 				"therefore its status remains `%s`", blockHash, externalapi.StatusUTXOPendingVerification)
-			var blockStatus externalapi.BlockStatus
 			// Keep the block-resolution path in a single staging area so block insertion
 			// does not create unnecessary per-block commits while still preserving the
 			// same UTXO-status and diff-child semantics.
@@ -69,7 +68,10 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 			log.Debugf("Block %s resolved to status `%s`", blockHash, blockStatus)
 		}
 	}
-
+	// Just commented out code, for future testing.
+	// if blockStatus == externalapi.StatusInvalid || blockStatus == externalapi.StatusDisqualifiedFromChain {
+	// 	return nil, nil, nil, errors.Wrapf(ruleerrors.ErrDuplicateBlock, "block %s is disqualified or invalid", blockHash)
+	// }
 	log.Debugf("Adding block %s to the DAG tips", blockHash)
 	newTips, err := csm.addTip(stagingArea, blockHash)
 	if err != nil {

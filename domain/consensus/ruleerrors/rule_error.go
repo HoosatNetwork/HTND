@@ -21,6 +21,9 @@ var (
 	// exists.
 	ErrDuplicateBlock = newRuleError("ErrDuplicateBlock")
 
+	// ErrDisqualifiedOrInvalid indicates a block which is disqualified or invalid.
+	ErrDisqualifiedOrInvalid = newRuleError("ErrDisqualifiedOrInvalid")
+
 	// ErrBlockVersionTooOld indicates the block version is too old and is
 	// no longer accepted since the majority of the network has upgraded
 	// to a newer version.
