@@ -71,7 +71,7 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	} else {
 		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	}
-	log.Infof("Number of tips %d", len(orderedTips))
+	// log.Infof("Number of tips %d", len(orderedTips))
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
 	}
