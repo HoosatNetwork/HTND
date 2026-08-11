@@ -141,6 +141,59 @@ func (csm *consensusStateManager) addTip(stagingArea *model.StagingArea, newTipH
 	return newTips, nil
 }
 
+func (csm *consensusStateManager) FindHighestValidBlock() (*externalapi.DomainHash, error) {
+	// Get an iterator to go through all blocks
+	iterator, err := csm.blockStore.AllBlockHashesIterator(csm.databaseContext)
+	if err != nil {
+		return nil, err
+	}
+	defer iterator.Close()
+	log.Infof("Found zero tips, so searching for something we could use.")
+	// Iterate through all blocks
+
+	var highestBlockHash *externalapi.DomainHash
+	var highestDAaScore uint64 = 0
+	if iterator.First() {
+		for {
+			blockHash, err := iterator.Get()
+			if err != nil {
+				return nil, err
+			}
+
+			// Use a separate staging area for each block to avoid memory accumulation
+			stagingArea := model.NewStagingArea()
+
+			status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, blockHash)
+			if err != nil {
+				// Skip blocks that can't be retrieved (might be pruned)
+				log.Infof("Error happened on getting block status")
+				if !iterator.Next() {
+					break
+				}
+				continue
+			}
+			if status == externalapi.StatusUTXOValid {
+				block, err := csm.blockStore.Block(csm.databaseContext, stagingArea, blockHash)
+				if err != nil {
+					continue
+				}
+				log.Infof("Found valid block %s, DAAScore %d", blockHash, block.Header.DAAScore())
+				if block.Header.DAAScore() > highestDAaScore {
+					highestBlockHash = blockHash
+					highestDAaScore = block.Header.DAAScore()
+				}
+			}
+
+			if !iterator.Next() {
+				break
+			}
+		}
+	}
+
+	log.Infof("Highest valid block %s at DAAScore %d found for tip", highestBlockHash, highestDAaScore)
+	return highestBlockHash, nil
+}
+
 func (csm *consensusStateManager) calculateNewTips(
 	stagingArea *model.StagingArea, newTipHash *externalapi.DomainHash, newTipStatus externalapi.BlockStatus,
 ) ([]*externalapi.DomainHash, error) {
@@ -172,7 +225,7 @@ func (csm *consensusStateManager) calculateNewTips(
 
 	// Check the new block's status before adding to tips
 	if newTipStatus == externalapi.StatusDisqualifiedFromChain || newTipStatus == externalapi.StatusInvalid {
-		log.Debugf("Dropping disqualified/invalid new tip %s", newTipHash)
+		log.Infof("Dropping disqualified/invalid new tip %s", newTipHash)
 	} else {
 		newTips = append(newTips, newTipHash)
 	}
@@ -193,6 +246,14 @@ func (csm *consensusStateManager) calculateNewTips(
 			continue
 		}
 		newTips = append(newTips, currentTip)
+	}
+
+	if len(newTips) < 1 {
+		highestValidBlock, err := csm.FindHighestValidBlock()
+		if err != nil {
+			return nil, err
+		}
+		newTips = append(newTips, highestValidBlock)
 	}
 	log.Debugf("The new number of tips is: %d", len(newTips))
 
