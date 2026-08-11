@@ -136,92 +136,86 @@ func (csm *consensusStateManager) removeHashesInFutureOf(stagingArea *model.Stag
 	return hashes[:i], nil
 }
 
-func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model.StagingArea,
+func (csm *consensusStateManager) selectVirtualSelectedParent(
+	stagingArea *model.StagingArea,
 	candidatesHeap model.BlockHeap,
 ) (*externalapi.DomainHash, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "selectVirtualSelectedParent")
 	defer onEnd()
 
-	disqualifiedCandidates := hashset.New()
-
-	// Cache status lookups to avoid repeating DB reads for the same hashes.
-	statusCache := make(map[externalapi.DomainHash]externalapi.BlockStatus)
-	pushedToHeap := make(map[externalapi.DomainHash]struct{})
+	statusCache := make(map[externalapi.DomainHash]externalapi.BlockStatus, 64)
+	pushedToHeap := make(map[externalapi.DomainHash]struct{}, 32)
 
 	getStatus := func(hash *externalapi.DomainHash) (externalapi.BlockStatus, error) {
 		key := *hash
-		if status, ok := statusCache[key]; ok {
-			return status, nil
+		if s, ok := statusCache[key]; ok {
+			return s, nil
 		}
-		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, hash)
+		s, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, hash)
 		if err != nil {
 			return 0, err
 		}
-		statusCache[key] = status
-		return status, nil
+		statusCache[key] = s
+		return s, nil
 	}
 
 	for {
 		if candidatesHeap.Len() == 0 {
 			return nil, errors.New("virtual has no valid parent candidates")
 		}
-		selectedParentCandidate := candidatesHeap.Pop()
 
-		selectedParentCandidateStatus, err := getStatus(selectedParentCandidate)
+		candidate := candidatesHeap.Pop()
+
+		status, err := getStatus(candidate)
 		if err != nil {
 			return nil, err
 		}
-		if selectedParentCandidateStatus == externalapi.StatusUTXOValid {
-			return selectedParentCandidate, nil
-		}
-		if selectedParentCandidateStatus == externalapi.StatusUTXOPendingVerification {
-			// For blocks with pending verification status, we need to ensure they have a UTXO diff
-			// before selecting them as virtual parents. If they don't have a UTXO diff yet,
-			// they haven't been fully processed and shouldn't be selected. Skip them like
-			// header-only blocks.
-			_, err = csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, selectedParentCandidate)
+
+		switch status {
+		case externalapi.StatusUTXOValid:
+			return candidate, nil
+
+		case externalapi.StatusUTXOPendingVerification:
+			// Accept only if the block already has a UTXO diff (i.e. it has
+			// been fully processed). UTXODiff itself is cached by the store.
+			_, err = csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, candidate)
 			if err == nil {
-				// Block has a UTXO diff, so it's safe to select
-				return selectedParentCandidate, nil
+				return candidate, nil
 			}
-			// If we can't get the UTXO diff (error), skip this candidate
-			// and continue to the next one
+			if !database.IsNotFoundError(err) {
+				return nil, err // real error
+			}
+			// No diff yet → treat like header-only
+			continue
+
+		case externalapi.StatusHeaderOnly:
 			continue
 		}
 
-		// Header-only blocks are not considered for the "all children disqualified" rule,
-		// so we can skip propagating disqualification through their parents.
-		if selectedParentCandidateStatus == externalapi.StatusHeaderOnly {
-			continue
-		}
-
-		disqualifiedCandidates.Add(selectedParentCandidate)
-
-		candidateParents, err := csm.dagTopologyManager.Parents(stagingArea, selectedParentCandidate)
+		// Candidate is disqualified / invalid. Promote its parents only when
+		// every relevant child is already “bad”.
+		parents, err := csm.dagTopologyManager.Parents(stagingArea, candidate)
 		if err != nil {
 			return nil, err
 		}
-		for _, parent := range candidateParents {
+
+		for _, parent := range parents {
 			if parent.Equal(model.VirtualBlockHash) {
 				continue
 			}
 
-			// Only push the parent if ALL of its relevant (non-virtual, non-header-only) children
-			// are disqualified or invalid. This prevents pushing parents prematurely when there
-			// are still valid children that should be preferred.
-			// We check the actual status of all children, not just those in the current iteration.
 			parentKey := *parent
-			if _, ok := pushedToHeap[parentKey]; ok {
+			if _, already := pushedToHeap[parentKey]; already {
 				continue
 			}
 
-			allChildren, err := csm.dagTopologyManager.Children(stagingArea, parent)
+			children, err := csm.dagTopologyManager.Children(stagingArea, parent)
 			if err != nil {
 				return nil, err
 			}
 
-			allChildrenDisqualified := true
-			for _, child := range allChildren {
+			allRelevantChildrenBad := true
+			for _, child := range children {
 				if child.Equal(model.VirtualBlockHash) {
 					continue
 				}
@@ -229,25 +223,23 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 				if err != nil {
 					return nil, err
 				}
-				// Header-only blocks don't affect parent qualification
 				if childStatus == externalapi.StatusHeaderOnly {
 					continue
 				}
-				// If we find a child that's not disqualified, the parent cannot be pushed yet
-				// Note: StatusUTXOPendingVerification blocks are treated as disqualified for this check
-				// to maintain consistency with how they're handled elsewhere in this function.
+				// PendingVerification is treated as “bad” so a parent is not
+				// promoted while any of its children are still only partially
+				// processed.
 				if childStatus != externalapi.StatusDisqualifiedFromChain &&
 					childStatus != externalapi.StatusInvalid &&
 					childStatus != externalapi.StatusUTXOPendingVerification {
-					allChildrenDisqualified = false
+					allRelevantChildrenBad = false
 					break
 				}
 			}
 
-			if allChildrenDisqualified {
+			if allRelevantChildrenBad {
 				pushedToHeap[parentKey] = struct{}{}
-				err = candidatesHeap.Push(parent)
-				if err != nil {
+				if err := candidatesHeap.Push(parent); err != nil {
 					return nil, err
 				}
 			}
