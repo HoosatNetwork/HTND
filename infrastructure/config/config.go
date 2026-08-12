@@ -81,7 +81,7 @@ const (
 	defaultIBDTimeout             = 480 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
-	defaultIBDDequeueTimeout      = 1 * time.Minute
+	defaultIBDDequeueTimeout      = 5 * time.Minute
 	defaultUTXODefaultMaxLimit    = 0
 	defaultMinHeadersPerSecond    = 5
 	defaultMinBlocksPerSecond     = 5
