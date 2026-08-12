@@ -50,6 +50,7 @@ type consensusStateManager struct {
 
 	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
 	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
+	lastValidBlock          *externalapi.DomainHash
 }
 
 // New instantiates a new ConsensusStateManager
@@ -120,7 +121,7 @@ func New(
 		headersSelectedChainStore: headersSelectedChainStore,
 		mergeDepthRootStore:       mergeDepthRootStore,
 		windowHeapSliceStore:      windowHeapSliceStore,
-		resolveBlockStatusCache: lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
+		resolveBlockStatusCache:   lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
 
 		stores: []model.Store{
 			consensusStateStore,
