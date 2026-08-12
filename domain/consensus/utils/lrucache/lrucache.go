@@ -116,6 +116,9 @@ func (c *LRUCache[V]) Add(key *externalapi.DomainHash, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if key == nil {
+		return
+	}
 	h := hash(*key)
 
 	if e, ok := c.cache[h]; ok {
@@ -152,6 +155,9 @@ func (c *LRUCache[V]) Get(key *externalapi.DomainHash) (value V, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if key == nil {
+		return
+	}
 	h := hash(*key)
 
 	e, exists := c.cache[h]
@@ -172,6 +178,9 @@ func (c *LRUCache[V]) Has(key *externalapi.DomainHash) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if key == nil {
+		return false
+	}
 	h := hash(*key)
 	e, ok := c.cache[h]
 	return ok && e.key == *key
@@ -182,6 +191,9 @@ func (c *LRUCache[V]) Remove(key *externalapi.DomainHash) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if key == nil {
+		return
+	}
 	h := hash(*key)
 	e, ok := c.cache[h]
 	if !ok || e.key != *key {

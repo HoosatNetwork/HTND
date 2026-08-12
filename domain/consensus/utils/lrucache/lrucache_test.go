@@ -197,3 +197,18 @@ func TestLRUCache_ConcurrentAccess_DoesNotPanic(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestLRUCache_NilKey_DoesNotPanic(t *testing.T) {
+	cache := New[string](10, false)
+
+	// These should not panic
+	cache.Add(nil, "value")
+	v, ok := cache.Get(nil)
+	if ok || v != "" {
+		t.Fatalf("expected Get(nil) to return false, got ok=%v v=%v", ok, v)
+	}
+	if cache.Has(nil) {
+		t.Fatalf("expected Has(nil) to return false")
+	}
+	cache.Remove(nil)
+}
