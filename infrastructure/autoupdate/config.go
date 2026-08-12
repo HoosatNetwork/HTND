@@ -50,6 +50,11 @@ type Config struct {
 	// GitHubToken is a personal access token for auto-filing error reports
 	// Requires 'repo' scope. If empty, error reporting is disabled.
 	GitHubToken string
+
+	// AutoReportIssues determines if issues should be automatically reported to GitHub
+	// When enabled (default), panics and update errors will create GitHub issues
+	// Requires GitHubToken to be set for reporting to work
+	AutoReportIssues bool
 }
 
 // DefaultConfig returns the default auto-update configuration
@@ -66,6 +71,7 @@ func DefaultConfig() *Config {
 		InstallDelayMin: 30 * time.Minute,
 		InstallDelayMax: 180 * time.Minute,
 		GitHubToken:     "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",
+		AutoReportIssues: true,
 	}
 }
 

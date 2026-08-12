@@ -18,6 +18,8 @@ import (
 
 	"github.com/HoosatNetwork/HTND/app"
 	"github.com/HoosatNetwork/HTND/infrastructure/autoupdate"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/version"
 )
 
@@ -48,7 +50,10 @@ func init() {
 }
 
 // reportPanicToGitHub creates a GitHub issue for panics using shared GitHubClient
-func reportPanicToGitHub(githubClient *autoupdate.GitHubClient, panicMsg interface{}, stack []byte) {
+func reportPanicToGitHub(githubClient *autoupdate.GitHubClient, panicMsg interface{}, stack []byte, autoReport bool) {
+	if !autoReport {
+		return
+	}
 	go func() {
 		title := fmt.Sprintf("[PANIC] HTND v%s", version.Version())
 		body := fmt.Sprintf(`**Node Crashed with Panic**
@@ -77,18 +82,30 @@ func reportPanicToGitHub(githubClient *autoupdate.GitHubClient, panicMsg interfa
 }
 
 func main() {
-	// Get default autoupdate config to access token
+	// Load configuration to access autoupdate settings
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer logger.BackendLog.Close()
+
+	// Get autoupdate config from loaded config
 	autoUpdateCfg := autoupdate.DefaultConfig()
-	
+	autoUpdateCfg.GitHubToken = "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"
+	autoUpdateCfg.AutoReportIssues = bool(cfg.AutoReportIssues)
+
 	// Initialize GitHub client for error reporting
 	githubClient := autoupdate.NewGitHubClient("HoosatNetwork", "HTND")
-	githubClient.SetToken(autoUpdateCfg.GitHubToken)
+	if autoUpdateCfg.GitHubToken != "" {
+		githubClient.SetToken(autoUpdateCfg.GitHubToken)
+	}
 
 	// Recover from panics and report to GitHub
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
-			reportPanicToGitHub(githubClient, r, stack)
+			reportPanicToGitHub(githubClient, r, stack, autoUpdateCfg.AutoReportIssues)
 			// Re-panic to maintain normal crash behavior
 			panic(r)
 		}
@@ -117,7 +134,7 @@ func main() {
 		}()
 	}
 
-	if err := app.StartApp(); err != nil {
+	if err := app.StartAppWithConfig(cfg); err != nil {
 		os.Exit(1)
 	}
 }

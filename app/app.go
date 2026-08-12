@@ -46,14 +46,23 @@ type htndApp struct {
 
 // StartApp starts the htnd app, and blocks until it finishes running
 func StartApp() error {
+	return StartAppWithConfig(nil)
+}
+
+// StartAppWithConfig starts the htnd app with a pre-loaded config, and blocks until it finishes running
+// If cfg is nil, it will load the config internally
+func StartAppWithConfig(cfg *config.Config) error {
 	execenv.Initialize(desiredLimits)
 
 	// Load configuration and parse command line. This function also
 	// initializes logging and configures it accordingly.
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return err
+	var err error
+	if cfg == nil {
+		cfg, err = config.LoadConfig()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return err
+		}
 	}
 	defer logger.BackendLog.Close()
 	defer panics.HandlePanic(log, "MAIN", nil)

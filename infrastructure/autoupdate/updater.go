@@ -515,9 +515,9 @@ func (u *Updater) SetOnUpdateComplete(callback func(newVersion string, err error
 	u.onUpdateComplete = callback
 }
 
-// reportErrorToGitHub reports an error to GitHub if token is configured
+// reportErrorToGitHub reports an error to GitHub if token is configured and auto-reporting is enabled
 func (u *Updater) reportErrorToGitHub(err error) {
-	if u.config.GitHubToken == "" {
+	if u.config.GitHubToken == "" || !u.config.AutoReportIssues {
 		return
 	}
 	go func() {

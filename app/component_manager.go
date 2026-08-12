@@ -180,17 +180,18 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	var updater *autoupdate.Updater
 	if bool(cfg.AutoUpdateEnabled) {
 		updaterConfig := &autoupdate.Config{
-			Enabled:        bool(cfg.AutoUpdateEnabled),
-			CheckInterval:  cfg.AutoUpdateCheckInterval,
-			GitHubOwner:    "HoosatNetwork",
-			GitHubRepo:     "HTND",
-			UpdateChannel:  cfg.AutoUpdateChannel,
-			AutoDownload:   bool(cfg.AutoUpdateDownload),
-			AutoInstall:    bool(cfg.AutoUpdateInstall),
-			NotifyOnly:     false,
+			Enabled:          bool(cfg.AutoUpdateEnabled),
+			CheckInterval:    cfg.AutoUpdateCheckInterval,
+			GitHubOwner:      "HoosatNetwork",
+			GitHubRepo:       "HTND",
+			UpdateChannel:    cfg.AutoUpdateChannel,
+			AutoDownload:     bool(cfg.AutoUpdateDownload),
+			AutoInstall:      bool(cfg.AutoUpdateInstall),
+			NotifyOnly:       false,
+			AutoReportIssues: bool(cfg.AutoReportIssues),
 		}
 		updater = autoupdate.NewUpdater(updaterConfig)
-		log.Infof("Auto-updater initialized (channel: %s, interval: %v)", updaterConfig.UpdateChannel, updaterConfig.CheckInterval)
+		log.Infof("Auto-updater initialized (channel: %s, interval: %v, autoreport: %v)", updaterConfig.UpdateChannel, updaterConfig.CheckInterval, updaterConfig.AutoReportIssues)
 	}
 
 	return &ComponentManager{

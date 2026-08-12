@@ -187,6 +187,7 @@ type Flags struct {
 	AutoUpdateChannel        string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
 	AutoUpdateDownload       Bool          `long:"autoupdate-download" description:"Automatically download available updates"`
 	AutoUpdateInstall        Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
+	AutoReportIssues        Bool          `long:"autoreport-issues" description:"Automatically report issues to GitHub (opt-out, enabled by default)"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -268,6 +269,7 @@ func defaultFlags() *Flags {
 		AutoUpdateChannel:            "stable",
 		AutoUpdateDownload:           true,
 		AutoUpdateInstall:            true,
+		AutoReportIssues:             true,
 	}
 }
 
