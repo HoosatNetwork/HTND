@@ -77,7 +77,7 @@ const (
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
-	defaultProtocolVersion        = 7
+	defaultProtocolVersion        = 8
 	defaultIBDTimeout             = 480 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
@@ -184,9 +184,9 @@ type Flags struct {
 	// Auto-update configuration
 	AutoUpdateEnabled       Bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases"`
 	AutoUpdateCheckInterval time.Duration `long:"autoupdate-interval" description:"Interval between update checks (e.g., 24h, 72h)" default:"24h"`
-	AutoUpdateChannel        string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
-	AutoUpdateDownload       Bool          `long:"autoupdate-download" description:"Automatically download available updates"`
-	AutoUpdateInstall        Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
+	AutoUpdateChannel       string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
+	AutoUpdateDownload      Bool          `long:"autoupdate-download" description:"Automatically download available updates"`
+	AutoUpdateInstall       Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
 	AutoReportIssues        Bool          `long:"autoreport-issues" description:"Automatically report issues to GitHub (opt-out, enabled by default)"`
 
 	NetworkFlags
@@ -264,12 +264,12 @@ func defaultFlags() *Flags {
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
-		AutoUpdateEnabled:             true,
-		AutoUpdateCheckInterval:       24 * time.Hour,
-		AutoUpdateChannel:            "stable",
-		AutoUpdateDownload:           true,
-		AutoUpdateInstall:            true,
-		AutoReportIssues:             true,
+		AutoUpdateEnabled:              true,
+		AutoUpdateCheckInterval:        24 * time.Hour,
+		AutoUpdateChannel:              "stable",
+		AutoUpdateDownload:             true,
+		AutoUpdateInstall:              true,
+		AutoReportIssues:               true,
 	}
 }
 
