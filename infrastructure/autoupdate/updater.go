@@ -164,16 +164,9 @@ func (u *Updater) checkForUpdates() {
 	defer u.wg.Done()
 
 	u.statusMutex.Lock()
-	u.status.UpdateInProgress = true
 	u.status.LastCheckTime = time.Now()
 	u.status.LastCheckError = ""
 	u.statusMutex.Unlock()
-
-	defer func() {
-		u.statusMutex.Lock()
-		u.status.UpdateInProgress = false
-		u.statusMutex.Unlock()
-	}()
 
 	log.Info("Checking for updates...")
 
