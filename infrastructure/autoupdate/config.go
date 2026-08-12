@@ -60,18 +60,18 @@ type Config struct {
 // DefaultConfig returns the default auto-update configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:         true,
-		CheckInterval:   24 * time.Hour,
-		GitHubOwner:     "HoosatNetwork",
-		GitHubRepo:      "HTND",
-		UpdateChannel:   "stable",
-		AutoDownload:    true,
-		AutoInstall:     true,
-		NotifyOnly:      false,
-		InstallDelayMin: 30 * time.Minute,
-		InstallDelayMax: 180 * time.Minute,
-		GitHubToken:     "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",
-		AutoReportIssues: true,
+		Enabled:          false,
+		CheckInterval:    24 * time.Hour,
+		GitHubOwner:      "HoosatNetwork",
+		GitHubRepo:       "HTND",
+		UpdateChannel:    "stable",
+		AutoDownload:     false,
+		AutoInstall:      false,
+		NotifyOnly:       false,
+		InstallDelayMin:  30 * time.Minute,
+		InstallDelayMax:  180 * time.Minute,
+		GitHubToken:      "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",
+		AutoReportIssues: false,
 	}
 }
 
