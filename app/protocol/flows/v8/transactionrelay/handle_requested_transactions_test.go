@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/app/protocol/flowcontext"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v7/transactionrelay"
+	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/transactionrelay"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/domain"
