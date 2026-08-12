@@ -310,7 +310,7 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 					t.Fatalf("GetBlock: %+v", err)
 				}
 
-				err = synceeStaging.ValidateAndInsertBlock(block, false, false)
+				err = synceeStaging.ValidateAndInsertBlock(block, true, false)
 				if err != nil {
 					t.Fatalf("ValidateAndInsertBlock: %+v", err)
 				}
