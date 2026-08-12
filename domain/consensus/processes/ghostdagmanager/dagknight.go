@@ -384,7 +384,6 @@ func (gm *ghostdagManager) getChainPath(stagingArea *model.StagingArea, block *e
 // partitionByLCAFuture partitions P into maximal disjoint sets where LCA of each set is in future(g)
 func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, P []*externalapi.DomainHash, g *externalapi.DomainHash, G []*externalapi.DomainHash) ([][]*externalapi.DomainHash, error) {
 	futureG, err := gm.getFuture(stagingArea, g, G)
-	log.Infof("Future G length %d", len(futureG))
 	if err != nil {
 		return nil, err
 	}
