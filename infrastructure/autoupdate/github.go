@@ -38,14 +38,14 @@ type GitHubRelease struct {
 
 // GitHubClient handles communication with GitHub API
 type GitHubClient struct {
-	client        *http.Client
-	owner         string
-	repo          string
-	userAgent     string
-	rateLimiter  *RateLimiter
-	token        string
-	errorReports map[string]time.Time
-	errorReportMu sync.Mutex
+	client         *http.Client
+	owner          string
+	repo           string
+	userAgent      string
+	rateLimiter    *RateLimiter
+	token          string
+	errorReports   map[string]time.Time
+	errorReportMu  sync.Mutex
 	reportCooldown time.Duration
 }
 
@@ -61,11 +61,11 @@ func NewGitHubClient(owner, repo string) *GitHubClient {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		owner:         owner,
-		repo:          repo,
-		userAgent:     fmt.Sprintf("HTND-AutoUpdater/%s-%s", runtime.GOOS, runtime.GOARCH),
-		rateLimiter:  NewRateLimiter(1 * time.Second),
-		errorReports: make(map[string]time.Time),
+		owner:          owner,
+		repo:           repo,
+		userAgent:      fmt.Sprintf("HTND-AutoUpdater/%s-%s", runtime.GOOS, runtime.GOARCH),
+		rateLimiter:    NewRateLimiter(1 * time.Second),
+		errorReports:   make(map[string]time.Time),
 		reportCooldown: 24 * time.Hour,
 	}
 }
@@ -358,10 +358,7 @@ func CompareVersions(v1, v2 string) int {
 	parts2 := strings.Split(v2, ".")
 
 	// Pad with zeros to make equal length
-	maxLen := len(parts1)
-	if len(parts2) > maxLen {
-		maxLen = len(parts2)
-	}
+	maxLen := max(len(parts2), len(parts1))
 
 	for i := 0; i < maxLen; i++ {
 		var num1, num2 int
@@ -390,8 +387,8 @@ func IsNewerVersion(currentVersion, newVersion string) bool {
 
 // GitHubIssue represents a GitHub issue
 type GitHubIssue struct {
-	Title string   `json:"title"`
-	Body  string   `json:"body"`
+	Title  string   `json:"title"`
+	Body   string   `json:"body"`
 	Labels []string `json:"labels"`
 }
 
@@ -431,8 +428,8 @@ func (gc *GitHubClient) generateIssueTitle(err error) string {
 	// Extract the error type (first word or before first colon/semicolon)
 	var title string
 	for _, sep := range []string{":", ";", "\n", "\t"} {
-		if idx := strings.Index(errStr, sep); idx >= 0 {
-			title = strings.TrimSpace(errStr[:idx])
+		if before, _, ok := strings.Cut(errStr, sep); ok {
+			title = strings.TrimSpace(before)
 			break
 		}
 	}

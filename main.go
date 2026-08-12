@@ -50,7 +50,7 @@ func init() {
 }
 
 // reportPanicToGitHub creates a GitHub issue for panics using shared GitHubClient
-func reportPanicToGitHub(githubClient *autoupdate.GitHubClient, panicMsg interface{}, stack []byte, autoReport bool) {
+func reportPanicToGitHub(githubClient *autoupdate.GitHubClient, panicMsg any, stack []byte, autoReport bool) {
 	if !autoReport {
 		return
 	}
