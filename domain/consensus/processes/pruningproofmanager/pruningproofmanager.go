@@ -160,6 +160,25 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 
 	pruningPointLevel := pruningPointHeader.BlockLevel(ppm.maxBlockLevel)
 
+	// Stage VirtualGenesisBlockHash GHOSTDAG data in all level stores and set up parents
+	// This ensures we have a fallback when no parents exist at a certain level
+	virtualGenesisGD := externalapi.NewBlockGHOSTDAGData(
+		0,
+		big.NewInt(0),
+		model.VirtualGenesisBlockHash,
+		nil,
+		nil,
+		nil,
+		externalapi.KType(1),
+	)
+	for i := 0; i <= maxLevel; i++ {
+		ppm.ghostdagDataStores[i].Stage(stagingArea, model.VirtualGenesisBlockHash, virtualGenesisGD, false)
+		// Set up VirtualGenesisBlockHash as having no parents in the DAG topology
+		if err := ppm.dagTopologyManagers[i].SetParents(stagingArea, model.VirtualGenesisBlockHash, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	for blockLevel := maxLevel; blockLevel >= 0; blockLevel-- {
 		var selectedTip *externalapi.DomainHash
 
@@ -181,9 +200,9 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 			}
 
 			if len(selectedTipCandidates) == 0 {
-				log.Warnf("No known GHOSTDAG parents at level %d for pruning point %s. Falling back to pruning point.",
+				log.Warnf("No known GHOSTDAG parents at level %d for pruning point %s. Falling back to VirtualGenesisBlockHash.",
 					blockLevel, pruningPoint)
-				selectedTip = pruningPoint
+				selectedTip = model.VirtualGenesisBlockHash
 			} else {
 				selectedTip, err = ppm.ghostdagManagers[blockLevel].ChooseSelectedParent(stagingArea, selectedTipCandidates...)
 				if err != nil {
@@ -250,6 +269,11 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 				continue
 			}
 			visited.Add(current)
+
+			// Skip VirtualGenesisBlockHash as it's not a real block
+			if current.Equal(model.VirtualGenesisBlockHash) {
+				continue
+			}
 
 			isRelevantForProof, err := ppm.dagTopologyManagers[blockLevel].IsAncestorOf(stagingArea, current, selectedTip)
 			if err != nil {
@@ -803,6 +827,8 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 
 	dagTopologyManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, nil, nil)
 	ghostdagDataStore := ghostdagdatastore.New(bucket, 0, false)
+	// Stage VirtualGenesisBlockHash in the temporary store as well for reachability validation
+	ghostdagDataStore.Stage(tmpStagingArea, model.VirtualGenesisBlockHash, gd0, false)
 	tmpGHOSTDAGManager := ghostdagmanager.New(ppm.databaseContext, nil, nil, ghostdagDataStore, nil, nil, []externalapi.KType{0}, nil)
 	dagTraversalManager := dagtraversalmanager.New(ppm.databaseContext, nil, ghostdagDataStore, nil, tmpGHOSTDAGManager, nil, nil, nil, []int{0})
 	type proofBlock struct {
