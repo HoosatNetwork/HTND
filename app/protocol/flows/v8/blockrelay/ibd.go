@@ -777,6 +777,12 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	// This prevents the map from having to dynamically grow and wait for the damn GC to arrive
 	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
+		// Re-check if we're nearly synced at the start of each batch to update the updateVirtual flag
+		// This allows the node to transition from non-nearly-synced to nearly-synced during IBD
+		updateVirtual, err = flow.Domain().Consensus().IsNearlySynced()
+		if err != nil {
+			return err
+		}
 		var hashesToRequest []*externalapi.DomainHash
 		if offset+ibdBatchSize < len(hashes) {
 			hashesToRequest = hashes[offset : offset+ibdBatchSize]
@@ -793,10 +799,32 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			return err
 		}
 		// Dequeue all messages for the requested hashes
-		for i := 0; i < len(hashesToRequest); i++ {
+		receivedCount := 0
+		for receivedCount < len(hashesToRequest) {
 			message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
 			if err != nil {
-				return err
+				// Only retry on a genuine timeout. Propagate everything else
+				if !errors.Is(err, router.ErrTimeout) {
+					return err
+				}
+
+				// Find which hashes we still need
+				missingHashes := make([]*externalapi.DomainHash, 0, len(hashesToRequest)-receivedCount)
+				for _, h := range hashesToRequest {
+					if _, exists := receivedBlocks[*h]; !exists {
+						missingHashes = append(missingHashes, h)
+					}
+				}
+				if len(missingHashes) == 0 {
+					// Should be extremely rare (race), but still surface the timeout.
+					return err
+				}
+
+				log.Debugf("Timeout waiting for blocks, re-requesting %d missing blocks", len(missingHashes))
+				if err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(missingHashes)); err != nil {
+					return err
+				}
+				continue
 			}
 
 			msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
@@ -807,24 +835,28 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			}
 
 			if msgIBDBlock.MsgBlock == nil {
-				log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", i)
-				return protocolerrors.Errorf(false, "received nil MsgBlock in MsgIBDBlock at index %d", i)
+				log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", receivedCount)
+				return protocolerrors.Errorf(false, "received nil MsgBlock in MsgIBDBlock at index %d", receivedCount)
 			}
 
 			block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
 			if block == nil {
-				log.Errorf("MsgBlockToDomainBlock returned nil at index %d", i)
-				return protocolerrors.Errorf(false, "MsgBlockToDomainBlock returned nil at index %d", i)
+				log.Errorf("MsgBlockToDomainBlock returned nil at index %d", receivedCount)
+				return protocolerrors.Errorf(false, "MsgBlockToDomainBlock returned nil at index %d", receivedCount)
 			}
 
 			blockHash := consensushashing.BlockHash(block)
 			if blockHash == nil {
-				log.Errorf("BlockHash returned nil for block at index %d", i)
-				return protocolerrors.Errorf(false, "BlockHash returned nil for block at index %d", i)
+				log.Errorf("BlockHash returned nil for block at index %d", receivedCount)
+				return protocolerrors.Errorf(false, "BlockHash returned nil for block at index %d", receivedCount)
 			}
 
-			receivedBlocks[*blockHash] = block
-			log.Debugf("Received block %s and stored in cache", blockHash)
+			// Only count new blocks to avoid incrementing for duplicates
+			if _, exists := receivedBlocks[*blockHash]; !exists {
+				receivedBlocks[*blockHash] = block
+				receivedCount++
+				log.Debugf("Received block %s and stored in cache", blockHash)
+			}
 		}
 
 		// Process blocks in the order of expected hashes
@@ -859,7 +891,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
 	}
-
+	log.Infof("Start resolving virtual")
 	if !updateVirtual {
 		err = flow.resolveVirtual(highestProcessedDAAScore)
 		if err != nil {
