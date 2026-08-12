@@ -58,7 +58,7 @@ func TestBlockStatus(t *testing.T) {
 			t.Fatalf("AddBlock: %+v", err)
 		}
 
-		checkStatus(nonChainBlockHash, externalapi.StatusUTXOValid)
+		checkStatus(nonChainBlockHash, externalapi.StatusUTXOPendingVerification)
 
 		disqualifiedBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{tipHash}, nil, nil)
 		if err != nil {
