@@ -114,6 +114,7 @@ func (csm *consensusStateManager) ResolveBlockStatus(
 			// Special path: propagate disqualification while still producing
 			// a continuous UTXO-diff chain (needed for later restorePastUTXO).
 			blockStatus = externalapi.StatusDisqualifiedFromChain
+			log.Infof("Disqualifying block, because it's selected parent isdisqualified.")
 		} else {
 			// Normal path – remember the state just before the tip for later reversal.
 			oneBeforeLastResolvedBlockUTXO = previousBlockUTXOSet
