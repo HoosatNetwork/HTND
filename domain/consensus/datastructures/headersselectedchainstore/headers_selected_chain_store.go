@@ -2,7 +2,6 @@ package headersselectedchainstore
 
 import (
 	"encoding/binary"
-	"unsafe"
 
 	"github.com/HoosatNetwork/HTND/util/staging"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/binaryserialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucacheuint64tohash"
 	"github.com/pkg/errors"
@@ -163,10 +161,7 @@ func (hscs *headersSelectedChainStore) deserializeIndex(indexBytes []byte) (uint
 }
 
 func (hscs *headersSelectedChainStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	// Reinterpret the pointer to DomainHash directly as a byte slice.
-	// This accesses the underlying memory without calling ByteArray() or making a copy.
-	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
-	return hscs.bucketChainBlockIndexByHash.Key(hashBytes)
+	return hscs.bucketChainBlockIndexByHash.Key(hash.ByteSlice())
 }
 
 func (hscs *headersSelectedChainStore) indexAsKey(index uint64) model.DBKey {

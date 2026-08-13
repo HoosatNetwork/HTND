@@ -108,7 +108,7 @@ func (sm *syncManager) createHeadersSelectedChainBlockLocator(stagingArea *model
 	if err != nil {
 		if database.IsNotFoundError(err) {
 			return nil, errors.Wrapf(model.ErrBlockNotInSelectedParentChain,
-				"LowHash %s is not in selected parent chain", lowHash)
+				"HighHash %s is not in selected parent chain", highHash)
 		}
 		return nil, err
 	}

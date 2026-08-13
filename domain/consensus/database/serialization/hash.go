@@ -1,10 +1,7 @@
 package serialization
 
 import (
-	unsafe "unsafe"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 )
 
 // DbHashToDomainHash converts a DbHash to a DomainHash
@@ -14,8 +11,7 @@ func DbHashToDomainHash(dbHash *DbHash) (*externalapi.DomainHash, error) {
 
 // DomainHashToDbHash converts a DomainHash to a DbHash
 func DomainHashToDbHash(domainHash *externalapi.DomainHash) *DbHash {
-	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(domainHash)), constants.DomainHashSize)
-	return &DbHash{Hash: hashBytes}
+	return &DbHash{Hash: domainHash.ByteSlice()}
 }
 
 // DomainHashesToDbHashes converts a slice of DomainHash to a slice of DbHash

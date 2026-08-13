@@ -1,12 +1,9 @@
 package finalitystore
 
 import (
-	"unsafe"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/cockroachdb/errors"
@@ -73,10 +70,7 @@ func (fs *finalityStore) UnstageAll(stagingArea *model.StagingArea) {
 }
 
 func (fs *finalityStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	// Reinterpret the pointer to DomainHash directly as a byte slice.
-	// This accesses the underlying memory without calling ByteArray() or making a copy.
-	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
-	return fs.bucket.Key(hashBytes)
+	return fs.bucket.Key(hash.ByteSlice())
 }
 
 func (fs *finalityStore) CacheLen() int {

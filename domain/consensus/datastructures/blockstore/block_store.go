@@ -2,13 +2,11 @@ package blockstore
 
 import (
 	"sync"
-	"unsafe"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/pkg/errors"
@@ -198,10 +196,7 @@ func (bs *blockStore) deserializeBlock(blockBytes []byte) (*externalapi.DomainBl
 }
 
 func (bs *blockStore) hashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	// Reinterpret the pointer to DomainHash directly as a byte slice.
-	// This accesses the underlying memory without calling ByteArray() or making a copy.
-	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
-	return bs.bucket.Key(hashBytes)
+	return bs.bucket.Key(hash.ByteSlice())
 }
 
 func (bs *blockStore) Count(stagingArea *model.StagingArea) uint64 {

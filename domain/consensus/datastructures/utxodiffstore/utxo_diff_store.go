@@ -1,13 +1,10 @@
 package utxodiffstore
 
 import (
-	"unsafe"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/util/memory"
 	"github.com/HoosatNetwork/HTND/util/staging"
@@ -161,17 +158,11 @@ func (uds *utxoDiffStore) Delete(stagingArea *model.StagingArea, blockHash *exte
 }
 
 func (uds *utxoDiffStore) utxoDiffHashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	// Reinterpret the pointer to DomainHash directly as a byte slice.
-	// This accesses the underlying memory without calling ByteArray() or making a copy.
-	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
-	return uds.utxoDiffBucket.Key(hashBytes)
+	return uds.utxoDiffBucket.Key(hash.ByteSlice())
 }
 
 func (uds *utxoDiffStore) utxoDiffChildHashAsKey(hash *externalapi.DomainHash) model.DBKey {
-	// Reinterpret the pointer to DomainHash directly as a byte slice.
-	// This accesses the underlying memory without calling ByteArray() or making a copy.
-	hashBytes := unsafe.Slice((*byte)(unsafe.Pointer(hash)), constants.DomainHashSize)
-	return uds.utxoDiffChildBucket.Key(hashBytes)
+	return uds.utxoDiffChildBucket.Key(hash.ByteSlice())
 }
 
 func (uds *utxoDiffStore) serializeUTXODiff(utxoDiff externalapi.UTXODiff) ([]byte, error) {
