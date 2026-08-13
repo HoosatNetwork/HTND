@@ -394,7 +394,9 @@ func (flow *handleIBDFlow) validateAndInsertPruningPoints(proofPruningPoint *ext
 	}
 
 	if currentPruningPoint.Equal(proofPruningPoint) {
-		return protocolerrors.Errorf(true, "the proposed pruning point is the same as the current pruning point")
+		// Pruning points are the same, no need to import
+		log.Debugf("Proof pruning point is the same as current pruning point, skipping import")
+		return nil
 	}
 
 	pruningPoints, err := flow.receivePruningPoints()

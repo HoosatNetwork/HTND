@@ -275,6 +275,7 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 
 	log.Infof("Finished syncing blocks up to %s", relayBlockHash)
 
+	flow.UnsetIBDRunning()
 	return nil
 }
 
@@ -779,10 +780,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
 		// Re-check if we're nearly synced at the start of each batch to update the updateVirtual flag
 		// This allows the node to transition from non-nearly-synced to nearly-synced during IBD
-		updateVirtual, err = flow.Domain().Consensus().IsNearlySynced()
-		if err != nil {
-			return err
-		}
+
 		var hashesToRequest []*externalapi.DomainHash
 		if offset+ibdBatchSize < len(hashes) {
 			hashesToRequest = hashes[offset : offset+ibdBatchSize]
@@ -865,7 +863,6 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			if !exists {
 				return protocolerrors.Errorf(true, "expected block %s not found in received blocks", expectedHash)
 			}
-
 			err = flow.Domain().Consensus().ValidateAndInsertBlock(block, updateVirtual, false)
 			if err != nil {
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {

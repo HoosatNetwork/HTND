@@ -1100,6 +1100,7 @@ func (s *consensus) ResolveVirtual(progressReportCallback func(uint64, uint64)) 
 	if err != nil {
 		return err
 	}
+	log.Infof("Start of virtual DAAScore %d", virtualDAAScoreStart)
 
 	for i := 0; ; i++ {
 		if i%10 == 0 && progressReportCallback != nil {
