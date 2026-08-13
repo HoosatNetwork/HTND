@@ -673,7 +673,7 @@ func (flow *handleIBDFlow) validatePruningPointFutureHeaderTimestamps() error {
 			"tip is smaller than the current selected tip")
 	}
 
-	minTimestampDifferenceInMilliseconds := (10 * time.Minute).Milliseconds()
+	minTimestampDifferenceInMilliseconds := (1 * time.Minute).Milliseconds()
 	if headerSelectedTipTimestamp-currentSelectedTipTimestamp < minTimestampDifferenceInMilliseconds {
 		return protocolerrors.Errorf(false, "difference between the timestamps of "+
 			"the current pruning point and the candidate pruning point is too small. Aborting IBD...")
