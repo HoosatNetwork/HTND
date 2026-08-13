@@ -39,12 +39,13 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 		return err
 	}
 
-	newPruningPointHeader, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
-	if err != nil {
-		return err
-	}
-	log.Debugf("The UTXO commitment of the pruning point: %s",
-		newPruningPointHeader.UTXOCommitment())
+	// Disable because HTN pruning points are messed up.
+	// newPruningPointHeader, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
+	// if err != nil {
+	// 	return err
+	// }
+	// log.Debugf("The UTXO commitment of the pruning point: %s",
+	// 	newPruningPointHeader.UTXOCommitment())
 
 	// if !newPruningPointHeader.UTXOCommitment().Equal(importedPruningPointMultiset.Hash()) {
 	// 	return errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet, "the expected multiset hash of the pruning "+

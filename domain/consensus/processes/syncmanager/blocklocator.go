@@ -94,14 +94,30 @@ func (sm *syncManager) createHeadersSelectedChainBlockLocator(stagingArea *model
 	if highHash.Equal(sm.genesisBlockHash) && lowHash.Equal(sm.genesisBlockHash) {
 		return externalapi.BlockLocator{sm.genesisBlockHash}, nil
 	}
+	log.Infof("Lowhash %s, HighHash %s", lowHash, highHash)
 
 	lowHashIndex, err := sm.headersSelectedChainStore.GetIndexByHash(sm.databaseContext, stagingArea, lowHash)
 	if err != nil {
-		if database.IsNotFoundError(err) {
-			return nil, errors.Wrapf(model.ErrBlockNotInSelectedParentChain,
-				"LowHash %s is not in selected parent chain", lowHash)
+		// This is extremely rare case when pruning point is not in the headers selected chain store,
+		// so lets find a pruning point that is in the selected chain store by brute force.
+		pruningPointIndex, err := sm.pruningStore.CurrentPruningPointIndex(sm.databaseContext, stagingArea)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
+		var i uint64
+		for i = 1; i < pruningPointIndex; i++ {
+			lowHash, err = sm.pruningStore.PruningPointByIndex(sm.databaseContext, stagingArea, pruningPointIndex-i)
+			if err != nil {
+				return nil, err
+			}
+			lowHashIndex, err = sm.headersSelectedChainStore.GetIndexByHash(sm.databaseContext, stagingArea, lowHash)
+			if err != nil {
+				return nil, err
+			}
+			if lowHashIndex > 0 {
+				break
+			}
+		}
 	}
 
 	highHashIndex, err := sm.headersSelectedChainStore.GetIndexByHash(sm.databaseContext, stagingArea, highHash)

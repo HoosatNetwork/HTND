@@ -44,6 +44,7 @@ type Consensus interface {
 	GetVirtualInfo() (*VirtualInfo, error)
 	GetVirtualDAAScore() (uint64, error)
 	IsValidPruningPoint(blockHash *DomainHash) (bool, error)
+	ValidateLowHashIsFunctionalPruningPoint(lowHash *DomainHash) (*DomainHash, error)
 	ArePruningPointsViolatingFinality(pruningPoints []BlockHeader) (bool, error)
 	GetVirtualSelectedParentChainFromBlock(blockHash *DomainHash) (*SelectedChainPath, error)
 	IsInSelectedParentChainOf(blockHashA *DomainHash, blockHashB *DomainHash) (bool, error)

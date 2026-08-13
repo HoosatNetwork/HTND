@@ -496,6 +496,7 @@ func (s *consensus) GetBlockEvenIfHeaderOnly(blockHash *externalapi.DomainHash) 
 		}
 		return nil, err
 	}
+
 	return &externalapi.DomainBlock{Header: header}, nil
 }
 
@@ -906,11 +907,13 @@ func (s *consensus) CreateFullHeadersSelectedChainBlockLocator() (externalapi.Bl
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("Found pruning point %s as lowHash", lowHash)
 
 	highHash, err := s.headersSelectedTipStore.HeadersSelectedTip(s.databaseContext, stagingArea)
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("Found headers selected tip %s as highHash", highHash)
 
 	return s.syncManager.CreateHeadersSelectedChainBlockLocator(stagingArea, lowHash, highHash)
 }
@@ -945,6 +948,38 @@ func (s *consensus) IsValidPruningPoint(blockHash *externalapi.DomainHash) (bool
 	}
 
 	return s.pruningManager.IsValidPruningPoint(stagingArea, blockHash)
+}
+
+func (s *consensus) ValidateLowHashIsFunctionalPruningPoint(lowHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+
+	lowHashIndex, err := s.headersSelectedChainStore.GetIndexByHash(s.databaseContext, stagingArea, lowHash)
+	if err != nil {
+		// This is extremely rare case when pruning point is not in the headers selected chain store,
+		// so lets find a pruning point that is in the selected chain store by brute force.
+		pruningPointIndex, err := s.pruningStore.CurrentPruningPointIndex(s.databaseContext, stagingArea)
+		if err != nil {
+			return nil, err
+		}
+		var i uint64
+		for i = 1; i < pruningPointIndex; i++ {
+			lowHash, err = s.pruningStore.PruningPointByIndex(s.databaseContext, stagingArea, pruningPointIndex-i)
+			if err != nil {
+				return nil, err
+			}
+			lowHashIndex, err = s.headersSelectedChainStore.GetIndexByHash(s.databaseContext, stagingArea, lowHash)
+			if err != nil {
+				return nil, err
+			}
+			if lowHashIndex > 0 {
+				break
+			}
+		}
+	}
+	return lowHash, nil
 }
 
 func (s *consensus) ArePruningPointsViolatingFinality(pruningPoints []externalapi.BlockHeader) (bool, error) {

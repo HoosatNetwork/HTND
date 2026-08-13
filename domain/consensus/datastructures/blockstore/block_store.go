@@ -93,6 +93,7 @@ func (bs *blockStore) Block(dbContext model.DBReader, stagingArea *model.Staging
 func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStagingShard, blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
 	block, ok := stagingShard.toAdd[*blockHash]
 	if ok && block != nil {
+		// log.Infof("Block found %s from staging", blockHash)
 		return block.Clone(), nil
 	}
 
@@ -100,6 +101,7 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 	blockCached, ok := bs.cache.Get(blockHash)
 	bs.lock.Unlock()
 	if ok && blockCached != nil {
+		// log.Infof("Block found %s from cache", blockHash)
 		return blockCached.Clone(), nil
 	}
 
@@ -111,6 +113,7 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 		return nil, err
 	}
 
+	// log.Infof("Block found %s from DB", blockHash)
 	blockDeserialized, err := bs.deserializeBlock(blockBytes)
 	if err != nil {
 		return nil, err

@@ -78,10 +78,10 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	}
 
 	// Check that none of the parents are disqualified or invalid
-	// err = v.checkParentsStatus(stagingArea, header)
-	// if err != nil {
-	// 	return err
-	// }
+	err = v.checkParentsStatus(stagingArea, header)
+	if err != nil {
+		return err
+	}
 
 	if !isBlockWithTrustedData {
 		// TODO: Enable these on block v6 after finding reason for the issues with the blocks

@@ -388,14 +388,14 @@ func (flow *handleIBDFlow) receivePruningPoints() (*appmessage.MsgPruningPoints,
 }
 
 func (flow *handleIBDFlow) validateAndInsertPruningPoints(proofPruningPoint *externalapi.DomainHash) error {
-	// currentPruningPoint, err := flow.Domain().Consensus().PruningPoint()
-	// if err != nil {
-	// 	return err
-	// }
+	currentPruningPoint, err := flow.Domain().Consensus().PruningPoint()
+	if err != nil {
+		return err
+	}
 
-	// if currentPruningPoint.Equal(proofPruningPoint) {
-	// 	return protocolerrors.Errorf(true, "the proposed pruning point is the same as the current pruning point")
-	// }
+	if currentPruningPoint.Equal(proofPruningPoint) {
+		return protocolerrors.Errorf(true, "the proposed pruning point is the same as the current pruning point")
+	}
 
 	pruningPoints, err := flow.receivePruningPoints()
 	if err != nil {

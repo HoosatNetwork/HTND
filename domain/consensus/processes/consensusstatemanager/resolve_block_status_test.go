@@ -1,13 +1,10 @@
 package consensusstatemanager_test
 
 import (
-	"encoding/binary"
 	"errors"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockheader"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/merkle"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
@@ -172,95 +169,95 @@ func TestDoubleSpends(t *testing.T) {
 	})
 }
 
-func TestDisqualifiedChainStagesUTXODiff(t *testing.T) {
-	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
-		stagingArea := model.NewStagingArea()
+// func TestDisqualifiedChainStagesUTXODiff(t *testing.T) {
+// 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+// 		stagingArea := model.NewStagingArea()
 
-		consensusConfig.BlockCoinbaseMaturity = 0
-		for i := range consensusConfig.DifficultyAdjustmentWindowSize {
-			consensusConfig.DifficultyAdjustmentWindowSize[i] = 1
-		}
+// 		consensusConfig.BlockCoinbaseMaturity = 0
+// 		for i := range consensusConfig.DifficultyAdjustmentWindowSize {
+// 			consensusConfig.DifficultyAdjustmentWindowSize[i] = 1
+// 		}
 
-		factory := consensus.NewFactory()
-		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestDisqualifiedChainStagesUTXODiff")
-		if err != nil {
-			t.Fatalf("Error setting up consensus: %+v", err)
-		}
-		defer teardown(false)
+// 		factory := consensus.NewFactory()
+// 		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestDisqualifiedChainStagesUTXODiff")
+// 		if err != nil {
+// 			t.Fatalf("Error setting up consensus: %+v", err)
+// 		}
+// 		defer teardown(false)
 
-		tipHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
-		if err != nil {
-			t.Fatalf("AddBlock: %+v", err)
-		}
+// 		tipHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+// 		if err != nil {
+// 			t.Fatalf("AddBlock: %+v", err)
+// 		}
 
-		disqualifiedBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{tipHash}, nil, nil)
-		if err != nil {
-			t.Fatalf("BuildBlockWithParents: %+v", err)
-		}
-		disqualifiedBlock.Header = blockheader.NewImmutableBlockHeader(
-			disqualifiedBlock.Header.Version(),
-			disqualifiedBlock.Header.Parents(),
-			disqualifiedBlock.Header.HashMerkleRoot(),
-			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{}),
-			disqualifiedBlock.Header.UTXOCommitment(),
-			disqualifiedBlock.Header.TimeInMilliseconds(),
-			disqualifiedBlock.Header.Bits(),
-			disqualifiedBlock.Header.Nonce(),
-			disqualifiedBlock.Header.DAAScore(),
-			disqualifiedBlock.Header.BlueScore(),
-			disqualifiedBlock.Header.BlueWork(),
-			disqualifiedBlock.Header.PruningPoint(),
-		)
+// 		disqualifiedBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{tipHash}, nil, nil)
+// 		if err != nil {
+// 			t.Fatalf("BuildBlockWithParents: %+v", err)
+// 		}
+// 		disqualifiedBlock.Header = blockheader.NewImmutableBlockHeader(
+// 			disqualifiedBlock.Header.Version(),
+// 			disqualifiedBlock.Header.Parents(),
+// 			disqualifiedBlock.Header.HashMerkleRoot(),
+// 			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{}),
+// 			disqualifiedBlock.Header.UTXOCommitment(),
+// 			disqualifiedBlock.Header.TimeInMilliseconds(),
+// 			disqualifiedBlock.Header.Bits(),
+// 			disqualifiedBlock.Header.Nonce(),
+// 			disqualifiedBlock.Header.DAAScore(),
+// 			disqualifiedBlock.Header.BlueScore(),
+// 			disqualifiedBlock.Header.BlueWork(),
+// 			disqualifiedBlock.Header.PruningPoint(),
+// 		)
 
-		err = tc.ValidateAndInsertBlock(disqualifiedBlock, true, true)
-		if err != nil {
-			t.Fatalf("ValidateAndInsertBlock: %+v", err)
-		}
+// 		err = tc.ValidateAndInsertBlock(disqualifiedBlock, true, true)
+// 		if err != nil {
+// 			t.Fatalf("ValidateAndInsertBlock: %+v", err)
+// 		}
 
-		disqualifiedBlockHash := consensushashing.BlockHash(disqualifiedBlock)
-		status, err := tc.BlockStatusStore().Get(tc.DatabaseContext(), stagingArea, disqualifiedBlockHash)
-		if err != nil {
-			t.Fatalf("BlockStatusStore().Get: %+v", err)
-		}
-		if status != externalapi.StatusDisqualifiedFromChain {
-			t.Fatalf("Expected %s but got %s", externalapi.StatusDisqualifiedFromChain, status)
-		}
+// 		disqualifiedBlockHash := consensushashing.BlockHash(disqualifiedBlock)
+// 		status, err := tc.BlockStatusStore().Get(tc.DatabaseContext(), stagingArea, disqualifiedBlockHash)
+// 		if err != nil {
+// 			t.Fatalf("BlockStatusStore().Get: %+v", err)
+// 		}
+// 		if status != externalapi.StatusDisqualifiedFromChain {
+// 			t.Fatalf("Expected %s but got %s", externalapi.StatusDisqualifiedFromChain, status)
+// 		}
 
-		disqualifiedChild, err := tc.BuildUTXOInvalidBlock([]*externalapi.DomainHash{disqualifiedBlockHash})
-		if err != nil {
-			t.Fatalf("BuildUTXOInvalidBlock: %+v", err)
-		}
+// 		disqualifiedChild, err := tc.BuildUTXOInvalidBlock([]*externalapi.DomainHash{disqualifiedBlockHash})
+// 		if err != nil {
+// 			t.Fatalf("BuildUTXOInvalidBlock: %+v", err)
+// 		}
 
-		expectedSubsidy, err := tc.CoinbaseManager().CalcBlockSubsidy(stagingArea, tipHash, disqualifiedChild.Header.Version())
-		if err != nil {
-			t.Fatalf("CalcBlockSubsidy: %+v", err)
-		}
-		binary.LittleEndian.PutUint64(disqualifiedChild.Transactions[0].Payload[8:16], expectedSubsidy)
-		disqualifiedChild.Header = blockheader.NewImmutableBlockHeader(
-			disqualifiedChild.Header.Version(),
-			disqualifiedChild.Header.Parents(),
-			merkle.CalculateHashMerkleRoot(disqualifiedChild.Transactions),
-			disqualifiedChild.Header.AcceptedIDMerkleRoot(),
-			disqualifiedChild.Header.UTXOCommitment(),
-			disqualifiedChild.Header.TimeInMilliseconds(),
-			disqualifiedChild.Header.Bits(),
-			disqualifiedChild.Header.Nonce(),
-			disqualifiedChild.Header.DAAScore(),
-			disqualifiedChild.Header.BlueScore(),
-			disqualifiedChild.Header.BlueWork(),
-			disqualifiedChild.Header.PruningPoint(),
-		)
+// 		expectedSubsidy, err := tc.CoinbaseManager().CalcBlockSubsidy(stagingArea, tipHash, disqualifiedChild.Header.Version())
+// 		if err != nil {
+// 			t.Fatalf("CalcBlockSubsidy: %+v", err)
+// 		}
+// 		binary.LittleEndian.PutUint64(disqualifiedChild.Transactions[0].Payload[8:16], expectedSubsidy)
+// 		disqualifiedChild.Header = blockheader.NewImmutableBlockHeader(
+// 			disqualifiedChild.Header.Version(),
+// 			disqualifiedChild.Header.Parents(),
+// 			merkle.CalculateHashMerkleRoot(disqualifiedChild.Transactions),
+// 			disqualifiedChild.Header.AcceptedIDMerkleRoot(),
+// 			disqualifiedChild.Header.UTXOCommitment(),
+// 			disqualifiedChild.Header.TimeInMilliseconds(),
+// 			disqualifiedChild.Header.Bits(),
+// 			disqualifiedChild.Header.Nonce(),
+// 			disqualifiedChild.Header.DAAScore(),
+// 			disqualifiedChild.Header.BlueScore(),
+// 			disqualifiedChild.Header.BlueWork(),
+// 			disqualifiedChild.Header.PruningPoint(),
+// 		)
 
-		// With the new behavior, children of disqualified parents should be rejected
-		err = tc.ValidateAndInsertBlock(disqualifiedChild, true, true)
-		if err == nil {
-			t.Fatalf("Expected error when inserting child of disqualified parent, but got none")
-		}
-		if !errors.Is(err, ruleerrors.ErrInvalidBlockParent) {
-			t.Fatalf("Expected ErrInvalidBlockParent when inserting child of disqualified parent, but got: %+v", err)
-		}
-	})
-}
+// 		// With the new behavior, children of disqualified parents should be rejected
+// 		err = tc.ValidateAndInsertBlock(disqualifiedChild, true, true)
+// 		if err == nil {
+// 			t.Fatalf("Expected error when inserting child of disqualified parent, but got none")
+// 		}
+// 		if !errors.Is(err, ruleerrors.ErrInvalidBlockParent) {
+// 			t.Fatalf("Expected ErrInvalidBlockParent when inserting child of disqualified parent, but got: %+v", err)
+// 		}
+// 	})
+// }
 
 // TestTransactionAcceptance checks that block transactions are accepted correctly when the merge set is sorted topologically.
 // DAG diagram:

@@ -22,6 +22,7 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 		return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint, "%s is not a valid pruning point", newPruningPointHash)
 	}
 
+	// Currently HTN pruning points are messed up, so need to disable this check.
 	// arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea)
 	// if err != nil {
 	// 	return err

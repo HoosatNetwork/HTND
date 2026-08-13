@@ -163,7 +163,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 			} else {
 				(*rpcBlocks)[i] = appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
 			}
-			err = context.PopulateBlockWithVerboseData((*rpcBlocks)[i], block.Header, block, getBlocksRequest.IncludeTransactions)
+			err = context.PopulateRPCBlockWithVerboseData((*rpcBlocks)[i], block.Header, block, getBlocksRequest.IncludeTransactions)
 			if err != nil {
 				return nil, err
 			}

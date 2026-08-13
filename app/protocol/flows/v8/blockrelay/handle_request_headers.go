@@ -58,6 +58,11 @@ func (flow *handleRequestHeadersFlow) start() error {
 			return protocolerrors.Errorf(true, "Block %s does not exist", lowHash)
 		}
 
+		lowHash, err = consensus.ValidateLowHashIsFunctionalPruningPoint(lowHash)
+		if err != nil {
+			return err
+		}
+
 		highHashInfo, err := consensus.GetBlockInfo(highHash)
 		if err != nil {
 			return err
@@ -65,6 +70,9 @@ func (flow *handleRequestHeadersFlow) start() error {
 		if !highHashInfo.HasHeader() {
 			return protocolerrors.Errorf(true, "Block %s does not exist", highHash)
 		}
+		// TODO: Maybe loop this so that we can actually find a valid pruning point as low hash,
+		// in this case 13.8.2026 it required just one pruning point movement back to find
+		// low hash which is in selected parent chain of high hash
 
 		isLowSelectedAncestorOfHigh, err := consensus.IsInSelectedParentChainOf(lowHash, highHash)
 		if err != nil {

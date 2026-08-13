@@ -40,9 +40,9 @@ func (ctx *Context) GetDifficultyRatio(bits uint32, params *dagconfig.Params) fl
 	return diff
 }
 
-// PopulateBlockWithVerboseData populates the given `block` with verbose
+// PopulateBlockWithVerboseData populates the given `RPCBlock` with verbose
 // data from `domainBlockHeader` and optionally from `domainBlock`
-func (ctx *Context) PopulateBlockWithVerboseData(block *appmessage.RPCBlock, domainBlockHeader externalapi.BlockHeader,
+func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, domainBlockHeader externalapi.BlockHeader,
 	domainBlock *externalapi.DomainBlock, includeTransactionVerboseData bool,
 ) error {
 	blockHash := consensushashing.HeaderHash(domainBlockHeader)

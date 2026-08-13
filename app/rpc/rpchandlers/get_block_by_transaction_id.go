@@ -43,7 +43,7 @@ func HandleGetBlockByTransactionID(context *rpccontext.Context, _ *router.Router
 		response.Block = appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
 	}
 
-	err = context.PopulateBlockWithVerboseData(response.Block, block.Header, block, getBlockByTransactionIDRequest.IncludeTransactions)
+	err = context.PopulateRPCBlockWithVerboseData(response.Block, block.Header, block, getBlockByTransactionIDRequest.IncludeTransactions)
 	if err != nil {
 		if errors.Is(err, rpccontext.ErrBuildBlockVerboseDataInvalidBlock) {
 			errorMessage := &appmessage.GetBlockByTransactionIDResponseMessage{}

@@ -93,30 +93,33 @@ func (hscs *headersSelectedChainStore) GetIndexByHash(dbContext model.DBReader, 
 	stagingShard := hscs.stagingShard(stagingArea)
 
 	if index, ok := stagingShard.addedByHash[*blockHash]; ok {
+		log.Infof("Found %d with %s from stagingshard", index, blockHash)
 		return index, nil
 	}
 
 	if _, ok := stagingShard.removedByHash[*blockHash]; ok {
+		log.Infof("Removed by %s", blockHash)
 		return 0, errors.Wrapf(database.ErrNotFound, "couldn't find block %s", blockHash)
 	}
 
 	if indexCached, ok := hscs.cacheByHash.Get(blockHash); ok {
+		log.Infof("Found %d with %s from cache", indexCached, blockHash)
 		return indexCached, nil
 	}
 
 	indexBytes, err := dbContext.Get(hscs.hashAsKey(blockHash))
-	if errors.Is(err, database.ErrNotFound) {
-		return 0, errors.Wrapf(err, "Headers %s selected chain does not exist in db", blockHash)
-	}
 	if err != nil {
+		log.Infof("Failed to get %s from DB", blockHash)
 		return 0, err
 	}
 
 	indexDeserialized, err := hscs.deserializeIndex(indexBytes)
 	if err != nil {
+		log.Infof("Desereliazilation of %s failed", blockHash)
 		return 0, err
 	}
 
+	log.Infof("Found %d with %s from DB", indexDeserialized, blockHash)
 	hscs.cacheByHash.Add(blockHash, indexDeserialized)
 	return indexDeserialized, nil
 }
