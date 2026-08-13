@@ -41,7 +41,7 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 	if err != nil {
 		// Check if this is the special error indicating pruning point is unchanged
 		// In this case, we clean up and return nil to indicate success (skip headers proof)
-		if err.Error() == "pruning point unchanged" {
+		if err.Error() == "skip headers proof: pruning point unchanged" {
 			deleteStagingConsensusErr := flow.Domain().DeleteStagingConsensus()
 			if deleteStagingConsensusErr != nil {
 				log.Errorf("Failed to delete staging consensus: %s", deleteStagingConsensusErr)
@@ -214,11 +214,11 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 		return err
 	}
 
+	log.Debugf("Proof pruning point: %s, Current pruning point: %s", proofPruningPoint, currentPruningPoint)
 	if currentPruningPoint.Equal(proofPruningPoint) {
 		log.Infof("Proof pruning point is the same as current pruning point, skipping headers proof IBD")
 		// Return a special error that the caller will recognize to skip headers proof
-		// We use protocolerrors.New(false, ...) so it's a recoverable error
-		return protocolerrors.New(false, "pruning point unchanged")
+		return errors.New("skip headers proof: pruning point unchanged")
 	}
 
 	err = flow.syncPruningPointsAndPruningPointAnticone(proofPruningPoint)
