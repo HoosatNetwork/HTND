@@ -284,6 +284,7 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 		return err
 	}
 
+	log.Debugf("In syncPruningPointsAndPruningPointAnticone: proofPruningPoint=%s, currentPruningPoint=%s", proofPruningPoint, currentPruningPoint)
 	if currentPruningPoint.Equal(proofPruningPoint) {
 		log.Debugf("Proof pruning point is the same as current pruning point, skipping pruning points and anticone sync")
 		return nil
