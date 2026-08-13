@@ -39,6 +39,17 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 
 	err = flow.downloadHeadersAndPruningUTXOSet(syncerHeaderSelectedTipHash, relayBlockHash, highBlockDAAScore)
 	if err != nil {
+		// Check if this is the special error indicating pruning point is unchanged
+		// In this case, we clean up and return nil to indicate success (skip headers proof)
+		if err.Error() == "pruning point unchanged" {
+			deleteStagingConsensusErr := flow.Domain().DeleteStagingConsensus()
+			if deleteStagingConsensusErr != nil {
+				log.Errorf("Failed to delete staging consensus: %s", deleteStagingConsensusErr)
+				return deleteStagingConsensusErr
+			}
+			return nil
+		}
+
 		if !flow.IsRecoverableError(err) {
 			return err
 		}
@@ -196,6 +207,20 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 		return err
 	}
 
+	// Check if the proof pruning point is the same as the current pruning point
+	// If so, we don't need to do headers proof IBD
+	currentPruningPoint, err := flow.Domain().Consensus().PruningPoint()
+	if err != nil {
+		return err
+	}
+
+	if currentPruningPoint.Equal(proofPruningPoint) {
+		log.Infof("Proof pruning point is the same as current pruning point, skipping headers proof IBD")
+		// Return a special error that the caller will recognize to skip headers proof
+		// We use protocolerrors.New(false, ...) so it's a recoverable error
+		return protocolerrors.New(false, "pruning point unchanged")
+	}
+
 	err = flow.syncPruningPointsAndPruningPointAnticone(proofPruningPoint)
 	if err != nil {
 		return err
@@ -252,8 +277,20 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 }
 
 func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruningPoint *externalapi.DomainHash) error {
+	// Check if the proof pruning point is the same as the current pruning point
+	// If so, no need to download pruning points and anticone
+	currentPruningPoint, err := flow.Domain().Consensus().PruningPoint()
+	if err != nil {
+		return err
+	}
+
+	if currentPruningPoint.Equal(proofPruningPoint) {
+		log.Debugf("Proof pruning point is the same as current pruning point, skipping pruning points and anticone sync")
+		return nil
+	}
+
 	log.Infof("Downloading the past pruning points and the pruning point anticone from %s", flow.peer)
-	err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestPruningPointAndItsAnticone())
+	err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestPruningPointAndItsAnticone())
 	if err != nil {
 		return err
 	}
