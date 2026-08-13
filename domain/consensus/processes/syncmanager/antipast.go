@@ -174,10 +174,10 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 			// In these cases - return an empty list of blocks to sync
 			return []*externalapi.DomainHash{}, nil
 		}
-		// TODO: Once block children are fixed (https://github.com/HoosatNetwork/HTND/issues/1499),
-		// this error should be returned rather the logged
+		// No header-only blocks found - this can cause incomplete IBD
 		log.Errorf("No header-only blocks between %s and %s",
 			lowHash, highHash)
+		return nil, errors.Errorf("no header-only blocks found between %s and %s", lowHash, highHash)
 	}
 
 	hashesBetween, _, err := sm.antiPastHashesBetween(stagingArea, lowHash, highHash, 0)

@@ -47,7 +47,10 @@ func (*FlowContext) HandleError(err error, flowName string, isStopping *uint32, 
 			if ruleErr := (ruleerrors.RuleError{}); errors.As(err, &ruleErr) {
 				err = protocolerrors.Wrapf(true, err, "rule violation in %s", flowName)
 			} else {
-				panic(err)
+				// For any other unexpected error, log it as a critical error but don't panic.
+				// Panicking would crash the entire node, which is disproportionate to a peer error.
+				log.Errorf("Unexpected error in %s (not a protocol or rule error): %+v", flowName, err)
+				err = protocolerrors.Errorf(true, "unexpected error in %s: %s", flowName, err.Error())
 			}
 		}
 		if errors.Is(err, ErrPingTimeout) {
