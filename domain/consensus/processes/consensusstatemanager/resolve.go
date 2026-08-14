@@ -210,9 +210,21 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	log.Infof("Previous virtual selected parent %s", previousVirtualSelectedParent)
 
 	if pendingTipStatus == externalapi.StatusUTXOValid && previousVirtualSelectedParent.Equal(pendingTip) {
-		return nil, true, nil
+		// Check if headers selected tip is beyond the pending tip.
+		// If so, there are header-only blocks in the selected chain that need resolution.
+		headerSelectedTip, err := csm.headersSelectedTipStore.HeadersSelectedTip(csm.databaseContext, readStagingArea)
+		if err != nil {
+			log.Warnf("Failed to check headers selected tip for early exit: %v", err)
+			// Continue with resolution to be safe
+		} else if headerSelectedTip != nil && !headerSelectedTip.Equal(pendingTip) {
+			// Headers selected tip is different from pending tip - blocks need resolution
+			log.Debugf("Headers selected tip %s differs from pending tip %s, continuing resolution", headerSelectedTip, pendingTip)
+		} else {
+			// No need to resolve - virtual is already at the headers selected tip
+			return nil, true, nil
+		}
 	}
-	log.Infof("Pending tip was UTXO Valid and they were same")
+	log.Infof("Pending tip was UTXO Valid and they were same, but headers tip differs or resolution needed")
 
 	// Resolve a chunk from the pending chain
 	resolveStagingArea := model.NewStagingArea()
