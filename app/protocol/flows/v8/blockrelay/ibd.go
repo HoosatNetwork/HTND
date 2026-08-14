@@ -888,6 +888,12 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
 	}
+
+	err = flow.Domain().Consensus().RepairBlockStatuses()
+	if err != nil {
+		log.Warnf("Failed to repair block statuses before resolve: %v", err)
+	}
+
 	log.Infof("Start resolving virtual")
 	if !updateVirtual {
 		err = flow.resolveVirtual(highestProcessedDAAScore)

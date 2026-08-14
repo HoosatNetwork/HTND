@@ -143,6 +143,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	// confusion with the resolve/updateVirtual staging areas below
 	readStagingArea := model.NewStagingArea()
 
+	log.Infof("Finding next pending tip")
 	pendingTip, pendingTipStatus, err := csm.findNextPendingTip(readStagingArea)
 	if err != nil {
 		return nil, false, err
@@ -152,15 +153,19 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		log.Warnf("None of the DAG tips are valid, because of %s", pendingTipStatus)
 		return nil, true, nil
 	}
+	log.Infof("Previous pending tip %s", pendingTip)
 
+	log.Infof("Finding virtual selected parent")
 	previousVirtualSelectedParent, err := csm.virtualSelectedParent(readStagingArea)
 	if err != nil {
 		return nil, false, err
 	}
+	log.Infof("Previous virtual selected parent %s", previousVirtualSelectedParent)
 
 	if pendingTipStatus == externalapi.StatusUTXOValid && previousVirtualSelectedParent.Equal(pendingTip) {
 		return nil, true, nil
 	}
+	log.Infof("Pending tip was UTXO Valid and they were same")
 
 	// Resolve a chunk from the pending chain
 	resolveStagingArea := model.NewStagingArea()
@@ -168,9 +173,13 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	if err != nil {
 		return nil, false, err
 	}
+	for i := 0; i < len(unverifiedBlocks); i++ {
+		log.Infof("unverified block %s", unverifiedBlocks[i])
+	}
 
 	// Initially set the resolve processing point to the pending tip
 	processingPoint := pendingTip
+	log.Infof("Processing point %s", processingPoint)
 
 	// Too many blocks to verify, so we only process a chunk and return
 	if maxBlocksToResolve != 0 && uint64(len(unverifiedBlocks)) > maxBlocksToResolve {
@@ -242,7 +251,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	}
 	virtualUTXODiff, err := csm.updateVirtualWithParents(updateVirtualStagingArea, virtualParents)
 	if err != nil {
-		return nil, false, nil
+		return nil, false, err
 	}
 
 	err = staging.CommitAllChanges(csm.databaseContext, updateVirtualStagingArea)

@@ -114,6 +114,8 @@ func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
 	// === Strong finality conflict signal ===
 	// If we share a block but the pruning point is NOT in its selected parent chain,
 	// the peer is on a chain that violates finality relative to our current state.
+	log.Infof("Highest Shared Block %s")
+	log.Infof("Is pruning point in shared block chain %s", isPruningPointInSharedBlockChain)
 	if highestSharedBlockFound && !isPruningPointInSharedBlockChain {
 		log.Warnf("Detected potential finality conflict: pruning point not in peer's shared chain. " +
 			"Stopping IBD from this peer to avoid adopting incorrect history.")
