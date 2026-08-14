@@ -3,6 +3,7 @@ package consensusstatemanager
 import (
 	"sort"
 
+	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
@@ -99,6 +100,52 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 			return tip, status, nil
 		}
 	}
+
+	// If no pending tip found among DAG tips, check the headers selected parent chain.
+	// This handles the case where blocks in the selected chain are not yet tips
+	// (e.g., during IBD when bodies are being synced and blocks have StatusHeaderOnly).
+	log.Debugf("No pending tip found among DAG tips, checking headers selected parent chain")
+	headerSelectedTip, err := csm.headersSelectedTipStore.HeadersSelectedTip(csm.databaseContext, stagingArea)
+	if err != nil {
+		log.Warnf("Failed to get headers selected tip: %v", err)
+	} else if headerSelectedTip != nil {
+		currentHash := headerSelectedTip
+		for {
+			status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, currentHash)
+			if database.IsNotFoundError(err) {
+				log.Debugf("Block %s not found in status store, walking up selected parent chain", currentHash)
+				break
+			}
+			if err != nil {
+				log.Warnf("Failed to get status for block %s: %v", currentHash, err)
+				break
+			}
+			if status == externalapi.StatusUTXOValid || status == externalapi.StatusUTXOPendingVerification {
+				log.Debugf("Found pending block %s in selected parent chain with status %s", currentHash, status)
+				return currentHash, status, nil
+			}
+			// Continue walking up the selected parent chain
+			ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, currentHash, false)
+			if database.IsNotFoundError(err) {
+				log.Debugf("GHOSTDAG data not found for %s, walking up", currentHash)
+				break
+			}
+			if err != nil {
+				log.Warnf("Failed to get GHOSTDAG data for block %s: %v", currentHash, err)
+				break
+			}
+			nextHash := ghostdagData.SelectedParent()
+			if nextHash == nil {
+				break
+			}
+			if nextHash.Equal(csm.genesisHash) {
+				// Genesis block should be StatusUTXOValid
+				return nextHash, externalapi.StatusUTXOValid, nil
+			}
+			currentHash = nextHash
+		}
+	}
+
 	log.Infof("None of the tips were valid or pending, so printing all the statuses")
 	for _, tip := range orderedTips {
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
