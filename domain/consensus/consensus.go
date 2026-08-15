@@ -449,6 +449,8 @@ func (s *consensus) ValidateTransactionAndPopulateWithConsensusData(transaction 
 }
 
 func (s *consensus) GetBlock(blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, bool, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	stagingArea := model.NewStagingArea()
 
 	block, err := s.blockStore.Block(s.databaseContext, stagingArea, blockHash)
