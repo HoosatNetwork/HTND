@@ -319,6 +319,10 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 					return nil, nil, protocolerrors.Errorf(false, "Sent invalid chain block %s", locatorHashes[i])
 				}
 
+				if info.BlockStatus == externalapi.StatusHeaderOnly {
+					continue
+				}
+
 				isPruningPointOnSyncerChain, err := flow.Domain().Consensus().IsInSelectedParentChainOf(pruningPoint, locatorHashes[i])
 				if err != nil {
 					log.Errorf("Error checking isPruningPointOnSyncerChain: %s", err)
@@ -756,6 +760,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		log.Debugf("No missing block body hashes found.")
 		return nil
 	}
+	// for _, hash := range hashes {
+	// 	log.Infof("Syncing hash %s", hash)
+	// }
 
 	lowBlockHeader, err := flow.Domain().Consensus().GetBlockHeader(hashes[0])
 	if err != nil {
@@ -860,7 +867,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		for _, expectedHash := range hashesToRequest {
 			block, exists := receivedBlocks[*expectedHash]
 			if !exists {
-				return protocolerrors.Errorf(true, "expected block %s not found in received blocks", expectedHash)
+				continue
+			}
+			if len(block.Transactions) == 0 {
+				continue
 			}
 			err = flow.Domain().Consensus().ValidateAndInsertBlock(block, updateVirtual, false)
 			if err != nil {
