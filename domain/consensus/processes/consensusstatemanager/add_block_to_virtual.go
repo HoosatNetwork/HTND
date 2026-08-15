@@ -216,7 +216,7 @@ func (csm *consensusStateManager) calculateNewTips(
 	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
 
 	// Check the new block's status before adding to tips
-	if newTipStatus != externalapi.StatusDisqualifiedFromChain && newTipStatus != externalapi.StatusInvalid {
+	if newTipStatus != externalapi.StatusDisqualifiedFromChain {
 		if newTipStatus == externalapi.StatusUTXOValid {
 			csm.lastValidBlock = newTipHash
 		}
@@ -233,7 +233,7 @@ func (csm *consensusStateManager) calculateNewTips(
 			continue
 		}
 
-		if status == externalapi.StatusDisqualifiedFromChain || status == externalapi.StatusInvalid {
+		if status == externalapi.StatusDisqualifiedFromChain {
 			// Just drop it. Do NOT walk its parents.
 			// log.Infof("Dropping disqualified/invalid tip %s", currentTip)
 			continue
