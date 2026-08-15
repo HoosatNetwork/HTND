@@ -45,6 +45,9 @@ func (c *gRPCConnection) sendLoop() error {
 			}
 			return err
 		}
+		if message == nil {
+			continue
+		}
 
 		blockDelayOnce.Do(func() {
 			experimentalDelayEnv := os.Getenv("HOOSAT_EXPERIMENTAL_DELAY")
