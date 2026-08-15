@@ -1,8 +1,6 @@
 package lrucache
 
 import (
-	"sync"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/cespare/xxhash/v2"
 )
@@ -20,7 +18,7 @@ type entry[V any] struct {
 //
 // Note: Get promotes entries to MRU and therefore takes an exclusive lock.
 type LRUCache[V any] struct {
-	mu sync.RWMutex
+	// mu sync.RWMutex
 
 	cache    map[uint64]*entry[V]
 	head     *entry[V]
@@ -113,8 +111,8 @@ func (c *LRUCache[V]) moveToFront(e *entry[V]) {
 
 // Add inserts or updates a key-value pair (moves to front on update)
 func (c *LRUCache[V]) Add(key *externalapi.DomainHash, value V) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
 
 	if key == nil {
 		return
@@ -152,8 +150,8 @@ func (c *LRUCache[V]) Add(key *externalapi.DomainHash, value V) {
 
 // Get returns the value if present and promotes it to MRU
 func (c *LRUCache[V]) Get(key *externalapi.DomainHash) (value V, ok bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
 
 	if key == nil {
 		return
@@ -175,8 +173,8 @@ func (c *LRUCache[V]) Get(key *externalapi.DomainHash) (value V, ok bool) {
 
 // Has checks existence without changing LRU order
 func (c *LRUCache[V]) Has(key *externalapi.DomainHash) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	// c.mu.RLock()
+	// defer c.mu.RUnlock()
 
 	if key == nil {
 		return false
@@ -188,8 +186,8 @@ func (c *LRUCache[V]) Has(key *externalapi.DomainHash) bool {
 
 // Remove deletes an entry if it exists
 func (c *LRUCache[V]) Remove(key *externalapi.DomainHash) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
 
 	if key == nil {
 		return
@@ -226,8 +224,8 @@ func (c *LRUCache[V]) unlink(e *entry[V]) {
 
 // Clear empties the cache
 func (c *LRUCache[V]) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
 
 	if len(c.pool) > 0 {
 		for i := 0; i < len(c.pool)-1; i++ {
@@ -255,8 +253,8 @@ func (c *LRUCache[V]) Clear() {
 
 // Len returns current number of items
 func (c *LRUCache[V]) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	// c.mu.RLock()
+	// defer c.mu.RUnlock()
 
 	return c.length
 }
