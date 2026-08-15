@@ -17,6 +17,12 @@ func (x *HoosatdMessage_IbdBlock) toAppMessage() (appmessage.Message, error) {
 }
 
 func (x *HoosatdMessage_IbdBlock) fromAppMessage(msgIBDBlock *appmessage.MsgIBDBlock) error {
+	if x == nil {
+		return errors.Wrapf(errorNil, "HoosatdMessage_IbdBlock is nil")
+	}
+	if msgIBDBlock == nil {
+		return errors.Wrapf(errorNil, "msgIBDBlock is nil")
+	}
 	x.IbdBlock = new(BlockMessage)
 	return x.IbdBlock.fromAppMessage(msgIBDBlock.MsgBlock)
 }
