@@ -49,10 +49,15 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 					return
 				}
 				// Fetch the block from the database.
-				block, err := context.Domain().Consensus().GetBlockEvenIfHeaderOnly(hash)
+				block, found, err := context.Domain().Consensus().GetBlock(hash)
 				if err != nil {
 					log.Warnf("unable to fetch requested block hash %s: %s", hash, err)
 					done.Store(true)
+					return
+				}
+
+				if !found {
+					log.Warnf("IBD block %s not found", hash)
 					return
 				}
 
