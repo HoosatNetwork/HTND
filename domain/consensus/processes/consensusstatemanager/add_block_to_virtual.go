@@ -18,6 +18,9 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 	onEnd := logger.LogAndMeasureExecutionTime(log, "csm.AddBlock")
 	defer onEnd()
 
+	// Diagnostic: log AddBlock entry so we can trace the updateVirtual flag per block during IBD.
+	log.Debugf("[DIAG] AddBlock entry: hash=%s updateVirtual=%v", blockHash, updateVirtual)
+
 	var blockStatus externalapi.BlockStatus
 	var reversalData *model.UTXODiffReversalData
 	if updateVirtual {
@@ -64,6 +67,16 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 	// if blockStatus == externalapi.StatusInvalid || blockStatus == externalapi.StatusDisqualifiedFromChain {
 	// 	return nil, nil, nil, errors.Wrapf(ruleerrors.ErrDuplicateBlock, "block %s is disqualified or invalid", blockHash)
 	// }
+	// Diagnostic: log the blockStatus that will be passed to addTip.
+	// When updateVirtual=false the local blockStatus was never populated and remains at its
+	// zero value (StatusInvalid=0).  This is the key signal for the regression hypothesis.
+	if !updateVirtual {
+		log.Debugf("[DIAG] AddBlock updateVirtual=false path: hash=%s blockStatus passed to addTip=%s (isZeroValue=%v)",
+			blockHash, blockStatus, blockStatus == externalapi.BlockStatus(0))
+	} else {
+		log.Debugf("[DIAG] AddBlock updateVirtual=true path: hash=%s blockStatus passed to addTip=%s",
+			blockHash, blockStatus)
+	}
 	log.Debugf("Adding block %s to the DAG tips", blockHash)
 	newTips, err := csm.addTip(stagingArea, blockHash, blockStatus)
 	if err != nil {

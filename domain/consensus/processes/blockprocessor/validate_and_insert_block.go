@@ -140,6 +140,12 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 	var reversalData *model.UTXODiffReversalData
 	isHeaderOnlyBlock := isHeaderOnlyBlock(block)
 	if !isHeaderOnlyBlock {
+		// Diagnostic: log the key parameters before calling AddBlock so we can validate
+		// the suspected IBD regression where updateVirtual=false may cause blockStatus to
+		// remain at its zero value when passed to addTip.
+		// Note: isHeaderOnly is always false here (we are inside the !isHeaderOnlyBlock branch).
+		log.Debugf("[DIAG] validateAndInsertBlock: hash=%s isHeaderOnly=false stagedStatus=%s shouldValidateAgainstUTXO(updateVirtual)=%v",
+			blockHash, status, shouldValidateAgainstUTXO)
 		// Attempt to add the block to the virtual
 		selectedParentChainChanges, virtualUTXODiff, reversalData, err = bp.consensusStateManager.AddBlock(stagingArea, blockHash, shouldValidateAgainstUTXO)
 		if err != nil {

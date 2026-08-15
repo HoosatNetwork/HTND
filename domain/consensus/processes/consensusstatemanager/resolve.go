@@ -77,6 +77,30 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 		return nil, externalapi.StatusInvalid, err
 	}
 
+	// Diagnostic: summarise all ordered tips and their statuses so we can see what ResolveVirtual finds.
+	const diagMaxTips = 5
+	if len(orderedTips) == 0 {
+		log.Debugf("[DIAG] findNextPendingTip: no ordered tips")
+	} else {
+		show := orderedTips
+		truncated := false
+		if len(show) > diagMaxTips {
+			show = orderedTips[:diagMaxTips]
+			truncated = true
+		}
+		for i, tip := range show {
+			st, stErr := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
+			if stErr != nil {
+				log.Debugf("[DIAG] findNextPendingTip: tip[%d]=%s status=<err:%v>", i, tip, stErr)
+			} else {
+				log.Debugf("[DIAG] findNextPendingTip: tip[%d]=%s status=%s", i, tip, st)
+			}
+		}
+		if truncated {
+			log.Debugf("[DIAG] findNextPendingTip: ... %d more tips not shown", len(orderedTips)-diagMaxTips)
+		}
+	}
+
 	for _, tip := range orderedTips {
 		log.Infof("Resolving tip %s", tip)
 		isViolatingFinality, shouldNotify, err := csm.isViolatingFinality(stagingArea, tip)
@@ -157,6 +181,9 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 		log.Infof("Status: %s", status)
 	}
 
+	// Diagnostic: explicitly flag that no pending tip was found (key signal for the hypothesis).
+	log.Debugf("[DIAG] findNextPendingTip: no UTXOValid/UTXOPendingVerification tip found among %d ordered tips; returning nil", len(orderedTips))
+
 	return nil, externalapi.StatusInvalid, nil
 }
 
@@ -200,8 +227,13 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	if pendingTip == nil {
 		log.Warnf("None of the DAG tips are valid, because of %s", pendingTipStatus)
+		// Diagnostic: no pending tip found; virtual will not advance.
+		log.Debugf("[DIAG] ResolveVirtual: pendingTip=nil, returning early (virtual will NOT advance)")
 		return nil, true, nil
 	}
+	// Diagnostic: show selected pending tip and status, and the previous virtual selected parent.
+	log.Debugf("[DIAG] ResolveVirtual: pendingTip=%s pendingTipStatus=%s", pendingTip, pendingTipStatus)
+
 	log.Debugf("Previous pending tip %s", pendingTip)
 
 	log.Debugf("Finding virtual selected parent")
@@ -210,6 +242,8 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		return nil, false, err
 	}
 	log.Debugf("Previous virtual selected parent %s", previousVirtualSelectedParent)
+	// Diagnostic: log previous virtual selected parent alongside pending tip for easy diffing.
+	log.Debugf("[DIAG] ResolveVirtual: previousVirtualSelectedParent=%s", previousVirtualSelectedParent)
 
 	if pendingTipStatus == externalapi.StatusUTXOValid && previousVirtualSelectedParent.Equal(pendingTip) {
 		// Check if headers selected tip is beyond the pending tip.
@@ -233,6 +267,20 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	unverifiedBlocks, err := csm.getUnverifiedChainBlocks(resolveStagingArea, pendingTip)
 	if err != nil {
 		return nil, false, err
+	}
+
+	// Diagnostic: summarise unverified chain blocks.
+	{
+		n := len(unverifiedBlocks)
+		const diagMax = 3
+		if n == 0 {
+			log.Debugf("[DIAG] ResolveVirtual: unverifiedChainBlocks=0")
+		} else if n <= diagMax*2 {
+			log.Debugf("[DIAG] ResolveVirtual: unverifiedChainBlocks=%d all=%s", n, unverifiedBlocks)
+		} else {
+			log.Debugf("[DIAG] ResolveVirtual: unverifiedChainBlocks=%d first=%s ... last=%s",
+				n, unverifiedBlocks[:diagMax], unverifiedBlocks[n-diagMax:])
+		}
 	}
 
 	// Initially set the resolve processing point to the pending tip
@@ -290,6 +338,11 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	isActualTip := processingPoint.Equal(pendingTip)
 	isCompletelyResolved := isActualTip && processingPointStatus == externalapi.StatusUTXOValid
 
+	// Diagnostic: show processingPoint, its resolved status, and isCompletelyResolved so we can
+	// see whether the chain advanced past the pending tip.
+	log.Debugf("[DIAG] ResolveVirtual: processingPoint=%s processingPointStatus=%s isActualTip=%v isCompletelyResolved=%v",
+		processingPoint, processingPointStatus, isActualTip, isCompletelyResolved)
+
 	updateVirtualStagingArea := model.NewStagingArea()
 
 	virtualParents := []*externalapi.DomainHash{processingPoint}
@@ -315,6 +368,19 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	err = staging.CommitAllChanges(csm.databaseContext, updateVirtualStagingArea)
 	if err != nil {
 		return nil, false, err
+	}
+
+	// Diagnostic: read and log the new virtual selected parent after updating virtual.
+	// This lets us see whether the virtual actually advanced.
+	{
+		newReadStagingArea := model.NewStagingArea()
+		newVSP, vspErr := csm.virtualSelectedParent(newReadStagingArea)
+		if vspErr != nil {
+			log.Debugf("[DIAG] ResolveVirtual post-update: failed to read virtual selected parent: %v", vspErr)
+		} else {
+			log.Debugf("[DIAG] ResolveVirtual post-update: virtualSelectedParent=%s (was %s, changed=%v)",
+				newVSP, previousVirtualSelectedParent, !newVSP.Equal(previousVirtualSelectedParent))
+		}
 	}
 
 	selectedParentChainChanges, err := csm.dagTraversalManager.

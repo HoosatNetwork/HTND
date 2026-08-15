@@ -857,6 +857,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		}
 
 		// Process blocks in the order of expected hashes
+		batchAccepted, batchDuplicate, batchRejected := 0, 0, 0
 		for _, expectedHash := range hashesToRequest {
 			block, exists := receivedBlocks[*expectedHash]
 			if !exists {
@@ -865,11 +866,17 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			err = flow.Domain().Consensus().ValidateAndInsertBlock(block, updateVirtual, false)
 			if err != nil {
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
+					log.Debugf("[DIAG] IBD body: hash=%s updateVirtual=%v result=duplicate", expectedHash, updateVirtual)
+					batchDuplicate++
 					continue
 				}
 				log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
+				log.Debugf("[DIAG] IBD body: hash=%s updateVirtual=%v result=rejected err=%v", expectedHash, updateVirtual, err)
+				batchRejected++
 				continue
 			}
+			log.Debugf("[DIAG] IBD body: hash=%s updateVirtual=%v result=accepted DAAScore=%d", expectedHash, updateVirtual, block.Header.DAAScore())
+			batchAccepted++
 			err = flow.OnNewBlock(block)
 			if err != nil {
 				return err
@@ -884,6 +891,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 				}
 			}
 		}
+		// Diagnostic: summarise per-batch insertion results so we can spot silent rejection without log spam.
+		log.Debugf("[DIAG] IBD batch summary: accepted=%d duplicate=%d rejected=%d updateVirtual=%v",
+			batchAccepted, batchDuplicate, batchRejected, updateVirtual)
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
 	}
@@ -895,9 +905,33 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 	log.Infof("Start resolving virtual")
 	if !updateVirtual {
+		// Diagnostic: capture virtual selected parent and DAAScore before resolution.
+		preVSP, preVSPErr := flow.Domain().Consensus().GetVirtualSelectedParent()
+		preDAAScore, preDAAErr := flow.Domain().Consensus().GetVirtualDAAScore()
+		if preVSPErr == nil && preDAAErr == nil {
+			log.Debugf("[DIAG] resolveVirtual pre: virtualSelectedParent=%s virtualDAAScore=%d", preVSP, preDAAScore)
+		} else {
+			log.Debugf("[DIAG] resolveVirtual pre: failed to read virtual state vspErr=%v daaErr=%v", preVSPErr, preDAAErr)
+		}
+
 		err = flow.resolveVirtual(highestProcessedDAAScore)
 		if err != nil {
 			return err
+		}
+
+		// Diagnostic: capture virtual selected parent and DAAScore after resolution.
+		postVSP, postVSPErr := flow.Domain().Consensus().GetVirtualSelectedParent()
+		postDAAScore, postDAAErr := flow.Domain().Consensus().GetVirtualDAAScore()
+		if postVSPErr == nil && postDAAErr == nil {
+			if preVSPErr == nil {
+				// Both pre and post reads succeeded; compare directly.
+				log.Debugf("[DIAG] resolveVirtual post: virtualSelectedParent=%s virtualDAAScore=%d advanced=%v", postVSP, postDAAScore, !postVSP.Equal(preVSP))
+			} else {
+				// Pre-read failed; cannot determine whether virtual advanced.
+				log.Debugf("[DIAG] resolveVirtual post: virtualSelectedParent=%s virtualDAAScore=%d advanced=unknown (pre-read failed)", postVSP, postDAAScore)
+			}
+		} else {
+			log.Debugf("[DIAG] resolveVirtual post: failed to read virtual state vspErr=%v daaErr=%v", postVSPErr, postDAAErr)
 		}
 	}
 
