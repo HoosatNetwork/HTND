@@ -200,7 +200,7 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 			}
 
 			if len(selectedTipCandidates) == 0 {
-				log.Warnf("No known GHOSTDAG parents at level %d for pruning point %s. Falling back to VirtualGenesisBlockHash.",
+				log.Debugf("No known GHOSTDAG parents at level %d for pruning point %s. Falling back to VirtualGenesisBlockHash.",
 					blockLevel, pruningPoint)
 				selectedTip = model.VirtualGenesisBlockHash
 			} else {
