@@ -1445,6 +1445,8 @@ func (s *consensus) RepairBlockStatuses() error {
 		var newStatus externalapi.BlockStatus
 		if currentStatus == externalapi.StatusInvalid {
 			newStatus = externalapi.StatusInvalid
+		} else if currentStatus == externalapi.StatusHeaderOnly {
+			newStatus = externalapi.StatusHeaderOnly
 		} else {
 			newStatus = externalapi.StatusUTXOValid
 		}
@@ -1452,7 +1454,7 @@ func (s *consensus) RepairBlockStatuses() error {
 		// Only update if the status needs to change
 		if newStatus != currentStatus {
 			repairedCount++
-			log.Infof("Repairing block %s: status %d -> %d", blockHash, currentStatus, newStatus)
+			log.Debugf("Repairing block %s: status %d -> %d", blockHash, currentStatus, newStatus)
 
 			// Create a staging area for the status update
 			stagingAreaForStatus := model.NewStagingArea()
