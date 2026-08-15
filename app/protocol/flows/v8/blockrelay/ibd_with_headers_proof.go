@@ -114,8 +114,8 @@ func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
 	// === Strong finality conflict signal ===
 	// If we share a block but the pruning point is NOT in its selected parent chain,
 	// the peer is on a chain that violates finality relative to our current state.
-	log.Infof("Highest Shared Block %s", highestKnownSyncerChainHash)
-	log.Infof("Is pruning point in shared block chain %t", isPruningPointInSharedBlockChain)
+	log.Debugf("Highest Shared Block %s", highestKnownSyncerChainHash)
+	log.Debugf("Is pruning point in shared block chain %t", isPruningPointInSharedBlockChain)
 	if highestSharedBlockFound && !isPruningPointInSharedBlockChain {
 		log.Warnf("Detected potential finality conflict: pruning point not in peer's shared chain. " +
 			"Stopping IBD from this peer to avoid adopting incorrect history.")
@@ -476,14 +476,14 @@ func (flow *handleIBDFlow) syncPruningPointUTXOSet(consensus externalapi.Consens
 	pruningPoint *externalapi.DomainHash,
 ) (bool, error) {
 	log.Infof("Checking if the suggested pruning point %s is compatible to the node DAG", pruningPoint)
-	isValid, err := flow.Domain().StagingConsensus().IsValidPruningPoint(pruningPoint)
-	if err != nil {
-		return false, err
-	}
+	// isValid, err := flow.Domain().StagingConsensus().IsValidPruningPoint(pruningPoint)
+	// if err != nil {
+	// 	return false, err
+	// }
 
-	if !isValid {
-		return false, protocolerrors.Errorf(true, "invalid pruning point %s", pruningPoint)
-	}
+	// if !isValid {
+	// 	return false, protocolerrors.Errorf(true, "invalid pruning point %s", pruningPoint)
+	// }
 
 	log.Info("Fetching the pruning point UTXO set")
 	isSuccessful, err := flow.fetchMissingUTXOSet(consensus, pruningPoint)

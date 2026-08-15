@@ -192,7 +192,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	// confusion with the resolve/updateVirtual staging areas below
 	readStagingArea := model.NewStagingArea()
 
-	log.Infof("Finding next pending tip")
+	log.Debugf("Finding next pending tip")
 	pendingTip, pendingTipStatus, err := csm.findNextPendingTip(readStagingArea)
 	if err != nil {
 		return nil, false, err
@@ -202,14 +202,14 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		log.Warnf("None of the DAG tips are valid, because of %s", pendingTipStatus)
 		return nil, true, nil
 	}
-	log.Infof("Previous pending tip %s", pendingTip)
+	log.Debugf("Previous pending tip %s", pendingTip)
 
-	log.Infof("Finding virtual selected parent")
+	log.Debugf("Finding virtual selected parent")
 	previousVirtualSelectedParent, err := csm.virtualSelectedParent(readStagingArea)
 	if err != nil {
 		return nil, false, err
 	}
-	log.Infof("Previous virtual selected parent %s", previousVirtualSelectedParent)
+	log.Debugf("Previous virtual selected parent %s", previousVirtualSelectedParent)
 
 	if pendingTipStatus == externalapi.StatusUTXOValid && previousVirtualSelectedParent.Equal(pendingTip) {
 		// Check if headers selected tip is beyond the pending tip.
@@ -226,7 +226,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 			return nil, true, nil
 		}
 	}
-	log.Infof("Pending tip was UTXO Valid and they were same, but headers tip differs or resolution needed")
+	log.Debugf("Pending tip was UTXO Valid and they were same, but headers tip differs or resolution needed")
 
 	// Resolve a chunk from the pending chain
 	resolveStagingArea := model.NewStagingArea()
@@ -237,7 +237,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	// Initially set the resolve processing point to the pending tip
 	processingPoint := pendingTip
-	log.Infof("Processing point %s", processingPoint)
+	log.Debugf("Processing point %s", processingPoint)
 
 	// Too many blocks to verify, so we only process a chunk and return
 	if maxBlocksToResolve != 0 && uint64(len(unverifiedBlocks)) > maxBlocksToResolve {

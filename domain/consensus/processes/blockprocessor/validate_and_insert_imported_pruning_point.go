@@ -3,8 +3,6 @@ package blockprocessor
 import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/pkg/errors"
 )
 
 func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
@@ -12,15 +10,15 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 ) error {
 	log.Info("Checking that the given pruning point is the expected pruning point")
 
-	isValidPruningPoint, err := bp.pruningManager.IsValidPruningPoint(stagingArea, newPruningPointHash)
-	if err != nil {
-		return err
-	}
+	// isValidPruningPoint, err := bp.pruningManager.IsValidPruningPoint(stagingArea, newPruningPointHash)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if !isValidPruningPoint {
-		// log.Infof("Invalid pruning point %s, but continuing either way.", newPruningPointHash)
-		return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint, "%s is not a valid pruning point", newPruningPointHash)
-	}
+	// if !isValidPruningPoint {
+	// 	// log.Infof("Invalid pruning point %s, but continuing either way.", newPruningPointHash)
+	// 	return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint, "%s is not a valid pruning point", newPruningPointHash)
+	// }
 
 	// Currently HTN pruning points are messed up, so need to disable this check.
 	// arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea)
@@ -32,7 +30,7 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 	// }
 
 	log.Infof("Updating consensus state manager according to the new pruning point %s", newPruningPointHash)
-	err = bp.consensusStateManager.ImportPruningPointUTXOSet(stagingArea, newPruningPointHash)
+	err := bp.consensusStateManager.ImportPruningPointUTXOSet(stagingArea, newPruningPointHash)
 	if err != nil {
 		return err
 	}
