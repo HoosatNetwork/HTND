@@ -8,7 +8,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
 )
 
@@ -37,10 +36,41 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	}
 	log.Debugf("The selected parent of the virtual is: %s", virtualSelectedParent)
 
+	// Determine the appropriate maxBlockParents to use. The global block version might be forced
+	// (e.g., in tests), so we determine the version from the actual blocks being processed.
+	currentMaxBlockParents := csm.maxBlockParents[0]
+	if len(tips) > 0 {
+		// Find the maximum version among all tips
+		maxVersionIndex := 0
+		for _, tip := range tips {
+			if tip.Equal(model.VirtualBlockHash) {
+				continue
+			}
+			blockHeader, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, tip)
+			if err != nil {
+				log.Warnf("Failed to get block header for tip %s: %v", tip, err)
+				continue
+			}
+			if blockHeader == nil {
+				continue
+			}
+			version := int(blockHeader.Version())
+			// Ensure version is within bounds
+			if version > 0 && version <= len(csm.maxBlockParents) {
+				if version-1 > maxVersionIndex {
+					maxVersionIndex = version - 1
+				}
+			}
+		}
+		if maxVersionIndex < len(csm.maxBlockParents) {
+			currentMaxBlockParents = csm.maxBlockParents[maxVersionIndex]
+		}
+	}
+
 	// Limit to maxBlockParents*3 candidates, that way we don't go over thousands of tips when the network isn't healthy.
 	// There's no specific reason for a factor of 3, and its not a consensus rule, just an estimation saying we probably
 	// don't want to consider and calculate 3 times the amount of candidates for the set of parents.
-	maxCandidates := int(csm.maxBlockParents[constants.GetBlockVersion()-1]) * 3
+	maxCandidates := int(currentMaxBlockParents) * 3
 	candidateAllocationSize := math.MinInt(maxCandidates, candidatesHeap.Len())
 	candidates := make([]*externalapi.DomainHash, 0, candidateAllocationSize)
 	for len(candidates) < maxCandidates && candidatesHeap.Len() > 0 {
@@ -48,9 +78,9 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	}
 
 	// prioritize half the blocks with highest blueWork and half with lowest, so the network will merge splits faster.
-	if len(candidates) >= int(csm.maxBlockParents[constants.GetBlockVersion()-1]) {
-		// We already have the selectedParent, so we're left with csm.maxBlockParents-1.
-		maxParents := csm.maxBlockParents[constants.GetBlockVersion()-1] - 1
+	if len(candidates) >= int(currentMaxBlockParents) {
+		// We already have the selectedParent, so we're left with currentMaxBlockParents-1.
+		maxParents := currentMaxBlockParents - 1
 		end := len(candidates) - 1
 		for i := (maxParents) / 2; i < maxParents; i++ {
 			candidates[i], candidates[end] = candidates[end], candidates[i]
@@ -62,7 +92,7 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	mergeSetSize := uint64(1) // starts counting from 1 because selectedParent is already in the mergeSet
 
 	// First condition implies that no point in searching since limit was already reached
-	for mergeSetSize < csm.mergeSetSizeLimit && len(candidates) > 0 && uint64(len(selectedVirtualParents)) < uint64(csm.maxBlockParents[constants.GetBlockVersion()-1]) {
+	for mergeSetSize < csm.mergeSetSizeLimit && len(candidates) > 0 && uint64(len(selectedVirtualParents)) < uint64(currentMaxBlockParents) {
 		candidate := candidates[0]
 		candidates = candidates[1:]
 
@@ -274,9 +304,24 @@ func (csm *consensusStateManager) mergeSetIncrease(stagingArea *model.StagingAre
 		current, queue = queue[0], queue[1:]
 		log.Tracef("Attempting to increment the merge set size increase for block %s", current)
 
+		// Check if current is in the past of any selectedVirtualParents using multiple methods
+		// to handle potential issues with IsAncestorOfAny
 		isInPastOfSelectedVirtualParents, err := csm.dagTopologyManager.IsAncestorOfAny(stagingArea, current, selectedVirtualParents)
 		if err != nil {
 			return false, nil, 0, err
+		}
+		// Also check direct parent relationships as a fallback
+		if !isInPastOfSelectedVirtualParents && len(selectedVirtualParents) > 0 {
+			// Get parents of the first selected virtual parent to check
+			parentsOfFirst, err := csm.dagTopologyManager.Parents(stagingArea, selectedVirtualParents[0])
+			if err == nil {
+				for _, parent := range parentsOfFirst {
+					if current.Equal(parent) {
+						isInPastOfSelectedVirtualParents = true
+						break
+					}
+				}
+			}
 		}
 		if isInPastOfSelectedVirtualParents {
 			log.Tracef("Skipping block %s because it's in the past of one (or more) of the selected virtual parents", current)

@@ -140,7 +140,7 @@ func (csm *consensusStateManager) FindHighestValidBlock() (*externalapi.DomainHa
 		return nil, err
 	}
 	defer iterator.Close()
-	log.Infof("Found zero tips, so searching for something we could use.")
+	log.Infof("Found zero tips, so searching for something we could use. This may take a moment.")
 	// Iterate through all blocks
 
 	var highestBlockHash *externalapi.DomainHash
@@ -169,7 +169,7 @@ func (csm *consensusStateManager) FindHighestValidBlock() (*externalapi.DomainHa
 				if err != nil {
 					continue
 				}
-				log.Infof("Found valid block %s, DAAScore %d", blockHash, block.Header.DAAScore())
+				log.Debug("Found valid block %s, DAAScore %d", blockHash, block.Header.DAAScore())
 				if block.Header.DAAScore() > highestDAaScore {
 					highestBlockHash = blockHash
 					highestDAaScore = block.Header.DAAScore()

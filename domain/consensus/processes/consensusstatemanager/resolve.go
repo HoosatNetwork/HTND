@@ -78,13 +78,14 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	}
 
 	for _, tip := range orderedTips {
-		log.Debugf("Resolving tip %s", tip)
+		log.Infof("Resolving tip %s", tip)
 		isViolatingFinality, shouldNotify, err := csm.isViolatingFinality(stagingArea, tip)
 		if err != nil {
 			return nil, externalapi.StatusInvalid, err
 		}
 
 		if isViolatingFinality {
+			log.Infof("Tip %s is violating finality", tip)
 			if shouldNotify {
 				// TODO: Send finality conflict notification
 				log.Warnf("Skipping %s tip resolution because it violates finality", tip)
@@ -93,6 +94,7 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 		}
 
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, tip)
+		log.Infof("Tip status %s", status)
 		if err != nil {
 			return nil, externalapi.StatusInvalid, err
 		}

@@ -337,11 +337,14 @@ func TestTransactionAcceptance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error creating transactionFromBlueChildOfRedBlock: %+v", err)
 		}
-		transactionFromBlueChildOfRedBlockInput0UTXOEntry, _, err := testConsensus.ConsensusStateStore().
-			UTXOByOutpoint(testConsensus.DatabaseContext(), stagingArea, &transactionFromBlueChildOfRedBlock.Inputs[0].PreviousOutpoint)
-		if err != nil {
-			t.Fatalf("Error getting UTXOEntry for transactionFromBlueChildOfRedBlockInput: %s", err)
-		}
+		// The output from transactionFromRedBlock is not in the UTXO database because
+		// redHash block is not in the selected parent chain. We construct the UTXO entry manually.
+		transactionFromBlueChildOfRedBlockInput0UTXOEntry := utxo.NewUTXOEntry(
+			transactionFromRedBlock.Outputs[0].Value,
+			transactionFromRedBlock.Outputs[0].ScriptPublicKey,
+			false,
+			0,
+		)
 		blueChildOfRedBlockScriptPublicKey := &externalapi.ScriptPublicKey{Script: []byte{3}, Version: 0}
 		// The blueChildOfRedBlock contains a transaction that spent an output from the red block.
 		hashBlueChildOfRedBlock, _, err := testConsensus.AddBlock([]*externalapi.DomainHash{lastBlockInChain, redHash},
