@@ -98,6 +98,9 @@ func (c *gRPCConnection) receiveLoop() error {
 			}
 			return err
 		}
+		if message == nil {
+			continue
+		}
 
 		messageNumber++
 		message.SetMessageNumber(messageNumber)
