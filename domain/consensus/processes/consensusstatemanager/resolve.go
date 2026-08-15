@@ -234,9 +234,6 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	if err != nil {
 		return nil, false, err
 	}
-	for i := 0; i < len(unverifiedBlocks); i++ {
-		log.Infof("unverified block %s", unverifiedBlocks[i])
-	}
 
 	// Initially set the resolve processing point to the pending tip
 	processingPoint := pendingTip

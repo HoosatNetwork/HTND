@@ -275,7 +275,6 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 
 	log.Infof("Finished syncing blocks up to %s", relayBlockHash)
 
-	flow.UnsetIBDRunning()
 	return nil
 }
 

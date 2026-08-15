@@ -18,7 +18,7 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 	onEnd := logger.LogAndMeasureExecutionTime(log, "csm.AddBlock")
 	defer onEnd()
 
-	var blockStatus externalapi.BlockStatus
+	var blockStatus externalapi.BlockStatus = externalapi.StatusUTXOPendingVerification
 	var reversalData *model.UTXODiffReversalData
 	if updateVirtual {
 		log.Debugf("Resolving whether the block %s is the next virtual selected parent", blockHash)
