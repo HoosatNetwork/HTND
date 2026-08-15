@@ -869,12 +869,6 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			if !exists {
 				continue
 			}
-			if len(block.Transactions) == 0 {
-				continue
-			}
-			if block.PoWHash == "HEADER ONLY BLOCK" {
-				continue
-			}
 			err = flow.Domain().Consensus().ValidateAndInsertBlock(block, updateVirtual, false)
 			if err != nil {
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {

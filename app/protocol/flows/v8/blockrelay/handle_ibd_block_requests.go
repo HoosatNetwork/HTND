@@ -57,13 +57,12 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				}
 
 				if !found {
-					block, err := context.Domain().Consensus().GetBlockEvenIfHeaderOnly(hash)
+					block, err = context.Domain().Consensus().GetBlockEvenIfHeaderOnly(hash)
 					if err != nil {
 						log.Warnf("unable to fetch requested block hash %s: %s", hash, err)
 						done.Store(true)
 						return
 					}
-					block.PoWHash = "HEADER ONLY BLOCK"
 				}
 
 				// TODO (Partial nodes): Convert block to partial block if needed

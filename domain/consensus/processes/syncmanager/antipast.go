@@ -84,10 +84,6 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		if maxBlocks != 0 && uint64(total) > maxBlocks {
 			break
 		}
-		status, err := sm.blockStatusStore.Get(sm.databaseContext, stagingArea, current)
-		if status == externalapi.StatusHeaderOnly {
-			continue
-		}
 
 		highHash = current
 
