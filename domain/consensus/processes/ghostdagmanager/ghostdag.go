@@ -1,7 +1,9 @@
 package ghostdagmanager
 
 import (
+	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
@@ -179,10 +181,19 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 	// of blueCandidate, and check for each one of them if blueCandidate potentially
 	// enlarges their blue anticone to be over K, or that they enlarge the blue anticone
 	// of blueCandidate to be over K.
-	chainBlock := chainBlockData{
-		blockData: newBlockData,
-	}
 
+	blueCandidateCheckStart := time.Now()
+	selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, newBlockData.SelectedParent(), false)
+	if err != nil {
+		return false, 0, nil, err
+	}
+	chainBlock := chainBlockData{
+		hash:      newBlockData.SelectedParent(),
+		blockData: selectedParentGHOSTDAGData,
+	}
+	// if we give chainBlock with hash, next loop does only one iteration.
+	// Because gm.dagTopologyManager.IsAncestorOf(stagingArea, chainBlock.hash, blueCandidate)
+	// returns either
 	for {
 		isBlue, isRed, err := gm.checkBlueCandidateWithChainBlock(stagingArea, newBlockData, chainBlock, blueCandidate,
 			candidateBluesAnticoneSizes, &candidateAnticoneSize, k)
@@ -198,24 +209,16 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 			return false, 0, nil, nil
 		}
 
-		selectedParentHash := chainBlock.blockData.SelectedParent()
-		if selectedParentHash == nil {
-			return false, 0, nil, errors.Errorf("chainBlock.blockData.SelectedParent() is nil")
-		}
-		selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, selectedParentHash, false)
-		if database.IsNotFoundError(err) {
-			log.Infof("GHOScheckBlueCandidateTDAG failed to retrieve with %s\n", selectedParentHash)
-			return false, 0, nil, err
-		}
+		selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, chainBlock.blockData.SelectedParent(), false)
 		if err != nil {
 			return false, 0, nil, err
 		}
 
-		chainBlock = chainBlockData{
-			hash:      chainBlock.blockData.SelectedParent(),
+		chainBlock = chainBlockData{hash: chainBlock.blockData.SelectedParent(),
 			blockData: selectedParentGHOSTDAGData,
 		}
 	}
+	log.Infof("CheckBlueCandidate took %v", time.Since(blueCandidateCheckStart))
 
 	return true, candidateAnticoneSize, candidateBluesAnticoneSizes, nil
 }
@@ -244,7 +247,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			return true, false, nil
 		}
 	}
-
+	log.Infof("Len %d of MergeSetBlues", len(chainBlock.blockData.MergeSetBlues()))
 	for _, block := range chainBlock.blockData.MergeSetBlues() {
 		// Skip blocks that exist in the past of blueCandidate.
 		isAncestorOfBlueCandidate, err := gm.dagTopologyManager.IsAncestorOf(stagingArea, block, blueCandidate)
@@ -288,7 +291,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 		if candidateBluesAnticoneSizes[*block] > maxAnticoneSize {
 			log.Debugf("Max Anticone size %d", maxAnticoneSize)
 			log.Debugf("Candidate blues anticone size %d", candidateBluesAnticoneSizes[*block])
-			// return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
+			return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
 		}
 	}
 
@@ -300,6 +303,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData, k externalapi.KType) (externalapi.KType, error) {
 
+	rotationStart := time.Now()
 	maxWalk := int(4 * byte(k))
 	steps := 0
 
@@ -323,5 +327,6 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 			return 0, err
 		}
 	}
+	log.Infof("blueAnticoneSize  took %v", time.Since(rotationStart))
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
 }
