@@ -304,22 +304,20 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 
 		var err error
 		current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current.SelectedParent(), isTrustedData)
-		if database.IsNotFoundError(err) {
-			log.Infof("blueAnticoneSize failed to retrieve with %s\n", current.SelectedParent())
-			return 0, err
-		}
 		if err != nil {
 			return 0, err
+		}
+		if current == nil {
+			return 0, errors.Errorf("block %s is not in blue set of the given context", block)
 		}
 		if current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
 			isTrustedData = true
 			current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current.SelectedParent(), isTrustedData)
-			if database.IsNotFoundError(err) {
-				log.Infof("blueAnticoneSize failed to retrieve with %s\n", current.SelectedParent())
-				return 0, err
-			}
 			if err != nil {
 				return 0, err
+			}
+			if current == nil {
+				return 0, errors.Errorf("block %s is not in blue set of the given context", block)
 			}
 		}
 	}
