@@ -7,6 +7,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/pkg/errors"
 )
 
 func (gm *ghostdagManager) mergeSetWithoutSelectedParent(stagingArea *model.StagingArea,
@@ -88,6 +89,9 @@ func (gm *ghostdagManager) sortMergeSet(stagingArea *model.StagingArea, mergeSet
 func (gm *ghostdagManager) GetSortedMergeSet(stagingArea *model.StagingArea,
 	current *externalapi.DomainHash,
 ) ([]*externalapi.DomainHash, error) {
+	if current == nil {
+		return nil, errors.Errorf("current hash is nil")
+	}
 	currentGhostdagData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current, false)
 	if database.IsNotFoundError(err) {
 		log.Infof("GetSortedMergeSet failed to retrieve with %s\n", current)

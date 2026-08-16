@@ -87,6 +87,9 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 		if err != nil {
 			return err
 		}
+		if selectedParent == nil {
+			return errors.Errorf("findSelectedParent returned nil")
+		}
 
 		newBlockData.selectedParent = selectedParent
 		newBlockData.mergeSetBlues = append(newBlockData.mergeSetBlues, selectedParent)
@@ -195,9 +198,13 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 			return false, 0, nil, nil
 		}
 
-		selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, chainBlock.blockData.SelectedParent(), false)
+		selectedParentHash := chainBlock.blockData.SelectedParent()
+		if selectedParentHash == nil {
+			return false, 0, nil, errors.Errorf("chainBlock.blockData.SelectedParent() is nil")
+		}
+		selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, selectedParentHash, false)
 		if database.IsNotFoundError(err) {
-			log.Infof("GHOScheckBlueCandidateTDAG failed to retrieve with %s\n", chainBlock.blockData.SelectedParent())
+			log.Infof("GHOScheckBlueCandidateTDAG failed to retrieve with %s\n", selectedParentHash)
 			return false, 0, nil, err
 		}
 		if err != nil {
@@ -249,7 +256,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			continue
 		}
 
-		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, newBlockData)
+		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData)
 		if err != nil {
 			return false, false, err
 		}
@@ -298,20 +305,33 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
 			return blueAnticoneSize, nil
 		}
-		if current.SelectedParent().Equal(gm.genesisHash) {
+		selectedParent := current.SelectedParent()
+		if selectedParent == nil {
 			break
 		}
 
 		var err error
-		current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current.SelectedParent(), isTrustedData)
+		current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, selectedParent, isTrustedData)
 		if err != nil {
 			return 0, err
 		}
-		if current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			isTrustedData = true
-			current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current.SelectedParent(), isTrustedData)
+		if current == nil {
+			log.Infof("Current is nil")
+			break
+		}
+		selectedParent = current.SelectedParent()
+		if selectedParent == nil {
+			log.Infof("Current selected parent is nil")
+			break
+		}
+		if selectedParent.Equal(model.VirtualGenesisBlockHash) || selectedParent.Equal(gm.genesisHash) {
+			log.Infof("Current selected parent is virtual genesis block hash")
+			current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, model.VirtualBlockHash, isTrustedData)
 			if err != nil {
 				return 0, err
+			}
+			if current == nil {
+				break
 			}
 		}
 	}

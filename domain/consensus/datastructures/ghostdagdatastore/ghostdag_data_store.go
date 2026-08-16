@@ -8,9 +8,11 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucacheghostdagdata"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/cockroachdb/errors"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 var (
+	log                     = logger.RegisterSubSystem("GDS")
 	ghostdagDataBucketName = []byte("block-ghostdag-data")
 	trustedDataBucketName  = []byte("block-with-trusted-data-ghostdag-data")
 )
@@ -37,6 +39,10 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.GHO
 func (gds *ghostdagDataStore) Stage(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData, isTrustedData bool,
 ) {
+	if blockHash == nil {
+		log.Critical("Attempted to stage with nil blockHash")
+		return
+	}
 	stagingShard := gds.stagingShard(stagingArea)
 
 	stagingShard.toAdd[newKey(blockHash, isTrustedData)] = blockGHOSTDAGData
@@ -48,6 +54,9 @@ func (gds *ghostdagDataStore) IsStaged(stagingArea *model.StagingArea) bool {
 
 // Get gets the blockGHOSTDAGData associated with the given blockHash
 func (gds *ghostdagDataStore) Get(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, error) {
+	if blockHash == nil {
+		return nil, errors.New("blockHash cannot be nil")
+	}
 	stagingShard := gds.stagingShard(stagingArea)
 
 	key := newKey(blockHash, isTrustedData)

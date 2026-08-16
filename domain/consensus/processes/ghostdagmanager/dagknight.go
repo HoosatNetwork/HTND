@@ -359,6 +359,9 @@ func (gm *ghostdagManager) latestCommonChainAncestor(stagingArea *model.StagingA
 
 // getChainPath returns the chain path from block to genesis (selected parent chain)
 func (gm *ghostdagManager) getChainPath(stagingArea *model.StagingArea, block *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	if block == nil {
+		return nil, errors.Errorf("block is nil")
+	}
 	// Check cache first
 	if cached, ok := gm.chainPathCache.Get(block); ok {
 		return cached, nil
@@ -372,7 +375,11 @@ func (gm *ghostdagManager) getChainPath(stagingArea *model.StagingArea, block *e
 		if err != nil {
 			return nil, err
 		}
-		current = gd.SelectedParent()
+		selectedParent := gd.SelectedParent()
+		if selectedParent == nil {
+			return nil, errors.Errorf("ghostdag data has nil SelectedParent for block %s", current)
+		}
+		current = selectedParent
 		path = append(path, current)
 	}
 
@@ -969,6 +976,9 @@ func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *exte
 // Used in KColouring to determine parent relationships.
 // If conditioning is provided, recursively checks agreement with the conditioning block.
 func (gm *ghostdagManager) agrees(stagingArea *model.StagingArea, B, C *externalapi.DomainHash, conditioning *externalapi.DomainHash) (bool, error) {
+	if B == nil || C == nil {
+		return false, errors.Errorf("B or C is nil")
+	}
 	if B.Equal(C) {
 		return true, nil
 	}
@@ -986,11 +996,28 @@ func (gm *ghostdagManager) agrees(stagingArea *model.StagingArea, B, C *external
 		}
 	}
 
-	gdB, _ := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, B, false)
-	gdC, _ := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, C, false)
+	gdB, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, B, false)
+	if err != nil {
+		return false, err
+	}
+	if gdB == nil {
+		return false, errors.Errorf("ghostdag data for B is nil")
+	}
+	gdC, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, C, false)
+	if err != nil {
+		return false, err
+	}
+	if gdC == nil {
+		return false, errors.Errorf("ghostdag data for C is nil")
+	}
 
 	// Core of Def 3: LCA should be chain-descendant (no split after relevant point)
-	return gdB.SelectedParent().Equal(gdC.SelectedParent()) || lca.Equal(gdB.SelectedParent()) || lca.Equal(gdC.SelectedParent()), nil
+	bSelectedParent := gdB.SelectedParent()
+	cSelectedParent := gdC.SelectedParent()
+	if bSelectedParent == nil || cSelectedParent == nil {
+		return false, nil
+	}
+	return bSelectedParent.Equal(cSelectedParent) || lca.Equal(bSelectedParent) || lca.Equal(cSelectedParent), nil
 }
 
 // rank returns the blue score of C as rank
