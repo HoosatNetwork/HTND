@@ -299,7 +299,7 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 			return blueAnticoneSize, nil
 		}
 		if current.SelectedParent().Equal(gm.genesisHash) || current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			break
+			return 0, nil
 		}
 
 		var err error
