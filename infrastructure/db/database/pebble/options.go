@@ -212,11 +212,11 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		return pebble.ValueSeparationPolicy{
-			Enabled:               true,
-			MinimumSize:           1024, // 1 KiB – reduces write amplification for typical value sizes (UTXO entries, scripts, etc.)
-			MaxBlobReferenceDepth: 100,
-			RewriteMinimumAge:     24 * time.Hour,
-			TargetGarbageRatio:    0.20,
+			Enabled:               true,          // keep it on for write amp, but tune it
+			MinimumSize:           4 << 10,       // 4 KiB (or try 8 KiB). Stop separating medium-sized values
+			MaxBlobReferenceDepth: 10,            // was 100 → much more aggressive rewriting of blobs to restore locality
+			RewriteMinimumAge:     6 * time.Hour, // or lower (e.g. 1–2h) so old blobs get rewritten sooner
+			TargetGarbageRatio:    0.15,          // slightly more aggressive space reclaim
 		}
 	}
 
