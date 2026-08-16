@@ -121,12 +121,12 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 			newBlockData.mergeSetReds = append(newBlockData.mergeSetReds, blueCandidate)
 		}
 	}
-	// log.Infof("Mergeset blues %d, reds %d", len(newBlockData.mergeSetBlues), len(newBlockData.mergeSetReds))
+	// log.Debugf("Mergeset blues %d, reds %d", len(newBlockData.mergeSetBlues), len(newBlockData.mergeSetReds))
 
 	if !isGenesis {
 		selectedParentGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, newBlockData.selectedParent, false)
 		if database.IsNotFoundError(err) {
-			log.Infof("GHOSTDAG failed to retrieve with %s\n", newBlockData.selectedParent)
+			log.Debugf("GHOSTDAG failed to retrieve with %s\n", newBlockData.selectedParent)
 			return err
 		}
 		if err != nil {
@@ -217,7 +217,7 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 			blockData: selectedParentGHOSTDAGData,
 		}
 	}
-	log.Infof("CheckBlueCandidate took %v", time.Since(blueCandidateCheckStart))
+	log.Debugf("CheckBlueCandidate took %v", time.Since(blueCandidateCheckStart))
 
 	return true, candidateAnticoneSize, candidateBluesAnticoneSizes, nil
 }
@@ -240,7 +240,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 	if chainBlock.hash != nil {
 		isAncestorOfTimer := time.Now()
 		isAncestorOfBlueCandidate, err := gm.dagTopologyManager.IsAncestorOf(stagingArea, chainBlock.hash, blueCandidate)
-		log.Infof("IsAncestorOf took %v", time.Since(isAncestorOfTimer))
+		log.Debugf("IsAncestorOf took %v", time.Since(isAncestorOfTimer))
 		if err != nil {
 			return false, false, err
 		}
@@ -248,12 +248,12 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			return true, false, nil
 		}
 	}
-	log.Infof("Len %d of MergeSetBlues", len(chainBlock.blockData.MergeSetBlues()))
+	log.Debugf("Len %d of MergeSetBlues", len(chainBlock.blockData.MergeSetBlues()))
 	for _, block := range chainBlock.blockData.MergeSetBlues() {
 		// Skip blocks that exist in the past of blueCandidate.
 		isAncestorOfTimer := time.Now()
 		isAncestorOfBlueCandidate, err := gm.dagTopologyManager.IsAncestorOf(stagingArea, block, blueCandidate)
-		log.Infof("IsAncestorOf in MergeSetBlues loop took %v, with result %t", time.Since(isAncestorOfTimer), isAncestorOfBlueCandidate)
+		log.Debugf("IsAncestorOf in MergeSetBlues loop took %v, with result %t", time.Since(isAncestorOfTimer), isAncestorOfBlueCandidate)
 		if err != nil {
 			return false, false, err
 		}
@@ -264,7 +264,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 
 		blueAnticoneSize := time.Now()
 		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData, k)
-		log.Infof("blueAnticoneSize in MergeSetBlues loop took %v, with result %d", time.Since(blueAnticoneSize), candidateBluesAnticoneSizes[*block])
+		log.Debugf("blueAnticoneSize in MergeSetBlues loop took %v, with result %d", time.Since(blueAnticoneSize), candidateBluesAnticoneSizes[*block])
 		if err != nil {
 			return false, false, err
 		}
@@ -333,6 +333,6 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 		}
 		steps++
 	}
-	log.Infof("blueAnticoneSize  took %v", time.Since(rotationStart))
+	log.Debugf("blueAnticoneSize  took %v", time.Since(rotationStart))
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
 }
