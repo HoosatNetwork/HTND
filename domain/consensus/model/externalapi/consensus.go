@@ -64,4 +64,5 @@ type Consensus interface {
 	RepairBlockStatuses() error
 	ReresolveInvalidBlocks() error
 	GetBlockByTransactionID(transactionID *DomainTransactionID) (*DomainBlock, error)
+	RepairBluesAnticoneSizes() error
 }

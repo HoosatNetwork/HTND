@@ -256,7 +256,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			continue
 		}
 
-		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, newBlockData)
+		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData)
 		if err != nil {
 			return false, false, err
 		}
@@ -302,23 +302,23 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 
 	isTrustedData := false
 	for current := context; current != nil; {
-		var blueAnticoneSize externalapi.KType = 0
-		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
+		blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]
+		log.Debugf("Blue anticone size %d for block %s in context %s", blueAnticoneSize, block, current.SelectedParent())
+		if ok {
 			return blueAnticoneSize, nil
 		}
-		log.Infof("Blue anticone size %d", blueAnticoneSize)
 		selectedParent := current.SelectedParent()
 		if selectedParent == nil {
-			return blueAnticoneSize, nil
+			return blueAnticoneSize, nil // Return 0 instead of breaking
 		}
 		if selectedParent.Equal(gm.genesisHash) || selectedParent.Equal(model.VirtualGenesisBlockHash) {
-			return blueAnticoneSize, nil
+			return blueAnticoneSize, nil // Return 0 instead of breaking
 		}
 
 		var err error
 		current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, selectedParent, isTrustedData)
 		if err != nil {
-			return 0, err
+			return blueAnticoneSize, err
 		}
 	}
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)

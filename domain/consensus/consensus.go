@@ -1642,3 +1642,95 @@ func (s *consensus) ValidateUTXODiffChildChains() error {
 	// The validation logic only reads data and uses its own staging areas for commits
 	return s.consensusStateManager.ValidateUTXODiffChildChains()
 }
+
+func (s *consensus) RepairBluesAnticoneSizes() error {
+	log.Info("Starting BluesAnticoneSizes repair...")
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	iterator, err := s.blockStore.AllBlockHashesIterator(s.databaseContext)
+	if err != nil {
+		return errors.Wrap(err, "failed to get block hashes iterator")
+	}
+	defer iterator.Close()
+
+	var repairedCount int
+	var totalCount int
+
+	if !iterator.First() {
+		log.Info("No blocks found in database")
+		return nil
+	}
+
+	for {
+		blockHash, err := iterator.Get()
+		if err != nil {
+			return errors.Wrap(err, "failed to get block hash")
+		}
+
+		totalCount++
+
+		// Create a staging area for this block
+		stagingArea := model.NewStagingArea()
+
+		for i := 0; i < len(s.ghostdagDataStores); i++ {
+			// Get the current GHOSTDAG data
+			ghostDAGData, err := s.ghostdagDataStores[i].Get(s.databaseContext, stagingArea, blockHash, false)
+			if err != nil {
+				if database.IsNotFoundError(err) {
+					// GHOSTDAG data not found - skip
+					if !iterator.Next() {
+						break
+					}
+					continue
+				}
+				return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
+			}
+
+			// Check if repair is needed: all MergeSetBlues should have entries in BluesAnticoneSizes
+			needsRepair := false
+			for _, blue := range ghostDAGData.MergeSetBlues() {
+				anticoneSize, exists := ghostDAGData.BluesAnticoneSizes()[*blue]
+				log.Infof("%s block blue anticone size %d", blue, anticoneSize)
+				if !exists {
+					needsRepair = true
+					break
+				}
+			}
+
+			if !needsRepair {
+				if !iterator.Next() {
+					break
+				}
+				continue
+			}
+
+			repairedCount++
+			log.Debugf("Repairing BluesAnticoneSizes for block %s", blockHash)
+
+			// Re-run GHOSTDAG to recalculate the data correctly
+			err = s.ghostdagManagers[i].GHOSTDAG(stagingArea, blockHash)
+			if err != nil {
+				return errors.Wrapf(err, "failed to repair BluesAnticoneSizes for block %s", blockHash)
+			}
+
+			// Commit the repaired data
+			if err := staging.CommitAllChanges(s.databaseContext, stagingArea); err != nil {
+				return errors.Wrapf(err, "failed to commit repaired BluesAnticoneSizes for block %s", blockHash)
+			}
+
+			// Log progress every 1000 blocks
+			if totalCount%1000 == 0 {
+				log.Infof("Processed %d blocks, repaired %d so far...", totalCount, repairedCount)
+			}
+		}
+
+		if !iterator.Next() {
+			break
+		}
+	}
+
+	log.Infof("BluesAnticoneSizes repair complete. Total blocks: %d, Repaired: %d", totalCount, repairedCount)
+	return nil
+}

@@ -612,7 +612,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	if err != nil {
 		return nil, false, err
 	}
-
+	// c.RepairBluesAnticoneSizes()
 	// c.RepairBlockStatuses()
 	// c.ReresolveInvalidBlocks()
 
