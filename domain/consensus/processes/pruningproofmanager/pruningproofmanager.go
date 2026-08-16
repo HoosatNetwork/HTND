@@ -165,14 +165,14 @@ func (ppm *pruningProofManager) buildPruningPointProof(stagingArea *model.Stagin
 	virtualGenesisGD := externalapi.NewBlockGHOSTDAGData(
 		0,
 		big.NewInt(0),
-		model.VirtualGenesisBlockHash,
+		nil,
 		nil,
 		nil,
 		nil,
 		externalapi.KType(1),
 	)
 	for i := 0; i <= maxLevel; i++ {
-		ppm.ghostdagDataStores[i].Stage(stagingArea, model.VirtualGenesisBlockHash, virtualGenesisGD, true)
+		ppm.ghostdagDataStores[i].Stage(stagingArea, model.VirtualGenesisBlockHash, virtualGenesisGD, false)
 		// Set up VirtualGenesisBlockHash as having no parents in the DAG topology
 		if err := ppm.dagTopologyManagers[i].SetParents(stagingArea, model.VirtualGenesisBlockHash, nil); err != nil {
 			return nil, err
