@@ -2,6 +2,7 @@ package coinbasemanager
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
@@ -119,8 +120,12 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 	} else if constants.GetBlockVersion() >= 2 {
 		log.Tracef("Processing %d blue blocks in merge set", len(ghostdagData.MergeSetBlues()))
 		// For v2, process both blue and red blocks individually to avoid bucketing
-		// Process all merge set blocks (blues and reds) in order
+		// Process all merge set blocks in sorted order for determinism
 		allMergeBlocks := append(ghostdagData.MergeSetBlues(), ghostdagData.MergeSetReds()...)
+		// Sort merge set blocks by hash to ensure consistent ordering
+		sort.Slice(allMergeBlocks, func(i, j int) bool {
+			return allMergeBlocks[i].String() < allMergeBlocks[j].String()
+		})
 		log.Tracef("Processing %d total merge set blocks (blues + reds)", len(allMergeBlocks))
 
 		devFeeDecodedAddress, err := util.DecodeAddress(constants.DevFeeAddress, util.Bech32PrefixHoosat)
