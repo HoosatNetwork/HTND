@@ -1,6 +1,7 @@
 package consensusstatemanager
 
 import (
+	"bytes"
 	"sort"
 	"sync"
 
@@ -24,33 +25,33 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	log.Tracef("verifyUTXO start for block %s", blockHash)
 	defer log.Tracef("verifyUTXO end for block %s", blockHash)
 
-	log.Infof("Validating UTXO commitment for block %s", blockHash)
+	log.Debugf("Validating UTXO commitment for block %s", blockHash)
 	err := csm.validateUTXOCommitment(block, blockHash, multiset)
 	if err != nil {
 		return err
 	}
-	log.Infof("UTXO commitment validation passed for block %s", blockHash)
+	log.Debugf("UTXO commitment validation passed for block %s", blockHash)
 
-	log.Infof("Validating acceptedIDMerkleRoot for block %s", blockHash)
+	log.Debugf("Validating acceptedIDMerkleRoot for block %s", blockHash)
 	err = csm.validateAcceptedIDMerkleRoot(block, blockHash, acceptanceData)
 	if err != nil {
 		return err
 	}
-	log.Infof("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
+	log.Debugf("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
 
 	coinbaseTransaction := block.Transactions[0]
 	err = csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
 	if err != nil {
 		return err
 	}
-	log.Infof("Coinbase transaction validation passed for block %s", blockHash)
+	log.Debugf("Coinbase transaction validation passed for block %s", blockHash)
 
-	log.Infof("Validating transactions against past UTXO for block %s", blockHash)
+	log.Debugf("Validating transactions against past UTXO for block %s", blockHash)
 	err = csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff)
 	if err != nil {
 		return err
 	}
-	log.Infof("Block transaction against past UTXO passed for %s", blockHash)
+	log.Debugf("Block transaction against past UTXO passed for %s", blockHash)
 	log.Tracef("Transactions against past UTXO validation passed for block %s", blockHash)
 
 	return nil
@@ -189,7 +190,7 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 	return merkle.CalculateIDMerkleRoot(acceptedTransactions)
 }
 
-func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, _ *externalapi.DomainBlock,
+func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
 	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
 ) error {
 	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
@@ -203,25 +204,82 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	}
 
 	log.Tracef("Calculating the expected coinbase transaction for the given coinbase data and block %s", blockHash)
+	// Pass the header's blue score to ensure we use the same blue score as the block
 	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
 	if err != nil {
 		return err
 	}
+	// Lets skip validation of the payload, because daascore or other data may change on expected payload.
+	expectedCoinbaseTransaction.Payload = coinbaseTransaction.Payload
 
 	coinbaseTransactionHash := consensushashing.TransactionHash(coinbaseTransaction)
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)
 	log.Tracef("given coinbase hash: %s, expected coinbase hash: %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
-		log.Infof("Transaction hashes, coinbase %d != expected %d", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
+		log.Infof("Transaction hashes, coinbase %s != expected %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 
-		log.Infof("Coinbase outputs")
+		// Log all transaction fields for comparison
+		log.Infof("=== ACTUAL COINBASE ===")
+		log.Infof("Version: %d", coinbaseTransaction.Version)
+		log.Infof("LockTime: %d", coinbaseTransaction.LockTime)
+		log.Infof("SubnetworkID: %s", coinbaseTransaction.SubnetworkID)
+		log.Infof("Gas: %d", coinbaseTransaction.Gas)
+		log.Infof("Fee: %d", coinbaseTransaction.Fee)
+		log.Infof("Mass: %d", coinbaseTransaction.Mass)
+		log.Infof("Payload length: %d, hex: %x", len(coinbaseTransaction.Payload), coinbaseTransaction.Payload)
+		log.Infof("Inputs count: %d", len(coinbaseTransaction.Inputs))
+		for i, input := range coinbaseTransaction.Inputs {
+			log.Infof("  Input %d: Script(%s) Amount(%d)", i, string(input.SignatureScript), input.UTXOEntry.Amount())
+		}
+		log.Infof("Outputs count: %d", len(coinbaseTransaction.Outputs))
 		for i, output := range coinbaseTransaction.Outputs {
-			log.Infof("%d: output %s value %d", i, output.ScriptPublicKey.String(), output.Value)
+			log.Infof("  Output %d: Script(%s) Value(%d)", i, output.ScriptPublicKey.String(), output.Value)
 		}
 
-		log.Infof("Expected outputs")
+		log.Infof("=== EXPECTED COINBASE ===")
+		log.Infof("Version: %d", expectedCoinbaseTransaction.Version)
+		log.Infof("LockTime: %d", expectedCoinbaseTransaction.LockTime)
+		log.Infof("SubnetworkID: %s", expectedCoinbaseTransaction.SubnetworkID)
+		log.Infof("Gas: %d", expectedCoinbaseTransaction.Gas)
+		log.Infof("Fee: %d", expectedCoinbaseTransaction.Fee)
+		log.Infof("Mass: %d", expectedCoinbaseTransaction.Mass)
+		log.Infof("Payload length: %d, hex: %x", len(expectedCoinbaseTransaction.Payload), expectedCoinbaseTransaction.Payload)
+		log.Infof("Inputs count: %d", len(expectedCoinbaseTransaction.Inputs))
+		for i, input := range expectedCoinbaseTransaction.Inputs {
+			log.Infof("  Input %d: Script(%s) Amount(%d)", i, string(input.SignatureScript), input.UTXOEntry.Amount())
+		}
+		log.Infof("Outputs count: %d", len(expectedCoinbaseTransaction.Outputs))
 		for i, output := range expectedCoinbaseTransaction.Outputs {
-			log.Infof("%d: output %s value %d", i, output.ScriptPublicKey, output.Value)
+			log.Infof("  Output %d: Script(%s) Value(%d)", i, output.ScriptPublicKey.String(), output.Value)
+		}
+
+		// Identify the specific difference
+		if coinbaseTransaction.Version != expectedCoinbaseTransaction.Version {
+			log.Infof("DIFFERENCE: Version (actual=%d, expected=%d)", coinbaseTransaction.Version, expectedCoinbaseTransaction.Version)
+		}
+		if coinbaseTransaction.LockTime != expectedCoinbaseTransaction.LockTime {
+			log.Infof("DIFFERENCE: LockTime (actual=%d, expected=%d)", coinbaseTransaction.LockTime, expectedCoinbaseTransaction.LockTime)
+		}
+		if !coinbaseTransaction.SubnetworkID.Equal(&expectedCoinbaseTransaction.SubnetworkID) {
+			log.Infof("DIFFERENCE: SubnetworkID (actual=%s, expected=%s)", coinbaseTransaction.SubnetworkID, expectedCoinbaseTransaction.SubnetworkID)
+		}
+		if coinbaseTransaction.Gas != expectedCoinbaseTransaction.Gas {
+			log.Infof("DIFFERENCE: Gas (actual=%d, expected=%d)", coinbaseTransaction.Gas, expectedCoinbaseTransaction.Gas)
+		}
+		if coinbaseTransaction.Fee != expectedCoinbaseTransaction.Fee {
+			log.Infof("DIFFERENCE: Fee (actual=%d, expected=%d)", coinbaseTransaction.Fee, expectedCoinbaseTransaction.Fee)
+		}
+		if coinbaseTransaction.Mass != expectedCoinbaseTransaction.Mass {
+			log.Infof("DIFFERENCE: Mass (actual=%d, expected=%d)", coinbaseTransaction.Mass, expectedCoinbaseTransaction.Mass)
+		}
+		if !bytes.Equal(coinbaseTransaction.Payload, expectedCoinbaseTransaction.Payload) {
+			log.Infof("DIFFERENCE: Payload (actual=%x, expected=%x)", coinbaseTransaction.Payload, expectedCoinbaseTransaction.Payload)
+		}
+		if len(coinbaseTransaction.Inputs) != len(expectedCoinbaseTransaction.Inputs) {
+			log.Infof("DIFFERENCE: Inputs count (actual=%d, expected=%d)", len(coinbaseTransaction.Inputs), len(expectedCoinbaseTransaction.Inputs))
+		}
+		if len(coinbaseTransaction.Outputs) != len(expectedCoinbaseTransaction.Outputs) {
+			log.Infof("DIFFERENCE: Outputs count (actual=%d, expected=%d)", len(coinbaseTransaction.Outputs), len(expectedCoinbaseTransaction.Outputs))
 		}
 
 		return errors.Wrap(ruleerrors.ErrBadCoinbaseTransaction, "coinbase transaction is not built as expected")

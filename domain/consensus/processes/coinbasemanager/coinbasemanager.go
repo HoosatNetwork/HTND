@@ -56,10 +56,10 @@ func (c *coinbaseManager) ExpectedCoinbaseTransaction(stagingArea *model.Staging
 }
 
 func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, coinbaseData *externalapi.DomainCoinbaseData, acceptanceData externalapi.AcceptanceData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
-	ghostdagData, err := c.ghostdagDataStore.Get(c.databaseContext, stagingArea, blockHash, true)
+	ghostdagData, err := c.ghostdagDataStore.Get(c.databaseContext, stagingArea, blockHash, false)
 	// If there's ghostdag data with trusted data we prefer it because we need the original merge set non-pruned merge set.
 	if database.IsNotFoundError(err) {
-		ghostdagData, err = c.ghostdagDataStore.Get(c.databaseContext, stagingArea, blockHash, false)
+		ghostdagData, err = c.ghostdagDataStore.Get(c.databaseContext, stagingArea, blockHash, true)
 		if err != nil {
 			return nil, false, err
 		}
