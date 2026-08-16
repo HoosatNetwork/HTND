@@ -177,76 +177,23 @@ func (csm *consensusStateManager) selectedParentInfo(
 		return nil, 0, nil, err
 	}
 	selectedParent := lastUnverifiedBlockGHOSTDAGData.SelectedParent()
-
-	// Walk up the selected parent chain to find a block with a valid UTXO set.
-	// This handles the case where there are header-only blocks in the chain between
-	// the last unverified block and the first UTXO-verified block.
-	currentHash := selectedParent
-	for {
-		selectedParentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, currentHash)
-		if database.IsNotFoundError(err) {
-			log.Infof("selectedParentInfo failed to retrieve with %s\n", currentHash)
-			return nil, 0, nil, err
-		}
-		if err != nil {
-			return nil, 0, nil, err
-		}
-
-		// If this block has a UTXO-verified status, we can get its past UTXO
-		if selectedParentStatus == externalapi.StatusUTXOValid || selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
-			selectedParentUTXOSet, err := csm.restorePastUTXO(stagingArea, currentHash)
-			if err != nil {
-				return nil, 0, nil, err
-			}
-			return currentHash, selectedParentStatus, selectedParentUTXOSet, nil
-		}
-
-		// If this block is header-only, continue walking up the selected parent chain
-		if selectedParentStatus == externalapi.StatusHeaderOnly {
-			currentBlockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, currentHash, false)
-			if database.IsNotFoundError(err) {
-				log.Infof("selectedParentInfo failed to retrieve with %s\n", currentHash)
-				return nil, 0, nil, err
-			}
-			if err != nil {
-				return nil, 0, nil, err
-			}
-			nextHash := currentBlockGHOSTDAGData.SelectedParent()
-			// Check if we've reached genesis or if the selected parent is nil
-			if nextHash == nil || nextHash.Equal(csm.genesisHash) {
-				// Genesis block has status UTXOValid, so we'll handle it in the next iteration
-				currentHash = csm.genesisHash
-				continue
-			}
-			currentHash = nextHash
-			continue
-		}
-
-		// For other statuses (e.g., StatusUTXOPendingVerification), continue walking up.
-		// This can happen if getUnverifiedChainBlocks didn't include all pending blocks
-		// (e.g., due to header-only blocks in between).
-		if selectedParentStatus == externalapi.StatusUTXOPendingVerification ||
-			selectedParentStatus == externalapi.StatusInvalid {
-			currentBlockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, currentHash, false)
-			if database.IsNotFoundError(err) {
-				log.Infof("selectedParentInfo failed to retrieve with %s\n", currentHash)
-				return nil, 0, nil, err
-			}
-			if err != nil {
-				return nil, 0, nil, err
-			}
-			nextHash := currentBlockGHOSTDAGData.SelectedParent()
-			if nextHash == nil || nextHash.Equal(csm.genesisHash) {
-				currentHash = csm.genesisHash
-				continue
-			}
-			currentHash = nextHash
-			continue
-		}
-		// For any other unexpected status, return with nil UTXO set
-		// (which will cause an error in resolveSingleBlockStatus).
-		return currentHash, selectedParentStatus, nil, nil
+	selectedParentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, selectedParent)
+	if database.IsNotFoundError(err) {
+		log.Infof("selectedParentInfo failed to retrieve with %s\n", selectedParent)
+		return nil, 0, nil, err
 	}
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	if selectedParentStatus != externalapi.StatusUTXOValid {
+		return selectedParent, selectedParentStatus, nil, nil
+	}
+
+	selectedParentUTXOSet, err := csm.restorePastUTXO(stagingArea, selectedParent)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	return selectedParent, selectedParentStatus, selectedParentUTXOSet, nil
 }
 
 func (csm *consensusStateManager) getUnverifiedChainBlocks(stagingArea *model.StagingArea,
