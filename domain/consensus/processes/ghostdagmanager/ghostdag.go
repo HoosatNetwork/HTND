@@ -295,11 +295,12 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 ) (externalapi.KType, error) {
 	isTrustedData := false
 	for current := context; current != nil; {
+		var blueAnticoneSize externalapi.KType
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
 			return blueAnticoneSize, nil
 		}
 		if current.SelectedParent().Equal(gm.genesisHash) || current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			break
+			return blueAnticoneSize, nil
 		}
 
 		var err error
@@ -309,16 +310,6 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 		}
 		if current == nil {
 			return 0, errors.Errorf("block %s is not in blue set of the given context", block)
-		}
-		if current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			isTrustedData = true
-			current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current.SelectedParent(), isTrustedData)
-			if err != nil {
-				return 0, err
-			}
-			if current == nil {
-				return 0, errors.Errorf("block %s is not in blue set of the given context", block)
-			}
 		}
 	}
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
