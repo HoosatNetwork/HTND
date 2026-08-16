@@ -1,7 +1,6 @@
 package ghostdagmanager
 
 import (
-	"fmt"
 	"math/big"
 	"time"
 
@@ -297,7 +296,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 		if candidateBluesAnticoneSizes[*block] > maxAnticoneSize {
 			log.Debugf("Max Anticone size %d", maxAnticoneSize)
 			log.Debugf("Candidate blues anticone size %d", candidateBluesAnticoneSizes[*block])
-			return false, false, errors.New(fmt.Sprintf("found blue anticone size %d larger than k %d", candidateBluesAnticoneSizes[*block], k))
+			return false, true, nil
 		}
 	}
 
@@ -332,6 +331,7 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 		if err != nil {
 			return 0, err
 		}
+		steps++
 	}
 	log.Infof("blueAnticoneSize  took %v", time.Since(rotationStart))
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
