@@ -295,12 +295,11 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 ) (externalapi.KType, error) {
 	isTrustedData := false
 	for current := context; current != nil; {
-		var blueAnticoneSize externalapi.KType
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
 			return blueAnticoneSize, nil
 		}
 		if current.SelectedParent().Equal(gm.genesisHash) || current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			return blueAnticoneSize, nil
+			break
 		}
 
 		var err error
