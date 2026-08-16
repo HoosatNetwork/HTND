@@ -64,6 +64,7 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			return nil, false, err
 		}
 	}
+	log.Tracef("ExpectedCoinbaseTransactionInternal: acceptanceData has %d blocks, GHOSTDAG merge set has %d blues, %d reds", len(acceptanceData), len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
 
 	daaAddedBlocksSet, err := c.daaAddedBlocksSet(stagingArea, blockHash)
 	if err != nil {
@@ -94,15 +95,25 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			txOuts = append(txOuts, txOut)
 		}
 	} else if constants.GetBlockVersion() >= 2 {
-		for _, blue := range ghostdagData.MergeSetBlues() {
-			txOut, devTx, hasReward, err := c.coinbaseOutputForBlueBlockV2(stagingArea, blue, acceptanceDataMap[*blue], daaAddedBlocksSet)
+		log.Tracef("Processing %d blue blocks in merge set", len(ghostdagData.MergeSetBlues()))
+		for i, blue := range ghostdagData.MergeSetBlues() {
+			blockAcc := acceptanceDataMap[*blue]
+			if blockAcc == nil {
+				log.Warnf("No acceptance data found for blue block %d: %s", i, blue)
+				continue
+			}
+			log.Tracef("Processing blue block %d: %s, acceptance data block hash: %s", i, blue, blockAcc.BlockHash)
+			txOut, devTx, hasReward, err := c.coinbaseOutputForBlueBlockV2(stagingArea, blue, blockAcc, daaAddedBlocksSet)
 			if err != nil {
 				return nil, false, err
 			}
 
 			if hasReward {
+				log.Tracef("Blue block %s has reward, adding outputs", blue)
 				txOuts = append(txOuts, txOut)
 				txOuts = append(txOuts, devTx)
+			} else {
+				log.Tracef("Blue block %s has no reward", blue)
 			}
 		}
 
@@ -126,6 +137,11 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 	payload, err := c.serializeCoinbasePayload(ghostdagData.BlueScore(), coinbaseData, subsidy)
 	if err != nil {
 		return nil, false, err
+	}
+
+	log.Tracef("ExpectedCoinbaseTransactionInternal: created %d outputs", len(txOuts))
+	for i, out := range txOuts {
+		log.Tracef("  Expected output %d: value=%d, script=%s", i, out.Value, out.ScriptPublicKey.String())
 	}
 
 	domainTransaction := &externalapi.DomainTransaction{
@@ -177,10 +193,17 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 	}
 
 	// the ScriptPublicKey for the coinbase is parsed from the coinbase payload
+	// For each blue block, extract the miner's address from that block's coinbase transaction
+	if len(blockAcceptanceData.TransactionAcceptanceData) == 0 || blockAcceptanceData.TransactionAcceptanceData[0].Transaction == nil {
+		log.Warnf("coinbaseOutputForBlueBlockV2: no coinbase transaction found in acceptance data for block %s", blueBlock)
+		return nil, nil, false, nil
+	}
 	_, coinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidy(blockAcceptanceData.TransactionAcceptanceData[0].Transaction)
 	if err != nil {
 		return nil, nil, false, err
 	}
+
+	log.Tracef("coinbaseOutputForBlueBlockV2: blue block %s, reward=%d, miner script=%s", blueBlock, blockReward, coinbaseData.ScriptPublicKey.String())
 
 	txOut := &externalapi.DomainTransactionOutput{
 		Value:           blockReward,
