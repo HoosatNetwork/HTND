@@ -696,7 +696,6 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 		if current.Equal(model.VirtualBlockHash) {
 			break
 		}
-
 		header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current)
 		if err != nil {
 			log.Errorf("pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current): %s", err)
