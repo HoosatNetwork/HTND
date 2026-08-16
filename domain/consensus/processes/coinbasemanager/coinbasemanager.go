@@ -96,38 +96,93 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		}
 	} else if constants.GetBlockVersion() >= 2 {
 		log.Tracef("Processing %d blue blocks in merge set", len(ghostdagData.MergeSetBlues()))
-		for i, blue := range ghostdagData.MergeSetBlues() {
-			blockAcc := acceptanceDataMap[*blue]
-			if blockAcc == nil {
-				log.Warnf("No acceptance data found for blue block %d: %s", i, blue)
-				continue
-			}
-			log.Tracef("Processing blue block %d: %s, acceptance data block hash: %s", i, blue, blockAcc.BlockHash)
-			txOut, devTx, hasReward, err := c.coinbaseOutputForBlueBlockV2(stagingArea, blue, blockAcc, daaAddedBlocksSet)
-			if err != nil {
-				return nil, false, err
-			}
+		// For v2, process both blue and red blocks individually to avoid bucketing
+		// Process all merge set blocks (blues and reds) in order
+		allMergeBlocks := append(ghostdagData.MergeSetBlues(), ghostdagData.MergeSetReds()...)
+		log.Tracef("Processing %d total merge set blocks (blues + reds)", len(allMergeBlocks))
 
-			if hasReward {
-				log.Tracef("Blue block %s has reward, adding outputs", blue)
-				txOuts = append(txOuts, txOut)
-				txOuts = append(txOuts, devTx)
-			} else {
-				log.Tracef("Blue block %s has no reward", blue)
-			}
+		devFeeDecodedAddress, err := util.DecodeAddress(constants.DevFeeAddress, util.Bech32PrefixHoosat)
+		if err != nil {
+			return nil, false, err
 		}
-
-		txOut, devTx, hasRedReward, err := c.coinbaseOutputForRewardFromRedBlocksV2(
-			stagingArea, ghostdagData, acceptanceData, daaAddedBlocksSet, coinbaseData)
+		devFeeScriptPublicKey, err := txscript.PayToAddrScript(devFeeDecodedAddress)
 		if err != nil {
 			return nil, false, err
 		}
 
-		if hasRedReward {
+		for i, blockHash := range allMergeBlocks {
+			blockAcc := acceptanceDataMap[*blockHash]
+			if blockAcc == nil {
+				log.Warnf("No acceptance data found for merge set block %d: %s", i, blockHash)
+				continue
+			}
+			log.Tracef("Processing merge set block %d: %s", i, blockHash)
+
+			// Check if this is a blue block (in MergeSetBlues)
+			isBlue := false
+			for _, b := range ghostdagData.MergeSetBlues() {
+				if b.Equal(blockHash) {
+					isBlue = true
+					break
+				}
+			}
+
+			// Get reward and miner script
+			blockReward, err := c.calcMergedBlockReward(stagingArea, blockHash, blockAcc, daaAddedBlocksSet)
+			if err != nil {
+				return nil, false, err
+			}
+			if blockReward <= 0 {
+				log.Tracef("Merge set block %s has no reward", blockHash)
+				continue
+			}
+
+			// Extract miner's script public key from the block's coinbase transaction
+			if len(blockAcc.TransactionAcceptanceData) == 0 || blockAcc.TransactionAcceptanceData[0].Transaction == nil {
+				log.Warnf("No coinbase transaction found for merge set block %d: %s", i, blockHash)
+				continue
+			}
+			_, blockCoinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidy(blockAcc.TransactionAcceptanceData[0].Transaction)
+			if err != nil {
+				return nil, false, err
+			}
+
+			log.Tracef("Block %s: reward=%d, miner=%s, isBlue=%v", blockHash, blockReward, blockCoinbaseData.ScriptPublicKey.String(), isBlue)
+
+			// For blue blocks, use the block's own miner address
+			// For red blocks, use the current block's miner address (coinbaseData parameter)
+			var minerScript *externalapi.ScriptPublicKey
+			if isBlue {
+				minerScript = blockCoinbaseData.ScriptPublicKey
+			} else {
+				minerScript = coinbaseData.ScriptPublicKey
+			}
+
+			// Calculate dev fee
+			devFee := uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+			blockReward -= devFee
+			if blockReward <= 0 {
+				continue
+			}
+
+			// Create reward output
+			txOut := &externalapi.DomainTransactionOutput{
+				Value:           blockReward,
+				ScriptPublicKey: minerScript,
+			}
+			// Create dev fee output
+			devTx := &externalapi.DomainTransactionOutput{
+				Value:           devFee,
+				ScriptPublicKey: devFeeScriptPublicKey,
+			}
+
 			txOuts = append(txOuts, txOut)
 			txOuts = append(txOuts, devTx)
 		}
+
+		hasRedReward = len(ghostdagData.MergeSetReds()) > 0
 	}
+
 
 	subsidy, err := c.CalcBlockSubsidy(stagingArea, blockHash, constants.GetBlockVersion())
 	if err != nil {
