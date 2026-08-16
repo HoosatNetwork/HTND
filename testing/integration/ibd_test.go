@@ -55,8 +55,32 @@ func TestIBD(t *testing.T) {
 	time.Sleep(time.Second)
 	// This should trigger resolving the syncee virtual
 	mineNextBlock(t, syncer)
-	time.Sleep(time.Second)
 
+	// Wait for the tips to be equal
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	start := time.Now()
+	for range ticker.C {
+		if time.Since(start) > defaultTimeout {
+			t.Fatalf("Timeout waiting for tips to be equal after IBD")
+		}
+
+		tip1Hash, err := syncer.rpcClient.GetSelectedTipHash()
+		if err != nil {
+			t.Fatalf("Error getting tip for syncer: %v", err)
+		}
+
+		tip2Hash, err := syncee.rpcClient.GetSelectedTipHash()
+		if err != nil {
+			t.Fatalf("Error getting tip for syncee: %v", err)
+		}
+
+		if tip1Hash.SelectedTipHash == tip2Hash.SelectedTipHash {
+			break
+		}
+	}
+
+	// Final check
 	tip1Hash, err := syncer.rpcClient.GetSelectedTipHash()
 	if err != nil {
 		t.Fatalf("Error getting tip for syncer")
