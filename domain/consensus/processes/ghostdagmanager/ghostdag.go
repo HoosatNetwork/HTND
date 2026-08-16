@@ -239,7 +239,9 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 
 	// We check if chainBlock is not the new block by checking if it has a hash.
 	if chainBlock.hash != nil {
+		isAncestorOfTimer := time.Now()
 		isAncestorOfBlueCandidate, err := gm.dagTopologyManager.IsAncestorOf(stagingArea, chainBlock.hash, blueCandidate)
+		log.Infof("IsAncestorOf took %v", time.Since(isAncestorOfTimer))
 		if err != nil {
 			return false, false, err
 		}
@@ -250,7 +252,9 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 	log.Infof("Len %d of MergeSetBlues", len(chainBlock.blockData.MergeSetBlues()))
 	for _, block := range chainBlock.blockData.MergeSetBlues() {
 		// Skip blocks that exist in the past of blueCandidate.
+		isAncestorOfTimer := time.Now()
 		isAncestorOfBlueCandidate, err := gm.dagTopologyManager.IsAncestorOf(stagingArea, block, blueCandidate)
+		log.Infof("IsAncestorOf in MergeSetBlues loop took %v, with result %t", time.Since(isAncestorOfTimer), isAncestorOfBlueCandidate)
 		if err != nil {
 			return false, false, err
 		}
@@ -259,7 +263,9 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			continue
 		}
 
+		blueAnticoneSize := time.Now()
 		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData, k)
+		log.Infof("blueAnticoneSize in MergeSetBlues loop took %v, with result %d", time.Since(blueAnticoneSize), candidateBluesAnticoneSizes[*block])
 		if err != nil {
 			return false, false, err
 		}
