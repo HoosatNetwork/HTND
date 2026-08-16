@@ -256,7 +256,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			continue
 		}
 
-		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData)
+		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, newBlockData)
 		if err != nil {
 			return false, false, err
 		}
@@ -302,37 +302,23 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 
 	isTrustedData := false
 	for current := context; current != nil; {
+		var blueAnticoneSize externalapi.KType = 0
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
 			return blueAnticoneSize, nil
 		}
+		log.Infof("Blue anticone size %d", blueAnticoneSize)
 		selectedParent := current.SelectedParent()
 		if selectedParent == nil {
-			break
+			return blueAnticoneSize, nil
+		}
+		if selectedParent.Equal(gm.genesisHash) || selectedParent.Equal(model.VirtualGenesisBlockHash) {
+			return blueAnticoneSize, nil
 		}
 
 		var err error
 		current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, selectedParent, isTrustedData)
 		if err != nil {
 			return 0, err
-		}
-		if current == nil {
-			log.Infof("Current is nil")
-			break
-		}
-		selectedParent = current.SelectedParent()
-		if selectedParent == nil {
-			log.Infof("Current selected parent is nil")
-			break
-		}
-		if selectedParent.Equal(model.VirtualGenesisBlockHash) || selectedParent.Equal(gm.genesisHash) {
-			log.Infof("Current selected parent is virtual genesis block hash")
-			current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, model.VirtualBlockHash, isTrustedData)
-			if err != nil {
-				return 0, err
-			}
-			if current == nil {
-				break
-			}
 		}
 	}
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
