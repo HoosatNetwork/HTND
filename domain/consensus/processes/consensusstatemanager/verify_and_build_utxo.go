@@ -24,36 +24,33 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	log.Tracef("verifyUTXO start for block %s", blockHash)
 	defer log.Tracef("verifyUTXO end for block %s", blockHash)
 
-	log.Debugf("Validating UTXO commitment for block %s", blockHash)
+	log.Infof("Validating UTXO commitment for block %s", blockHash)
 	err := csm.validateUTXOCommitment(block, blockHash, multiset)
 	if err != nil {
 		return err
 	}
-	log.Debugf("UTXO commitment validation passed for block %s", blockHash)
+	log.Infof("UTXO commitment validation passed for block %s", blockHash)
 
-	log.Debugf("Validating acceptedIDMerkleRoot for block %s", blockHash)
+	log.Infof("Validating acceptedIDMerkleRoot for block %s", blockHash)
 	err = csm.validateAcceptedIDMerkleRoot(block, blockHash, acceptanceData)
 	if err != nil {
 		return err
 	}
-	log.Debugf("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
+	log.Infof("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
 
-	// Only validate coinbase if DAA score is above the threshold
-	// Note: coinbasemanager gracefully handles missing acceptance data for header-only blue blocks
-	if block.Header.DAAScore() >= 31557600*2.2 {
-		coinbaseTransaction := block.Transactions[0]
-		err = csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-		if err != nil {
-			return err
-		}
-		log.Debugf("Coinbase transaction validation passed for block %s", blockHash)
+	coinbaseTransaction := block.Transactions[0]
+	err = csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
+	if err != nil {
+		return err
 	}
+	log.Infof("Coinbase transaction validation passed for block %s", blockHash)
 
-	log.Debugf("Validating transactions against past UTXO for block %s", blockHash)
+	log.Infof("Validating transactions against past UTXO for block %s", blockHash)
 	err = csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff)
 	if err != nil {
 		return err
 	}
+	log.Infof("Block transaction against past UTXO passed for %s", blockHash)
 	log.Tracef("Transactions against past UTXO validation passed for block %s", blockHash)
 
 	return nil
@@ -215,6 +212,18 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)
 	log.Tracef("given coinbase hash: %s, expected coinbase hash: %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
+		log.Infof("Transaction hashes, coinbase %d != expected %d", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
+
+		log.Infof("Coinbase outputs")
+		for i, output := range coinbaseTransaction.Outputs {
+			log.Infof("%d: output %s value %d", i, output.ScriptPublicKey.String(), output.Value)
+		}
+
+		log.Infof("Expected outputs")
+		for i, output := range expectedCoinbaseTransaction.Outputs {
+			log.Infof("%d: output %s value %d", i, output.ScriptPublicKey, output.Value)
+		}
+
 		return errors.Wrap(ruleerrors.ErrBadCoinbaseTransaction, "coinbase transaction is not built as expected")
 	}
 
