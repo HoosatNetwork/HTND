@@ -291,15 +291,15 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 // blueAnticoneSize returns the blue anticone size of 'block' from the worldview of 'context'.
 // Expects 'block' to be in the blue set of 'context'
 func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
-	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData,
-) (externalapi.KType, error) {
+	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData) (externalapi.KType, error) {
+
 	isTrustedData := false
 	for current := context; current != nil; {
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
 			return blueAnticoneSize, nil
 		}
-		if current.SelectedParent().Equal(gm.genesisHash) || current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			return 0, nil
+		if current.SelectedParent().Equal(gm.genesisHash) {
+			break
 		}
 
 		var err error
@@ -307,8 +307,12 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 		if err != nil {
 			return 0, err
 		}
-		if current == nil {
-			return 0, errors.Errorf("block %s is not in blue set of the given context", block)
+		if current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
+			isTrustedData = true
+			current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current.SelectedParent(), isTrustedData)
+			if err != nil {
+				return 0, err
+			}
 		}
 	}
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)

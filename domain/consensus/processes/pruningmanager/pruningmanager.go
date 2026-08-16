@@ -693,7 +693,7 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 	reachedGenesis := false
 	for {
 		// Skip virtual blocks as they don't have headers
-		if current.Equal(model.VirtualBlockHash) || current.Equal(model.VirtualGenesisBlockHash) {
+		if current.Equal(model.VirtualBlockHash) {
 			break
 		}
 

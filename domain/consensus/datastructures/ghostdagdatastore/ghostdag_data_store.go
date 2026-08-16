@@ -64,7 +64,6 @@ func (gds *ghostdagDataStore) Get(dbContext model.DBReader, stagingArea *model.S
 	blockGHOSTDAGDataBytes, err := dbContext.Get(gds.serializeKey(key))
 	if errors.Is(err, database.ErrNotFound) {
 		if blockHash.Equal(model.VirtualGenesisBlockHash) {
-
 			panic(errors.Wrapf(err, "Block %s GhostDAG data does not exist in db", blockHash))
 		}
 	}

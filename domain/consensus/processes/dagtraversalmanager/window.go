@@ -120,10 +120,6 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 			break
 		}
 
-		if currentGHOSTDAGData.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
-			break
-		}
-
 		_, err := dtm.daaWindowStore.DAAWindowBlock(dtm.databaseContext, stagingArea, current, 0)
 		currentIsNonTrustedBlock := database.IsNotFoundError(err)
 		if !currentIsNonTrustedBlock && err != nil {
