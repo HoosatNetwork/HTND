@@ -197,15 +197,19 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
 	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
 
-	var err error
-	// Get GHOSTDAG data for this block to access the merge set
+	// Filter acceptance data to only include blocks in the merge set.
+	// ExpectedCoinbaseTransactionInternal will retrieve its own GHOSTDAG data and
+	// iterate over the merge set. We need to ensure it only processes blocks in the merge set.
+	// However, since ExpectedCoinbaseTransactionInternal retrieves its own GHOSTDAG data,
+	// we filter here using the same approach to ensure consistency.
+	
+	// Get GHOSTDAG data to determine the merge set for filtering
 	var ghostdagData *externalapi.BlockGHOSTDAGData
+	var err error
 	ghostdagData, err = csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 	if database.IsNotFoundError(err) {
 		ghostdagData, err = csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, true)
 		if err != nil {
-			// If we can't get GHOSTDAG data, we use the original acceptance data as fallback
-			// This is a backup validation path
 			log.Warnf("Could not retrieve GHOSTDAG data for block %s, using unfiltered acceptance data as fallback", blockHash)
 			ghostdagData = nil
 		} else {
@@ -216,21 +220,13 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		return err
 	}
 
-	// Filter acceptance data to only include blocks in the merge set (blues and reds).
-	// This fixes the issue where coinbase red block outputs are bucketed incorrectly
-	// in the expected coinbase calculation. The real coinbase transaction only includes
-	// outputs for blocks in the merge set, so we need to filter the acceptance data
-	// to match. Without this filtering, the expected coinbase would include outputs for
-	// all accepted blocks, not just those in the merge set, causing a mismatch.
-	// This ensures the expected coinbase is generated using the same set of blocks
-	// that were used to create the real coinbase transaction.
+	// Filter acceptance data to only include blocks in the merge set
 	var filteredAcceptanceData externalapi.AcceptanceData
 	if ghostdagData != nil {
 		filteredAcceptanceData = filterAcceptanceDataByMergeSet(acceptanceData, ghostdagData)
 		log.Tracef("Filtered acceptance data from %d blocks to %d blocks (merge set only)", len(acceptanceData), len(filteredAcceptanceData))
 		log.Tracef("Merge set: %d blues, %d reds", len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
 	} else {
-		// Fallback: use original acceptance data
 		filteredAcceptanceData = acceptanceData
 		log.Warnf("Using unfiltered acceptance data for block %s (GHOSTDAG data unavailable)", blockHash)
 	}
@@ -254,6 +250,28 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	coinbaseTransactionHash := consensushashing.TransactionHash(coinbaseTransaction)
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)
 	log.Tracef("given coinbase hash: %s, expected coinbase hash: %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
+	
+	// Debug: compare outputs in detail if hashes differ
+	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
+		if len(coinbaseTransaction.Outputs) == len(expectedCoinbaseTransaction.Outputs) {
+			for i := range coinbaseTransaction.Outputs {
+				actOut := coinbaseTransaction.Outputs[i]
+				expOut := expectedCoinbaseTransaction.Outputs[i]
+				if actOut.Value != expOut.Value {
+					log.Infof("Output %d value differs: actual=%d, expected=%d", i, actOut.Value, expOut.Value)
+				}
+				if !bytes.Equal(actOut.ScriptPublicKey.Script, expOut.ScriptPublicKey.Script) {
+					log.Infof("Output %d script differs: actual=%x, expected=%x", i, actOut.ScriptPublicKey.Script, expOut.ScriptPublicKey.Script)
+				}
+				if actOut.ScriptPublicKey.Version != expOut.ScriptPublicKey.Version {
+					log.Infof("Output %d script version differs: actual=%d, expected=%d", i, actOut.ScriptPublicKey.Version, expOut.ScriptPublicKey.Version)
+				}
+			}
+		} else {
+			log.Infof("Output count differs: actual=%d, expected=%d", len(coinbaseTransaction.Outputs), len(expectedCoinbaseTransaction.Outputs))
+		}
+	}
+	
 	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
 		log.Infof("Transaction hashes, coinbase %s != expected %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 
