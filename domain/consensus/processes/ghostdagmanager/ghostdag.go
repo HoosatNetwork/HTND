@@ -256,7 +256,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 			continue
 		}
 
-		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData)
+		candidateBluesAnticoneSizes[*block], err = gm.blueAnticoneSize(stagingArea, block, chainBlock.blockData, k)
 		if err != nil {
 			return false, false, err
 		}
@@ -298,27 +298,29 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 // blueAnticoneSize returns the blue anticone size of 'block' from the worldview of 'context'.
 // Expects 'block' to be in the blue set of 'context'
 func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
-	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData) (externalapi.KType, error) {
+	block *externalapi.DomainHash, context *externalapi.BlockGHOSTDAGData, k externalapi.KType) (externalapi.KType, error) {
+
+	maxWalk := int(4 * byte(k))
+	steps := 0
 
 	isTrustedData := false
 	for current := context; current != nil; {
 		blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]
-		log.Debugf("Blue anticone size %d for block %s in context %s", blueAnticoneSize, block, current.SelectedParent())
 		if ok {
 			return blueAnticoneSize, nil
 		}
-		selectedParent := current.SelectedParent()
-		if selectedParent == nil {
-			return blueAnticoneSize, nil // Return 0 instead of breaking
+		if steps > maxWalk {
+			return 0, nil
 		}
-		if selectedParent.Equal(gm.genesisHash) || selectedParent.Equal(model.VirtualGenesisBlockHash) {
-			return blueAnticoneSize, nil // Return 0 instead of breaking
+		selectedParent := current.SelectedParent()
+		if selectedParent == nil || selectedParent.Equal(gm.genesisHash) || selectedParent.Equal(model.VirtualGenesisBlockHash) {
+			return 0, nil
 		}
 
 		var err error
 		current, err = gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, selectedParent, isTrustedData)
 		if err != nil {
-			return blueAnticoneSize, err
+			return 0, err
 		}
 	}
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
