@@ -60,10 +60,6 @@ func (csm *consensusStateManager) AddBlock(stagingArea *model.StagingArea, block
 				"therefore its status remains `%s`", blockHash, externalapi.StatusUTXOPendingVerification)
 		}
 	}
-	// Just commented out code, for future testing.
-	// if blockStatus == externalapi.StatusInvalid || blockStatus == externalapi.StatusDisqualifiedFromChain {
-	// 	return nil, nil, nil, errors.Wrapf(ruleerrors.ErrDuplicateBlock, "block %s is disqualified or invalid", blockHash)
-	// }
 	log.Debugf("Adding block %s to the DAG tips", blockHash)
 	newTips, err := csm.addTip(stagingArea, blockHash, blockStatus)
 	if err != nil {
