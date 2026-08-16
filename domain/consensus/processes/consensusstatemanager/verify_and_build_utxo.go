@@ -15,6 +15,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/pkg/errors"
 )
 
@@ -196,6 +197,44 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
 	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
 
+	var err error
+	// Get GHOSTDAG data for this block to access the merge set
+	var ghostdagData *externalapi.BlockGHOSTDAGData
+	ghostdagData, err = csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
+	if database.IsNotFoundError(err) {
+		ghostdagData, err = csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, true)
+		if err != nil {
+			// If we can't get GHOSTDAG data, we use the original acceptance data as fallback
+			// This is a backup validation path
+			log.Warnf("Could not retrieve GHOSTDAG data for block %s, using unfiltered acceptance data as fallback", blockHash)
+			ghostdagData = nil
+		} else {
+			log.Tracef("Retrieved GHOSTDAG data from trusted store for block %s", blockHash)
+		}
+	}
+	if err != nil && !database.IsNotFoundError(err) {
+		return err
+	}
+
+	// Filter acceptance data to only include blocks in the merge set (blues and reds).
+	// This fixes the issue where coinbase red block outputs are bucketed incorrectly
+	// in the expected coinbase calculation. The real coinbase transaction only includes
+	// outputs for blocks in the merge set, so we need to filter the acceptance data
+	// to match. Without this filtering, the expected coinbase would include outputs for
+	// all accepted blocks, not just those in the merge set, causing a mismatch.
+	// This ensures the expected coinbase is generated using the same set of blocks
+	// that were used to create the real coinbase transaction.
+	var filteredAcceptanceData externalapi.AcceptanceData
+	if ghostdagData != nil {
+		filteredAcceptanceData = filterAcceptanceDataByMergeSet(acceptanceData, ghostdagData)
+		log.Tracef("Filtered acceptance data from %d blocks to %d blocks (merge set only)", len(acceptanceData), len(filteredAcceptanceData))
+		log.Tracef("Merge set: %d blues, %d reds", len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
+	} else {
+		// Fallback: use original acceptance data
+		filteredAcceptanceData = acceptanceData
+		log.Warnf("Using unfiltered acceptance data for block %s (GHOSTDAG data unavailable)", blockHash)
+	}
+
 	log.Tracef("Extracting coinbase data for coinbase transaction %s in block %s",
 		consensushashing.TransactionID(coinbaseTransaction), blockHash)
 	_, coinbaseData, _, err := csm.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTransaction)
@@ -205,7 +244,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 
 	log.Tracef("Calculating the expected coinbase transaction for the given coinbase data and block %s", blockHash)
 	// Pass the header's blue score to ensure we use the same blue score as the block
-	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
+	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, filteredAcceptanceData)
 	if err != nil {
 		return err
 	}
@@ -280,6 +319,11 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		}
 		if len(coinbaseTransaction.Outputs) != len(expectedCoinbaseTransaction.Outputs) {
 			log.Infof("DIFFERENCE: Outputs count (actual=%d, expected=%d)", len(coinbaseTransaction.Outputs), len(expectedCoinbaseTransaction.Outputs))
+			// Log merge set info to help debug filtering issues
+			if ghostdagData != nil {
+				log.Infof("MERGE SET INFO: %d blues, %d reds in merge set", len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
+				log.Infof("FILTERED ACCEPTANCE: %d blocks in filtered acceptance data", len(filteredAcceptanceData))
+			}
 		}
 
 		return errors.Wrap(ruleerrors.ErrBadCoinbaseTransaction, "coinbase transaction is not built as expected")
