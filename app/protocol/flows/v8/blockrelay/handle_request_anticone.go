@@ -50,7 +50,7 @@ func (flow *handleRequestAnticoneFlow) start() error {
 		// intersected by past of relayed block, and is thus expected to be bounded by mergeset limit since
 		// we relay blocks only if they enter virtual's mergeset. We add a 2 factor for possible sync gaps.
 		var blockHashes []*externalapi.DomainHash
-		blockHashes, err = flow.Domain().Consensus().GetAnticone(blockHash, contextHash, flow.Config().ActiveNetParams.MergeSetSizeLimit*5000)
+		blockHashes, err = flow.Domain().Consensus().GetAnticone(blockHash, contextHash, flow.Config().ActiveNetParams.MergeSetSizeLimit*1000)
 		if err != nil {
 			return protocolerrors.Wrap(true, err, "Failed querying anticone")
 		}
