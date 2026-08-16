@@ -298,7 +298,7 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 		if blueAnticoneSize, ok := current.BluesAnticoneSizes()[*block]; ok {
 			return blueAnticoneSize, nil
 		}
-		if current.SelectedParent().Equal(gm.genesisHash) {
+		if current.SelectedParent().Equal(gm.genesisHash) || current.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
 			break
 		}
 
