@@ -66,13 +66,35 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 	}
 	log.Tracef("ExpectedCoinbaseTransactionInternal: acceptanceData has %d blocks, GHOSTDAG merge set has %d blues, %d reds", len(acceptanceData), len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
 
+	// Filter acceptance data to only include blocks in the merge set
+	// This ensures we only process blocks that are actually in the merge set
+	// Build a set of block hashes that are in the merge set
+	mergeSetHashes := make(map[string]bool)
+	for _, blockHash := range ghostdagData.MergeSetBlues() {
+		mergeSetHashes[blockHash.String()] = true
+	}
+	for _, blockHash := range ghostdagData.MergeSetReds() {
+		mergeSetHashes[blockHash.String()] = true
+	}
+
+	// Filter the acceptance data to only include blocks in the merge set
+	filteredAcceptanceData := make(externalapi.AcceptanceData, 0, len(acceptanceData))
+	for _, blockAcceptance := range acceptanceData {
+		if blockAcceptance.BlockHash != nil {
+			if mergeSetHashes[blockAcceptance.BlockHash.String()] {
+				filteredAcceptanceData = append(filteredAcceptanceData, blockAcceptance)
+			}
+		}
+	}
+	log.Tracef("Filtered acceptance data from %d blocks to %d blocks (merge set only)", len(acceptanceData), len(filteredAcceptanceData))
+
 	daaAddedBlocksSet, err := c.daaAddedBlocksSet(stagingArea, blockHash)
 	if err != nil {
 		return nil, false, err
 	}
 
 	txOuts := make([]*externalapi.DomainTransactionOutput, 0, len(ghostdagData.MergeSetBlues()))
-	acceptanceDataMap := acceptanceDataFromArrayToMap(acceptanceData)
+	acceptanceDataMap := acceptanceDataFromArrayToMap(filteredAcceptanceData)
 	if constants.GetBlockVersion() == 1 {
 		for _, blue := range ghostdagData.MergeSetBlues() {
 			txOut, hasReward, err := c.coinbaseOutputForBlueBlockV1(stagingArea, blue, acceptanceDataMap[*blue], daaAddedBlocksSet)
@@ -149,14 +171,9 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 
 			log.Tracef("Block %s: reward=%d, miner=%s, isBlue=%v", blockHash, blockReward, blockCoinbaseData.ScriptPublicKey.String(), isBlue)
 
-			// For blue blocks, use the block's own miner address
-			// For red blocks, use the current block's miner address (coinbaseData parameter)
+			// For both blue and red blocks, use the block's own miner address to stop bucketing
 			var minerScript *externalapi.ScriptPublicKey
-			if isBlue {
-				minerScript = blockCoinbaseData.ScriptPublicKey
-			} else {
-				minerScript = coinbaseData.ScriptPublicKey
-			}
+			minerScript = blockCoinbaseData.ScriptPublicKey
 
 			// Calculate dev fee
 			devFee := uint64(float64(constants.DevFee) / 100 * float64(blockReward))

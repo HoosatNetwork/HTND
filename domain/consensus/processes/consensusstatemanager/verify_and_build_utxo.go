@@ -15,7 +15,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/pkg/errors"
 )
 
@@ -197,40 +196,6 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
 	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
 
-	// Filter acceptance data to only include blocks in the merge set.
-	// ExpectedCoinbaseTransactionInternal will retrieve its own GHOSTDAG data and
-	// iterate over the merge set. We need to ensure it only processes blocks in the merge set.
-	// However, since ExpectedCoinbaseTransactionInternal retrieves its own GHOSTDAG data,
-	// we filter here using the same approach to ensure consistency.
-	
-	// Get GHOSTDAG data to determine the merge set for filtering
-	var ghostdagData *externalapi.BlockGHOSTDAGData
-	var err error
-	ghostdagData, err = csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
-	if database.IsNotFoundError(err) {
-		ghostdagData, err = csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, true)
-		if err != nil {
-			log.Warnf("Could not retrieve GHOSTDAG data for block %s, using unfiltered acceptance data as fallback", blockHash)
-			ghostdagData = nil
-		} else {
-			log.Tracef("Retrieved GHOSTDAG data from trusted store for block %s", blockHash)
-		}
-	}
-	if err != nil && !database.IsNotFoundError(err) {
-		return err
-	}
-
-	// Filter acceptance data to only include blocks in the merge set
-	var filteredAcceptanceData externalapi.AcceptanceData
-	if ghostdagData != nil {
-		filteredAcceptanceData = filterAcceptanceDataByMergeSet(acceptanceData, ghostdagData)
-		log.Tracef("Filtered acceptance data from %d blocks to %d blocks (merge set only)", len(acceptanceData), len(filteredAcceptanceData))
-		log.Tracef("Merge set: %d blues, %d reds", len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
-	} else {
-		filteredAcceptanceData = acceptanceData
-		log.Warnf("Using unfiltered acceptance data for block %s (GHOSTDAG data unavailable)", blockHash)
-	}
-
 	log.Tracef("Extracting coinbase data for coinbase transaction %s in block %s",
 		consensushashing.TransactionID(coinbaseTransaction), blockHash)
 	_, coinbaseData, _, err := csm.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTransaction)
@@ -239,8 +204,9 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	}
 
 	log.Tracef("Calculating the expected coinbase transaction for the given coinbase data and block %s", blockHash)
-	// Pass the header's blue score to ensure we use the same blue score as the block
-	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, filteredAcceptanceData)
+	// Pass the original acceptance data - ExpectedCoinbaseTransactionInternal will filter it
+	// using its own GHOSTDAG data to ensure it only processes merge set blocks
+	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
 	if err != nil {
 		return err
 	}
@@ -250,7 +216,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	coinbaseTransactionHash := consensushashing.TransactionHash(coinbaseTransaction)
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)
 	log.Tracef("given coinbase hash: %s, expected coinbase hash: %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
-	
+
 	// Debug: compare outputs in detail if hashes differ
 	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
 		if len(coinbaseTransaction.Outputs) == len(expectedCoinbaseTransaction.Outputs) {
@@ -271,7 +237,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 			log.Infof("Output count differs: actual=%d, expected=%d", len(coinbaseTransaction.Outputs), len(expectedCoinbaseTransaction.Outputs))
 		}
 	}
-	
+
 	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
 		log.Infof("Transaction hashes, coinbase %s != expected %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 
@@ -286,11 +252,11 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		log.Infof("Payload length: %d, hex: %x", len(coinbaseTransaction.Payload), coinbaseTransaction.Payload)
 		log.Infof("Inputs count: %d", len(coinbaseTransaction.Inputs))
 		for i, input := range coinbaseTransaction.Inputs {
-			log.Infof("  Input %d: Script(%s) Amount(%d)", i, string(input.SignatureScript), input.UTXOEntry.Amount())
+			log.Infof("  Input %d: Script(%x) Amount(%d)", i, input.SignatureScript, input.UTXOEntry.Amount())
 		}
 		log.Infof("Outputs count: %d", len(coinbaseTransaction.Outputs))
 		for i, output := range coinbaseTransaction.Outputs {
-			log.Infof("  Output %d: Script(%s) Value(%d)", i, output.ScriptPublicKey.String(), output.Value)
+			log.Infof("  Output %d: Script(%x) Value(%d)", i, output.ScriptPublicKey.Script, output.Value)
 		}
 
 		log.Infof("=== EXPECTED COINBASE ===")
@@ -303,11 +269,11 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		log.Infof("Payload length: %d, hex: %x", len(expectedCoinbaseTransaction.Payload), expectedCoinbaseTransaction.Payload)
 		log.Infof("Inputs count: %d", len(expectedCoinbaseTransaction.Inputs))
 		for i, input := range expectedCoinbaseTransaction.Inputs {
-			log.Infof("  Input %d: Script(%s) Amount(%d)", i, string(input.SignatureScript), input.UTXOEntry.Amount())
+			log.Infof("  Input %d: Script(%x) Amount(%d)", i, input.SignatureScript, input.UTXOEntry.Amount())
 		}
 		log.Infof("Outputs count: %d", len(expectedCoinbaseTransaction.Outputs))
 		for i, output := range expectedCoinbaseTransaction.Outputs {
-			log.Infof("  Output %d: Script(%s) Value(%d)", i, output.ScriptPublicKey.String(), output.Value)
+			log.Infof("  Output %d: Script(%x) Value(%d)", i, output.ScriptPublicKey.Script, output.Value)
 		}
 
 		// Identify the specific difference
@@ -337,11 +303,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		}
 		if len(coinbaseTransaction.Outputs) != len(expectedCoinbaseTransaction.Outputs) {
 			log.Infof("DIFFERENCE: Outputs count (actual=%d, expected=%d)", len(coinbaseTransaction.Outputs), len(expectedCoinbaseTransaction.Outputs))
-			// Log merge set info to help debug filtering issues
-			if ghostdagData != nil {
-				log.Infof("MERGE SET INFO: %d blues, %d reds in merge set", len(ghostdagData.MergeSetBlues()), len(ghostdagData.MergeSetReds()))
-				log.Infof("FILTERED ACCEPTANCE: %d blocks in filtered acceptance data", len(filteredAcceptanceData))
-			}
+
 		}
 
 		return errors.Wrap(ruleerrors.ErrBadCoinbaseTransaction, "coinbase transaction is not built as expected")
