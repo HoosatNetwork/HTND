@@ -135,7 +135,7 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 				nil,
 				nil,
 				nil,
-				externalapi.KType(1)), false)
+				externalapi.KType(1)), true)
 		}
 
 		err = staging.CommitAllChanges(s.databaseContext, stagingArea)
