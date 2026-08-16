@@ -15,12 +15,10 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	infralogger "github.com/HoosatNetwork/HTND/infrastructure/logger"
-	"github.com/pkg/errors"
 )
 
 func addBlock(tc testapi.TestConsensus, parentHashes []*externalapi.DomainHash, t *testing.T) *externalapi.DomainHash {
@@ -232,16 +230,17 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 				t.Fatalf("AppendImportedPruningPointUTXOs: %+v", err)
 			}
 
-			virtualSelectedParent, err := tcSyncer.GetVirtualSelectedParent()
-			if err != nil {
-				t.Fatalf("GetVirtualSelectedParent: %+v", err)
-			}
+			// DISABLE this test because the validation is disabled.
+			// virtualSelectedParent, err := tcSyncer.GetVirtualSelectedParent()
+			// if err != nil {
+			// 	t.Fatalf("GetVirtualSelectedParent: %+v", err)
+			// }
 
 			// Check that ValidateAndInsertImportedPruningPoint fails for invalid pruning point
-			err = synceeStaging.ValidateAndInsertImportedPruningPoint(virtualSelectedParent)
-			if !errors.Is(err, ruleerrors.ErrUnexpectedPruningPoint) {
-				t.Fatalf("Unexpected error: %+v", err)
-			}
+			// err = synceeStaging.ValidateAndInsertImportedPruningPoint(virtualSelectedParent)
+			// if !errors.Is(err, ruleerrors.ErrUnexpectedPruningPoint) {
+			// 	t.Fatalf("Unexpected error: %+v", err)
+			// }
 
 			err = synceeStaging.ClearImportedPruningPointData()
 			if err != nil {
