@@ -329,14 +329,14 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("HashesBetween %d", len(hashesBetween))
+	log.Debugf("HashesBetween %d", len(hashesBetween))
 	missingBlocks := make([]*externalapi.DomainHash, 0, len(hashesBetween))
 	for _, blockHash := range hashesBetween {
 		blockStatus, err := sm.blockStatusStore.Get(sm.databaseContext, stagingArea, blockHash)
 		if err != nil {
 			return nil, err
 		}
-		log.Infof("Missing block body status %s", blockStatus)
+		log.Debugf("Missing block body status %s", blockStatus)
 		if blockStatus == externalapi.StatusHeaderOnly {
 			missingBlocks = append(missingBlocks, blockHash)
 		}
