@@ -3,7 +3,6 @@ package consensusstatemanager
 import (
 	"math"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
@@ -27,12 +26,8 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	}
 
 	ms, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, blockGHOSTDAGData.SelectedParent())
-	if database.IsNotFoundError(err) {
-		log.Infof("calculateMultiset failed to retrieve with %s\n", blockGHOSTDAGData.SelectedParent())
-		return nil, err
-	}
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	log.Debugf("The multiset for the selected parent %s is: %s", blockGHOSTDAGData.SelectedParent(), ms.Hash())
 
