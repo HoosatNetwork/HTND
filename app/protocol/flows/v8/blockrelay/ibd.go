@@ -892,7 +892,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
 					continue
 				}
-				log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer)
+				log.Infof("Rejected block %s from %s during IBD", expectedHash, flow.peer)
 				panic(errors.WithStack(err))
 			}
 			err = flow.OnNewBlock(block)
