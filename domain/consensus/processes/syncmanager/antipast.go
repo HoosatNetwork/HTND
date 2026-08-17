@@ -26,7 +26,6 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 	// Therefore, we traverse down lowHash's selectedParentChain until we reach a block that is in
 	// highHash's selectedParentChain.
 	// We keep originalLowHash to filter out blocks in it's past later down the road
-	originalLowHash := lowHash
 	lowHash, err = sm.findLowHashInHighHashSelectedParentChain(stagingArea, lowHash, highHash)
 	if err != nil {
 		return nil, nil, err
@@ -89,7 +88,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 
 		// append to blockHashes all blocks in sortedMergeSet which are not in the past of originalLowHash
 		for _, blockHash := range sortedMergeSet {
-			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
+			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, lowHash)
 			if err != nil {
 				return nil, nil, err
 			}
