@@ -108,7 +108,17 @@ func (gm *ghostdagManager) GetSortedMergeSet(stagingArea *model.StagingArea,
 	if len(blueMergeSet) == 0 {
 		return sortedMergeSet, nil
 	}
-	selectedParent, blueMergeSet := blueMergeSet[0], blueMergeSet[1:]
+	selectedParent := currentGhostdagData.SelectedParent()
+	// Remove selected parent from blueMergeSet if it exists there
+	// The selected parent is stored separately in the GHOSTDAG data and also in mergeSetBlues
+	// We need to filter it out to avoid duplication
+	filteredBlueMergeSet := make([]*externalapi.DomainHash, 0, len(blueMergeSet))
+	for _, hash := range blueMergeSet {
+		if !hash.Equal(selectedParent) {
+			filteredBlueMergeSet = append(filteredBlueMergeSet, hash)
+		}
+	}
+	blueMergeSet = filteredBlueMergeSet
 	sortedMergeSet = append(sortedMergeSet, selectedParent)
 	i, j := 0, 0
 	for i < len(blueMergeSet) && j < len(redMergeSet) {
