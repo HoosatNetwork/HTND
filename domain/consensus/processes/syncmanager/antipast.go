@@ -134,12 +134,12 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		return nil, nil, err
 	}
 	if !originalLowHash.Equal(lowHash) {
-		log.Debugf("originalLowHash %s changed to %s", originalLowHash, lowHash)
+		log.Infof("originalLowHash %s changed to %s", originalLowHash, lowHash)
 	}
 
 	lowBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, lowHash, false)
 	if database.IsNotFoundError(err) {
-		log.Debugf("antiPastHashesBetween failed to retrieve low with %s\n", lowHash)
+		log.Infof("antiPastHashesBetween failed to retrieve low with %s\n", lowHash)
 		return nil, nil, err
 	}
 	if err != nil {
@@ -147,7 +147,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 	}
 	highBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, highHash, false)
 	if database.IsNotFoundError(err) {
-		log.Debugf("antiPastHashesBetween failed to retrieve high with %s\n", highHash)
+		log.Infof("antiPastHashesBetween failed to retrieve high with %s\n", highHash)
 		return nil, nil, err
 	}
 	if err != nil {
@@ -158,7 +158,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 			lowBlockGHOSTDAGData.BlueScore(), highBlockGHOSTDAGData.BlueScore())
 	}
 
-	log.Debugf("Low %s, High %s", lowHash, highHash)
+	log.Infof("Low %s, High %s", lowHash, highHash)
 	// Collect all hashes by concatenating the merge-sets of all blocks between highHash and lowHash
 	blockHashes := []*externalapi.DomainHash{}
 	iterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowHash, false)
@@ -172,50 +172,61 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		if err != nil {
 			return nil, nil, err
 		}
-		// log.Debugf("Current block %s", current)
+		log.Infof("Current block %s", current)
 		header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, current)
 		if err != nil {
 			return nil, nil, err
 		}
-		// Collect ancestors up to depth 5
-		const maxDepth = 5
-		levels := make([][]*externalapi.DomainHash, maxDepth)
+		parentsOfParentsOfParents := make([]*externalapi.DomainHash, 0)
+		parentsOfParents := make([]*externalapi.DomainHash, 0)
+		parents := make([]*externalapi.DomainHash, 0)
 
-		// Level 0 = direct parents of current
 		for _, blockLevelParent := range header.Parents() {
 			for _, parent := range blockLevelParent {
 				if _, exists := seen[*parent]; !exists {
 					seen[*parent] = struct{}{}
-					levels[0] = append(levels[0], parent)
+					parents = append(parents, parent)
 				}
 			}
 		}
 
-		// Levels 1 and 2 = parents of the previous level
-		for depth := 1; depth < maxDepth; depth++ {
-			for _, p := range levels[depth-1] {
-				h, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, p)
-				if err != nil {
-					return nil, nil, err
+		for _, parent := range parents {
+			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, blockLevelParent := range header.Parents() {
+				for _, parent := range blockLevelParent {
+					if _, exists := seen[*parent]; !exists {
+						seen[*parent] = struct{}{}
+						parentsOfParents = append(parentsOfParents, parent)
+					}
 				}
-				for _, blockLevelParent := range h.Parents() {
-					for _, parent := range blockLevelParent {
-						if _, exists := seen[*parent]; !exists {
-							seen[*parent] = struct{}{}
-							levels[depth] = append(levels[depth], parent)
-						}
+			}
+		}
+		for _, parent := range parentsOfParents {
+			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, blockLevelParent := range header.Parents() {
+				for _, parent := range blockLevelParent {
+					if _, exists := seen[*parent]; !exists {
+						seen[*parent] = struct{}{}
+						parentsOfParentsOfParents = append(parentsOfParentsOfParents, parent)
 					}
 				}
 			}
 		}
 
-		// log.Debugf("Printing current block parents")
-		// for i, blockhash := range levels[0] {
-		// 	log.Debugf("%d %s", i, blockhash)
-		// }
+		log.Infof("Printing current block mergeset")
+		for i, blockhash := range parents {
+			log.Infof("%d %s", i, blockhash)
+		}
 
-		total := len(blockHashes) + len(levels[0])
+		total := len(blockHashes) + len(parents)
 		if total < 0 {
+			// Should never happen, but guard for safety
 			break
 		}
 		if maxBlocks != 0 && uint64(total) > maxBlocks {
@@ -224,20 +235,41 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 
 		highHash = current
 
-		// Append in the original order: deepest first → parents last
-		for depth := maxDepth - 1; depth >= 0; depth-- {
-			for _, blockHash := range levels[depth] {
-				isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
-				if err != nil {
-					return nil, nil, err
-				}
-				if isInPastOfOriginalLowHash {
-					log.Debugf("Dismissing %s from mergeset, parent of %s, because is in past of original low hash %s",
-						blockHash, current, originalLowHash)
-					continue
-				}
-				blockHashes = append(blockHashes, blockHash)
+		for _, blockHash := range parentsOfParentsOfParents {
+			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
+			if err != nil {
+				return nil, nil, err
 			}
+			if isInPastOfOriginalLowHash {
+				log.Infof("Dismissing %s from mergeset, parent of %s, because is in past of original original low hash %s", blockHash, current, originalLowHash)
+				continue
+			}
+			blockHashes = append(blockHashes, blockHash)
+		}
+
+		// append to blockHashes all blocks in sortedMergeSet which are not in the past of originalLowHash
+		for _, blockHash := range parentsOfParents {
+			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
+			if err != nil {
+				return nil, nil, err
+			}
+			if isInPastOfOriginalLowHash {
+				log.Infof("Dismissing %s from mergeset, parent of %s, because is in past of original original low hash %s", blockHash, current, originalLowHash)
+				continue
+			}
+			blockHashes = append(blockHashes, blockHash)
+		}
+
+		for _, blockHash := range parents {
+			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
+			if err != nil {
+				return nil, nil, err
+			}
+			if isInPastOfOriginalLowHash {
+				log.Infof("Dismissing %s from mergeset, parent of %s, because is in past of original original low hash %s", blockHash, current, originalLowHash)
+				continue
+			}
+			blockHashes = append(blockHashes, blockHash)
 		}
 	}
 
@@ -246,10 +278,10 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		blockHashes = append(blockHashes, highHash)
 	}
 	blockHashes = hashset.NewFromSlice(blockHashes...).ToSlice()
-	// log.Debugf("Printing current block hashes")
-	// for i, blockhash := range blockHashes {
-	// 	log.Debugf("%d %s", i, blockhash)
-	// }
+	log.Infof("Printing current block hashes")
+	for i, blockhash := range blockHashes {
+		log.Infof("%d %s", i, blockhash)
+	}
 	return blockHashes, highHash, nil
 }
 
