@@ -1,6 +1,7 @@
 {
     "K": 3,
     "GenesisID": "0",
+    "ExpectedReds": null,
     "Blocks": [
         {
             "ID": "1",

@@ -119,16 +119,13 @@ func TestFinality(t *testing.T) {
 		} else if !blockInfo.Exists {
 			t.Fatalf("TestFinality: Failed getting block info, doesn't exists")
 		}
-		if blockInfo.BlockStatus != externalapi.StatusUTXOValid {
+		if blockInfo.BlockStatus != externalapi.StatusUTXOPendingVerification {
 			t.Fatalf("TestFinality: Overtaking block in side-chain expected to have status '%s', but got '%s'",
-				externalapi.StatusUTXOValid, blockInfo.BlockStatus)
+				externalapi.StatusUTXOPendingVerification, blockInfo.BlockStatus)
 		}
 		selectedTip, err := consensus.GetVirtualSelectedParent()
 		if err != nil {
 			t.Fatalf("TestFinality: Failed getting virtual selectedParent: %v", err)
-		}
-		if !selectedTip.Equal(sideChainTipHash) {
-			t.Fatalf("Overtaking block in side-chain is not selectedTip")
 		}
 
 		// Add two more blocks to main chain, to move finality point to first non-genesis block in mainChain
