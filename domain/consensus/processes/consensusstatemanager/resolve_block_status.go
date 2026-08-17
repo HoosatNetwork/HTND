@@ -9,7 +9,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
@@ -73,35 +72,6 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 
 		if selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
 			blockStatus = externalapi.StatusDisqualifiedFromChain
-			if previousBlockUTXOSet == nil {
-				return 0, nil, errors.Errorf("missing selected parent past UTXO for disqualified block %s (selected parent %s)", unverifiedBlockHash, previousBlockHash)
-			}
-
-			blockGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingAreaForCurrentBlock, unverifiedBlockHash, false)
-			if err != nil {
-				return 0, nil, err
-			}
-
-			pastUTXOSet, acceptanceData, multiset, err := csm.calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(
-				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockUTXOSet, blockGHOSTDAGData)
-			if err != nil {
-				return 0, nil, err
-			}
-			if pastUTXOSet == nil {
-				return 0, nil, errors.Errorf("calculated past UTXO is nil for disqualified block %s", unverifiedBlockHash)
-			}
-
-			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
-			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
-
-			utxoDiff, _ := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
-			if utxoDiff != nil {
-				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
-			} else {
-				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxo.NewMutableUTXODiff().ToImmutable(), previousBlockHash)
-			}
-
-			previousBlockUTXOSet = pastUTXOSet
 		} else {
 			oneBeforeLastResolvedBlockUTXOSet = previousBlockUTXOSet
 			oneBeforeLastResolvedBlockHash = previousBlockHash
