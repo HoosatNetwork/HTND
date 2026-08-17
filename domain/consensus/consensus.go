@@ -909,13 +909,13 @@ func (s *consensus) CreateFullHeadersSelectedChainBlockLocator() (externalapi.Bl
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Found pruning point %s as lowHash", lowHash)
+	log.Debugf("Found pruning point %s as lowHash", lowHash)
 
 	highHash, err := s.headersSelectedTipStore.HeadersSelectedTip(s.databaseContext, stagingArea)
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Found headers selected tip %s as highHash", highHash)
+	log.Debugf("Found headers selected tip %s as highHash", highHash)
 
 	return s.syncManager.CreateHeadersSelectedChainBlockLocator(stagingArea, lowHash, highHash)
 }

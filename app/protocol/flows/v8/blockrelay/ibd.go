@@ -301,7 +301,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	var highestKnownSyncerChainHash *externalapi.DomainHash
 	chainNegotiationRestartCounter := 0
 	chainNegotiationZoomCounts := 0
-	initialLocatorLen := len(locatorHashes)
+	// initialLocatorLen := len(locatorHashes)
 	pruningPoint, err := flow.Domain().Consensus().PruningPoint()
 	if err != nil {
 		return nil, nil, err
@@ -379,14 +379,14 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				highestKnownSyncerChainHash = currentHighestKnownSyncerChainHash
 				break
 			}
-
-			if chainNegotiationZoomCounts > initialLocatorLen*2 {
-				// Since the zoom-in always queries two consecutive entries in the previous locator, it is
-				// expected to decrease in size at least every two iterations
-				return nil, nil, protocolerrors.Errorf(true,
-					"IBD chain negotiation: Number of zoom-in steps %d exceeded the upper bound of 2*%d",
-					chainNegotiationZoomCounts, initialLocatorLen)
-			}
+			// initialLocatorLen = initialLocatorLen * 2
+			// if chainNegotiationZoomCounts > initialLocatorLen {
+			// 	// Since the zoom-in always queries two consecutive entries in the previous locator, it is
+			// 	// expected to decrease in size at least every two iterations
+			// 	return nil, nil, protocolerrors.Errorf(true,
+			// 		"IBD chain negotiation: Number of zoom-in steps %d exceeded the upper bound of %d, with %d locatorhashes",
+			// 		chainNegotiationZoomCounts, initialLocatorLen, len(locatorHashes))
+			// }
 
 		} else { // Empty locator signals a restart due to chain changes
 			chainNegotiationZoomCounts = 0
@@ -410,7 +410,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 			log.Infof("IBD chain negotiation with peer %s restarted (%d) and received %d hashes (%s, %s)", flow.peer,
 				chainNegotiationRestartCounter, len(locatorHashes), locatorHashes[0], locatorHashes[len(locatorHashes)-1])
 
-			initialLocatorLen = len(locatorHashes)
+			// initialLocatorLen = len(locatorHashes)
 			// Reset syncer's header selected tip
 			syncerHeaderSelectedTipHash = locatorHashes[0]
 		}

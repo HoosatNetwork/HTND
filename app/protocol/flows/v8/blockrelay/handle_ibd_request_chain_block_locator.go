@@ -39,10 +39,10 @@ func (flow *handleRequestIBDChainBlockLocatorFlow) start() error {
 
 		var locator externalapi.BlockLocator
 		if highHash == nil || lowHash == nil {
-			log.Infof("Heading to Create Full Headers Seelcted Chain Block Locator")
+			log.Debugf("Heading to Create Full Headers Seelcted Chain Block Locator")
 			locator, err = flow.Domain().Consensus().CreateFullHeadersSelectedChainBlockLocator()
 		} else {
-			log.Infof("Heading to Create Headers Seelcted Chain Block Locator between %s and %s", lowHash, highHash)
+			log.Debugf("Heading to Create Headers Seelcted Chain Block Locator between %s and %s", lowHash, highHash)
 			locator, err = flow.Domain().Consensus().CreateHeadersSelectedChainBlockLocator(lowHash, highHash)
 		}
 

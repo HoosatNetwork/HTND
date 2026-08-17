@@ -94,7 +94,7 @@ func (sm *syncManager) createHeadersSelectedChainBlockLocator(stagingArea *model
 	if highHash.Equal(sm.genesisBlockHash) && lowHash.Equal(sm.genesisBlockHash) {
 		return externalapi.BlockLocator{sm.genesisBlockHash}, nil
 	}
-	log.Infof("Lowhash %s, HighHash %s", lowHash, highHash)
+	log.Debugf("Lowhash %s, HighHash %s", lowHash, highHash)
 
 	lowHashIndex, err := sm.headersSelectedChainStore.GetIndexByHash(sm.databaseContext, stagingArea, lowHash)
 	if err != nil {
