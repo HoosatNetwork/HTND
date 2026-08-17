@@ -4,7 +4,7 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // SyncManager exposes functions to support sync between htnd nodes
 type SyncManager interface {
-	GetHashesBetween(stagingArea *StagingArea, lowHash, highHash *externalapi.DomainHash, maxBlocks uint64) (
+	GetHashesBetween(stagingArea *StagingArea, lowHash, highHash *externalapi.DomainHash, maxBlocks uint64, brute bool) (
 		hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error)
 	GetAnticone(stagingArea *StagingArea, blockHash, contextHash *externalapi.DomainHash, maxBlocks uint64) (hashes []*externalapi.DomainHash, err error)
 	GetMissingBlockBodyHashes(stagingArea *StagingArea, highHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)

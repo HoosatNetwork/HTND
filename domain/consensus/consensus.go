@@ -638,7 +638,7 @@ func (s *consensus) GetBlocksAcceptanceData(blockHashes []*externalapi.DomainHas
 	return blocksAcceptanceData, nil
 }
 
-func (s *consensus) GetHashesBetween(lowHash, highHash *externalapi.DomainHash, maxBlocks uint64) (
+func (s *consensus) GetHashesBetween(lowHash, highHash *externalapi.DomainHash, maxBlocks uint64, brute bool) (
 	hashes []*externalapi.DomainHash, actualHighHash *externalapi.DomainHash, err error,
 ) {
 	s.lock.Lock()
@@ -655,7 +655,7 @@ func (s *consensus) GetHashesBetween(lowHash, highHash *externalapi.DomainHash, 
 		return nil, nil, err
 	}
 
-	return s.syncManager.GetHashesBetween(stagingArea, lowHash, highHash, maxBlocks)
+	return s.syncManager.GetHashesBetween(stagingArea, lowHash, highHash, maxBlocks, brute)
 }
 
 func (s *consensus) GetAnticone(blockHash, contextHash *externalapi.DomainHash,

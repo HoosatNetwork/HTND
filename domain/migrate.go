@@ -133,7 +133,7 @@ func syncConsensuses(syncer, syncee externalapi.Consensus) error {
 		return err
 	}
 
-	missingBlocks, _, err := syncer.GetHashesBetween(pruningPoint, syncerVirtualSelectedParent, math.MaxUint64)
+	missingBlocks, _, err := syncer.GetHashesBetween(pruningPoint, syncerVirtualSelectedParent, math.MaxUint64, false)
 	if err != nil {
 		return err
 	}

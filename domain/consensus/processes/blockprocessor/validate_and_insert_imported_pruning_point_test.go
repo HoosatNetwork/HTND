@@ -175,7 +175,7 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 				t.Fatalf("PruningPoint: %+v", err)
 			}
 
-			missingHeaderHashes, _, err := tcSyncer.GetHashesBetween(pruningPoint, syncerVirtualSelectedParent, math.MaxUint64)
+			missingHeaderHashes, _, err := tcSyncer.GetHashesBetween(pruningPoint, syncerVirtualSelectedParent, math.MaxUint64, false)
 			if err != nil {
 				t.Fatalf("GetHashesBetween: %+v", err)
 			}

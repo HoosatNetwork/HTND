@@ -265,7 +265,7 @@ func TestBoundedMergeDepth(t *testing.T) {
 				t.Fatalf("GetVirtualSelectedParent: %+v", err)
 			}
 
-			missingHeaderHashes, _, err := tcSyncer.GetHashesBetween(consensusConfig.GenesisHash, syncerVirtualSelectedParent, math.MaxUint64)
+			missingHeaderHashes, _, err := tcSyncer.GetHashesBetween(consensusConfig.GenesisHash, syncerVirtualSelectedParent, math.MaxUint64, false)
 			if err != nil {
 				t.Fatalf("GetHashesBetween: %+v", err)
 			}

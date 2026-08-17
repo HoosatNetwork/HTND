@@ -119,7 +119,7 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 	// We use +1 because lowHash is also returned
 	// maxBlocks MUST be >= MergeSetSizeLimit + 1
 	maxBlocks := context.Config.NetParams().MergeSetSizeLimit + 1
-	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, maxBlocks)
+	blockHashes, highHash, err := context.Domain.Consensus().GetHashesBetween(lowHash, virtualSelectedParent, maxBlocks, false)
 	if err != nil {
 		return &appmessage.GetBlocksResponseMessage{
 			Error: appmessage.RPCErrorf(
