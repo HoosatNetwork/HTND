@@ -87,3 +87,9 @@ func (gm *ghostdagManager) Less(blockHashA *externalapi.DomainHash, ghostdagData
 		panic("big.Int.Cmp is defined to always return -1/1/0 and nothing else")
 	}
 }
+
+func (gm *ghostdagManager) LessByBlueScore(blockHashA *externalapi.DomainHash, ghostdagDataA *externalapi.BlockGHOSTDAGData,
+	blockHashB *externalapi.DomainHash, ghostdagDataB *externalapi.BlockGHOSTDAGData,
+) bool {
+	return ghostdagDataA.BlueScore() < ghostdagDataB.BlueScore()
+}

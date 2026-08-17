@@ -87,7 +87,7 @@ func (flow *handleRequestHeadersFlow) start() error {
 			// in order to avoid locking the consensus for too long
 			// maxBlocks MUST be >= MergeSetSizeLimit + 1
 			const maxBlocks = 1 << 12
-			blockHashes, _, err := consensus.GetHashesBetween(lowHash, highHash, maxBlocks)
+			blockHashes, actualHighHash, err := consensus.GetHashesBetween(lowHash, highHash, maxBlocks)
 			if err != nil {
 				return err
 			}
@@ -98,6 +98,9 @@ func (flow *handleRequestHeadersFlow) start() error {
 			if err != nil {
 				return err
 			}
+			// if len(blockHashes) != len(domainHeaders) {
+			// 	log.Infof("Length of block hashes %d and domain headers %d is different", len(blockHashes), len(domainHeaders))
+			// }
 			blockHeaders := make([]*appmessage.MsgBlockHeader, len(domainHeaders))
 			for i, dh := range domainHeaders {
 				blockHeaders[i] = appmessage.DomainBlockHeaderToBlockHeader(dh)
@@ -120,7 +123,7 @@ func (flow *handleRequestHeadersFlow) start() error {
 			}
 
 			// The next lowHash is the last element in blockHashes
-			lowHash = blockHashes[len(blockHashes)-1]
+			lowHash = actualHighHash
 		}
 		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgDoneHeaders())
 		if err != nil {

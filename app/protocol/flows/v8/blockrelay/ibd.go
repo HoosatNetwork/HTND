@@ -1,6 +1,7 @@
 package blockrelay
 
 import (
+	"sort"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
@@ -505,7 +506,15 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		if len(blockHeadersMessage.BlockHeaders) == 0 {
 			return protocolerrors.Errorf(true, "Received an empty headers message from peer %s", flow.peer)
 		}
+		log.Infof("Received %d headers", len(blockHeadersMessage.BlockHeaders))
 
+		sort.Slice(blockHeadersMessage.BlockHeaders, func(i, j int) bool {
+			if blockHeadersMessage.BlockHeaders[i].DAAScore < blockHeadersMessage.BlockHeaders[j].DAAScore {
+				// log.Infof("%s %d < %d %s", blockHeadersMessage.BlockHeaders[i].BlockHash(), blockHeadersMessage.BlockHeaders[i].DAAScore, blockHeadersMessage.BlockHeaders[j].DAAScore, blockHeadersMessage.BlockHeaders[j].BlockHash())
+				return true
+			}
+			return false
+		})
 		// Process all headers in this batch
 		for _, header := range blockHeadersMessage.BlockHeaders {
 			err = flow.processHeader(consensus, header)
@@ -556,6 +565,7 @@ func (flow *handleIBDFlow) syncMissingRelayPast(consensus externalapi.Consensus,
 		if err != nil {
 			return err
 		}
+		log.Infof("send request anticone %s with relayb block hash and %s syncer selected tip hash", relayBlockHash, syncerHeaderSelectedTipHash)
 		anticoneHeadersMessage, anticoneDone, err := flow.receiveHeaders()
 		if err != nil {
 			return err
@@ -867,6 +877,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			}
 		}
 
+		sort.Slice(hashesToRequest, func(i, j int) bool {
+			return receivedBlocks[*hashesToRequest[i]].Header.DAAScore() < receivedBlocks[*hashesToRequest[j]].Header.DAAScore()
+		})
+
 		// Process blocks in the order of expected hashes
 		for _, expectedHash := range hashesToRequest {
 			block, exists := receivedBlocks[*expectedHash]
@@ -878,8 +892,8 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 				if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
 					continue
 				}
-				log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer, errors.WithStack(err))
-				continue
+				log.Infof("Rejected block %s from %s during IBD: %+v", expectedHash, flow.peer)
+				panic(errors.WithStack(err))
 			}
 			err = flow.OnNewBlock(block)
 			if err != nil {

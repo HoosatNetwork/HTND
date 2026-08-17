@@ -68,7 +68,7 @@ func (sm *syncManager) GetHashesBetween(stagingArea *model.StagingArea, lowHash,
 	onEnd := logger.LogAndMeasureExecutionTime(log, "GetHashesBetween")
 	defer onEnd()
 
-	return sm.antiPastHashesBetween(stagingArea, lowHash, highHash, maxBlocks)
+	return sm.antiPastHashesBetweenBrute(stagingArea, lowHash, highHash, maxBlocks)
 }
 
 func (sm *syncManager) GetAnticone(stagingArea *model.StagingArea, blockHash, contextHash *externalapi.DomainHash, maxBlocks uint64) (hashes []*externalapi.DomainHash, err error) {
