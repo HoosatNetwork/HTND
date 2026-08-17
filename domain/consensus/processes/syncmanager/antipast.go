@@ -88,13 +88,6 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 
 		// append to blockHashes all blocks in sortedMergeSet which are not in the past of originalLowHash
 		for _, blockHash := range sortedMergeSet {
-			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, lowHash)
-			if err != nil {
-				return nil, nil, err
-			}
-			if isInPastOfOriginalLowHash {
-				continue
-			}
 			blockHashes = append(blockHashes, blockHash)
 		}
 	}

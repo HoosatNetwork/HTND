@@ -510,6 +510,10 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		for _, header := range blockHeadersMessage.BlockHeaders {
 			err = flow.processHeader(consensus, header)
 			if err != nil {
+				if errors.As(err, &ruleerrors.ErrMissingParents{}) {
+					// Panic missing parents error, to avoid corrupting the datadir
+					panic(err)
+				}
 				return err
 			}
 			flow.headersProcessedSinceLast++
