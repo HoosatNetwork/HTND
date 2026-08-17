@@ -1,49 +1,41 @@
-# -- multistage docker build: stage #1: build stage
+# syntax=docker/dockerfile:1
+
+# --- Stage 1: Build stage ---
 FROM golang:1.26 AS build
 
-#
-ENV GOEXPERIMENT=simd,jsonv2
+ENV CGO_ENABLED=1 \
+  GOEXPERIMENT=simd,jsonv2
 
+WORKDIR /build
 
-RUN mkdir -p /go/src/github.com/HoosatNetwork/HTND
-WORKDIR /go/src/github.com/HoosatNetwork/HTND
-
-RUN apt-get update && apt-get install -y curl git openssh-client binutils gcc musl-dev
-
-COPY go.mod .
-COPY go.sum .
-
-# Cache htnd dependencies
-RUN go mod download
+# Cache Go module downloads across builds
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+  go mod download
 
 COPY . .
 
-# Build the binary with CGO disabled for static linking to ensure Alpine compatibility
-RUN go build -tags "deadlock pebblegozstd" -o HTND .
-RUN go build -tags "deadlock pebblegozstd" -o htnwallet ./cmd/htnwallet
-RUN go build -tags "deadlock pebblegozstd" -o htnminer ./cmd/htnminer
-RUN go build -tags "deadlock pebblegozstd" -o htnctl ./cmd/htnctl
-RUN go build -tags "deadlock pebblegozstd" -o genkeypair ./cmd/genkeypair
+# Build all binaries with CGO enabled using BuildKit compilation and C caching
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  go build -trimpath -ldflags="-s -w" -tags "deadlock pebblegozstd" \
+  -o /out/ . ./cmd/htnwallet ./cmd/htnminer ./cmd/htnctl ./cmd/genkeypair
 
-# --- multistage docker build: stage #2: runtime image
+# --- Stage 2: Runtime image ---
 FROM ubuntu:24.04
+
 WORKDIR /app
 
+# Combine runtime directory and ca-certificates setup
 RUN apt-get update && \
   apt-get install -y --no-install-recommends ca-certificates && \
-  rm -rf /var/lib/apt/lists/*
+  rm -rf /var/lib/apt/lists/* && \
+  mkdir -p /nonexistent/.htnd && \
+  chown nobody:nogroup /nonexistent/.htnd && \
+  chmod 700 /nonexistent/.htnd
 
-# Copy the binary from the build stage
-COPY --from=build /go/src/github.com/HoosatNetwork/HTND/HTND /app/HTND
-COPY --from=build /go/src/github.com/HoosatNetwork/HTND/htnwallet /app/htnwallet
-COPY --from=build /go/src/github.com/HoosatNetwork/HTND/htnctl /app/htnctl
-COPY --from=build /go/src/github.com/HoosatNetwork/HTND/htnminer /app/htnminer
-COPY --from=build /go/src/github.com/HoosatNetwork/HTND/genkeypair /app/genkeypair
-
-RUN mkdir -p /nonexistent/.htnd && chown nobody:nogroup /nonexistent/.htnd && chmod 700 /nonexistent/.htnd
-
-# Set ownership and permissions for the binary
-RUN chown nobody:nogroup /app/* && chmod +x /app/*
+# Copy binaries with direct permission/ownership setup
+COPY --from=build --chown=nobody:nogroup --chmod=755 /out/ /app/
 
 USER nobody
 ENTRYPOINT ["/app/HTND"]
