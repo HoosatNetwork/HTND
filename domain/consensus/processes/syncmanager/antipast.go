@@ -35,7 +35,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 
 	lowBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, lowHash, false)
 	if database.IsNotFoundError(err) {
-		log.Infof("antiPastHashesBetween failed to retrieve low with %s\n", lowHash)
+		log.Debugf("antiPastHashesBetween failed to retrieve low with %s\n", lowHash)
 		return nil, nil, err
 	}
 	if err != nil {
@@ -43,7 +43,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 	}
 	highBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, highHash, false)
 	if database.IsNotFoundError(err) {
-		log.Infof("antiPastHashesBetween failed to retrieve high with %s\n", highHash)
+		log.Debugf("antiPastHashesBetween failed to retrieve high with %s\n", highHash)
 		return nil, nil, err
 	}
 	if err != nil {
@@ -134,12 +134,12 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		return nil, nil, err
 	}
 	if !originalLowHash.Equal(lowHash) {
-		log.Infof("originalLowHash %s changed to %s", originalLowHash, lowHash)
+		log.Debugf("originalLowHash %s changed to %s", originalLowHash, lowHash)
 	}
 
 	lowBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, lowHash, false)
 	if database.IsNotFoundError(err) {
-		log.Infof("antiPastHashesBetween failed to retrieve low with %s\n", lowHash)
+		log.Debugf("antiPastHashesBetween failed to retrieve low with %s\n", lowHash)
 		return nil, nil, err
 	}
 	if err != nil {
@@ -147,7 +147,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 	}
 	highBlockGHOSTDAGData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, highHash, false)
 	if database.IsNotFoundError(err) {
-		log.Infof("antiPastHashesBetween failed to retrieve high with %s\n", highHash)
+		log.Debugf("antiPastHashesBetween failed to retrieve high with %s\n", highHash)
 		return nil, nil, err
 	}
 	if err != nil {
@@ -158,7 +158,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 			lowBlockGHOSTDAGData.BlueScore(), highBlockGHOSTDAGData.BlueScore())
 	}
 
-	log.Infof("Low %s, High %s", lowHash, highHash)
+	log.Debugf("Low %s, High %s", lowHash, highHash)
 	// Collect all hashes by concatenating the merge-sets of all blocks between highHash and lowHash
 	blockHashes := []*externalapi.DomainHash{}
 	iterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowHash, false)
@@ -172,7 +172,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		if err != nil {
 			return nil, nil, err
 		}
-		// log.Infof("Current block %s", current)
+		// log.Debugf("Current block %s", current)
 		header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, current)
 		if err != nil {
 			return nil, nil, err
@@ -209,9 +209,9 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 			}
 		}
 
-		// log.Infof("Printing current block parents")
+		// log.Debugf("Printing current block parents")
 		// for i, blockhash := range levels[0] {
-		// 	log.Infof("%d %s", i, blockhash)
+		// 	log.Debugf("%d %s", i, blockhash)
 		// }
 
 		total := len(blockHashes) + len(levels[0])
@@ -246,9 +246,9 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		blockHashes = append(blockHashes, highHash)
 	}
 	blockHashes = hashset.NewFromSlice(blockHashes...).ToSlice()
-	// log.Infof("Printing current block hashes")
+	// log.Debugf("Printing current block hashes")
 	// for i, blockhash := range blockHashes {
-	// 	log.Infof("%d %s", i, blockhash)
+	// 	log.Debugf("%d %s", i, blockhash)
 	// }
 	return blockHashes, highHash, nil
 }
