@@ -1643,8 +1643,8 @@ func (s *consensus) ValidateUTXODiffChildChains() error {
 	return s.consensusStateManager.ValidateUTXODiffChildChains()
 }
 
-func (s *consensus) RepairBluesAnticoneSizes() error {
-	log.Info("Starting BluesAnticoneSizes repair...")
+func (s *consensus) CheckMergeSetBluesAndIfBlockExistsInThem(searchedBlock *externalapi.DomainHash) error {
+	log.Info("Starting CheckMergeSetBluesAndIfBlockExistsInThem ...")
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -1655,7 +1655,6 @@ func (s *consensus) RepairBluesAnticoneSizes() error {
 	}
 	defer iterator.Close()
 
-	var repairedCount int
 	var totalCount int
 
 	if !iterator.First() {
@@ -1676,6 +1675,8 @@ func (s *consensus) RepairBluesAnticoneSizes() error {
 
 		for i := 0; i < len(s.ghostdagDataStores); i++ {
 			// Get the current GHOSTDAG data
+
+			log.Infof("Fetching GhostDAG data from store.")
 			ghostDAGData, err := s.ghostdagDataStores[i].Get(s.databaseContext, stagingArea, blockHash, false)
 			if err != nil {
 				if database.IsNotFoundError(err) {
@@ -1687,28 +1688,26 @@ func (s *consensus) RepairBluesAnticoneSizes() error {
 				}
 				return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
 			}
-
-			// Check if repair is needed: all MergeSetBlues should have entries in BluesAnticoneSizes
-			needsRepair := false
+			found := false
 			for _, blue := range ghostDAGData.MergeSetBlues() {
-				anticoneSize, exists := ghostDAGData.BluesAnticoneSizes()[*blue]
-				log.Infof("%s block blue anticone size %d", blue, anticoneSize)
-				if !exists {
-					needsRepair = true
+				if blue.Equal(searchedBlock) {
+					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
+					found = true
 					break
 				}
 			}
-
-			if !needsRepair {
-				if !iterator.Next() {
+			for _, blue := range ghostDAGData.MergeSetReds() {
+				if blue.Equal(searchedBlock) {
+					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
+					found = true
 					break
 				}
-				continue
+			}
+			if !found {
+				log.Infof("Did not find the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
 			}
 
-			repairedCount++
-			log.Debugf("Repairing BluesAnticoneSizes for block %s", blockHash)
-
+			log.Infof("Recalculating GHOSTDAG")
 			// Re-run GHOSTDAG to recalculate the data correctly
 			err = s.ghostdagManagers[i].GHOSTDAG(stagingArea, blockHash)
 			if err != nil {
@@ -1716,13 +1715,44 @@ func (s *consensus) RepairBluesAnticoneSizes() error {
 			}
 
 			// Commit the repaired data
-			if err := staging.CommitAllChanges(s.databaseContext, stagingArea); err != nil {
-				return errors.Wrapf(err, "failed to commit repaired BluesAnticoneSizes for block %s", blockHash)
+			// if err := staging.CommitAllChanges(s.databaseContext, stagingArea); err != nil {
+			// 	return errors.Wrapf(err, "failed to commit repaired BluesAnticoneSizes for block %s", blockHash)
+			// }
+
+			ghostDAGData, err = s.ghostdagDataStores[i].Get(s.databaseContext, stagingArea, blockHash, false)
+			if err != nil {
+				if database.IsNotFoundError(err) {
+					// GHOSTDAG data not found - skip
+					if !iterator.Next() {
+						break
+					}
+					continue
+				}
+				return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
+			}
+
+			found = false
+			for _, blue := range ghostDAGData.MergeSetBlues() {
+				if blue.Equal(searchedBlock) {
+					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
+					found = true
+					break
+				}
+			}
+			for _, blue := range ghostDAGData.MergeSetReds() {
+				if blue.Equal(searchedBlock) {
+					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
+					found = true
+					break
+				}
+			}
+			if !found {
+				log.Infof("Did not find the blockhash %s in mergeset blues of %s, even after recalculating GHOSTDAG", searchedBlock, blockHash)
 			}
 
 			// Log progress every 1000 blocks
 			if totalCount%1000 == 0 {
-				log.Infof("Processed %d blocks, repaired %d so far...", totalCount, repairedCount)
+				log.Infof("Processed %d blocks..", totalCount)
 			}
 		}
 
@@ -1731,6 +1761,6 @@ func (s *consensus) RepairBluesAnticoneSizes() error {
 		}
 	}
 
-	log.Infof("BluesAnticoneSizes repair complete. Total blocks: %d, Repaired: %d", totalCount, repairedCount)
+	log.Infof("CheckMergeSetBluesAndIfBlockExistsInThem complete. Total blocks: %d", totalCount)
 	return nil
 }
