@@ -150,7 +150,7 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 }
 
 // selectedParentInfo returns the hash and status of the selectedParent of the last block in the unverifiedBlocks
-// chain, in addition, if the status is UTXOValid, it return it's pastUTXOSet
+// chain, in addition, if the status is UTXOValid or DisqualifiedFromChain, it returns its pastUTXOSet
 func (csm *consensusStateManager) selectedParentInfo(
 	stagingArea *model.StagingArea, unverifiedBlocks []*externalapi.DomainHash) (
 	*externalapi.DomainHash, externalapi.BlockStatus, externalapi.UTXODiff, error,
@@ -186,6 +186,15 @@ func (csm *consensusStateManager) selectedParentInfo(
 		return nil, 0, nil, err
 	}
 	if selectedParentStatus != externalapi.StatusUTXOValid {
+		// For disqualified blocks, we still need to restore their past UTXO
+		// so that chains of disqualified blocks can be resolved
+		if selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
+			selectedParentUTXOSet, err := csm.restorePastUTXO(stagingArea, selectedParent)
+			if err != nil {
+				return nil, 0, nil, err
+			}
+			return selectedParent, selectedParentStatus, selectedParentUTXOSet, nil
+		}
 		return selectedParent, selectedParentStatus, nil, nil
 	}
 
