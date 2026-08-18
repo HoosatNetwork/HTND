@@ -50,7 +50,9 @@ type consensusStateManager struct {
 
 	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
 	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
-	lastValidBlock          *externalapi.DomainHash
+	// restorePastUTXOCache caches the results of restorePastUTXO calls
+	restorePastUTXOCache *lrucache.LRUCache[externalapi.UTXODiff]
+	lastValidBlock         *externalapi.DomainHash
 }
 
 // New instantiates a new ConsensusStateManager
@@ -87,6 +89,7 @@ func New(
 	mergeDepthRootStore model.MergeDepthRootStore,
 	windowHeapSliceStore model.WindowHeapSliceStore,
 	resolveBlockStatusCacheSize int,
+	restorePastUTXOCacheSize int,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
 		maxBlockParents:   maxBlockParents,
@@ -122,6 +125,7 @@ func New(
 		mergeDepthRootStore:       mergeDepthRootStore,
 		windowHeapSliceStore:      windowHeapSliceStore,
 		resolveBlockStatusCache:   lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
+		restorePastUTXOCache:      lrucache.New[externalapi.UTXODiff](restorePastUTXOCacheSize, false),
 
 		stores: []model.Store{
 			consensusStateStore,

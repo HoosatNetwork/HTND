@@ -111,6 +111,12 @@ func (csm *consensusStateManager) restorePastUTXO(
 
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
+	// Check cache first
+	if cachedPastUTXO, ok := csm.restorePastUTXOCache.Get(blockHash); ok {
+		log.Debugf("restorePastUTXO cache hit for block %s", blockHash)
+		return cachedPastUTXO, nil
+	}
+
 	var err error
 
 	log.Debugf("Collecting UTXO diffs for block %s", blockHash)
@@ -171,7 +177,14 @@ func (csm *consensusStateManager) restorePastUTXO(
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
 
-	return accumulatedDiff.ToImmutable(), nil
+	result := accumulatedDiff.ToImmutable()
+	// Cache the result only if there were no errors in the loop
+	// (i.e., we successfully applied all diffs or the list was empty)
+	if err == nil {
+		csm.restorePastUTXOCache.Add(blockHash, result)
+	}
+
+	return result, nil
 }
 
 func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
