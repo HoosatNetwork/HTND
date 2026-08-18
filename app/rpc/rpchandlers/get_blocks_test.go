@@ -146,12 +146,12 @@ func TestHandleGetBlocks(t *testing.T) {
 			actualBlocks := getBlocks(blockHash)
 			expectedHashes := hashes.ToStrings(expectedBlocks)
 			actualHashes := actualBlocks.BlockHashes
-			
+
 			// Check that the same hashes are returned (regardless of order)
 			if len(expectedHashes) != len(actualHashes) {
 				t.Fatalf("TestHandleGetBlocks %d length mismatch expected %d actual %d", i, len(expectedHashes), len(actualHashes))
 			}
-			
+
 			// Create maps for set comparison
 			expectedSet := make(map[string]struct{}, len(expectedHashes))
 			for _, h := range expectedHashes {
@@ -161,7 +161,7 @@ func TestHandleGetBlocks(t *testing.T) {
 			for _, h := range actualHashes {
 				actualSet[h] = struct{}{}
 			}
-			
+
 			if !reflect.DeepEqual(expectedSet, actualSet) {
 				// Find missing and extra hashes
 				missing := []string{}
@@ -189,7 +189,7 @@ func TestHandleGetBlocks(t *testing.T) {
 
 		expectedOrder = append([]*externalapi.DomainHash{consensusConfig.GenesisHash}, expectedOrder...)
 		actualOrder := getBlocks(nil)
-		
+
 		// Check that the same hashes are returned (regardless of order)
 		actualOrderSet := make(map[string]struct{}, len(actualOrder.BlockHashes))
 		for _, h := range actualOrder.BlockHashes {
