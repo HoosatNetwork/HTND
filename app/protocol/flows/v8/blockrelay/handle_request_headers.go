@@ -87,7 +87,7 @@ func (flow *handleRequestHeadersFlow) start() error {
 			// in order to avoid locking the consensus for too long
 			// maxBlocks MUST be >= MergeSetSizeLimit + 1
 			const maxBlocks = 1 << 12
-			blockHashes, actualHighHash, err := consensus.GetHashesBetween(lowHash, highHash, maxBlocks, true)
+			blockHashes, actualHighHash, err := consensus.GetHashesBetween(lowHash, highHash, maxBlocks, false)
 			if err != nil {
 				return err
 			}
