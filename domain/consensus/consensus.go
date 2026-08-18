@@ -958,8 +958,7 @@ func (s *consensus) ValidateLowHashIsFunctionalPruningPoint(lowHash *externalapi
 
 	stagingArea := model.NewStagingArea()
 
-	lowHashIndex, err := s.headersSelectedChainStore.GetIndexByHash(s.databaseContext, stagingArea, lowHash)
-	if err != nil {
+	if _, err := s.headersSelectedChainStore.GetIndexByHash(s.databaseContext, stagingArea, lowHash); err != nil {
 		// This is extremely rare case when pruning point is not in the headers selected chain store,
 		// so lets find a pruning point that is in the selected chain store by brute force.
 		pruningPointIndex, err := s.pruningStore.CurrentPruningPointIndex(s.databaseContext, stagingArea)
@@ -972,6 +971,7 @@ func (s *consensus) ValidateLowHashIsFunctionalPruningPoint(lowHash *externalapi
 			if err != nil {
 				return nil, err
 			}
+			var lowHashIndex uint64
 			lowHashIndex, err = s.headersSelectedChainStore.GetIndexByHash(s.databaseContext, stagingArea, lowHash)
 			if err != nil {
 				return nil, err

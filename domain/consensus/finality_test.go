@@ -123,7 +123,7 @@ func TestFinality(t *testing.T) {
 			t.Fatalf("TestFinality: Overtaking block in side-chain expected to have status '%s', but got '%s'",
 				externalapi.StatusUTXOPendingVerification, blockInfo.BlockStatus)
 		}
-		selectedTip, err := consensus.GetVirtualSelectedParent()
+		_, err = consensus.GetVirtualSelectedParent()
 		if err != nil {
 			t.Fatalf("TestFinality: Failed getting virtual selectedParent: %v", err)
 		}
@@ -158,7 +158,7 @@ func TestFinality(t *testing.T) {
 		}
 
 		// Check that sideChainTip hash higher blue score than the selected parent
-		selectedTip, err = consensus.GetVirtualSelectedParent()
+		selectedTip, err := consensus.GetVirtualSelectedParent()
 		if err != nil {
 			t.Fatalf("TestFinality: Failed getting virtual selectedParent: %v", err)
 		}
