@@ -518,21 +518,11 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		}
 		log.Infof("Received %d headers", len(blockHeadersMessage.BlockHeaders))
 
-		sort.Slice(blockHeadersMessage.BlockHeaders, func(i, j int) bool {
-			if blockHeadersMessage.BlockHeaders[i].DAAScore < blockHeadersMessage.BlockHeaders[j].DAAScore {
-				// log.Infof("%s %d < %d %s", blockHeadersMessage.BlockHeaders[i].BlockHash(), blockHeadersMessage.BlockHeaders[i].DAAScore, blockHeadersMessage.BlockHeaders[j].DAAScore, blockHeadersMessage.BlockHeaders[j].BlockHash())
-				return true
-			}
-			return false
-		})
 		// Process all headers in this batch
 		for _, header := range blockHeadersMessage.BlockHeaders {
 			err = flow.processHeader(consensus, header)
 			if err != nil {
-				if errors.As(err, &ruleerrors.ErrMissingParents{}) {
-					// Panic missing parents error, to avoid corrupting the datadir
-					panic(err)
-				}
+
 				return err
 			}
 			flow.headersProcessedSinceLast++
@@ -903,7 +893,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 					continue
 				}
 				log.Infof("Rejected block %s from %s during IBD", expectedHash, flow.peer)
-				panic(errors.WithStack(err))
+				return err
 			}
 			err = flow.OnNewBlock(block)
 			if err != nil {
