@@ -3,9 +3,7 @@ name: Tests
 on:
   push:
   pull_request:
-    # edtited - because base branch can be modified
-    # synchronize - update commits on PR
-    types: [opened, synchronize, edited]
+    types: [opened, synchronize, reopened]
 
 jobs:
 
@@ -28,7 +26,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
-      # Increase the pagefile size on Windows to aviod running out of memory
+      # Increase the pagefile size on Windows to avoid running out of memory
       - name: Increase pagefile size on Windows
         if: runner.os == 'Windows'
         run: powershell -command .github\workflows\SetPageFileSize.ps1
@@ -46,6 +44,7 @@ jobs:
 
 
   stability-test-fast:
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     env:
       GOFLAGS: -tags=ci
@@ -72,40 +71,3 @@ jobs:
         env:
           SKIP_LONG_STABILITY_TESTS: 1
         run: ./install_and_test.sh
-
-
-  coverage:
-    runs-on: ubuntu-latest
-    env:
-      GOFLAGS: -tags=ci
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-    name: Produce code coverage
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.26
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Create coverage file
-        shell: bash
-        run: |
-          packages=$(go list ./... | grep -v '^github.com/HoosatNetwork/HTND/stability-tests')
-          coverpkg=$(printf '%s\n' "$packages" | paste -sd, -)
-          go test -v -covermode=atomic -coverpkg "$coverpkg" -coverprofile coverage.txt $packages
-
-      - name: Skip Codecov upload when token is unavailable
-        if: ${{ env.CODECOV_TOKEN == '' }}
-        run: echo "CODECOV_TOKEN is not configured; skipping coverage upload."
-
-      - name: Upload coverage file
-        if: ${{ env.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ env.CODECOV_TOKEN }}
-          files: coverage.txt
-          fail_ci_if_error: true
