@@ -1,8 +1,6 @@
 package utxo
 
 import (
-	"fmt"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
@@ -112,7 +110,7 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	}
 
 	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
-		panic(fmt.Sprintf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd", offendingOutpoint))
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd", offendingOutpoint)
 	}
 
 	// check that NOT (entries with unequal DAA score AND utxoEntry is in this.toRemove and/or other.toAdd) -> Error
@@ -123,7 +121,7 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	}
 
 	if offendingOutpoint, ok := checkIntersectionWithRule(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
-		panic(fmt.Sprintf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove", offendingOutpoint))
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove", offendingOutpoint)
 	}
 
 	// if have the same entry in this.toRemove and other.toRemove
@@ -132,8 +130,8 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 		func(_ *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 			return utxoEntry.BlockDAAScore() != diffEntry.BlockDAAScore()
 		}); ok {
-		panic(fmt.Sprintf("diffFrom: outpoint %s both in this.toRemove and other.toRemove with different "+
-			"DAA scores, with no corresponding entry in this.toAdd", offendingOutpoint))
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and other.toRemove with different "+
+			"DAA scores, with no corresponding entry in this.toAdd", offendingOutpoint)
 	}
 
 	result := &mutableUTXODiff{
@@ -147,7 +145,8 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	subtractionWithRemainderHavingDAAScoreInPlace(this.toAdd, other.toAdd, result.toRemove, inBothToAdd)
 	// If they are in other.toRemove - base utxoSet is not the same
 	if checkIntersection(inBothToAdd, this.toRemove) != checkIntersection(inBothToAdd, other.toRemove) {
-		panic("diffFrom: outpoint both in this.toAdd, other.toAdd, and only one of this.toRemove and other.toRemove")
+		return nil, errors.New(
+			"diffFrom: outpoint both in this.toAdd, other.toAdd, and only one of this.toRemove and other.toRemove")
 	}
 
 	// All transactions in other.toRemove:

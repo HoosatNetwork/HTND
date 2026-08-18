@@ -1,6 +1,7 @@
 package pruningmanager
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -959,7 +960,11 @@ diffTraversalLoop:
 			return nil, err
 		}
 	}
-	return oldDiff.DiffFrom(newDiff.ToImmutable())
+	result, err := oldDiff.DiffFrom(newDiff.ToImmutable())
+	if err != nil {
+		panic(fmt.Sprintf("DiffFrom error for pruning points (previous: %s, current: %s): %s", previousPruningHash, currentPruningHash, err))
+	}
+	return result, nil
 }
 
 // This function takes 2 chain blocks (currentPruningHash, previousPruningHash) and finds
