@@ -123,6 +123,11 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 	// 	log.Infof("%d, %s", i, hash)
 	// }
 
+	// Sort by blue score to get topological order
+	if err := sm.sortByBlueScore(stagingArea, blockHashes); err != nil {
+		return nil, nil, err
+	}
+
 	return blockHashes, highHash, nil
 }
 
