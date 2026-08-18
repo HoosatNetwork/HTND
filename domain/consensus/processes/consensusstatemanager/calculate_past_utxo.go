@@ -21,18 +21,18 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 
 	log.Debugf("CalculatePastUTXOAndAcceptanceData start for block %s", blockHash)
 
-	if blockHash.Equal(csm.genesisHash) {
+	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
 		log.Debugf("Block %s is the genesis. By definition, "+
 			"it has a predefined UTXO diff, empty acceptance data, and a predefined multiset", blockHash)
-		multiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, blockHash)
+		multiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, csm.genesisHash)
 		if database.IsNotFoundError(err) {
-			log.Infof("CalculatePastUTXOAndAcceptanceData failed to retrieve with %s\n", blockHash)
+			log.Infof("CalculatePastUTXOAndAcceptanceData failed to retrieve with %s\n", csm.genesisHash)
 			return nil, nil, nil, err
 		}
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, blockHash)
+		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, csm.genesisHash)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -111,12 +111,6 @@ func (csm *consensusStateManager) restorePastUTXO(
 
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
-	// Check cache first
-	if cachedPastUTXO, ok := csm.restorePastUTXOCache.Get(blockHash); ok {
-		log.Debugf("restorePastUTXO cache hit for block %s", blockHash)
-		return cachedPastUTXO, nil
-	}
-
 	var err error
 
 	log.Debugf("Collecting UTXO diffs for block %s", blockHash)
@@ -177,14 +171,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
 
-	result := accumulatedDiff.ToImmutable()
-	// Cache the result only if there were no errors in the loop
-	// (i.e., we successfully applied all diffs or the list was empty)
-	if err == nil {
-		csm.restorePastUTXOCache.Add(blockHash, result)
-	}
-
-	return result, nil
+	return accumulatedDiff.ToImmutable(), nil
 }
 
 func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
