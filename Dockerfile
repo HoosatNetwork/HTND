@@ -39,4 +39,4 @@ COPY --from=build --chown=nobody:nogroup --chmod=755 /out/ /app/
 
 USER nobody
 ENTRYPOINT ["/app/HTND"]
-CMD ["--utxoindex", "--saferpc", "--autoupdate=false", "--autoupdate-download=fase", "--autoupdate-install=false"]
+CMD ["--utxoindex", "--saferpc", "--autoupdate=false", "--autoupdate-download=false", "--autoupdate-install=false", "--autoreport-issues=false"]

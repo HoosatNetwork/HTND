@@ -182,12 +182,12 @@ type Flags struct {
 	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
 	// Auto-update configuration
-	AutoUpdateEnabled       Bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases"`
+	AutoUpdateEnabled       Bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases (opt-in, disabled by default)"`
 	AutoUpdateCheckInterval time.Duration `long:"autoupdate-interval" description:"Interval between update checks (e.g., 24h, 72h)" default:"24h"`
 	AutoUpdateChannel       string        `long:"autoupdate-channel" description:"Update channel: stable, beta, or all" default:"stable"`
-	AutoUpdateDownload      Bool          `long:"autoupdate-download" description:"Automatically download available updates"`
-	AutoUpdateInstall       Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download)"`
-	AutoReportIssues        Bool          `long:"autoreport-issues" description:"Automatically report issues to GitHub (opt-out, enabled by default)"`
+	AutoUpdateDownload      Bool          `long:"autoupdate-download" description:"Automatically download available updates (opt-in, disabled by default)"`
+	AutoUpdateInstall       Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download) (opt-in, disabled by default)"`
+	AutoReportIssues        Bool          `long:"autoreport-issues" description:"Automatically report issues to GitHub (opt-in, disabled by default)"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -264,12 +264,12 @@ func defaultFlags() *Flags {
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
-		AutoUpdateEnabled:              true,
+		AutoUpdateEnabled:              false,
 		AutoUpdateCheckInterval:        24 * time.Hour,
 		AutoUpdateChannel:              "stable",
-		AutoUpdateDownload:             true,
-		AutoUpdateInstall:              true,
-		AutoReportIssues:               true,
+		AutoUpdateDownload:             false,
+		AutoUpdateInstall:              false,
+		AutoReportIssues:               false,
 	}
 }
 
