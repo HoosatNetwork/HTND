@@ -19,7 +19,6 @@ import (
 	"github.com/HoosatNetwork/HTND/app"
 	"github.com/HoosatNetwork/HTND/infrastructure/autoupdate"
 	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/version"
 )
 
@@ -88,7 +87,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer logger.BackendLog.Close()
 
 	// Get autoupdate config from loaded config
 	autoUpdateCfg := autoupdate.DefaultConfig()
