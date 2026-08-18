@@ -69,7 +69,7 @@ func (sm *syncManager) GetHashesBetween(stagingArea *model.StagingArea, lowHash,
 	if brute {
 		return sm.antiPastHashesBetween(stagingArea, lowHash, highHash, maxBlocks)
 	} else {
-		return sm.antiPastHashesBetween(stagingArea, lowHash, highHash, maxBlocks)
+		return sm.antiPastHashesBetweenBrute(stagingArea, lowHash, highHash, maxBlocks)
 	}
 }
 

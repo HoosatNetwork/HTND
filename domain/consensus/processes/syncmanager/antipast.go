@@ -177,6 +177,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		if err != nil {
 			return nil, nil, err
 		}
+		parentsOfParentsOfParentsOfParents := make([]*externalapi.DomainHash, 0)
 		parentsOfParentsOfParents := make([]*externalapi.DomainHash, 0)
 		parentsOfParents := make([]*externalapi.DomainHash, 0)
 		parents := make([]*externalapi.DomainHash, 0)
@@ -218,6 +219,34 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 				}
 			}
 		}
+		for _, parent := range parentsOfParentsOfParents {
+			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, blockLevelParent := range header.Parents() {
+				for _, parent := range blockLevelParent {
+					if _, exists := seen[*parent]; !exists {
+						seen[*parent] = struct{}{}
+						parentsOfParentsOfParents = append(parentsOfParentsOfParents, parent)
+					}
+				}
+			}
+		}
+		for _, parent := range parentsOfParentsOfParentsOfParents {
+			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, blockLevelParent := range header.Parents() {
+				for _, parent := range blockLevelParent {
+					if _, exists := seen[*parent]; !exists {
+						seen[*parent] = struct{}{}
+						parentsOfParentsOfParentsOfParents = append(parentsOfParentsOfParentsOfParents, parent)
+					}
+				}
+			}
+		}
 
 		// log.Debugf("Printing current block mergeset")
 		// for i, blockhash := range parents {
@@ -234,6 +263,18 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		}
 
 		highHash = current
+
+		for _, blockHash := range parentsOfParentsOfParentsOfParents {
+			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
+			if err != nil {
+				return nil, nil, err
+			}
+			if isInPastOfOriginalLowHash {
+				log.Debugf("Dismissing %s from mergeset, parent of %s, because is in past of original original low hash %s", blockHash, current, originalLowHash)
+				continue
+			}
+			blockHashes = append(blockHashes, blockHash)
+		}
 
 		for _, blockHash := range parentsOfParentsOfParents {
 			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
