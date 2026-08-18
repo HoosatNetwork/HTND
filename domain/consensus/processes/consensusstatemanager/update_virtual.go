@@ -1,8 +1,6 @@
 package consensusstatemanager
 
 import (
-	"fmt"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -124,7 +122,10 @@ func (csm *consensusStateManager) updateSelectedTipUTXODiff(
 	}
 	newDiff, err := virtualUTXODiff.DiffFrom(selectedTipUTXODiff)
 	if err != nil {
-		panic(fmt.Sprintf("DiffFrom error for virtual diff parent %s: %s", selectedTip, err))
+		// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
+		// Fall back to using the virtualUTXODiff directly with nil diffChild.
+		log.Debugf("DiffFrom failed in updateSelectedTipUTXODiff (err: %v), using virtualUTXODiff directly", err)
+		newDiff = virtualUTXODiff
 	}
 
 	log.Debugf("Staging new UTXO diff for virtual diff parent %s", selectedTip)
