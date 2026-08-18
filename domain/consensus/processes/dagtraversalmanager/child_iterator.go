@@ -48,7 +48,7 @@ func (s *ChildIterator) Next() bool {
 		s.queueIndex++
 
 		// Enqueue all children of the current node for BFS traversal
-		children, err := s.dagTraversalManager.Childs(s.stagingArea, s.current)
+		children, err := s.dagTraversalManager.Childs(s.stagingArea, s.highHash, s.current)
 		if err != nil && !errors.Is(err, errNoChild) {
 			s.current = nil
 			s.err = err
@@ -113,16 +113,24 @@ func (dtm *dagTraversalManager) ChildIterator(stagingArea *model.StagingArea,
 var errNoChild = errors.New("errNoChild")
 
 func (dtm *dagTraversalManager) Childs(stagingArea *model.StagingArea,
-	lowHash *externalapi.DomainHash,
+	highHash, lowHash *externalapi.DomainHash,
 ) ([]*externalapi.DomainHash, error) {
-	// Get all children of lowHash from the reachability tree
-	// highHash is kept for interface compatibility but not used in BFS
 	children, err := dtm.reachabilityManager.GetChildren(stagingArea, lowHash)
 	if err != nil {
 		return nil, errors.Wrapf(errNoChild, "no children for %s", lowHash)
 	}
-	if len(children) == 0 {
+	filtered := make([]*externalapi.DomainHash, 0, len(children))
+	for _, child := range children {
+		isAncestorOfHigh, err := dtm.dagTopologyManager.IsAncestorOf(stagingArea, child, highHash)
+		if err != nil {
+			return nil, err
+		}
+		if isAncestorOfHigh || child.Equal(highHash) {
+			filtered = append(filtered, child)
+		}
+	}
+	if len(filtered) == 0 {
 		return nil, errNoChild
 	}
-	return children, nil
+	return filtered, nil
 }

@@ -61,7 +61,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Infof("LowHash %s, HighHash %s", lowHash, highHash)
+	// log.Infof("LowHash %s, HighHash %s", lowHash, highHash)
 	defer iterator.Close()
 	for ok := iterator.First(); ok; ok = iterator.Next() {
 		current, err := iterator.Get()
@@ -85,7 +85,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			return nil, nil, err
 		}
 		if isInPastOfOriginalLowHash {
-			log.Infof("Skipping %s sorted mergeset, because IsAncestorOf %s", current, originalLowHash)
+			// log.Infof("Skipping %s sorted mergeset, because IsAncestorOf %s", current, originalLowHash)
 			continue
 		}
 		sortedMergeSet, err := sm.ghostdagManager.GetSortedMergeSet(stagingArea, current)
