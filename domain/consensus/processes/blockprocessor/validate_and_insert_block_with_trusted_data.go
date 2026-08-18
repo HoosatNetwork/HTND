@@ -96,7 +96,29 @@ func (bp *blockProcessor) ghostdagDataWithoutPrunedBlocks(stagingArea *model.Sta
 func (bp *blockProcessor) isPruned(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	status, err := bp.blockStatusStore.Get(bp.databaseContext, stagingArea, blockHash)
 	if err != nil {
-		return false, err
+		// If the status doesn't exist, check if the block header exists
+		// If the header doesn't exist, the block is pruned
+		hasHeader, err := bp.blockHeaderStore.HasBlockHeader(bp.databaseContext, stagingArea, blockHash)
+		if err != nil {
+			return false, err
+		}
+		if !hasHeader {
+			// Block header doesn't exist, so the block is pruned
+			return true, nil
+		}
+		// Header exists but status doesn't - check if it has reachability data
+		// If it doesn't have reachability data, treat it as pruned for the purpose of
+		// GHOSTDAG data filtering during pruning point import
+		hasReachabilityData, err := bp.reachabilityDataStore.HasReachabilityData(bp.databaseContext, stagingArea, blockHash)
+		if err != nil {
+			return false, err
+		}
+		if !hasReachabilityData {
+			// Block doesn't have reachability data, treat as pruned
+			return true, nil
+		}
+		// Header exists and has reachability data, but no status - assume not pruned
+		return false, nil
 	}
 	if status == externalapi.StatusHeaderOnly {
 		return true, nil
