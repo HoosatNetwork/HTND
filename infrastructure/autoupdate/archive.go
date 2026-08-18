@@ -38,8 +38,6 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 	return extractTarReader(tarReader, destDir)
 }
 
-
-
 // extractZip extracts a .zip archive
 func extractZip(archivePath, destDir string) (string, error) {
 	log.Infof("Extracting zip archive: %s", archivePath)

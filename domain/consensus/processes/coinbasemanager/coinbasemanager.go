@@ -205,7 +205,6 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		hasRedReward = len(ghostdagData.MergeSetReds()) > 0
 	}
 
-
 	subsidy, err := c.CalcBlockSubsidy(stagingArea, blockHash, constants.GetBlockVersion())
 	if err != nil {
 		return nil, false, err

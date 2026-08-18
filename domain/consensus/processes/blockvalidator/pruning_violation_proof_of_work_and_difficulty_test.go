@@ -320,7 +320,7 @@ func TestCheckPruningPointViolation(t *testing.T) {
 // 			t.Fatalf("Error setting up consensus: %+v", err)
 // 		}
 // 		defer teardown(false)
-// 
+//
 // 		emptyCoinbase := externalapi.DomainCoinbaseData{
 // 			ScriptPublicKey: &externalapi.ScriptPublicKey{
 // 				Script:  nil,

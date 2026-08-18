@@ -6,13 +6,13 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucacheghostdagdata"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/cockroachdb/errors"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 var (
-	log                     = logger.RegisterSubSystem("GDS")
+	log                    = logger.RegisterSubSystem("GDS")
 	ghostdagDataBucketName = []byte("block-ghostdag-data")
 	trustedDataBucketName  = []byte("block-with-trusted-data-ghostdag-data")
 )

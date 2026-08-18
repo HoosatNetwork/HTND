@@ -860,7 +860,7 @@ func TestAntiPastHashesBetween_TopologicalOrder(t *testing.T) {
 				t.Fatalf("Expected hash %s not found in result. Result: %v", expected, hashesChain)
 			}
 		}
-		
+
 		// Check that no unexpected blocks are present
 		if len(hashesChain) != len(expectedChain) {
 			t.Fatalf("Expected %d hashes, got %d. Result: %v", len(expectedChain), len(hashesChain), hashesChain)
@@ -1003,14 +1003,14 @@ func TestAntiPastHashesBetween_IBDScenario_MissingParent(t *testing.T) {
 
 		// Simulate the IBD scenario where a block has parents
 		// that are in different branches.
-		
+
 		// Structure:
 		// Genesis -> A -> B -> C -> D -> E -> F (main chain)
 		//           \-> G -> H -> I -> J -> K
 		//                   \-> L -> M (merge: L has parents H and C)
 		//                         \-> N (parents: M and J)
 		//                               \-> O
-		
+
 		genesis := consensusConfig.GenesisHash
 
 		// Main chain
