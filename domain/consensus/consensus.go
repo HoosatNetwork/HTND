@@ -1690,9 +1690,7 @@ func (s *consensus) CheckMergeSetBluesAndIfBlockExistsInThem(searchedBlock *exte
 
 			ghostDAGData, err := s.ghostdagDataStores[i].Get(s.databaseContext, stagingArea, blockHash, false)
 			if err != nil {
-				if database.IsNotFoundError(err) {
-					log.Infof("ghostDAGData was missing for %s", blockHash)
-				} else {
+				if !database.IsNotFoundError(err) {
 					return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
 				}
 			}
