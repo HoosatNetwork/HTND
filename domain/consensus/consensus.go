@@ -138,6 +138,9 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 				externalapi.KType(1)), false)
 		}
 
+		s.daaBlocksStore.StageDAAScore(stagingArea, model.VirtualGenesisBlockHash, 0)
+		s.daaBlocksStore.StageBlockDAAAddedBlocks(stagingArea, model.VirtualGenesisBlockHash, nil)
+
 		err = staging.CommitAllChanges(s.databaseContext, stagingArea)
 		if err != nil {
 			return err
