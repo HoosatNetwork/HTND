@@ -186,7 +186,7 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 			if err != nil {
 				return 0, err
 			}
-			if childStatus == externalapi.StatusHeaderOnly {
+			if childStatus == externalapi.StatusHeaderOnly || childStatus == externalapi.StatusUTXOPendingVerification {
 				continue
 			}
 			count++
@@ -209,9 +209,29 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 			return selectedParentCandidate, nil
 		}
 
-		// Header-only blocks are not considered for the "all children disqualified" rule,
-		// so we can skip propagating disqualification through their parents.
-		if selectedParentCandidateStatus == externalapi.StatusHeaderOnly {
+		// Header-only and UTXO-pending-verification blocks are not considered for the
+		// "all children disqualified" rule, so we don't mark them as disqualified or
+		// increment disqualified child counts. However, we still need to consider their
+		// parents as candidates.
+		if selectedParentCandidateStatus == externalapi.StatusHeaderOnly || selectedParentCandidateStatus == externalapi.StatusUTXOPendingVerification {
+			candidateParents, err := csm.dagTopologyManager.Parents(stagingArea, selectedParentCandidate)
+			if err != nil {
+				return nil, err
+			}
+			for _, parent := range candidateParents {
+				if parent.Equal(model.VirtualBlockHash) {
+					continue
+				}
+				parentKey := *parent
+				if _, ok := pushedToHeap[parentKey]; ok {
+					continue
+				}
+				pushedToHeap[parentKey] = struct{}{}
+				err = candidatesHeap.Push(parent)
+				if err != nil {
+					return nil, err
+				}
+			}
 			continue
 		}
 
