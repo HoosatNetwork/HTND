@@ -98,7 +98,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 				return nil, nil, err
 			}
 			if isInPastOfOriginalLowHash {
-				log.Infof("Skipping %s on %s sorted mergeset, because IsAncestorOf %s", blockHash, current, originalLowHash)
+				// log.Infof("Skipping %s on %s sorted mergeset, because IsAncestorOf %s", blockHash, current, originalLowHash)
 				continue
 			}
 			if _, exists := seen[*blockHash]; !exists {
@@ -119,9 +119,9 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		}
 	}
 
-	for i, hash := range blockHashes {
-		log.Infof("%d, %s", i, hash)
-	}
+	// for i, hash := range blockHashes {
+	// 	log.Infof("%d, %s", i, hash)
+	// }
 
 	return blockHashes, highHash, nil
 }
