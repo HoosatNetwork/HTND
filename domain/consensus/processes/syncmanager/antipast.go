@@ -56,6 +56,10 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 
 	// Collect all hashes by concatenating the merge-sets of all blocks between highHash and lowHash
 	blockHashes := []*externalapi.DomainHash{}
+	// Pre-seed seen with originalLowHash so it is never added to the result during parent closure,
+	// regardless of whether IsAncestorOf is reflexive for the boundary block.
+	seen := hashset.New()
+	seen.Add(originalLowHash)
 	iterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowHash, false)
 	if err != nil {
 		return nil, nil, err
@@ -102,13 +106,51 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 				log.Infof("Skipping %s on %s sorted mergeset, because IsAncestorOf %s", blockHash, current, originalLowHash)
 				continue
 			}
-			blockHashes = append(blockHashes, blockHash)
+			if !seen.Contains(blockHash) {
+				seen.Add(blockHash)
+				blockHashes = append(blockHashes, blockHash)
+			}
 		}
 	}
 
 	// The process above doesn't return highHash, so include it explicitly, unless highHash == lowHash
 	if !lowHash.Equal(highHash) {
-		blockHashes = append(blockHashes, highHash)
+		if !seen.Contains(highHash) {
+			seen.Add(highHash)
+			blockHashes = append(blockHashes, highHash)
+		}
+	}
+
+	// Parent closure: merge-set blocks that are NOT on the selected-parent chain are never
+	// themselves visited by the SelectedChildIterator, so their own parents may be missing from
+	// blockHashes. Walk every included block's parents and add any that are not already present
+	// and not already known (i.e. not ancestors of originalLowHash).
+	for i := 0; i < len(blockHashes); i++ {
+		blockHash := blockHashes[i]
+		parents, err := sm.dagTopologyManager.Parents(stagingArea, blockHash)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, parent := range parents {
+			if seen.Contains(parent) {
+				continue
+			}
+			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, parent, originalLowHash)
+			if err != nil {
+				return nil, nil, err
+			}
+			if isInPastOfOriginalLowHash {
+				continue
+			}
+			seen.Add(parent)
+			blockHashes = append(blockHashes, parent)
+		}
+	}
+
+	// Sort by blue score to ensure topological ordering after parent closure may have
+	// appended ancestor blocks out of order.
+	if err := sm.sortByBlueScore(stagingArea, blockHashes); err != nil {
+		return nil, nil, err
 	}
 
 	return blockHashes, highHash, nil

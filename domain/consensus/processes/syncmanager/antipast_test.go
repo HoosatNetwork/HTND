@@ -1205,10 +1205,134 @@ func TestAntiPastHashesBetween_IBDScenario_MissingParent(t *testing.T) {
 					if isInPastOfH {
 						continue
 					}
-					t.Errorf("Brute version IBD BUG: Block %s has parent %s NOT in result and NOT in past of %s",
+			t.Errorf("Brute version IBD BUG: Block %s has parent %s NOT in result and NOT in past of %s",
 						blockHash, parent, h)
 				}
 			}
 		}
-	})
+		})
+}
+
+// TestAntiPastHashesBetween_MergeSetBlockParentClosure is a regression test for the bug where a
+// block included via a chain block's merge set (i.e. a "red"/non-selected-chain block) has its
+// own parent that is neither on the selected-parent chain nor in the past of originalLowHash.
+// Previously antiPastHashesBetween would omit such parents, causing IBD to fail with
+// "child of missing parent" when processing the merge-set block.
+//
+// DAG structure (lowHash = L, highHash = H):
+//
+//	Genesis -> A -> B -> C -> D -> H   (selected-parent chain)
+//	                |-> E              (E is a "side" block, child of B)
+//	                         \-> M     (M has two parents: E and C)
+//	                              \-> H (H has two parents: D and M)
+//
+// When lowHash=L (=B) and highHash=H the SelectedChildIterator visits C, D, H.
+// M is in D's merge set, so it appears in blockHashes.  But E (M's parent) is NOT
+// in any chain block's merge set and is NOT in the past of L.  Without the fix,
+// E would be silently absent from the result, breaking IBD.
+func TestAntiPastHashesBetween_MergeSetBlockParentClosure(t *testing.T) {
+		testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+			stagingArea := model.NewStagingArea()
+
+			factory := consensus.NewFactory()
+			tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestAntiPastHashesBetween_MergeSetBlockParentClosure")
+			if err != nil {
+				t.Fatalf("Error setting up consensus: %+v", err)
+			}
+			defer teardown(false)
+
+			genesis := consensusConfig.GenesisHash
+
+			// Build selected-parent chain: genesis -> A -> B -> C -> D
+			a, _, err := tc.AddBlock([]*externalapi.DomainHash{genesis}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block A: %v", err)
+			}
+			b, _, err := tc.AddBlock([]*externalapi.DomainHash{a}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block B: %v", err)
+			}
+			c, _, err := tc.AddBlock([]*externalapi.DomainHash{b}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block C: %v", err)
+			}
+			d, _, err := tc.AddBlock([]*externalapi.DomainHash{c}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block D: %v", err)
+			}
+
+			// E is a side block off B — it is NOT on the selected-parent chain from B to D,
+			// and will not be an ancestor of the lowHash (B) once we set lowHash=B.
+			e, _, err := tc.AddBlock([]*externalapi.DomainHash{b}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block E: %v", err)
+			}
+
+			// M has parents E and C — it merges E (off-chain) into the DAG.
+			// M will appear in D's merge set because D's selected parent is C and M is in D's anticone.
+			m, _, err := tc.AddBlock([]*externalapi.DomainHash{e, c}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block M: %v", err)
+			}
+
+			// highHash H has parents D and M.
+			h, _, err := tc.AddBlock([]*externalapi.DomainHash{d, m}, nil, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block H: %v", err)
+			}
+
+			// Use B as lowHash so that E (child of B) is NOT in the past of lowHash.
+			lowHash := b
+			highHash := h
+
+			hashes, actualHighHash, err := tc.SyncManager().GetHashesBetween(stagingArea, lowHash, highHash, math.MaxUint64, false)
+			if err != nil {
+				t.Fatalf("GetHashesBetween failed: %v", err)
+			}
+
+			if !actualHighHash.Equal(highHash) {
+				t.Fatalf("Expected actualHighHash %s, got %s", highHash, actualHighHash)
+			}
+
+			// Build a lookup set of all returned hashes.
+			hashSet := make(map[externalapi.DomainHash]bool)
+			for _, hash := range hashes {
+				hashSet[*hash] = true
+			}
+
+			// Core assertion: for every block in the result, every parent must be either
+			// (a) also in the result, or (b) the lowHash itself, or (c) an ancestor of lowHash.
+			// This is the property that IBD requires to avoid "child of missing parent" failures.
+			for _, blockHash := range hashes {
+				header, err := tc.BlockHeaderStore().BlockHeader(tc.DatabaseContext(), stagingArea, blockHash)
+				if err != nil {
+					t.Fatalf("Failed to get header for %s: %v", blockHash, err)
+				}
+
+				for _, parentLevel := range header.Parents() {
+					for _, parent := range parentLevel {
+						if hashSet[*parent] || parent.Equal(lowHash) {
+							continue
+						}
+						isInPastOfLow, err := tc.DAGTopologyManager().IsAncestorOf(stagingArea, parent, lowHash)
+						if err != nil {
+							t.Fatalf("IsAncestorOf failed: %v", err)
+						}
+						if isInPastOfLow {
+							continue
+						}
+						t.Errorf("REGRESSION: block %s has parent %s that is missing from the result "+
+							"and is NOT an ancestor of lowHash %s — this would cause IBD to fail with "+
+							"\"child of missing parent\"", blockHash, parent, lowHash)
+					}
+				}
+			}
+
+			// Also verify that E specifically is included (it is M's parent and was the missing block
+			// in the bug scenario).
+			if !hashSet[*e] {
+				t.Errorf("REGRESSION: block E (%s) should be in the result because it is the parent "+
+					"of merge-set block M (%s), but it is missing", e, m)
+			}
+		})
 }
