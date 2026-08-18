@@ -9,7 +9,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/util/staging"
-	"github.com/pkg/errors"
 )
 
 // tipsInDecreasingDAGKnightOrder returns the current DAG tips in decreasing DAGKnight ordering.
@@ -253,8 +252,12 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		// Otherwise, internal UTXO diff logic gets all messed up
 		for !isNewVirtualSelectedParent {
 			if processingPointIndex == 0 {
-				return nil, false, errors.Errorf(
-					"Expecting the pending tip %s to overcome the previous selected parent %s", pendingTip, previousVirtualSelectedParent)
+				// If we've reached the pending tip and it still doesn't overcome the previous
+				// virtual selected parent, this could happen in nearly synced scenarios where
+				// GHOSTDAG data isn't fully consistent. Log a warning and process from the pending tip.
+				log.Warnf("Pending tip %s does not overcome previous selected parent %s. Processing entire unverified chain from pending tip.", pendingTip, previousVirtualSelectedParent)
+				processingPoint = pendingTip
+				break
 			}
 			processingPointIndex--
 			processingPoint = unverifiedBlocks[processingPointIndex]
