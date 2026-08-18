@@ -76,7 +76,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		if err != nil {
 			return nil, nil, err
 		}
-		log.Infof("Logging sortedMergeSet of %d", current)
+		log.Infof("Logging sortedMergeSet of %s", current)
 		for i, hash := range sortedMergeSet {
 			log.Infof("%d: %s", i, hash)
 		}
