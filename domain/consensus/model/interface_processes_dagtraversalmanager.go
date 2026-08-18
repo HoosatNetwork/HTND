@@ -1,6 +1,8 @@
 package model
 
-import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+import (
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+)
 
 // DAGTraversalManager exposes methods for traversing blocks
 // in the DAG
@@ -8,6 +10,8 @@ type DAGTraversalManager interface {
 	LowestChainBlockAboveOrEqualToBlueScore(stagingArea *StagingArea, highHash *externalapi.DomainHash, blueScore uint64) (*externalapi.DomainHash, error)
 	// SelectedChildIterator should return a BlockIterator that iterates
 	// from lowHash (exclusive) to highHash (inclusive) over highHash's selected parent chain
+	ChildIterator(stagingArea *StagingArea, highHash, lowHash *externalapi.DomainHash, includeLowHash bool) (BlockIterator, error)
+	Childs(stagingArea *StagingArea, lowHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	SelectedChildIterator(stagingArea *StagingArea, highHash, lowHash *externalapi.DomainHash, includeLowHash bool) (BlockIterator, error)
 	SelectedChild(stagingArea *StagingArea, highHash, lowHash *externalapi.DomainHash) (*externalapi.DomainHash, error)
 	AnticoneFromBlocks(stagingArea *StagingArea, tips []*externalapi.DomainHash, blockHash *externalapi.DomainHash, maxTraversalAllowed uint64) ([]*externalapi.DomainHash, error)

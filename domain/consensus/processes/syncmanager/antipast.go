@@ -56,32 +56,20 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 
 	// Collect all hashes by concatenating the merge-sets of all blocks between highHash and lowHash
 	blockHashes := []*externalapi.DomainHash{}
-	iterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowHash, false)
+	seen := make(map[externalapi.DomainHash]struct{})
+	iterator, err := sm.dagTraversalManager.ChildIterator(stagingArea, highHash, lowHash, false)
 	if err != nil {
 		return nil, nil, err
 	}
+	log.Infof("LowHash %s, HighHash %s", lowHash, highHash)
 	defer iterator.Close()
 	for ok := iterator.First(); ok; ok = iterator.Next() {
 		current, err := iterator.Get()
 		if err != nil {
 			return nil, nil, err
 		}
-		// Both blue and red merge sets are topologically sorted, but not the concatenation of the two.
-		// We require the blocks to be topologically sorted. In addition,  for optimal performance,
-		// we want the selectedParent to be first.
-		// Since the rest of the merge set is in the anticone of selectedParent, it's position in the list does not
-		// matter, even though it's blue score is the highest, we can arbitrarily decide it comes first.
-		// Therefore we first append the selectedParent, then the rest of blocks in ghostdag order.
-		sortedMergeSet, err := sm.ghostdagManager.GetSortedMergeSet(stagingArea, current)
-		if err != nil {
-			return nil, nil, err
-		}
-		log.Infof("Logging sortedMergeSet of %s", current)
-		for i, hash := range sortedMergeSet {
-			log.Infof("%d: %s", i, hash)
-		}
 
-		total := len(blockHashes) + len(sortedMergeSet)
+		total := len(blockHashes)
 		if total < 0 {
 			// Should never happen, but guard for safety
 			break
@@ -92,7 +80,18 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 
 		highHash = current
 
-		// append to blockHashes all blocks in sortedMergeSet which are not in the past of originalLowHash
+		isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, current, originalLowHash)
+		if err != nil {
+			return nil, nil, err
+		}
+		if isInPastOfOriginalLowHash {
+			log.Infof("Skipping %s sorted mergeset, because IsAncestorOf %s", current, originalLowHash)
+			continue
+		}
+		sortedMergeSet, err := sm.ghostdagManager.GetSortedMergeSet(stagingArea, current)
+		if err != nil {
+			return nil, nil, err
+		}
 		for _, blockHash := range sortedMergeSet {
 			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
 			if err != nil {
@@ -102,13 +101,26 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 				log.Infof("Skipping %s on %s sorted mergeset, because IsAncestorOf %s", blockHash, current, originalLowHash)
 				continue
 			}
-			blockHashes = append(blockHashes, blockHash)
+			if _, exists := seen[*blockHash]; !exists {
+				seen[*blockHash] = struct{}{}
+				blockHashes = append(blockHashes, blockHash)
+			}
+		}
+		if _, exists := seen[*current]; !exists {
+			seen[*current] = struct{}{}
+			blockHashes = append(blockHashes, current)
 		}
 	}
 
 	// The process above doesn't return highHash, so include it explicitly, unless highHash == lowHash
 	if !lowHash.Equal(highHash) {
-		blockHashes = append(blockHashes, highHash)
+		if _, exists := seen[*highHash]; !exists {
+			blockHashes = append(blockHashes, highHash)
+		}
+	}
+
+	for i, hash := range blockHashes {
+		log.Infof("%d, %s", i, hash)
 	}
 
 	return blockHashes, highHash, nil

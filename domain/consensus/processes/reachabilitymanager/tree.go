@@ -2,6 +2,7 @@ package reachabilitymanager
 
 import (
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -130,6 +131,17 @@ func (rt *reachabilityManager) IsReachabilityTreeAncestorOf(stagingArea *model.S
 	return intervalContains(nodeInterval, otherInterval), nil
 }
 
+func (rt *reachabilityManager) GetChildren(stagingArea *model.StagingArea, ancestor *externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
+
+	childrenOfAncestor, err := rt.children(stagingArea, ancestor)
+	if err != nil {
+		return nil, err
+	}
+
+	return childrenOfAncestor, nil
+}
+
 // FindNextAncestor finds the reachability tree child
 // of 'ancestor' which is also an ancestor of 'descendant'.
 func (rt *reachabilityManager) FindNextAncestor(stagingArea *model.StagingArea,
@@ -144,7 +156,26 @@ func (rt *reachabilityManager) FindNextAncestor(stagingArea *model.StagingArea,
 		return nil, err
 	}
 
-	nextAncestor, ok := rt.findAncestorOfNode(stagingArea, childrenOfAncestor, descendant)
+	// Sort children by their interval start to ensure binary search works correctly
+	// The binary search in findAncestorOfNode assumes children are sorted by interval.Start
+	// We make a copy to avoid modifying the stored data
+	sortedChildren := make([]*externalapi.DomainHash, len(childrenOfAncestor))
+	copy(sortedChildren, childrenOfAncestor)
+	sort.Slice(sortedChildren, func(i, j int) bool {
+		iInterval, err := rt.interval(stagingArea, sortedChildren[i])
+		if err != nil {
+			log.Errorf("Failed to get interval for child %s: %v", sortedChildren[i], err)
+			return false
+		}
+		jInterval, err := rt.interval(stagingArea, sortedChildren[j])
+		if err != nil {
+			log.Errorf("Failed to get interval for child %s: %v", sortedChildren[j], err)
+			return false
+		}
+		return iInterval.Start < jInterval.Start
+	})
+
+	nextAncestor, ok := rt.findAncestorOfNode(stagingArea, sortedChildren, descendant)
 	if !ok {
 		return nil, errors.Errorf("ancestor is not an ancestor of descendant")
 	}

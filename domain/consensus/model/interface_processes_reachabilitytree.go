@@ -10,5 +10,6 @@ type ReachabilityManager interface {
 	IsReachabilityTreeAncestorOf(stagingArea *StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error)
 	IsDAGAncestorOf(stagingArea *StagingArea, blockHashA *externalapi.DomainHash, blockHashB *externalapi.DomainHash) (bool, error)
 	UpdateReindexRoot(stagingArea *StagingArea, selectedTip *externalapi.DomainHash) error
+	GetChildren(stagingArea *StagingArea, ancestor *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	FindNextAncestor(stagingArea *StagingArea, descendant, ancestor *externalapi.DomainHash) (*externalapi.DomainHash, error)
 }
