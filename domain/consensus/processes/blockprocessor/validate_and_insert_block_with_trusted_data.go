@@ -6,7 +6,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 )
 
 func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *model.StagingArea,
@@ -26,17 +25,18 @@ func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *mod
 		bp.blockHeaderStore.Stage(stagingArea, hash, daaBlock.Header)
 	}
 
+	for _, pair := range block.GHOSTDAGData {
+		bp.ghostdagDataStore.Stage(stagingArea, pair.Hash, pair.GHOSTDAGData, true)
+	}
+
+	bp.daaBlocksStore.StageDAAScore(stagingArea, blockHash, block.Block.Header.DAAScore())
+
 	blockReplacedGHOSTDAGData, err := bp.ghostdagDataWithoutPrunedBlocks(stagingArea, block.GHOSTDAGData[0].GHOSTDAGData)
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
 	}
 	bp.ghostdagDataStore.Stage(stagingArea, blockHash, blockReplacedGHOSTDAGData, false)
 
-	for _, pair := range block.GHOSTDAGData {
-		bp.ghostdagDataStore.Stage(stagingArea, pair.Hash, pair.GHOSTDAGData, true)
-	}
-
-	bp.daaBlocksStore.StageDAAScore(stagingArea, blockHash, block.Block.Header.DAAScore())
 	return bp.validateAndInsertBlock(stagingArea, block.Block, false, validateUTXO, true, true, true)
 }
 
@@ -89,18 +89,17 @@ func (bp *blockProcessor) ghostdagDataWithoutPrunedBlocks(stagingArea *model.Sta
 		mergeSetBlues,
 		mergeSetReds,
 		data.BluesAnticoneSizes(),
-		externalapi.KType(1),
+		data.DynamicK(),
 	), nil
 }
 
 func (bp *blockProcessor) isPruned(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
-	_, err := bp.ghostdagDataStore.Get(bp.databaseContext, stagingArea, blockHash, false)
-	if database.IsNotFoundError(err) {
-		return true, nil
-	}
+	status, err := bp.blockStatusStore.Get(bp.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		return false, err
 	}
-
+	if status == externalapi.StatusHeaderOnly {
+		return true, nil
+	}
 	return false, nil
 }
