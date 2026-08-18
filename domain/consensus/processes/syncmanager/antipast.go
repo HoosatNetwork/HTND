@@ -76,6 +76,10 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		if err != nil {
 			return nil, nil, err
 		}
+		log.Infof("Logging sortedMergeSet of %d", current)
+		for i, hash := range sortedMergeSet {
+			log.Infof("%d: %s", i, hash)
+		}
 
 		total := len(blockHashes) + len(sortedMergeSet)
 		if total < 0 {
@@ -95,6 +99,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 				return nil, nil, err
 			}
 			if isInPastOfOriginalLowHash {
+				log.Infof("Skipping %s on %s sorted mergeset, because IsAncestorOf %s", blockHash, current, originalLowHash)
 				continue
 			}
 			blockHashes = append(blockHashes, blockHash)

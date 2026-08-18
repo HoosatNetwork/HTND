@@ -615,14 +615,14 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 	// c.RepairBlockStatuses()
 	// c.ReresolveInvalidBlocks()
-	hash, err := externalapi.NewDomainHashFromString("3ba7ac9a1d0f8262ba05e3e5c00fab85ffc9ce9ed8ddfaec6709615af7a6c531")
-	if err != nil {
-		return nil, false, err
-	}
-	err = c.CheckMergeSetBluesAndIfBlockExistsInThem(hash)
-	if err != nil {
-		return nil, false, err
-	}
+	// hash, err := externalapi.NewDomainHashFromString("3ba7ac9a1d0f8262ba05e3e5c00fab85ffc9ce9ed8ddfaec6709615af7a6c531")
+	// if err != nil {
+	// 	return nil, false, err
+	// }
+	// err = c.CheckMergeSetBluesAndIfBlockExistsInThem(hash)
+	// if err != nil {
+	// 	return nil, false, err
+	// }
 
 	err = pruningManager.UpdatePruningPointIfRequired()
 	if err != nil {
