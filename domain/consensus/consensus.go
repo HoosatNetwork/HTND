@@ -1668,93 +1668,81 @@ func (s *consensus) CheckMergeSetBluesAndIfBlockExistsInThem(searchedBlock *exte
 			return errors.Wrap(err, "failed to get block hash")
 		}
 
+		_, found, err := s.GetBlock(blockHash)
+		if err != nil {
+			return errors.Wrap(err, "failed to get block")
+		}
+		if !found {
+			continue
+		}
+
 		totalCount++
 
 		// Create a staging area for this block
 		stagingArea := model.NewStagingArea()
 
 		for i := 0; i < len(s.ghostdagDataStores); i++ {
-			// Get the current GHOSTDAG data
 			if blockHash.Equal(searchedBlock) {
 				log.Infof("Block found itself")
 			}
+
 			ghostDAGData, err := s.ghostdagDataStores[i].Get(s.databaseContext, stagingArea, blockHash, false)
 			if err != nil {
 				if database.IsNotFoundError(err) {
-					// GHOSTDAG data not found - skip
-					if !iterator.Next() {
+					log.Infof("ghostDAGData was missing for %s", blockHash)
+				} else {
+					return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
+				}
+			}
+			if ghostDAGData != nil {
+				for _, blue := range ghostDAGData.MergeSetBlues() {
+					if blue.Equal(searchedBlock) {
+						log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
 						break
 					}
-					continue
 				}
-				return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
-			}
-			// found := false
-			for _, blue := range ghostDAGData.MergeSetBlues() {
-				if blue.Equal(searchedBlock) {
-					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
-					// found = true
-					break
+				for _, red := range ghostDAGData.MergeSetReds() {
+					if red.Equal(searchedBlock) {
+						log.Infof("Found the blockhash %s in mergeset reds of %s", searchedBlock, blockHash)
+						break
+					}
 				}
 			}
-			for _, blue := range ghostDAGData.MergeSetReds() {
-				if blue.Equal(searchedBlock) {
-					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
-					// found = true
-					break
-				}
-			}
-			// if !found {
-			// 	log.Infof("Did not find the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
-			// }
 
 			// Re-run GHOSTDAG to recalculate the data correctly
 			err = s.ghostdagManagers[i].GHOSTDAG(stagingArea, blockHash)
 			if err != nil {
-				return errors.Wrapf(err, "failed to repair BluesAnticoneSizes for block %s", blockHash)
+				continue
 			}
-
-			// Commit the repaired data
-			// if err := staging.CommitAllChanges(s.databaseContext, stagingArea); err != nil {
-			// 	return errors.Wrapf(err, "failed to commit repaired BluesAnticoneSizes for block %s", blockHash)
-			// }
 
 			ghostDAGData, err = s.ghostdagDataStores[i].Get(s.databaseContext, stagingArea, blockHash, false)
 			if err != nil {
 				if database.IsNotFoundError(err) {
-					// GHOSTDAG data not found - skip
-					if !iterator.Next() {
-						break
-					}
+					// GHOSTDAG data not found after recalculation - skip to next store
 					continue
 				}
 				return errors.Wrapf(err, "failed to get GHOSTDAG data for block %s", blockHash)
 			}
-
-			// found = false
-			for _, blue := range ghostDAGData.MergeSetBlues() {
-				if blue.Equal(searchedBlock) {
-					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
-					// found = true
-					break
+			if ghostDAGData != nil {
+				for _, blue := range ghostDAGData.MergeSetBlues() {
+					if blue.Equal(searchedBlock) {
+						log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
+						break
+					}
+				}
+				for _, red := range ghostDAGData.MergeSetReds() {
+					if red.Equal(searchedBlock) {
+						log.Infof("Found the blockhash %s in mergeset reds of %s", searchedBlock, blockHash)
+						break
+					}
 				}
 			}
-			for _, blue := range ghostDAGData.MergeSetReds() {
-				if blue.Equal(searchedBlock) {
-					log.Infof("Found the blockhash %s in mergeset blues of %s", searchedBlock, blockHash)
-					// found = true
-					break
-				}
-			}
-			// if !found {
-			// 	log.Infof("Did not find the blockhash %s in mergeset blues of %s, even after recalculating GHOSTDAG", searchedBlock, blockHash)
-			// }
 
-			// Log progress every 1000 blocks
-			if totalCount%1000 == 0 {
-				log.Infof("Processed %d blocks..", totalCount)
-			}
-			totalCount++
+		}
+
+		// Log progress every 1000 blocks
+		if totalCount%1000 == 0 {
+			log.Infof("Processed %d blocks..", totalCount)
 		}
 
 		if !iterator.Next() {

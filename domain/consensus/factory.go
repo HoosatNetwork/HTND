@@ -619,7 +619,10 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	if err != nil {
 		return nil, false, err
 	}
-	c.CheckMergeSetBluesAndIfBlockExistsInThem(hash)
+	err = c.CheckMergeSetBluesAndIfBlockExistsInThem(hash)
+	if err != nil {
+		return nil, false, err
+	}
 
 	err = pruningManager.UpdatePruningPointIfRequired()
 	if err != nil {
