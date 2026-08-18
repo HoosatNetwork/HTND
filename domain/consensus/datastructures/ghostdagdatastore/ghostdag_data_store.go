@@ -54,6 +54,9 @@ func (gds *ghostdagDataStore) IsStaged(stagingArea *model.StagingArea) bool {
 
 // Get gets the blockGHOSTDAGData associated with the given blockHash
 func (gds *ghostdagDataStore) Get(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, error) {
+	if blockHash == nil {
+		return nil, errors.New("blockHash is nil")
+	}
 	stagingShard := gds.stagingShard(stagingArea)
 
 	key := newKey(blockHash, isTrustedData)

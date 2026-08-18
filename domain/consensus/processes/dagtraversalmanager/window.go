@@ -116,7 +116,11 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 	// Walk down the chain until you finish or find a trusted block and then take complete the rest
 	// of the window with the trusted window.
 	for {
-		if currentGHOSTDAGData.SelectedParent().Equal(dtm.genesisHash) {
+		selectedParent := currentGHOSTDAGData.SelectedParent()
+		if selectedParent.Equal(nil) {
+			break
+		}
+		if selectedParent.Equal(dtm.genesisHash) || selectedParent.Equal(model.VirtualGenesisBlockHash) {
 			break
 		}
 
@@ -149,7 +153,7 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 		}
 
 		selectedParentGHOSTDAGData, err := dtm.ghostdagDataStore.Get(
-			dtm.databaseContext, stagingArea, currentGHOSTDAGData.SelectedParent(), false)
+			dtm.databaseContext, stagingArea, selectedParent, false)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +166,7 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 			break
 		}
 
-		current = currentGHOSTDAGData.SelectedParent()
+		current = selectedParent
 		currentGHOSTDAGData = selectedParentGHOSTDAGData
 	}
 
