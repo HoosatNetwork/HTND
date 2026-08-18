@@ -4,24 +4,29 @@ set -eu
 
 # Go pre-commit hook: gofmt + staticcheck
 
-# VS Code (when launched from a GUI) may not inherit the same PATH as your shell,
-# so Go tools installed via `go install` (typically under $GOPATH/bin) might not
-# be found when the hook runs.
-if command -v go >/dev/null 2>&1; then
-    GO_BIN="$(go env GOBIN 2>/dev/null || true)"
-    if [ -z "${GO_BIN:-}" ]; then
-        GO_BIN="$(go env GOPATH 2>/dev/null || true)/bin"
-    fi
-    if [ -n "${GO_BIN:-}" ]; then
-        PATH="$GO_BIN:$PATH"
-        export PATH
-    fi
-fi
+# --- 1. Robust PATH Resolution ---
+# Ensures Go binaries are located even when commits are initiated from GUI apps (VS Code, GitKraken, etc.)
+add_to_path() {
+    case ":$PATH:" in
+        *":$1:"*) ;;
+        *) [ -d "$1" ] && PATH="$1:$PATH" ;;
+    esac
+}
 
-# Avoid failing when /tmp is full (staticcheck compiles packages and uses temp files).
-# IMPORTANT: GOTMPDIR must be an *absolute* path. The Go toolchain may execute
-# cgo/gcc from a different working directory; relative GOTMPDIR paths can cause
-# intermittent "cgo: open ... no such file or directory" failures.
+add_to_path "$HOME/go/bin"
+add_to_path "/usr/local/go/bin"
+add_to_path "/opt/homebrew/bin"
+add_to_path "/opt/homebrew/opt/go/bin"
+
+if command -v go >/dev/null 2>&1; then
+    GOBIN="$(go env GOBIN 2>/dev/null || true)"
+    [ -z "$GOBIN" ] && GOBIN="$(go env GOPATH 2>/dev/null || true)/bin"
+    [ -n "$GOBIN" ] && add_to_path "$GOBIN"
+fi
+export PATH
+
+# --- 2. Isolated GOTMPDIR ---
+# Prevents /tmp full errors and cgo relative path issues
 GIT_DIR_PATH="$(git rev-parse --absolute-git-dir 2>/dev/null || true)"
 if [ -n "${GIT_DIR_PATH:-}" ]; then
     TMP_BASE="$GIT_DIR_PATH/.gotmp"
@@ -31,28 +36,53 @@ if [ -n "${GIT_DIR_PATH:-}" ]; then
     export TMPDIR GOTMPDIR
 fi
 
+# --- 3. Dependency Verification ---
 if ! command -v gofmt >/dev/null 2>&1; then
-    echo "pre-commit: gofmt not found (PATH=$PATH)" >&2
+    echo "pre-commit: error: gofmt not found in PATH ($PATH)" >&2
     exit 1
 fi
 
 if ! command -v staticcheck >/dev/null 2>&1; then
-    echo "pre-commit: staticcheck not found (PATH=$PATH)" >&2
+    echo "pre-commit: error: staticcheck not found in PATH ($PATH)" >&2
     echo "Install: GOTMPDIR=$TMPDIR go install honnef.co/go/tools/cmd/staticcheck@latest" >&2
     exit 1
 fi
 
-# Find staged Go files (added, copied, modified)
-STAGED_GO_FILES="$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' || true)"
+# --- 4. Staged File Detection ---
+# Get staged Go files (Added, Copied, Modified), ignoring vendor/
+STAGED_GO_FILES="$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' | grep -v '^vendor/' || true)"
 
-if [ -n "$STAGED_GO_FILES" ]; then
-	echo "pre-commit: running gofmt on staged Go files"
-	printf '%s\n' "$STAGED_GO_FILES" | while IFS= read -r file; do
-		[ -n "$file" ] || continue
-		gofmt -w "$file"
-		git add "$file"
-	done
+if [ -z "$STAGED_GO_FILES" ]; then
+    exit 0
 fi
 
-echo "pre-commit: running staticcheck"
-staticcheck ./...
+# --- 5. Format Staged Files Safely ---
+UNFORMATTED="$(gofmt -l $STAGED_GO_FILES 2>/dev/null || true)"
+
+if [ -n "$UNFORMATTED" ]; then
+    echo "pre-commit: formatting staged Go files..."
+    for file in $UNFORMATTED; do
+        # Prevent partial-staging bug: if a file has unstaged edits, running gofmt + git add
+        # would accidentally commit the unstaged work-in-progress.
+        if ! git diff --quiet -- "$file"; then
+            echo "pre-commit: ERROR: '$file' needs formatting but has unstaged edits." >&2
+            echo "            Format it manually or stash unstaged changes before committing." >&2
+            exit 1
+        fi
+        gofmt -w "$file"
+        git add "$file"
+        echo "  formatted: $file"
+    done
+fi
+
+# --- 6. Scoped Static Analysis ---
+echo "pre-commit: running staticcheck..."
+
+# Run staticcheck only on affected package directories rather than scanning the full repo
+STAGED_PKGS="$(printf '%s\n' "$STAGED_GO_FILES" | while read -r f; do dirname "$f"; done | sort -u | sed 's|^\.$|.|; s|^[^\.]|./&|')"
+
+if [ -n "$STAGED_PKGS" ]; then
+    staticcheck $STAGED_PKGS
+else
+    staticcheck ./...
+fi

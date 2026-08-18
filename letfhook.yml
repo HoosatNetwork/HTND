@@ -1,0 +1,4 @@
+pre-commit:
+  commands:
+    custom-pre-commit:
+      run: .hooks/pre-commit
