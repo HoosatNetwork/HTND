@@ -70,7 +70,7 @@ func DefaultConfig() *Config {
 		NotifyOnly:       false,
 		InstallDelayMin:  30 * time.Minute,
 		InstallDelayMax:  180 * time.Minute,
-		GitHubToken:      "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",
+		GitHubToken:      "",
 		AutoReportIssues: false,
 	}
 }

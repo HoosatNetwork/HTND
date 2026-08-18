@@ -92,7 +92,6 @@ func main() {
 
 	// Get autoupdate config from loaded config
 	autoUpdateCfg := autoupdate.DefaultConfig()
-	autoUpdateCfg.GitHubToken = "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"
 	autoUpdateCfg.AutoReportIssues = bool(cfg.AutoReportIssues)
 
 	// Initialize GitHub client for error reporting
