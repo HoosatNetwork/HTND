@@ -52,7 +52,7 @@ type consensusStateManager struct {
 	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
 	// restorePastUTXOCache caches the results of restorePastUTXO calls
 	restorePastUTXOCache *lrucache.LRUCache[externalapi.UTXODiff]
-	lastValidBlock         *externalapi.DomainHash
+	lastValidBlock       *externalapi.DomainHash
 }
 
 // New instantiates a new ConsensusStateManager

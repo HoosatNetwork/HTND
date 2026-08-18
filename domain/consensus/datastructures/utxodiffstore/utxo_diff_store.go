@@ -83,7 +83,8 @@ func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.
 
 	utxoDiffBytes, err := dbContext.Get(uds.utxoDiffHashAsKey(blockHash))
 	if errors.Is(err, database.ErrNotFound) {
-		return nil, errors.Wrapf(err, "UTXO diff for block %s does not exist in db", blockHash)
+		panic(err)
+		// return nil, errors.Wrapf(err, "UTXO diff for block %s does not exist in db", blockHash)
 	}
 	if err != nil {
 		return nil, err
