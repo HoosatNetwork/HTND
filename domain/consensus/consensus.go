@@ -1662,24 +1662,26 @@ func (s *consensus) CheckMergeSetBluesAndIfBlockExistsInThem(searchedBlock *exte
 		return nil
 	}
 
+	// Create a staging area for this block
+	stagingArea := model.NewStagingArea()
 	for {
 		blockHash, err := iterator.Get()
 		if err != nil {
 			return errors.Wrap(err, "failed to get block hash")
 		}
 
-		_, found, err := s.GetBlock(blockHash)
+		status, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, blockHash)
 		if err != nil {
 			return errors.Wrap(err, "failed to get block")
 		}
-		if !found {
+		if status == externalapi.StatusHeaderOnly {
+			if !iterator.Next() {
+				break
+			}
 			continue
 		}
 
 		totalCount++
-
-		// Create a staging area for this block
-		stagingArea := model.NewStagingArea()
 
 		for i := 0; i < len(s.ghostdagDataStores); i++ {
 			if blockHash.Equal(searchedBlock) {
