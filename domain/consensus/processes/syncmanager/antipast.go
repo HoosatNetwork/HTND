@@ -177,9 +177,9 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		if err != nil {
 			return nil, nil, err
 		}
-		parentsOfParentsOfParentsOfParents := make([]*externalapi.DomainHash, 0)
-		parentsOfParentsOfParents := make([]*externalapi.DomainHash, 0)
-		parentsOfParents := make([]*externalapi.DomainHash, 0)
+		parents3 := make([]*externalapi.DomainHash, 0)
+		parents2 := make([]*externalapi.DomainHash, 0)
+		parents1 := make([]*externalapi.DomainHash, 0)
 		parents := make([]*externalapi.DomainHash, 0)
 
 		for _, blockLevelParent := range header.Parents() {
@@ -200,12 +200,12 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 				for _, parent := range blockLevelParent {
 					if _, exists := seen[*parent]; !exists {
 						seen[*parent] = struct{}{}
-						parentsOfParents = append(parentsOfParents, parent)
+						parents1 = append(parents1, parent)
 					}
 				}
 			}
 		}
-		for _, parent := range parentsOfParents {
+		for _, parent := range parents1 {
 			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
 			if err != nil {
 				return nil, nil, err
@@ -214,12 +214,12 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 				for _, parent := range blockLevelParent {
 					if _, exists := seen[*parent]; !exists {
 						seen[*parent] = struct{}{}
-						parentsOfParentsOfParents = append(parentsOfParentsOfParents, parent)
+						parents2 = append(parents2, parent)
 					}
 				}
 			}
 		}
-		for _, parent := range parentsOfParentsOfParents {
+		for _, parent := range parents2 {
 			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
 			if err != nil {
 				return nil, nil, err
@@ -228,21 +228,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 				for _, parent := range blockLevelParent {
 					if _, exists := seen[*parent]; !exists {
 						seen[*parent] = struct{}{}
-						parentsOfParentsOfParents = append(parentsOfParentsOfParents, parent)
-					}
-				}
-			}
-		}
-		for _, parent := range parentsOfParentsOfParentsOfParents {
-			header, err := sm.blockHeaderStore.BlockHeader(sm.databaseContext, stagingArea, parent)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, blockLevelParent := range header.Parents() {
-				for _, parent := range blockLevelParent {
-					if _, exists := seen[*parent]; !exists {
-						seen[*parent] = struct{}{}
-						parentsOfParentsOfParentsOfParents = append(parentsOfParentsOfParentsOfParents, parent)
+						parents3 = append(parents3, parent)
 					}
 				}
 			}
@@ -262,9 +248,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 			break
 		}
 
-		highHash = current
-
-		for _, blockHash := range parentsOfParentsOfParentsOfParents {
+		for _, blockHash := range parents3 {
 			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
 			if err != nil {
 				return nil, nil, err
@@ -276,7 +260,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 			blockHashes = append(blockHashes, blockHash)
 		}
 
-		for _, blockHash := range parentsOfParentsOfParents {
+		for _, blockHash := range parents2 {
 			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
 			if err != nil {
 				return nil, nil, err
@@ -289,7 +273,7 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		}
 
 		// append to blockHashes all blocks in sortedMergeSet which are not in the past of originalLowHash
-		for _, blockHash := range parentsOfParents {
+		for _, blockHash := range parents1 {
 			isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, blockHash, originalLowHash)
 			if err != nil {
 				return nil, nil, err
@@ -319,11 +303,59 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 		blockHashes = append(blockHashes, highHash)
 	}
 	blockHashes = hashset.NewFromSlice(blockHashes...).ToSlice()
+
+	// Sort by blue score to get topological order
+	if err := sm.sortByBlueScore(stagingArea, blockHashes); err != nil {
+		return nil, nil, err
+	}
+
 	// log.Debugf("Printing current block hashes")
 	// for i, blockhash := range blockHashes {
 	// 	log.Debugf("%d %s", i, blockhash)
 	// }
 	return blockHashes, highHash, nil
+}
+
+// sortByBlueScore sorts a slice of block hashes by their blue score in ascending order.
+// Blue score is monotonically increasing along any chain, so sorting by it
+// ensures ancestors come before descendants, which is the definition of topological order.
+func (sm *syncManager) sortByBlueScore(stagingArea *model.StagingArea, hashes []*externalapi.DomainHash) error {
+	if len(hashes) <= 1 {
+		return nil
+	}
+
+	// Use bubble sort for simplicity (the slice is typically small)
+	swapped := true
+	for swapped {
+		swapped = false
+		for i := 0; i < len(hashes)-1; i++ {
+			if hashes[i].Equal(hashes[i+1]) {
+				continue
+			}
+			iScore, err := sm.getBlueScore(stagingArea, hashes[i])
+			if err != nil {
+				return err
+			}
+			jScore, err := sm.getBlueScore(stagingArea, hashes[i+1])
+			if err != nil {
+				return err
+			}
+			if iScore > jScore {
+				hashes[i], hashes[i+1] = hashes[i+1], hashes[i]
+				swapped = true
+			}
+		}
+	}
+	return nil
+}
+
+// getBlueScore is a helper function to get the blue score of a block
+func (sm *syncManager) getBlueScore(stagingArea *model.StagingArea, hash *externalapi.DomainHash) (uint64, error) {
+	ghostdagData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, hash, false)
+	if err != nil {
+		return 0, err
+	}
+	return ghostdagData.BlueScore(), nil
 }
 
 func (sm *syncManager) findLowHashInHighHashSelectedParentChain(stagingArea *model.StagingArea,
