@@ -302,7 +302,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	var highestKnownSyncerChainHash *externalapi.DomainHash
 	chainNegotiationRestartCounter := 0
 	chainNegotiationZoomCounts := 0
-	initialLocatorLen := len(locatorHashes)
+	maxZoomSteps := len(locatorHashes) * 64
 	pruningPoint, err := flow.Domain().Consensus().PruningPoint()
 	if err != nil {
 		return nil, nil, err
@@ -380,13 +380,22 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				highestKnownSyncerChainHash = currentHighestKnownSyncerChainHash
 				break
 			}
-			initialLocatorLen = initialLocatorLen * 2
-			if chainNegotiationZoomCounts > initialLocatorLen {
-				// Since the zoom-in always queries two consecutive entries in the previous locator, it is
-				// expected to decrease in size at least every two iterations
-				return nil, nil, protocolerrors.Errorf(true,
-					"IBD chain negotiation: Number of zoom-in steps %d exceeded the upper bound of %d, with %d locatorhashes",
-					chainNegotiationZoomCounts, initialLocatorLen, len(locatorHashes))
+			// Since the zoom-in always queries two consecutive entries in the previous locator, it is
+			// expected to decrease in size at least every two iterations. Use a bound based on the
+			// original locator size to detect if we're stuck in a loop. If we exceed the bound,
+			// ban the peer as it may be misbehaving.
+			if chainNegotiationZoomCounts > maxZoomSteps {
+				log.Warnf("IBD chain negotiation: Number of zoom-in steps %d exceeded the upper bound of %d, with %d locatorhashes. "+
+					"Banning peer %s",
+					chainNegotiationZoomCounts, maxZoomSteps, len(locatorHashes), flow.peer)
+				// Ban the misbehaving peer
+				netAddress := flow.peer.Connection().NetAddress()
+				if err := flow.AddressManager().RemoveAddress(netAddress); err != nil {
+					log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
+				}
+				flow.peer.Connection().Disconnect()
+				highestKnownSyncerChainHash = nil
+				break
 			}
 
 		} else { // Empty locator signals a restart due to chain changes
@@ -411,7 +420,8 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 			log.Infof("IBD chain negotiation with peer %s restarted (%d) and received %d hashes (%s, %s)", flow.peer,
 				chainNegotiationRestartCounter, len(locatorHashes), locatorHashes[0], locatorHashes[len(locatorHashes)-1])
 
-			initialLocatorLen = len(locatorHashes)
+			// Reset the max zoom steps based on the new locator size
+			maxZoomSteps = len(locatorHashes) * 64
 			// Reset syncer's header selected tip
 			syncerHeaderSelectedTipHash = locatorHashes[0]
 		}
