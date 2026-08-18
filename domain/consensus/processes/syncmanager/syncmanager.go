@@ -67,7 +67,7 @@ func (sm *syncManager) GetHashesBetween(stagingArea *model.StagingArea, lowHash,
 	onEnd := logger.LogAndMeasureExecutionTime(log, "GetHashesBetween")
 	defer onEnd()
 	if brute {
-		return sm.antiPastHashesBetweenBrute(stagingArea, lowHash, highHash, maxBlocks)
+		return sm.antiPastHashesBetween(stagingArea, lowHash, highHash, maxBlocks)
 	} else {
 		return sm.antiPastHashesBetween(stagingArea, lowHash, highHash, maxBlocks)
 	}
