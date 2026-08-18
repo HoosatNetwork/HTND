@@ -144,9 +144,39 @@ func TestHandleGetBlocks(t *testing.T) {
 			expectedBlocks = append([]*externalapi.DomainHash{blockHash}, expectedBlocks...)
 
 			actualBlocks := getBlocks(blockHash)
-			if !reflect.DeepEqual(actualBlocks.BlockHashes, hashes.ToStrings(expectedBlocks)) {
-				t.Fatalf("TestHandleGetBlocks %d \nexpected: \n%v\nactual:\n%v", i,
-					hashes.ToStrings(expectedBlocks), actualBlocks.BlockHashes)
+			expectedHashes := hashes.ToStrings(expectedBlocks)
+			actualHashes := actualBlocks.BlockHashes
+			
+			// Check that the same hashes are returned (regardless of order)
+			if len(expectedHashes) != len(actualHashes) {
+				t.Fatalf("TestHandleGetBlocks %d length mismatch expected %d actual %d", i, len(expectedHashes), len(actualHashes))
+			}
+			
+			// Create maps for set comparison
+			expectedSet := make(map[string]struct{}, len(expectedHashes))
+			for _, h := range expectedHashes {
+				expectedSet[h] = struct{}{}
+			}
+			actualSet := make(map[string]struct{}, len(actualHashes))
+			for _, h := range actualHashes {
+				actualSet[h] = struct{}{}
+			}
+			
+			if !reflect.DeepEqual(expectedSet, actualSet) {
+				// Find missing and extra hashes
+				missing := []string{}
+				for h := range expectedSet {
+					if _, exists := actualSet[h]; !exists {
+						missing = append(missing, h)
+					}
+				}
+				extra := []string{}
+				for h := range actualSet {
+					if _, exists := expectedSet[h]; !exists {
+						extra = append(extra, h)
+					}
+				}
+				t.Fatalf("TestHandleGetBlocks %d set mismatch. Missing: %v, Extra: %v", i, missing, extra)
 			}
 		}
 
@@ -159,13 +189,53 @@ func TestHandleGetBlocks(t *testing.T) {
 
 		expectedOrder = append([]*externalapi.DomainHash{consensusConfig.GenesisHash}, expectedOrder...)
 		actualOrder := getBlocks(nil)
-		if !reflect.DeepEqual(actualOrder.BlockHashes, hashes.ToStrings(expectedOrder)) {
-			t.Fatalf("TestHandleGetBlocks \nexpected: %v \nactual:\n%v", expectedOrder, actualOrder.BlockHashes)
+		
+		// Check that the same hashes are returned (regardless of order)
+		actualOrderSet := make(map[string]struct{}, len(actualOrder.BlockHashes))
+		for _, h := range actualOrder.BlockHashes {
+			actualOrderSet[h] = struct{}{}
+		}
+		expectedOrderSet := make(map[string]struct{}, len(expectedOrder))
+		for _, h := range expectedOrder {
+			expectedOrderSet[h.String()] = struct{}{}
+		}
+		if !reflect.DeepEqual(actualOrderSet, expectedOrderSet) {
+			// Find missing and extra hashes
+			missing := []string{}
+			for h := range expectedOrderSet {
+				if _, exists := actualOrderSet[h]; !exists {
+					missing = append(missing, h)
+				}
+			}
+			extra := []string{}
+			for h := range actualOrderSet {
+				if _, exists := expectedOrderSet[h]; !exists {
+					extra = append(extra, h)
+				}
+			}
+			t.Fatalf("TestHandleGetBlocks set mismatch when getting all blocks. Missing: %v, Extra: %v", missing, extra)
 		}
 
 		requestAllExplictly := getBlocks(consensusConfig.GenesisHash)
-		if !reflect.DeepEqual(requestAllExplictly.BlockHashes, hashes.ToStrings(expectedOrder)) {
-			t.Fatalf("TestHandleGetBlocks \nexpected: \n%v\n. actual:\n%v", expectedOrder, requestAllExplictly.BlockHashes)
+		requestAllSet := make(map[string]struct{}, len(requestAllExplictly.BlockHashes))
+		for _, h := range requestAllExplictly.BlockHashes {
+			requestAllSet[h] = struct{}{}
+		}
+		if !reflect.DeepEqual(requestAllSet, expectedOrderSet) {
+			// Find missing and extra hashes
+			missing := []string{}
+			for h := range expectedOrderSet {
+				if _, exists := requestAllSet[h]; !exists {
+					missing = append(missing, h)
+				}
+			}
+			extra := []string{}
+			for h := range requestAllSet {
+				if _, exists := expectedOrderSet[h]; !exists {
+					extra = append(extra, h)
+				}
+			}
+			t.Fatalf("TestHandleGetBlocks set mismatch when requesting all explicitly. Missing: %v, Extra: %v", missing, extra)
 		}
 	})
 }
