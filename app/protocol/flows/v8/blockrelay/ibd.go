@@ -500,7 +500,7 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 	}
 
 	progressReporter := newIBDProgressReporter(highestSharedBlockHeader.DAAScore(), highBlockDAAScoreHint, "block headers")
-
+	finished := false
 	for {
 		// Receive next batch of headers (this call blocks)
 		blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
@@ -508,7 +508,7 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 			return err
 		}
 
-		if doneIBD {
+		if doneIBD || finished {
 			// IBD of headers is finished → proceed to sync relay past
 			return flow.syncMissingRelayPast(consensus, syncerHeaderSelectedTipHash, relayBlockHash)
 		}
@@ -520,10 +520,14 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 
 		// Process all headers in this batch
 		for _, header := range blockHeadersMessage.BlockHeaders {
+			// log.Infof("Processing header %s", header.BlockHash())
 			err = flow.processHeader(consensus, header)
 			if err != nil {
-
 				return err
+			}
+			if header.BlockHash().Equal(syncerHeaderSelectedTipHash) {
+				log.Infof("Setting finished as true, because found the syncer header selected tip hash")
+				finished = true
 			}
 			flow.headersProcessedSinceLast++
 			// Periodic rate check (e.g., every 10 seconds) inside loop

@@ -68,6 +68,11 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		if err != nil {
 			return nil, nil, err
 		}
+		log.Infof("Child iterator returned %s", current)
+		if current.Equal(actualHighHash) {
+			highHash = actualHighHash
+			break
+		}
 
 		total := len(blockHashes)
 		if total < 0 {

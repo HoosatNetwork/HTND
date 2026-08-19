@@ -20,10 +20,12 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 	defer onEnd()
 
 	log.Debugf("CalculatePastUTXOAndAcceptanceData start for block %s", blockHash)
+
 	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
-		blockHash = csm.genesisHash
+		blockHash = csm.genesisHash // keep lookups + logs consistent
 		log.Debugf("Block %s is the genesis. By definition, "+
 			"it has a predefined UTXO diff, empty acceptance data, and a predefined multiset", blockHash)
+
 		multiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, blockHash)
 		if database.IsNotFoundError(err) {
 			log.Infof("CalculatePastUTXOAndAcceptanceData failed to retrieve with %s\n", blockHash)
@@ -50,6 +52,9 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 
 	blockParent := blockGHOSTDAGData.SelectedParent()
 
+	// IMPORTANT: Do NOT special-case the parent here.
+	// restorePastUTXO already returns the correct genesis UTXO when parent
+	// is csm.genesisHash or model.VirtualGenesisBlockHash.
 	log.Debugf("Restoring the past UTXO of block %s with selectedParent %s",
 		blockHash, blockParent)
 	selectedParentPastUTXO, err := csm.restorePastUTXO(stagingArea, blockParent)
@@ -61,7 +66,8 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 		"Diff toAdd length: %d, toRemove length: %d", blockHash, blockParent,
 		selectedParentPastUTXO.ToAdd().Len(), selectedParentPastUTXO.ToRemove().Len())
 
-	return csm.calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(stagingArea, blockHash, selectedParentPastUTXO, blockGHOSTDAGData)
+	return csm.calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(
+		stagingArea, blockHash, selectedParentPastUTXO, blockGHOSTDAGData)
 }
 
 func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(stagingArea *model.StagingArea,
@@ -81,12 +87,6 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	daaScore, err := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-	if !blockHash.Equal(model.VirtualBlockHash) {
-		header, headerErr := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, blockHash)
-		if headerErr == nil {
-			daaScore = header.DAAScore()
-		}
 	}
 
 	log.Debugf("Applying blue blocks to the selected parent past UTXO of block %s", blockHash)
@@ -115,7 +115,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 		return utxo.NewUTXODiff(), nil
 	}
 
-	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualBlockHash) {
+	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, csm.genesisHash)
 		if err != nil {
 			return nil, err
@@ -125,9 +125,6 @@ func (csm *consensusStateManager) restorePastUTXO(
 
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
-	var err error
-
-	log.Debugf("Collecting UTXO diffs for block %s", blockHash)
 	var utxoDiffs []externalapi.UTXODiff
 	nextBlockHash := blockHash
 	for {
@@ -135,20 +132,26 @@ func (csm *consensusStateManager) restorePastUTXO(
 			log.Debugf("Block is genesis, treating as end of UTXO-diff chain for block %s", blockHash)
 			break
 		}
-		log.Debugf("Collecting UTXO diff for block %s", nextBlockHash)
+
 		blockStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
 			return nil, err
 		}
-		// During IBD with headers proof, we might encounter header-only blocks in the UTXO-diff child path.
-		// These blocks don't have UTXO diffs, so we treat them as if they don't have a UTXO-diff child
-		// (i.e., we've reached the end of the chain that has UTXO diffs).
 		if blockStatus == externalapi.StatusHeaderOnly {
-			log.Debugf("Block %s is header-only, treating as end of UTXO-diff chain for block %s", nextBlockHash, blockHash)
+			log.Debugf("Block %s is header-only, treating as end of UTXO-diff chain for block %s",
+				nextBlockHash, blockHash)
 			break
 		}
+
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
+			// Treat missing UTXODiff the same as HeaderOnly – stop the walk.
+			// This is common during IBD / pruning-point import / virtual resolution.
+			if database.IsNotFoundError(err) {
+				log.Debugf("Block %s has no UTXO diff (not found), treating as end of UTXO-diff chain for block %s",
+					nextBlockHash, blockHash)
+				break
+			}
 			return nil, err
 		}
 
@@ -161,8 +164,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 			return nil, err
 		}
 		if !exists {
-			log.Debugf("Block %s does not have a UTXO diff child, "+
-				"meaning we reached the virtual", nextBlockHash)
+			log.Debugf("Block %s does not have a UTXO diff child, meaning we reached the virtual", nextBlockHash)
 			break
 		}
 
@@ -171,8 +173,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 			return nil, err
 		}
 		if nextBlockHash == nil {
-			log.Debugf("Block %s does not have a UTXO diff child, "+
-				"meaning we reached the virtual", nextBlockHash)
+			log.Debugf("Block %s does not have a UTXO diff child, meaning we reached the virtual", nextBlockHash)
 			break
 		}
 	}
@@ -181,11 +182,10 @@ func (csm *consensusStateManager) restorePastUTXO(
 	log.Debugf("Applying the collected UTXO diffs for block %s in reverse order", blockHash)
 	accumulatedDiff := utxo.NewMutableUTXODiff()
 	for i := len(utxoDiffs) - 1; i >= 0; i-- {
-		err = accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
+		err := accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
 		if err != nil {
 			log.Debugf("restorePastUTXO: WithDiffInPlace on index %d failed while walking selected parent chain for %s", len(utxoDiffs), blockHash)
 			break
-			// Consider returning empty utxodiff as accumulated diff return utxo.NewMutableUTXODiff().ToImmutable(), nil
 		}
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
