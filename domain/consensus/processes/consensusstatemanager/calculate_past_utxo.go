@@ -20,19 +20,19 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 	defer onEnd()
 
 	log.Debugf("CalculatePastUTXOAndAcceptanceData start for block %s", blockHash)
-
 	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
+		blockHash = csm.genesisHash
 		log.Debugf("Block %s is the genesis. By definition, "+
 			"it has a predefined UTXO diff, empty acceptance data, and a predefined multiset", blockHash)
-		multiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, csm.genesisHash)
+		multiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, blockHash)
 		if database.IsNotFoundError(err) {
-			log.Infof("CalculatePastUTXOAndAcceptanceData failed to retrieve with %s\n", csm.genesisHash)
+			log.Infof("CalculatePastUTXOAndAcceptanceData failed to retrieve with %s\n", blockHash)
 			return nil, nil, nil, err
 		}
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, csm.genesisHash)
+		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, blockHash)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -48,15 +48,17 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 		return nil, nil, nil, err
 	}
 
+	blockParent := blockGHOSTDAGData.SelectedParent()
+
 	log.Debugf("Restoring the past UTXO of block %s with selectedParent %s",
-		blockHash, blockGHOSTDAGData.SelectedParent())
-	selectedParentPastUTXO, err := csm.restorePastUTXO(stagingArea, blockGHOSTDAGData.SelectedParent())
+		blockHash, blockParent)
+	selectedParentPastUTXO, err := csm.restorePastUTXO(stagingArea, blockParent)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	log.Debugf("Restored the past UTXO of block %s with selectedParent %s. "+
-		"Diff toAdd length: %d, toRemove length: %d", blockHash, blockGHOSTDAGData.SelectedParent(),
+		"Diff toAdd length: %d, toRemove length: %d", blockHash, blockParent,
 		selectedParentPastUTXO.ToAdd().Len(), selectedParentPastUTXO.ToRemove().Len())
 
 	return csm.calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO(stagingArea, blockHash, selectedParentPastUTXO, blockGHOSTDAGData)
@@ -109,6 +111,18 @@ func (csm *consensusStateManager) restorePastUTXO(
 	onEnd := logger.LogAndMeasureExecutionTime(log, "restorePastUTXO")
 	defer onEnd()
 
+	if blockHash.Equal(model.VirtualBlockHash) {
+		return utxo.NewUTXODiff(), nil
+	}
+
+	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualBlockHash) {
+		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, csm.genesisHash)
+		if err != nil {
+			return nil, err
+		}
+		return utxoDiff, nil
+	}
+
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
 	var err error
@@ -117,6 +131,10 @@ func (csm *consensusStateManager) restorePastUTXO(
 	var utxoDiffs []externalapi.UTXODiff
 	nextBlockHash := blockHash
 	for {
+		if nextBlockHash.Equal(model.VirtualGenesisBlockHash) || nextBlockHash.Equal(csm.genesisHash) {
+			log.Debugf("Block is genesis, treating as end of UTXO-diff chain for block %s", blockHash)
+			break
+		}
 		log.Debugf("Collecting UTXO diff for block %s", nextBlockHash)
 		blockStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
@@ -133,6 +151,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 		if err != nil {
 			return nil, err
 		}
+
 		utxoDiffs = append(utxoDiffs, utxoDiff)
 		log.Debugf("Collected UTXO diff for block %s: toAdd: %d, toRemove: %d",
 			nextBlockHash, utxoDiff.ToAdd().Len(), utxoDiff.ToRemove().Len())
@@ -170,7 +189,6 @@ func (csm *consensusStateManager) restorePastUTXO(
 		}
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
-
 	return accumulatedDiff.ToImmutable(), nil
 }
 
