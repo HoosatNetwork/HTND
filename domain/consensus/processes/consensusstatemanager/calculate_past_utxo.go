@@ -36,7 +36,12 @@ func (csm *consensusStateManager) CalculatePastUTXOAndAcceptanceData(stagingArea
 		}
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, blockHash)
 		if err != nil {
-			return nil, nil, nil, err
+			if database.IsNotFoundError(err) {
+				log.Warnf("Genesis UTXO diff for %s not found, using empty diff", blockHash)
+				utxoDiff = utxo.NewUTXODiff()
+			} else {
+				return nil, nil, nil, err
+			}
 		}
 		return utxoDiff, externalapi.AcceptanceData{}, multiset, nil
 	}
@@ -118,6 +123,10 @@ func (csm *consensusStateManager) restorePastUTXO(
 	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, csm.genesisHash)
 		if err != nil {
+			if database.IsNotFoundError(err) {
+				log.Warnf("Genesis UTXO diff for %s not found in db, falling back to empty UTXODiff", csm.genesisHash)
+				return utxo.NewUTXODiff(), nil
+			}
 			return nil, err
 		}
 		return utxoDiff, nil
