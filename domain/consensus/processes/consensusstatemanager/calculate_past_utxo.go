@@ -214,6 +214,16 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	if err != nil {
 		return nil, nil, err
 	}
+	// VirtualGenesisBlockHash is only a marker – it has no block body.
+	// It appears as SelectedParent of the pruning-point / first known blocks.
+	filtered := make([]*externalapi.DomainHash, 0, len(mergeSetHashes))
+	for _, h := range mergeSetHashes {
+		if !h.Equal(model.VirtualGenesisBlockHash) && !h.Equal(model.VirtualBlockHash) {
+			filtered = append(filtered, h)
+		}
+	}
+	mergeSetHashes = filtered
+
 	log.Debugf("Merge set for block %s is %v", blockHash, mergeSetHashes)
 	mergeSetBlocks, err := csm.blockStore.Blocks(csm.databaseContext, stagingArea, mergeSetHashes)
 	if err != nil {
