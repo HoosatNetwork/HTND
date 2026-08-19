@@ -95,9 +95,6 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
 
 			utxoDiff, _ := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
-			// if err != nil {
-			// 	panic(fmt.Sprintf("DiffFrom error for block %s (previous: %s): %s", unverifiedBlockHash, previousBlockHash, err))
-			// }
 			if utxoDiff != nil {
 				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
 			} else {
@@ -140,7 +137,7 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 		// needed data (tip's selectedParent and selectedParent's UTXODiff)
 		selectedParentUTXODiff, err := previousBlockUTXOSet.DiffFrom(oneBeforeLastResolvedBlockUTXOSet)
 		if err != nil {
-			panic(fmt.Sprintf("DiffFrom error for block %s (one before last: %s): %s", blockHash, oneBeforeLastResolvedBlockHash, err))
+			return 0, nil, err
 		}
 
 		reversalData = &model.UTXODiffReversalData{
@@ -307,7 +304,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 
 			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
 			if diffErr != nil {
-				panic(fmt.Sprintf("DiffFrom error for block %s (selected parent: %s): %s", blockHash, selectedParentHash, diffErr))
+				return 0, nil, diffErr
 			}
 			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 			// Even for disqualified blocks, return the calculated past UTXO so the
@@ -342,7 +339,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 
 			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
 			if err != nil {
-				panic(fmt.Sprintf("DiffFrom error for new tip %s (old selected tip: %s): %s", blockHash, oldSelectedTip, err))
+				return 0, nil, err
 			}
 			log.Debugf("Setting the old selected tip's (%s) diffChild to be the new selected tip (%s)",
 				oldSelectedTip, blockHash)
@@ -355,7 +352,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 				"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
 			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
 			if err != nil {
-				panic(fmt.Sprintf("DiffFrom error for block %s (old selected tip: %s): %s", blockHash, oldSelectedTip, err))
+				return 0, nil, err
 			}
 			csm.stageDiff(stagingArea, blockHash, utxoDiff, oldSelectedTip)
 		}
@@ -367,7 +364,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			"therefore temporarily setting selectedParent as it's diffChild", blockHash)
 		utxoDiff, err := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
 		if err != nil {
-			panic(fmt.Sprintf("DiffFrom error for block %s (selected parent: %s): %s", blockHash, selectedParentHash, err))
+			return 0, nil, err
 		}
 
 		csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
