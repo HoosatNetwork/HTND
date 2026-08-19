@@ -4,6 +4,8 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 )
 
 // resolveBlockStatusCacheEntry stores the cached result of ResolveBlockStatus
@@ -143,6 +145,11 @@ func New(
 			windowHeapSliceStore,
 		},
 	}
+	stagingArea := model.NewStagingArea()
+
+	csm.consensusStateStore.StageVirtualUTXODiff(stagingArea, utxo.NewUTXODiff())
+	csm.utxoDiffStore.Stage(stagingArea, csm.genesisHash, utxo.NewUTXODiff(), nil)
+	csm.multisetStore.Stage(stagingArea, csm.genesisHash, multiset.New())
 
 	return csm, nil
 }
