@@ -23,14 +23,36 @@ func (s *ChildIterator) First() bool {
 	if s.isClosed {
 		panic("Tried using a closed ChildIterator")
 	}
-	s.queue = []*externalapi.DomainHash{s.lowHash}
+	s.queue = []*externalapi.DomainHash{}
 	s.queueIndex = 0
+	s.current = nil
+	s.err = nil
+
 	if s.includeLowHash {
 		s.current = s.lowHash
-		s.queueIndex = 1
+		// Enqueue children of lowHash so the walk can continue to highHash
+		children, err := s.dagTraversalManager.Childs(s.stagingArea, s.highHash, s.lowHash)
+		if err != nil && !errors.Is(err, errNoChild) {
+			s.err = err
+			return true
+		}
+		if children != nil {
+			s.queue = append(s.queue, children...)
+		}
 		return true
 	}
 
+	// Exclusive: process lowHash (enqueue its children) without yielding it,
+	// then advance to the first real item.
+	children, err := s.dagTraversalManager.Childs(s.stagingArea, s.highHash, s.lowHash)
+	if err != nil && !errors.Is(err, errNoChild) {
+		s.current = nil
+		s.err = err
+		return true
+	}
+	if children != nil {
+		s.queue = append(s.queue, children...)
+	}
 	return s.Next()
 }
 
@@ -42,12 +64,24 @@ func (s *ChildIterator) Next() bool {
 		return true
 	}
 
-	// If there are more items in the queue, get the next one
+	// Already yielded highHash → stop (inclusive end)
+	if s.current != nil && s.current.Equal(s.highHash) {
+		s.current = nil
+		return false
+	}
+
 	if s.queueIndex < len(s.queue) {
 		s.current = s.queue[s.queueIndex]
 		s.queueIndex++
 
-		// Enqueue all children of the current node for BFS traversal
+		// Reached highHash: do not enqueue further children and discard any
+		// remaining queue items so the iterator stops after this yield.
+		if s.current.Equal(s.highHash) {
+			s.queue = s.queue[:s.queueIndex]
+			return true
+		}
+
+		// Enqueue children that still lead toward highHash
 		children, err := s.dagTraversalManager.Childs(s.stagingArea, s.highHash, s.current)
 		if err != nil && !errors.Is(err, errNoChild) {
 			s.current = nil
@@ -60,7 +94,7 @@ func (s *ChildIterator) Next() bool {
 		return true
 	}
 
-	// Queue is empty, no more items
+	// Queue exhausted
 	s.current = nil
 	return false
 }
@@ -86,8 +120,8 @@ func (s *ChildIterator) Close() error {
 	return nil
 }
 
-// ChildIterator returns a BlockIterator that iterates from lowHash (exclusive) to highHash (inclusive) BFS over
-// highHash's  parent chain
+// ChildIterator returns a BlockIterator that iterates from lowHash (exclusive) to highHash (inclusive)
+// BFS over the reachability-tree path from lowHash toward highHash.
 func (dtm *dagTraversalManager) ChildIterator(stagingArea *model.StagingArea,
 	highHash, lowHash *externalapi.DomainHash, includeLowHash bool,
 ) (model.BlockIterator, error) {
@@ -98,7 +132,7 @@ func (dtm *dagTraversalManager) ChildIterator(stagingArea *model.StagingArea,
 	}
 
 	if !isLowHashInParentChainOfHighHash {
-		return nil, errors.Errorf("%s is not in the  parent chain of %s", lowHash, highHash)
+		return nil, errors.Errorf("%s is not in the parent chain of %s", lowHash, highHash)
 	}
 	return &ChildIterator{
 		dagTraversalManager: dtm,
