@@ -37,7 +37,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Memtable tuning
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 256
+		defaultMemTableMB           = 512
 		defaultMemTablesBeforeStall = 6
 	)
 
@@ -108,9 +108,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		FlushSplitBytes: baseFileSize,
 
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 12),      // was 16 → start here, try up to 128–256 if still building up
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 36),     // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
-		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 16), // was 16 → align with compaction trigger
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 6),      // was 16 → start here, try up to 128–256 if still building up
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 24),    // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
+		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 6), // was 16 → align with compaction trigger
 
 		TargetFileSizes: [7]int64{
 			baseFileSize,       // L0
@@ -131,48 +131,48 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		// WALBytesPerSync: 4 << 20,
 		// BytesPerSync:    4 << 20,
 
-		CompactionConcurrencyRange: func() (int, int) { return 3, 6 }, // was 4,8 → more workers help during backlog
+		CompactionConcurrencyRange: func() (int, int) { return 4, 8 },
 
 		Levels: [7]pebble.LevelOptions{
-			{ // L0
-				BlockSize:      16 << 10,
-				IndexBlockSize: 128 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L1
-				BlockSize:      16 << 10,
-				IndexBlockSize: 128 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L2
-				BlockSize:      16 << 10,
-				IndexBlockSize: 128 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L3
-				BlockSize:      16 << 10,
-				IndexBlockSize: 128 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L4
-				BlockSize:      16 << 10,
-				IndexBlockSize: 128 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L5
-				BlockSize:      16 << 10,
-				IndexBlockSize: 128 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
-			{ // L6
-				BlockSize:      16 << 10,
-				IndexBlockSize: 256 << 10,
+			{
+				BlockSize:      32 << 10,
+				IndexBlockSize: 64 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
@@ -189,7 +189,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 
 	// How many L0 compactions can run concurrently
-	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 12)
+	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 6)
 
 	// Trigger extra compaction workers when debt (pending bytes) is high
 	// opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
@@ -213,8 +213,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		return pebble.ValueSeparationPolicy{
 			Enabled:               true,          // keep it on for write amp, but tune it
-			MinimumSize:           4 << 10,       // 4 KiB (or try 8 KiB). Stop separating medium-sized values
-			MaxBlobReferenceDepth: 10,            // was 100 → much more aggressive rewriting of blobs to restore locality
+			MinimumSize:           16 << 10,      // 4 KiB (or try 8 KiB). Stop separating medium-sized values
+			MaxBlobReferenceDepth: 4,             // was 100 → much more aggressive rewriting of blobs to restore locality
 			RewriteMinimumAge:     6 * time.Hour, // or lower (e.g. 1–2h) so old blobs get rewritten sooner
 			TargetGarbageRatio:    0.15,          // slightly more aggressive space reclaim
 		}
