@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app"
@@ -86,6 +87,19 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	var rLimit syscall.Rlimit
+	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		fmt.Println("Error Getting Rlimit ", err)
+	}
+	fmt.Println(rLimit)
+	rLimit.Max = 64000
+	rLimit.Cur = 64000
+	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		fmt.Println("Error Setting Rlimit ", err)
 	}
 
 	// Get autoupdate config from loaded config
