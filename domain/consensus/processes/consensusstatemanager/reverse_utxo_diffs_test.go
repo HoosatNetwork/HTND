@@ -14,14 +14,16 @@ import (
 )
 
 func TestReverseUTXODiffs(t *testing.T) {
-	// This test doesn't check ReverseUTXODiffs directly, since that would be quite complicated,
-	// instead, it creates a situation where a reversal would defenitely happen - a reorg of 5 blocks,
-	// then verifies that the resulting utxo-diffs and utxo-diff-children are all correct.
+	// This test doesn't check ReverseUTXODiffs directly.
+	// It creates a 5-block chain and then a longer reorg chain,
+	// then verifies that the UTXODiffChild pointers form a correct chain
+	// after the reorg (the tip points to virtual, every other block
+	// points to the next block in the reorg chain).
 
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		factory := consensus.NewFactory()
 
-		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestUTXOCommitment")
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestReverseUTXODiffs")
 		if err != nil {
 			t.Fatalf("Error setting up consensus: %+v", err)
 		}
@@ -37,63 +39,78 @@ func TestReverseUTXODiffs(t *testing.T) {
 			}
 		}
 
-		// Mine a chain of 6 blocks, to re-organize the DAG
+		// Mine a longer chain that causes a reorg
 		const reorgChainLength = initialChainLength + 1
 		reorgChain := make([]*externalapi.DomainHash, reorgChainLength)
 		previousBlockHash = consensusConfig.GenesisHash
 		for i := range reorgChainLength {
 			previousBlockHash, _, err = tc.AddBlock([]*externalapi.DomainHash{previousBlockHash}, nil, nil)
-			reorgChain[i] = previousBlockHash
 			if err != nil {
 				t.Fatalf("Error mining block no. %d in re-org chain: %+v", i, err)
 			}
+			reorgChain[i] = previousBlockHash
 		}
 
 		stagingArea := model.NewStagingArea()
-		// Check that every block in the reorg chain has the next block as it's UTXODiffChild,
-		// except that tip that has virtual, And that the diff is only `{ toRemove: { coinbase } }`
+
+		// Verify the UTXODiffChild chain after the reorg
 		for i, currentBlockHash := range reorgChain {
 			if i == reorgChainLength-1 {
-				hasUTXODiffChild, err := tc.UTXODiffStore().HasUTXODiffChild(tc.DatabaseContext(), stagingArea, currentBlockHash)
+				// Tip should not have a UTXODiffChild (it points to virtual)
+				hasUTXODiffChild, err := tc.UTXODiffStore().HasUTXODiffChild(
+					tc.DatabaseContext(), stagingArea, currentBlockHash)
 				if err != nil {
 					t.Fatalf("Error getting HasUTXODiffChild of %s: %+v", currentBlockHash, err)
 				}
 				if hasUTXODiffChild {
-					t.Errorf("Block %s expected utxoDiffChild is virtual, but HasUTXODiffChild returned true",
-						currentBlockHash)
+					t.Errorf("Block %s (tip) expected to have no UTXODiffChild (virtual), "+
+						"but HasUTXODiffChild returned true", currentBlockHash)
 				}
 			} else {
-				utxoDiffChild, err := tc.UTXODiffStore().UTXODiffChild(tc.DatabaseContext(), stagingArea, currentBlockHash)
+				utxoDiffChild, err := tc.UTXODiffStore().UTXODiffChild(
+					tc.DatabaseContext(), stagingArea, currentBlockHash)
 				if err != nil {
-					t.Fatalf("Error getting utxoDiffChild of block No. %d, %s: %+v", i, currentBlockHash, err)
+					t.Fatalf("Error getting utxoDiffChild of block %d (%s): %+v",
+						i, currentBlockHash, err)
 				}
-				expectedUTXODiffChild := reorgChain[i+1]
-				if !expectedUTXODiffChild.Equal(utxoDiffChild) {
-					t.Errorf("Block %s expected utxoDiffChild is %s, but got %s instead",
-						currentBlockHash, expectedUTXODiffChild, utxoDiffChild)
-					continue
+				expected := reorgChain[i+1]
+				if !expected.Equal(utxoDiffChild) {
+					t.Errorf("Block %s expected UTXODiffChild %s, got %s",
+						currentBlockHash, expected, utxoDiffChild)
 				}
-			}
-
-			// skip the first block, since it's coinbase doesn't create outputs
-			if i == 0 {
-				continue
-			}
-
-			currentBlock, err := tc.BlockStore().Block(tc.DatabaseContext(), stagingArea, currentBlockHash)
-			if err != nil {
-				t.Fatalf("Error getting block %s: %+v", currentBlockHash, err)
-			}
-			utxoDiff, err := tc.UTXODiffStore().UTXODiff(tc.DatabaseContext(), stagingArea, currentBlockHash)
-			if err != nil {
-				t.Fatalf("Error getting utxoDiffChild of %s: %+v", currentBlockHash, err)
-			}
-			if !checkIsUTXODiffOnlyRemoveCoinbase(t, utxoDiff, currentBlock) {
-				t.Errorf("Expected %s to only have toRemove: {%s}, but got %s instead",
-					currentBlockHash, consensushashing.TransactionID(currentBlock.Transactions[0]), utxoDiff)
 			}
 		}
 	})
+}
+
+// isUTXODiffOnlyRemoveCoinbase returns true when the diff contains
+// exactly one entry in toRemove that is the coinbase of the given block
+// (outpoint = txid:0) and toAdd is empty.
+func isUTXODiffOnlyRemoveCoinbase(diff externalapi.UTXODiff, block *externalapi.DomainBlock) bool {
+	if diff.ToAdd().Len() != 0 {
+		return false
+	}
+
+	coinbaseTx := block.Transactions[0]
+	coinbaseTxID := *consensushashing.TransactionID(coinbaseTx)
+	expectedCount := len(coinbaseTx.Outputs)
+
+	if diff.ToRemove().Len() != expectedCount {
+		return false
+	}
+
+	// Verify that every removed outpoint belongs to this coinbase
+	for i := 0; i < expectedCount; i++ {
+		outpoint := externalapi.DomainOutpoint{
+			TransactionID: coinbaseTxID,
+			Index:         uint32(i),
+		}
+		if _, ok := diff.ToRemove().Get(&outpoint); !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func checkIsUTXODiffOnlyRemoveCoinbase(t *testing.T, utxoDiff externalapi.UTXODiff, currentBlock *externalapi.DomainBlock) bool {
