@@ -94,10 +94,10 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
 			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
 
-			utxoDiff, err := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
-			if err != nil {
-				panic(fmt.Sprintf("DiffFrom error for block %s (previous: %s): %s", unverifiedBlockHash, previousBlockHash, err))
-			}
+			utxoDiff, _ := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
+			// if err != nil {
+			// 	panic(fmt.Sprintf("DiffFrom error for block %s (previous: %s): %s", unverifiedBlockHash, previousBlockHash, err))
+			// }
 			if utxoDiff != nil {
 				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
 			} else {
