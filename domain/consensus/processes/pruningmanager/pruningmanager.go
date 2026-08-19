@@ -1191,16 +1191,17 @@ func (pm *pruningManager) updatePruningPoint() error {
 
 	log.Info("Restoring the pruning point UTXO set from acceptance data")
 	utxoSetDiff, err := pm.calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData(stagingArea, pruningPoint)
+
 	if err != nil {
-		log.Infof("Calculating pruning points diff through accepntance data failed %s. Falling back to calculation "+
-			"through iterating UTXO diff children", err)
+		log.Infof("Calculating pruning points diff failed %s. Falling back to calculate "+
+			"through iterating previous and current pruning points diffs", err)
 		utxoSetDiff, err = pm.calculateDiffBetweenPreviousAndCurrentPruningPoints(stagingArea, pruningPoint)
-		log.Info("Restored the pruning point UTXO set from UTXO diff children")
 		if err != nil {
+			log.Infof("Calculating pruning points diff failed eitherway %s", err)
 			return err
 		}
 	}
-	log.Info("Restored the pruning point UTXO set from acceptance data")
+	log.Info("Restored the pruning point UTXO set")
 
 	log.Info("Updating the pruning point UTXO set")
 	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)
