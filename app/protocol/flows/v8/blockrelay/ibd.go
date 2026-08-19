@@ -565,7 +565,7 @@ func (flow *handleIBDFlow) syncMissingRelayPast(consensus externalapi.Consensus,
 		if err != nil {
 			return err
 		}
-		log.Infof("send request anticone %s with relayb block hash and %s syncer selected tip hash", relayBlockHash, syncerHeaderSelectedTipHash)
+		log.Debugf("send request anticone %s with relayb block hash and %s syncer selected tip hash", relayBlockHash, syncerHeaderSelectedTipHash)
 		anticoneHeadersMessage, anticoneDone, err := flow.receiveHeaders()
 		if err != nil {
 			return err
