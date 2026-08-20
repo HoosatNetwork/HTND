@@ -221,6 +221,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		return nil, err
 	}
 
+	// Build filtered list: skip virtual sentinels (no headers / no reachability data).
 	virtualGenesisChildrenWithHeadersPtr := virtualGenesisChildSlicePool.Get().(*[]virtualGenesisChild)
 	virtualGenesisChildrenWithHeaders := (*virtualGenesisChildrenWithHeadersPtr)[:0]
 	if cap(virtualGenesisChildrenWithHeaders) < len(virtualGenesisChildren) {
@@ -232,8 +233,8 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		virtualGenesisChildSlicePool.Put(virtualGenesisChildrenWithHeadersPtr)
 	}()
 
+	virtualGenesisChildHashes := make([]*externalapi.DomainHash, 0, len(virtualGenesisChildren))
 	for _, child := range virtualGenesisChildren {
-		// Virtual markers are never real blocks and have no headers.
 		if child.Equal(model.VirtualBlockHash) || child.Equal(model.VirtualGenesisBlockHash) {
 			continue
 		}
@@ -245,6 +246,7 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 			hash:   child,
 			header: childHeader,
 		})
+		virtualGenesisChildHashes = append(virtualGenesisChildHashes, child)
 	}
 
 	for _, directParentHeader := range directParentHeaders {
@@ -260,15 +262,20 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 			candidates := *candidatesPtr
 
 			for _, parent := range blockLevelParentsInHeader {
+				// Virtual markers are never real parents.
+				if parent.Equal(model.VirtualBlockHash) || parent.Equal(model.VirtualGenesisBlockHash) {
+					continue
+				}
+
 				isInFutureOfVirtualGenesisChildren := false
 				hasReachabilityData, err := bpb.reachabilityDataStore.HasReachabilityData(bpb.databaseContext, stagingArea, parent)
 				if err != nil {
 					return nil, err
 				}
 				if hasReachabilityData {
-					// If a block is in the future of one of the virtual genesis children it means we have the full DAG between the current block
-					// and this parent, so there's no need for any indirect reference blocks, and normal reachability queries can be used.
-					isInFutureOfVirtualGenesisChildren, err = bpb.dagTopologyManager.IsAnyAncestorOf(stagingArea, virtualGenesisChildren, parent)
+					// Use filtered child hashes only — never pass VirtualBlockHash / VirtualGenesis into reachability.
+					isInFutureOfVirtualGenesisChildren, err = bpb.dagTopologyManager.IsAnyAncestorOf(
+						stagingArea, virtualGenesisChildHashes, parent)
 					if err != nil {
 						return nil, err
 					}
