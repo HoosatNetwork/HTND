@@ -91,6 +91,7 @@ func (flow *handleRequestHeadersFlow) start() error {
 			if err != nil {
 				return err
 			}
+			log.Debugf("lowhash %s, highhash %s", lowHash, highHash)
 			log.Debugf("Got %d header hashes above lowHash %s", len(blockHashes), lowHash)
 
 			// Fetch headers in a single batch to reduce consensus read overhead
@@ -124,7 +125,9 @@ func (flow *handleRequestHeadersFlow) start() error {
 
 			// The next lowHash is the last element in blockHashes
 			lowHash = actualHighHash
+			log.Debugf("New lowhash %s", lowHash)
 		}
+		log.Debugf("Sending IBD done")
 		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgDoneHeaders())
 		if err != nil {
 			return err

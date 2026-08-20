@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/pkg/errors"
 )
@@ -19,17 +20,27 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	log.Tracef("calculateMultiset start for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 	defer log.Tracef("calculateMultiset end for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 
-	if blockHash.Equal(csm.genesisHash) {
+	// Case 1: we are calculating the multiset of the genesis / virtual-genesis itself
+	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
 		log.Debugf("Selected parent is nil, which could only happen for the genesis. " +
 			"The genesis has a predefined multiset")
-		return csm.multisetStore.Get(csm.databaseContext, stagingArea, blockHash)
+		return csm.multisetStore.Get(csm.databaseContext, stagingArea, csm.genesisHash)
 	}
 
-	ms, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, blockGHOSTDAGData.SelectedParent())
-	if err != nil {
-		panic(err)
+	// Case 2: normal path – but the selected parent may be the virtual-genesis marker
+	selectedParent := blockGHOSTDAGData.SelectedParent()
+	if selectedParent.Equal(model.VirtualGenesisBlockHash) || selectedParent.Equal(csm.genesisHash) {
+		// VirtualGenesis is only a marker and never has its own multiset.
+		// Fall back to the real genesis multiset (same idea as restorePastUTXO).
+		csm.multisetStore.Stage(stagingArea, csm.genesisHash, multiset.New())
+		selectedParent = csm.genesisHash
 	}
-	log.Debugf("The multiset for the selected parent %s is: %s", blockGHOSTDAGData.SelectedParent(), ms.Hash())
+
+	ms, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParent)
+	if err != nil {
+		return nil, err
+	}
+	log.Debugf("The multiset for the selected parent %s is: %s", selectedParent, ms.Hash())
 
 	for _, blockAcceptanceData := range acceptanceData {
 		for i, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {

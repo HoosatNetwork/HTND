@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/util/memory"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/pkg/errors"
@@ -83,6 +84,9 @@ func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.
 
 	utxoDiffBytes, err := dbContext.Get(uds.utxoDiffHashAsKey(blockHash))
 	if errors.Is(err, database.ErrNotFound) {
+		if blockHash.Equal(model.VirtualGenesisBlockHash) {
+			return utxo.NewUTXODiff(), nil
+		}
 		// panic(fmt.Sprintf("Could find blockhash %s: error %s", blockHash, err))
 		return nil, errors.Wrapf(err, "UTXO diff for block %s does not exist in db", blockHash)
 	}

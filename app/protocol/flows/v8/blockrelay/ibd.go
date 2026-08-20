@@ -493,14 +493,12 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 	if err != nil {
 		return err
 	}
-
 	highestSharedBlockHeader, err := consensus.GetBlockHeader(highestKnownSyncerChainHash)
 	if err != nil {
 		return err
 	}
-
 	progressReporter := newIBDProgressReporter(highestSharedBlockHeader.DAAScore(), highBlockDAAScoreHint, "block headers")
-	finished := false
+
 	for {
 		// Receive next batch of headers (this call blocks)
 		blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
@@ -508,7 +506,8 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 			return err
 		}
 
-		if doneIBD || finished {
+		if doneIBD {
+			log.Debugf("IBD Done!")
 			// IBD of headers is finished → proceed to sync relay past
 			return flow.syncMissingRelayPast(consensus, syncerHeaderSelectedTipHash, relayBlockHash)
 		}
@@ -525,10 +524,6 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 			if err != nil {
 				return err
 			}
-			if header.BlockHash().Equal(syncerHeaderSelectedTipHash) {
-				log.Infof("Setting finished as true, because found the syncer header selected tip hash")
-				finished = true
-			}
 			flow.headersProcessedSinceLast++
 			// Periodic rate check (e.g., every 10 seconds) inside loop
 			if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
@@ -543,6 +538,9 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		progressReporter.reportProgress(len(blockHeadersMessage.BlockHeaders), lastReceivedHeader.DAAScore)
 
 		// Ask for the next batch
+		if !lastReceivedHeader.BlockHash().Equal(syncerHeaderSelectedTipHash) {
+			log.Infof("Requesting more with last received header %s", lastReceivedHeader.BlockHash())
+		}
 		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestNextHeaders())
 		if err != nil {
 			return err
@@ -565,15 +563,16 @@ func (flow *handleIBDFlow) syncMissingRelayPast(consensus externalapi.Consensus,
 		// Send a special header request for the selected tip anticone. This is expected to
 		// be a small set, as it is bounded to the size of virtual's mergeset.
 
+		log.Infof("Request anticone")
 		err = flow.sendRequestAnticone(syncerHeaderSelectedTipHash, relayBlockHash)
 		if err != nil {
 			return err
 		}
-		log.Debugf("send request anticone %s with relayb block hash and %s syncer selected tip hash", relayBlockHash, syncerHeaderSelectedTipHash)
 		anticoneHeadersMessage, anticoneDone, err := flow.receiveHeaders()
 		if err != nil {
 			return err
 		}
+		log.Infof("Received headers %d", len(anticoneHeadersMessage.BlockHeaders))
 		if anticoneDone {
 			return protocolerrors.Errorf(true,
 				"Expected one anticone header chunk for past(%s) cap anticone(%s) but got zero",

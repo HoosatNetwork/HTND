@@ -70,6 +70,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		}
 		// log.Infof("Child iterator returned %s", current)
 		if current.Equal(actualHighHash) {
+			log.Debugf("Found actual HighHash %d", current)
 			highHash = actualHighHash
 			break
 		}
@@ -124,14 +125,13 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		}
 	}
 
-	// for i, hash := range blockHashes {
-	// 	log.Infof("%d, %s", i, hash)
-	// }
-
 	// Sort by blue score to get topological order
 	if err := sm.sortByBlueScore(stagingArea, blockHashes); err != nil {
 		return nil, nil, err
 	}
+	// for i, hash := range blockHashes {
+	// 	log.Infof("%d, %s", i, hash)
+	// }
 
 	return blockHashes, highHash, nil
 }
