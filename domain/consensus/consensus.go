@@ -1330,7 +1330,7 @@ func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 		return false, err
 	}
 
-	if virtualGHOSTDAGData.SelectedParent().Equal(s.genesisHash) {
+	if virtualGHOSTDAGData.SelectedParent().Equal(s.genesisHash) || virtualGHOSTDAGData.SelectedParent().Equal(model.VirtualGenesisBlockHash) {
 		return false, nil
 	}
 
