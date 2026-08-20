@@ -175,7 +175,15 @@ func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.Staging
 		return err
 	}
 
-	if virtualGHOSTDAGData.SelectedParent().Equal(pm.genesisHash) {
+	selectedParent := virtualGHOSTDAGData.SelectedParent()
+	if selectedParent == nil {
+		log.Infof("UpdatePruningPointByVirtual skipped: virtual selected parent is nil")
+		return nil
+	}
+	if selectedParent.Equal(pm.genesisHash) {
+		return nil
+	}
+	if selectedParent.Equal(model.VirtualGenesisBlockHash) {
 		return nil
 	}
 
