@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Stage 1: Build stage ---
-FROM golang:1.26 AS build
+FROM golang:1.27 AS build
 
 ENV CGO_ENABLED=1 \
   GOEXPERIMENT=simd,jsonv2
