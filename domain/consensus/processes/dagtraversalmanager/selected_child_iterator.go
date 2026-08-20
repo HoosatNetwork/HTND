@@ -75,7 +75,9 @@ func (s *selectedChildIterator) Close() error {
 func (dtm *dagTraversalManager) SelectedChildIterator(stagingArea *model.StagingArea,
 	highHash, lowHash *externalapi.DomainHash, includeLowHash bool,
 ) (model.BlockIterator, error) {
-	// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+	if highHash == nil || lowHash == nil {
+		return nil, errors.Errorf("SelectedChildIterator: highHash or lowHash is nil")
+	}
 	isLowHashInSelectedParentChainOfHighHash, err := dtm.dagTopologyManager.IsInSelectedParentChainOf(
 		stagingArea, lowHash, highHash)
 	if err != nil {
