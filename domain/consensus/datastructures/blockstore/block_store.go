@@ -106,10 +106,6 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
-	if errors.Is(err, database.ErrNotFound) {
-		// panic(fmt.Sprintf("Could find blockhash %s: error %s", blockHash, err))
-		return nil, errors.Wrapf(err, "Block %s does not exist in db", blockHash)
-	}
 	if err != nil {
 		return nil, err
 	}
