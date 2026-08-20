@@ -100,7 +100,7 @@ func isUTXODiffOnlyRemoveCoinbase(diff externalapi.UTXODiff, block *externalapi.
 	}
 
 	// Verify that every removed outpoint belongs to this coinbase
-	for i := 0; i < expectedCount; i++ {
+	for i := range expectedCount {
 		outpoint := externalapi.DomainOutpoint{
 			TransactionID: coinbaseTxID,
 			Index:         uint32(i),

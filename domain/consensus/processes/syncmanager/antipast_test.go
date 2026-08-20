@@ -24,7 +24,7 @@ func TestAntiPastHashesBetween_BasicChain(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
@@ -460,7 +460,7 @@ func TestAntiPastHashesBetweenBrute_Basic(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
@@ -670,7 +670,7 @@ func TestAntiPastHashesBetween_Consistency(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
@@ -734,7 +734,7 @@ func TestAntiPastHashesBetween_WithMaxBlocks(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
@@ -773,7 +773,7 @@ func TestAntiPastHashesBetween_SelectedChildIterator(t *testing.T) {
 
 		chain := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		tipHash := consensusConfig.GenesisHash
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
@@ -828,7 +828,7 @@ func TestAntiPastHashesBetween_TopologicalOrder(t *testing.T) {
 		genesis := consensusConfig.GenesisHash
 		chain := []*externalapi.DomainHash{genesis}
 		tipHash := genesis
-		for j := 0; j < 5; j++ {
+		for range 5 {
 			tipHash, _, err = tc.AddBlock([]*externalapi.DomainHash{tipHash}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed adding block: %v", err)
