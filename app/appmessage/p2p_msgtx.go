@@ -170,9 +170,9 @@ func (msg *MsgTx) Copy() *MsgTx {
 	for _, oldTxIn := range msg.TxIn {
 		// Deep copy the old previous outpoint.
 		oldOutpoint := oldTxIn.PreviousOutpoint
-		newOutpoint := Outpoint{}
-		newOutpoint.TxID = oldOutpoint.TxID
-		newOutpoint.Index = oldOutpoint.Index
+		newOutpoint := Outpoint{
+			TxID:  oldOutpoint.TxID,
+			Index: oldOutpoint.Index}
 
 		// Deep copy the old signature script.
 		var newScript []byte

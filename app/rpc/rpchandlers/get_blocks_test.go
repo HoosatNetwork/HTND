@@ -61,8 +61,13 @@ func TestHandleGetBlocks(t *testing.T) {
 		}
 		defer teardown(false)
 
+		cfg := &config.Config{
+			Flags: &config.Flags{},
+		}
+		cfg.ActiveNetParams = &consensusConfig.Params
+
 		fakeContext := rpccontext.Context{
-			Config: &config.Config{Flags: &config.Flags{NetworkFlags: config.NetworkFlags{ActiveNetParams: &consensusConfig.Params}}},
+			Config: cfg,
 			Domain: fakeDomain{tc},
 		}
 
@@ -252,8 +257,13 @@ func TestHandleGetBlocksCacheRespectsIncludeFlags(t *testing.T) {
 		}
 		defer teardown(false)
 
+		cfg := &config.Config{
+			Flags: &config.Flags{},
+		}
+		cfg.ActiveNetParams = &consensusConfig.Params
+
 		fakeContext := rpccontext.Context{
-			Config: &config.Config{Flags: &config.Flags{NetworkFlags: config.NetworkFlags{ActiveNetParams: &consensusConfig.Params}}},
+			Config: cfg,
 			Domain: fakeDomain{tc},
 		}
 

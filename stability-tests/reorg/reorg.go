@@ -26,9 +26,13 @@ func checkedUint64FromInt63(value int64) uint64 {
 }
 
 func testReorg(cfg *configFlags) {
-	consensusConfig := consensus.Config{Params: dagconfig.DevnetParams}
-	consensusConfig.SkipProofOfWork = true
-	consensusConfig.DisableDifficultyAdjustment = true
+	devnetParams := dagconfig.DevnetParams
+	devnetParams.SkipProofOfWork = true
+	devnetParams.DisableDifficultyAdjustment = true
+
+	consensusConfig := consensus.Config{
+		Params: devnetParams,
+	}
 
 	factory := consensus.NewFactory()
 	tc, teardown, err := factory.NewTestConsensus(&consensusConfig, "ReorgHonest")

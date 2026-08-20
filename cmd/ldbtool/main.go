@@ -68,9 +68,9 @@ func main() {
 			os.Exit(2)
 		}
 
-		opts := ldb.FuseOptions{CacheSizeMiB: cache, BatchSize: batch, MaxBatchBytes: batchBytesMiB * 1024 * 1024, Strategy: strategy, CompactAfter: compact, PipelineDepth: pipeline}
-		// Preserve previous default behavior: enable compaction assistance for fuse
-		opts.CompactOnStall = true
+		opts := ldb.FuseOptions{CacheSizeMiB: cache, BatchSize: batch, MaxBatchBytes: batchBytesMiB * 1024 * 1024, Strategy: strategy, CompactAfter: compact, PipelineDepth: pipeline,
+			// Preserve previous default behavior: enable compaction assistance for fuse
+			CompactOnStall: true}
 		if err := ldb.FuseLevelDB(dest, srcs, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "fuse failed: %v\n", err)
 			os.Exit(1)
@@ -157,9 +157,9 @@ func main() {
 		if v := os.Getenv("KSDB_WRITE_L0_PAUSE"); v != "" {
 			fmt.Fprintf(os.Stderr, "L0 pause: %s\n", v)
 		}
-		opts := ldb.FuseOptions{CacheSizeMiB: cache, BatchSize: batch, MaxBatchBytes: batchBytesMiB * 1024 * 1024, Strategy: strategy, CompactAfter: compact, PipelineDepth: pipeline}
-		// Explicitly set compaction assistance based on user flag
-		opts.CompactOnStall = !noCompact
+		opts := ldb.FuseOptions{CacheSizeMiB: cache, BatchSize: batch, MaxBatchBytes: batchBytesMiB * 1024 * 1024, Strategy: strategy, CompactAfter: compact, PipelineDepth: pipeline,
+			// Explicitly set compaction assistance based on user flag
+			CompactOnStall: !noCompact}
 		if err := ldb.CopyLevelDB(src, dest, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "copy failed: %v\n", err)
 			os.Exit(1)

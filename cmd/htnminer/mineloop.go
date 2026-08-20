@@ -18,7 +18,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var hashesTried uint64
+var hashesTried atomic.Uint64
 
 const logHashRateInterval = 60 * time.Second
 
@@ -106,14 +106,14 @@ func logHashRate() {
 	spawn("logHashRate", func() {
 		lastCheck := time.Now()
 		for range time.Tick(logHashRateInterval) {
-			currentHashesTried := atomic.LoadUint64(&hashesTried)
+			currentHashesTried := hashesTried.Load()
 			currentTime := time.Now()
 			kiloHashesTried := float64(currentHashesTried) / 1000.0
 			hashRate := kiloHashesTried / currentTime.Sub(lastCheck).Seconds()
 			log.Infof("Current hash rate is %.2f Khash/s", hashRate)
 			lastCheck = currentTime
 			// subtract from hashesTried the hashes we already sampled
-			atomic.AddUint64(&hashesTried, -currentHashesTried)
+			hashesTried.Add(-currentHashesTried)
 		}
 	})
 }
@@ -158,7 +158,7 @@ func mineNextBlock(mineWhenNotSynced bool) *externalapi.DomainBlock {
 		// is discovered.
 		block, state := getBlockForMining(mineWhenNotSynced)
 		state.Nonce = nonce
-		atomic.AddUint64(&hashesTried, 1)
+		hashesTried.Add(1)
 		powNum, hash := state.CalculateProofOfWorkValue()
 		if powNum.Cmp(&state.Target) <= 0 {
 			mutHeader := block.Header.ToMutable()

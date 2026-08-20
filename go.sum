@@ -39,8 +39,6 @@ github.com/cockroachdb/pebble/v2 v2.1.6 h1:GDo7Z2+LgFZ7LJLdLmBXhDeTVIwgSPGxIT15h
 github.com/cockroachdb/pebble/v2 v2.1.6/go.mod h1:Reo1RTniv1UjVTAu/Fv74y5i3kJ5gmVrPhO9UtFiKn8=
 github.com/cockroachdb/redact v1.1.8 h1:8eVLLj6juKxiKrAEw2b8cJvNqWq++U8WOfQFuL7KTaA=
 github.com/cockroachdb/redact v1.1.8/go.mod h1:GceHHpJ0rMDpYARL5In88Alq/xMBUtVlz7Qxix6ZVkw=
-github.com/cockroachdb/swiss v0.0.0-20251224182025-b0f6560f979b h1:VXvSNzmr8hMj8XTuY0PT9Ane9qZGul/p67vGYwl9BFI=
-github.com/cockroachdb/swiss v0.0.0-20251224182025-b0f6560f979b/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
 github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb h1:3bCgBvB8PbJVMX1ouCcSIxvsqKPYM7gs72o0zC76n9g=
 github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb/go.mod h1:7nc4anLGjupUW/PeY5qiNYsdNXj7zopG+eqsS7To5IQ=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
@@ -80,6 +78,8 @@ github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpO
 github.com/jessevdk/go-flags v0.0.0-20141203071132-1679536dcc89/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
 github.com/jessevdk/go-flags v1.6.1 h1:Cvu5U8UGrLay1rZfv/zP7iLpSHGUZ/Ou68T0iX1bBK4=
 github.com/jessevdk/go-flags v1.6.1/go.mod h1:Mk8T1hIAWpOiJiHa9rJASDK2UGWji0EuPGBnNLMooyc=
+github.com/jprieto-temporal/swiss v0.0.0-20260819190615-a1071b6b5d47 h1:+TnsprN0S7O2H8NiMO5gEWF4EHWnlIU0Ko/A71bZOic=
+github.com/jprieto-temporal/swiss v0.0.0-20260819190615-a1071b6b5d47/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
 github.com/jrick/logrotate v1.0.0/go.mod h1:LNinyqDIJnpAur+b8yyulnQw/wDuN1+BYKlTRt3OuAQ=
 github.com/jrick/logrotate v1.1.2 h1:6ePk462NCX7TfKtNp5JJ7MbA2YIslkpfgP03TlTYMN0=
 github.com/jrick/logrotate v1.1.2/go.mod h1:f9tdWggSVK3iqavGpyvegq5IhNois7KXmasU6/N96OQ=

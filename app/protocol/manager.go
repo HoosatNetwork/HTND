@@ -25,7 +25,7 @@ import (
 type Manager struct {
 	context          *flowcontext.FlowContext
 	routersWaitGroup sync.WaitGroup
-	isClosed         uint32
+	isClosed         atomic.Uint32
 }
 
 // NewManager creates a new instance of the p2p protocol manager
@@ -43,11 +43,11 @@ func NewManager(cfg *config.Config, domain domain.Domain, netAdapter *netadapter
 // Close closes the protocol manager and waits until all p2p flows
 // finish.
 func (m *Manager) Close() {
-	if !atomic.CompareAndSwapUint32(&m.isClosed, 0, 1) {
+	if !m.isClosed.CompareAndSwap(0, 1) {
 		panic(errors.New("The protocol manager was already closed"))
 	}
 
-	atomic.StoreUint32(&m.isClosed, 1)
+	m.isClosed.Store(1)
 	m.context.Close()
 	m.routersWaitGroup.Wait()
 }

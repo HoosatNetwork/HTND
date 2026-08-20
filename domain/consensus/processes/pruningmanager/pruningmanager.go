@@ -2,6 +2,7 @@ package pruningmanager
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -655,8 +656,8 @@ func (pm *pruningManager) ArePruningPointsViolatingFinality(stagingArea *model.S
 	// We need to check if virtualFinalityPointFinalityPoint is in the selected chain of
 	// the most recent known pruning point, so we iterate the pruning points from the most
 	// recent one until we find a known pruning point.
-	for i := len(pruningPoints) - 1; i >= 0; i-- {
-		blockHash := consensushashing.HeaderHash(pruningPoints[i])
+	for _, pruningPoint := range slices.Backward(pruningPoints) {
+		blockHash := consensushashing.HeaderHash(pruningPoint)
 		exists, err := pm.blockStatusStore.Exists(pm.databaseContext, stagingArea, blockHash)
 		if err != nil {
 			return false, err
@@ -946,8 +947,8 @@ diffTraversalLoop:
 
 	oldDiff := utxo.NewMutableUTXODiff()
 	log.Infof("Diff hashes from previous %d", len(diffHashesFromPrevious))
-	for i := len(diffHashesFromPrevious) - 1; i >= 0; i-- {
-		utxoDiff, err := pm.utxoDiffStore.UTXODiff(pm.databaseContext, stagingArea, diffHashesFromPrevious[i])
+	for _, diffHashesFromPreviou := range slices.Backward(diffHashesFromPrevious) {
+		utxoDiff, err := pm.utxoDiffStore.UTXODiff(pm.databaseContext, stagingArea, diffHashesFromPreviou)
 		if err != nil {
 			return nil, err
 		}
@@ -958,8 +959,8 @@ diffTraversalLoop:
 	}
 	newDiff := utxo.NewMutableUTXODiff()
 	log.Infof("Diff hashes from current %d", len(diffHashesFromCurrent))
-	for i := len(diffHashesFromCurrent) - 1; i >= 0; i-- {
-		utxoDiff, err := pm.utxoDiffStore.UTXODiff(pm.databaseContext, stagingArea, diffHashesFromCurrent[i])
+	for _, d := range slices.Backward(diffHashesFromCurrent) {
+		utxoDiff, err := pm.utxoDiffStore.UTXODiff(pm.databaseContext, stagingArea, d)
 		if err != nil {
 			return nil, err
 		}

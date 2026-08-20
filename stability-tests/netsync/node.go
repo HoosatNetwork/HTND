@@ -56,12 +56,12 @@ func startNode(name string, rpcAddress, listen, connect, profilePort, dataDir st
 		return nil, nil, err
 	}
 
-	var shutdown uint32
+	var shutdown atomic.Uint32
 	stopped := make(chan struct{})
 	spawn("startNode-cmd.Wait", func() {
 		err := cmd.Wait()
 		if err != nil {
-			if atomic.LoadUint32(&shutdown) == 0 {
+			if shutdown.Load() == 0 {
 				panics.Exit(log, fmt.Sprintf("%s ( %s ) closed unexpectedly: %s", name, cmd, err))
 			}
 			if !strings.Contains(err.Error(), "signal: killed") {
@@ -72,7 +72,7 @@ func startNode(name string, rpcAddress, listen, connect, profilePort, dataDir st
 	})
 
 	return cmd, func() {
-		atomic.StoreUint32(&shutdown, 1)
+		shutdown.Store(1)
 		killWithSigkill(cmd, name)
 		const timeout = time.Second
 		select {

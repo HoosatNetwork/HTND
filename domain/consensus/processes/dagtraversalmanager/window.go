@@ -1,6 +1,8 @@
 package dagtraversalmanager
 
 import (
+	"slices"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
@@ -189,8 +191,8 @@ func (dtm *dagTraversalManager) tryPushMergeSet(windowHeap *sizedUpBlockHeap, cu
 	// Remove the SP from the blue merge set because we already added it.
 	mergeSetBlues := currentGHOSTDAGData.MergeSetBlues()[1:]
 	// Go over the merge set in reverse because it's ordered in reverse by blueWork.
-	for i := len(mergeSetBlues) - 1; i >= 0; i-- {
-		added, err := windowHeap.tryPush(mergeSetBlues[i])
+	for _, mergeSetBlue := range slices.Backward(mergeSetBlues) {
+		added, err := windowHeap.tryPush(mergeSetBlue)
 		if err != nil {
 			return false, err
 		}
@@ -201,8 +203,8 @@ func (dtm *dagTraversalManager) tryPushMergeSet(windowHeap *sizedUpBlockHeap, cu
 	}
 
 	mergeSetReds := currentGHOSTDAGData.MergeSetReds()
-	for i := len(mergeSetReds) - 1; i >= 0; i-- {
-		added, err := windowHeap.tryPush(mergeSetReds[i])
+	for _, mergeSetRed := range slices.Backward(mergeSetReds) {
+		added, err := windowHeap.tryPush(mergeSetRed)
 		if err != nil {
 			return false, err
 		}

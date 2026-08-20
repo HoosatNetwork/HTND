@@ -34,7 +34,7 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 		m.routersWaitGroup.Add(1)
 		defer m.routersWaitGroup.Done()
 
-		if atomic.LoadUint32(&m.isClosed) == 1 {
+		if m.isClosed.Load() == 1 {
 			panic(errors.Errorf("tried to initialize router when the protocol manager is closed"))
 		}
 		log.Debugf("initializing route for %s", netConnection)

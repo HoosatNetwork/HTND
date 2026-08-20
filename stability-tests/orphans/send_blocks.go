@@ -1,6 +1,8 @@
 package main
 
 import (
+	"slices"
+
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
@@ -21,8 +23,7 @@ func sendBlocks(routes *standalone.Routes, blocks []*externalapi.DomainBlock, to
 		return err
 	}
 
-	for i := len(blocks) - 1; i >= 0; i-- {
-		block := blocks[i]
+	for i, block := range slices.Backward(blocks) {
 
 		orphanBlock := topBlock
 		if i+1 != len(blocks) {

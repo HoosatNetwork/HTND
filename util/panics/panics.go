@@ -23,7 +23,7 @@ func HandlePanic(log *logger.Logger, goroutineName string, goroutineStackTrace [
 	exit(log, reason, debug.Stack(), goroutineStackTrace)
 }
 
-var goroutineLastID uint64
+var goroutineLastID atomic.Uint64
 
 // GoroutineWrapperFunc returns a goroutine wrapper function that handles panics and writes them to the log.
 func GoroutineWrapperFunc(log *logger.Logger) func(name string, spawnedFunction func()) {
@@ -76,7 +76,7 @@ func exit(log *logger.Logger, reason string, currentThreadStackTrace []byte, gor
 }
 
 func handleSpawnedFunction(log *logger.Logger, stackTrace []byte, spawnedFunctionName string, spawnedFunction func()) {
-	goroutineID := atomic.AddUint64(&goroutineLastID, 1)
+	goroutineID := goroutineLastID.Add(1)
 	goroutineName := fmt.Sprintf("%s %d", spawnedFunctionName, goroutineID)
 	utilLog.Tracef("Started goroutine `%s`", goroutineName)
 	defer utilLog.Tracef("Ended goroutine `%s`", goroutineName)

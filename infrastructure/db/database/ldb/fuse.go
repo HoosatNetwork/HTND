@@ -123,7 +123,7 @@ func FuseLevelDB(destPath string, sourcePaths []string, opts FuseOptions) error 
 	}
 
 	var totalWritten int64 // accessed from heartbeat goroutine
-	var totalSkipped int64
+	var totalSkipped atomic.Int64
 	started := time.Now()
 
 	for i, srcPath := range sourcePaths {
@@ -154,7 +154,7 @@ func FuseLevelDB(destPath string, sourcePaths []string, opts FuseOptions) error 
 				select {
 				case <-ticker.C:
 					tw := atomic.LoadInt64(&totalWritten)
-					ts := atomic.LoadInt64(&totalSkipped)
+					ts := totalSkipped.Load()
 					elapsed := time.Since(started)
 					rate := 0.0
 					if elapsed > 0 {
@@ -227,7 +227,7 @@ func FuseLevelDB(destPath string, sourcePaths []string, opts FuseOptions) error 
 				}
 				if exists {
 					// Skip overwriting existing keys and count them separately.
-					atomic.AddInt64(&totalSkipped, 1)
+					totalSkipped.Add(1)
 					continue
 				}
 			}

@@ -118,9 +118,9 @@ func TestRPCSpam(t *testing.T) {
 	t.Logf("RPC spam starting: rpc=%s clients=%d workers=%d duration=%s calls=%d methods=%s",
 		cfg.RPCAddress, cfg.Clients, cfg.Workers, cfg.Duration, cfg.TotalCalls, cfg.Methods)
 
-	var totalRequests int64
-	var totalErrors int64
-	var totalLatencyNanoseconds int64
+	var totalRequests atomic.Int64
+	var totalErrors atomic.Int64
+	var totalLatencyNanoseconds atomic.Int64
 	var maxLatencyNanoseconds int64
 
 	progressDone := make(chan struct{})
@@ -137,9 +137,9 @@ func TestRPCSpam(t *testing.T) {
 					return
 				case <-ticker.C:
 					now := time.Now()
-					req := atomic.LoadInt64(&totalRequests)
-					errCount := atomic.LoadInt64(&totalErrors)
-					latNs := atomic.LoadInt64(&totalLatencyNanoseconds)
+					req := totalRequests.Load()
+					errCount := totalErrors.Load()
+					latNs := totalLatencyNanoseconds.Load()
 					maxNs := atomic.LoadInt64(&maxLatencyNanoseconds)
 					elapsed := now.Sub(start)
 					if elapsed <= 0 {
@@ -222,10 +222,10 @@ func TestRPCSpam(t *testing.T) {
 				err := call(client)
 				lat := time.Since(callStart)
 
-				atomic.AddInt64(&totalRequests, 1)
-				atomic.AddInt64(&totalLatencyNanoseconds, lat.Nanoseconds())
+				totalRequests.Add(1)
+				totalLatencyNanoseconds.Add(lat.Nanoseconds())
 				if err != nil {
-					atomic.AddInt64(&totalErrors, 1)
+					totalErrors.Add(1)
 				}
 				updateMaxInt64(&maxLatencyNanoseconds, lat.Nanoseconds())
 
@@ -241,9 +241,9 @@ func TestRPCSpam(t *testing.T) {
 		elapsed = time.Nanosecond
 	}
 
-	finalRequests := atomic.LoadInt64(&totalRequests)
-	finalErrors := atomic.LoadInt64(&totalErrors)
-	finalLatencyNs := atomic.LoadInt64(&totalLatencyNanoseconds)
+	finalRequests := totalRequests.Load()
+	finalErrors := totalErrors.Load()
+	finalLatencyNs := totalLatencyNanoseconds.Load()
 	finalMaxLatencyNs := atomic.LoadInt64(&maxLatencyNanoseconds)
 
 	avgLatency := time.Duration(0)

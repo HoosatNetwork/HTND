@@ -1,6 +1,8 @@
 package reachabilitymanager
 
 import (
+	"slices"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
@@ -422,8 +424,8 @@ func (rc *reindexContext) offsetSiblingsBefore(stagingArea *model.StagingArea,
 	}
 
 	// Iterate over the slice in reverse order in order to break if reaching `allocationNode`
-	for i := len(siblingsBefore) - 1; i >= 0; i-- {
-		sibling := siblingsBefore[i]
+	for _, sibling := range slices.Backward(siblingsBefore) {
+
 		if sibling.Equal(allocationNode) {
 			// We reached our final destination, allocate `offset` to `allocationNode` by increasing end and break
 			previousInterval, err := rc.manager.interval(stagingArea, allocationNode)

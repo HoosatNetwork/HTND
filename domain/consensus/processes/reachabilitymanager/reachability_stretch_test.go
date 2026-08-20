@@ -23,8 +23,9 @@ const numBlocksExponent = 12
 
 func initializeTest(t *testing.T, testName string) (tc testapi.TestConsensus, teardown func(keepDataDir bool)) {
 	t.Parallel()
+	SimnetParams := dagconfig.SimnetParams
+	SimnetParams.SkipProofOfWork = true
 	consensusConfig := consensus.Config{Params: dagconfig.SimnetParams}
-	consensusConfig.SkipProofOfWork = true
 	tc, teardown, err := consensus.NewFactory().NewTestConsensus(&consensusConfig, testName)
 	if err != nil {
 		t.Fatalf("Error setting up consensus: %+v", err)

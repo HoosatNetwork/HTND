@@ -40,7 +40,7 @@ type ConnectionManager struct {
 	activeIncoming   map[string]struct{}
 	maxIncoming      int
 
-	stop                   uint32
+	stop                   atomic.Uint32
 	connectionRequestsLock sync.RWMutex
 
 	resetLoopChan chan struct{}
@@ -86,7 +86,7 @@ func (c *ConnectionManager) Start() {
 
 // Stop halts the operation of the ConnectionManager
 func (c *ConnectionManager) Stop() {
-	atomic.StoreUint32(&c.stop, 1)
+	c.stop.Store(1)
 
 	for _, connection := range c.netAdapter.P2PConnections() {
 		connection.Disconnect()
@@ -109,7 +109,7 @@ func (c *ConnectionManager) initiateConnection(address string) error {
 const connectionsLoopInterval = 30 * time.Second
 
 func (c *ConnectionManager) connectionsLoop() {
-	for atomic.LoadUint32(&c.stop) == 0 {
+	for c.stop.Load() == 0 {
 		connections := c.netAdapter.P2PConnections()
 
 		// We convert the connections list to a set, so that connections can be found quickly

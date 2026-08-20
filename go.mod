@@ -1,6 +1,6 @@
 module github.com/HoosatNetwork/HTND
 
-go 1.26.5
+go 1.27
 
 require (
 	github.com/btcsuite/btcutil v1.0.2
@@ -59,3 +59,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+replace github.com/cockroachdb/swiss => github.com/jprieto-temporal/swiss v0.0.0-20260819190615-a1071b6b5d47

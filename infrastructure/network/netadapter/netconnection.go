@@ -18,7 +18,7 @@ type NetConnection struct {
 	id                    *id.ID
 	router                *routerpkg.Router
 	onDisconnectedHandler server.OnDisconnectedHandler
-	isRouterClosed        uint32
+	isRouterClosed        atomic.Uint32
 	shouldBanCounter      uint32
 	ErrorMessage          error
 }
@@ -39,7 +39,7 @@ func newNetConnection(connection server.Connection, routerInitializer RouterInit
 		log.Debugf("Disconnected from %s", netConnection)
 		// If the disconnection came because of a network error and not because of the application layer, we
 		// need to close the router as well.
-		if atomic.AddUint32(&netConnection.isRouterClosed, 1) == 1 {
+		if netConnection.isRouterClosed.Add(1) == 1 {
 			netConnection.router.Close()
 		}
 		// Call the onDisconnectedHandler if it was set by the caller. It may be nil
@@ -98,7 +98,7 @@ func (c *NetConnection) setOnDisconnectedHandler(onDisconnectedHandler server.On
 
 // Disconnect disconnects the given connection
 func (c *NetConnection) Disconnect() {
-	if atomic.AddUint32(&c.isRouterClosed, 1) == 1 {
+	if c.isRouterClosed.Add(1) == 1 {
 		c.router.Close()
 	}
 	c.connection.Disconnect()

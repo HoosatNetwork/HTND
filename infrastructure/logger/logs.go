@@ -192,7 +192,7 @@ func (l *Logger) printf(lvl Level, tag string, format string, args ...any) {
 // function and formatting the provided arguments using the default formatting
 // rules.
 func (l *Logger) print(lvl Level, tag string, args ...any) {
-	if atomic.LoadUint32(&l.b.isRunning) == 0 {
+	if l.b.isRunning.Load() == 0 {
 		panic("printing log without initializing")
 	}
 	t := mstime.Now() // get as early as possible

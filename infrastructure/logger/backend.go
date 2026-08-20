@@ -55,7 +55,7 @@ const logsBuffer = 0
 // subsystems.
 type Backend struct {
 	flag      uint32
-	isRunning uint32
+	isRunning atomic.Uint32
 	writers   []logWriter
 	writeChan chan logEntry
 	syncClose sync.Mutex // used to sync that the logger finished writing everything
@@ -139,7 +139,7 @@ func (b *Backend) AddLogFileWithCustomRotator(logFile string, logLevel Level, th
 
 // Run launches the logger backend in a separate go-routine. should only be called once.
 func (b *Backend) Run() error {
-	if !atomic.CompareAndSwapUint32(&b.isRunning, 0, 1) {
+	if !b.isRunning.CompareAndSwap(0, 1) {
 		return errors.New("The logger is already running")
 	}
 	go func() {
@@ -155,7 +155,7 @@ func (b *Backend) Run() error {
 }
 
 func (b *Backend) runBlocking() {
-	defer atomic.StoreUint32(&b.isRunning, 0)
+	defer b.isRunning.Store(0)
 	b.syncClose.Lock()
 	defer b.syncClose.Unlock()
 
@@ -170,7 +170,7 @@ func (b *Backend) runBlocking() {
 
 // IsRunning returns true if backend.Run() has been called and false if it hasn't.
 func (b *Backend) IsRunning() bool {
-	return atomic.LoadUint32(&b.isRunning) != 0
+	return b.isRunning.Load() != 0
 }
 
 // Close finalizes all log rotators for this backend

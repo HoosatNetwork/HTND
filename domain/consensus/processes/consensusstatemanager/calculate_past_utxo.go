@@ -1,6 +1,8 @@
 package consensusstatemanager
 
 import (
+	"slices"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
@@ -188,8 +190,8 @@ func (csm *consensusStateManager) restorePastUTXO(
 	// apply the diffs in reverse order
 	log.Debugf("Applying the collected UTXO diffs for block %s in reverse order", blockHash)
 	accumulatedDiff := utxo.NewMutableUTXODiff()
-	for i := len(utxoDiffs) - 1; i >= 0; i-- {
-		err := accumulatedDiff.WithDiffInPlace(utxoDiffs[i])
+	for _, utxoDiff := range slices.Backward(utxoDiffs) {
+		err := accumulatedDiff.WithDiffInPlace(utxoDiff)
 		if err != nil {
 			log.Debugf("restorePastUTXO: WithDiffInPlace on index %d failed while walking selected parent chain for %s", len(utxoDiffs), blockHash)
 			break

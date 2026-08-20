@@ -2,6 +2,7 @@ package consensusstatemanager
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/HoosatNetwork/HTND/util/staging"
 
@@ -61,8 +62,7 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 	var oneBeforeLastResolvedBlockUTXOSet externalapi.UTXODiff
 	var oneBeforeLastResolvedBlockHash *externalapi.DomainHash
 
-	for i := len(unverifiedBlocks) - 1; i >= 0; i-- {
-		unverifiedBlockHash := unverifiedBlocks[i]
+	for i, unverifiedBlockHash := range slices.Backward(unverifiedBlocks) {
 
 		stagingAreaForCurrentBlock := stagingArea
 		isResolveTip := i == 0

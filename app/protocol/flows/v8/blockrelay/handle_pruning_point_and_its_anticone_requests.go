@@ -20,7 +20,7 @@ type PruningPointAndItsAnticoneRequestsContext interface {
 	Config() *config.Config
 }
 
-var isBusy uint32
+var isBusy atomic.Uint32
 
 // HandlePruningPointAndItsAnticoneRequests listens to appmessage.MsgRequestPruningPointAndItsAnticone messages and sends
 // the pruning point and its anticone to the requesting peer.
@@ -34,10 +34,10 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 				return err
 			}
 
-			if !atomic.CompareAndSwapUint32(&isBusy, 0, 1) {
+			if !isBusy.CompareAndSwap(0, 1) {
 				return protocolerrors.Errorf(false, "node is busy with other pruning point anticone requests")
 			}
-			defer atomic.StoreUint32(&isBusy, 0)
+			defer isBusy.Store(0)
 
 			log.Debugf("Got request for pruning point and its anticone from %s", peer)
 

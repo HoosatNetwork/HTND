@@ -32,7 +32,7 @@ type NetAdapter struct {
 	p2pRouterInitializer RouterInitializer
 	rpcServer            server.Server
 	rpcRouterInitializer RouterInitializer
-	stop                 uint32
+	stop                 atomic.Uint32
 
 	p2pConnections     map[*NetConnection]struct{}
 	p2pConnectionsLock sync.RWMutex
@@ -98,7 +98,7 @@ func (na *NetAdapter) Start() error {
 
 // Stop safely closes the NetAdapter
 func (na *NetAdapter) Stop() error {
-	if atomic.AddUint32(&na.stop, 1) != 1 {
+	if na.stop.Add(1) != 1 {
 		return errors.New("net adapter stopped more than once")
 	}
 	err := na.p2pServer.Stop()

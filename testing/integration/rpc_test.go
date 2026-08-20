@@ -114,10 +114,9 @@ func TestRPCMaxInboundConnections(t *testing.T) {
 		t.Fatalf("Rejected RPC client was misattributed to timeout instead of immediate rejection: %v", err)
 	}
 
-	var statusErr interface{ GRPCStatus() *grpcstatus.Status }
-	if errors.As(err, &statusErr) {
-		if statusErr.GRPCStatus().Code() != codes.ResourceExhausted {
-			t.Fatalf("Expected ResourceExhausted for rejected RPC client, got: %s (%v)", statusErr.GRPCStatus().Code(), err)
+	if st, ok := grpcstatus.FromError(err); ok {
+		if st.Code() != codes.ResourceExhausted {
+			t.Fatalf("Expected ResourceExhausted for rejected RPC client, got: %s (%v)", st.Code(), err)
 		}
 	} else if !errors.Is(err, routerpkg.ErrRouteClosed) {
 		t.Fatalf("Expected rejected RPC client to fail with ResourceExhausted or closed route, got: %v", err)

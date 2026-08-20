@@ -24,11 +24,11 @@ type RPCClient struct {
 
 	rpcAddress           string
 	rpcRouter            *rpcRouter
-	isConnected          uint32
-	isClosed             uint32
-	isReconnecting       uint32
+	isConnected          atomic.Uint32
+	isClosed             atomic.Uint32
+	isReconnecting       atomic.Uint32
 	lastDisconnectedTime time.Time
-	isConnecting         uint32
+	isConnecting         atomic.Uint32
 
 	timeout time.Duration
 }
@@ -48,8 +48,8 @@ func NewRPCClient(rpcAddress string) (*RPCClient, error) {
 }
 
 func (c *RPCClient) connect() error {
-	atomic.StoreUint32(&c.isConnecting, 1)
-	defer atomic.StoreUint32(&c.isConnecting, 0)
+	c.isConnecting.Store(1)
+	defer c.isConnecting.Store(0)
 
 	rpcClient, err := grpcclient.Connect(c.rpcAddress)
 	if err != nil {
@@ -62,7 +62,7 @@ func (c *RPCClient) connect() error {
 		return errors.Wrapf(err, "error creating the RPC router")
 	}
 
-	atomic.StoreUint32(&c.isConnected, 1)
+	c.isConnected.Store(1)
 	rpcClient.AttachRouter(rpcRouter.router)
 
 	c.GRPCClient = rpcClient
@@ -82,7 +82,7 @@ func (c *RPCClient) connect() error {
 		if closeErr != nil {
 			log.Warnf("Error closing failed RPC connection to %s: %s", c.rpcAddress, closeErr)
 		}
-		atomic.StoreUint32(&c.isConnected, 0)
+		c.isConnected.Store(0)
 		return errors.Wrapf(err, "error validating initial RPC connection to %s", c.rpcAddress)
 	}
 
@@ -108,22 +108,22 @@ func (c *RPCClient) disconnect() error {
 // Reconnect forces the client to attempt to reconnect to the address
 // this client initially was connected to
 func (c *RPCClient) Reconnect() error {
-	if atomic.LoadUint32(&c.isClosed) == 1 {
+	if c.isClosed.Load() == 1 {
 		return errors.Errorf("Cannot reconnect from a closed client")
 	}
 
 	// Protect against multiple threads attempting to reconnect at the same time
-	swapped := atomic.CompareAndSwapUint32(&c.isReconnecting, 0, 1)
+	swapped := c.isReconnecting.CompareAndSwap(0, 1)
 	if !swapped {
 		// Already reconnecting
 		return nil
 	}
-	defer atomic.StoreUint32(&c.isReconnecting, 0)
+	defer c.isReconnecting.Store(0)
 
 	log.Warnf("Attempting to reconnect to %s", c.rpcAddress)
 
 	// Disconnect if we're connected
-	if atomic.LoadUint32(&c.isConnected) == 1 {
+	if c.isConnected.Load() == 1 {
 		err := c.disconnect()
 		if err != nil {
 			return err
@@ -146,14 +146,14 @@ func (c *RPCClient) Reconnect() error {
 }
 
 func (c *RPCClient) handleClientDisconnected() {
-	atomic.StoreUint32(&c.isConnected, 0)
+	c.isConnected.Store(0)
 	if c.rpcRouter != nil {
 		c.rpcRouter.router.Close()
 	}
-	if atomic.LoadUint32(&c.isConnecting) == 1 {
+	if c.isConnecting.Load() == 1 {
 		return
 	}
-	if atomic.LoadUint32(&c.isClosed) == 0 {
+	if c.isClosed.Load() == 0 {
 		err := c.disconnect()
 		if err != nil {
 			panic(err)
@@ -167,7 +167,7 @@ func (c *RPCClient) handleClientDisconnected() {
 }
 
 func (c *RPCClient) handleClientError(err error) {
-	if atomic.LoadUint32(&c.isClosed) == 1 {
+	if c.isClosed.Load() == 1 {
 		return
 	}
 	log.Warnf("Received error from client: %s", err)
@@ -181,7 +181,7 @@ func (c *RPCClient) SetTimeout(timeout time.Duration) {
 
 // Close closes the RPC client
 func (c *RPCClient) Close() error {
-	swapped := atomic.CompareAndSwapUint32(&c.isClosed, 0, 1)
+	swapped := c.isClosed.CompareAndSwap(0, 1)
 	if !swapped {
 		return errors.Errorf("Cannot close a client that had already been closed")
 	}
