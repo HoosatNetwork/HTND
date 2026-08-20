@@ -212,6 +212,10 @@ func (flow *handleRelayInvsFlow) start() error {
 		if err != nil {
 			return err
 		}
+		if inv.Hash.Equal(model.VirtualGenesisBlockHash) || inv.Hash.Equal(model.VirtualBlockHash) {
+			log.Debugf("Ignoring inv for virtual sentinel hash %s", inv.Hash)
+			continue
+		}
 
 		log.Debugf("Got relay inv for block %s", inv.Hash)
 		exists, err := flow.Domain().Consensus().HasBlock(inv.Hash)
