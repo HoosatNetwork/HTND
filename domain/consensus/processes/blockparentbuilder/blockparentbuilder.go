@@ -222,23 +222,29 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 	}
 
 	virtualGenesisChildrenWithHeadersPtr := virtualGenesisChildSlicePool.Get().(*[]virtualGenesisChild)
-	virtualGenesisChildrenWithHeaders := *virtualGenesisChildrenWithHeadersPtr
+	virtualGenesisChildrenWithHeaders := (*virtualGenesisChildrenWithHeadersPtr)[:0]
 	if cap(virtualGenesisChildrenWithHeaders) < len(virtualGenesisChildren) {
-		virtualGenesisChildrenWithHeaders = make([]virtualGenesisChild, len(virtualGenesisChildren))
-	} else {
-		virtualGenesisChildrenWithHeaders = virtualGenesisChildrenWithHeaders[:len(virtualGenesisChildren)]
+		virtualGenesisChildrenWithHeaders = make([]virtualGenesisChild, 0, len(virtualGenesisChildren))
 	}
 	defer func() {
 		clear(virtualGenesisChildrenWithHeaders[:cap(virtualGenesisChildrenWithHeaders)])
 		*virtualGenesisChildrenWithHeadersPtr = virtualGenesisChildrenWithHeaders[:0]
 		virtualGenesisChildSlicePool.Put(virtualGenesisChildrenWithHeadersPtr)
 	}()
-	for i, child := range virtualGenesisChildren {
+
+	for _, child := range virtualGenesisChildren {
+		// Virtual markers are never real blocks and have no headers.
+		if child.Equal(model.VirtualBlockHash) || child.Equal(model.VirtualGenesisBlockHash) {
+			continue
+		}
 		childHeader, err := bpb.blockHeaderStore.BlockHeader(bpb.databaseContext, stagingArea, child)
 		if err != nil {
 			return nil, err
 		}
-		virtualGenesisChildrenWithHeaders[i] = virtualGenesisChild{hash: child, header: childHeader}
+		virtualGenesisChildrenWithHeaders = append(virtualGenesisChildrenWithHeaders, virtualGenesisChild{
+			hash:   child,
+			header: childHeader,
+		})
 	}
 
 	for _, directParentHeader := range directParentHeaders {
