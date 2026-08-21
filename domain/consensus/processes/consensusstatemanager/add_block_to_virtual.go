@@ -7,6 +7,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/pkg/errors"
 )
 
 // AddBlock submits the given block to be added to the
@@ -147,6 +148,9 @@ func (csm *consensusStateManager) FindHighestValidBlock() (*externalapi.DomainHa
 			if err != nil {
 				return nil, err
 			}
+			if blockHash.Equal(model.VirtualBlockHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
+				continue
+			}
 
 			// Use a separate staging area for each block to avoid memory accumulation
 			stagingArea := model.NewStagingArea()
@@ -177,7 +181,9 @@ func (csm *consensusStateManager) FindHighestValidBlock() (*externalapi.DomainHa
 			}
 		}
 	}
-
+	if highestBlockHash == nil {
+		return nil, errors.Errorf("FindHighestValidBlock: no StatusUTXOValid block in store")
+	}
 	log.Infof("Highest valid block %s at DAAScore %d found for tip", highestBlockHash, highestDAaScore)
 	return highestBlockHash, nil
 }
@@ -246,6 +252,9 @@ func (csm *consensusStateManager) calculateNewTips(
 		candidate, err := csm.FindHighestValidBlock()
 		if err != nil {
 			return nil, err
+		}
+		if candidate == nil {
+			return nil, errors.Errorf("calculateNewTips: no tips left and no UTXO-valid block found")
 		}
 		newTips = append(newTips, candidate)
 	}
