@@ -1125,6 +1125,19 @@ func (s *consensus) ResolveVirtual(progressReportCallback func(uint64, uint64)) 
 		}
 	}
 
+	stagingArea := model.NewStagingArea()
+	tips, _ := s.consensusStateStore.Tips(stagingArea, s.databaseContext)
+	virtualDAA, _ := s.GetVirtualDAAScore()
+	parents, _ := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
+	log.Infof("ResolveVirtual done: daa=%d tips=%d parents=%s", virtualDAA, len(tips), parents)
+	for _, tip := range tips {
+		st, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, tip)
+		log.Infof("  tip %s status=%s err=%v", tip, st, err)
+	}
+	if virtualDAA == 0 || len(tips) == 0 {
+		return errors.Errorf("ResolveVirtual finished in broken state: daa=%d tips=%d", virtualDAA, len(tips))
+	}
+
 	return nil
 }
 
