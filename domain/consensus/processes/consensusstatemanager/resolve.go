@@ -199,7 +199,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	if pendingTip == nil {
 		log.Warnf("None of the DAG tips are valid, because of %s", pendingTipStatus)
-		return nil, true, nil
+		return nil, false, nil
 	}
 	log.Debugf("Previous pending tip %s", pendingTip)
 
