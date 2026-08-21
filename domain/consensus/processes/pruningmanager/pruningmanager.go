@@ -526,7 +526,6 @@ func (pm *pruningManager) deleteBlocksDownward(stagingArea *model.StagingArea,
 func (pm *pruningManager) pruneTips(stagingArea *model.StagingArea, pruningPoint *externalapi.DomainHash,
 	virtualParents []*externalapi.DomainHash,
 ) (prunedTips []*externalapi.DomainHash, err error) {
-	// Find P.AC that's not in V.Past
 	dagTips, err := pm.consensusStateStore.Tips(stagingArea, pm.databaseContext)
 	if err != nil {
 		return nil, err
@@ -543,8 +542,15 @@ func (pm *pruningManager) pruneTips(stagingArea *model.StagingArea, pruningPoint
 			newTips = append(newTips, tip)
 		}
 	}
-	pm.consensusStateStore.StageTips(stagingArea, newTips)
 
+	// Never leave the node with zero tips.
+	if len(newTips) == 0 {
+		log.Warnf("pruneTips would leave zero tips; keeping pruning point %s as tip", pruningPoint)
+		newTips = []*externalapi.DomainHash{pruningPoint}
+		prunedTips = nil // do not delete the only remaining tip
+	}
+
+	pm.consensusStateStore.StageTips(stagingArea, newTips)
 	return prunedTips, nil
 }
 

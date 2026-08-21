@@ -213,7 +213,7 @@ func (csm *consensusStateManager) calculateNewTips(
 
 	// Check the new block's status before adding to tips
 	if newTipStatus != externalapi.StatusDisqualifiedFromChain {
-		if newTipStatus == externalapi.StatusUTXOValid {
+		if newTipStatus == externalapi.StatusUTXOValid && !newTipHash.Equal(model.VirtualBlockHash) && !newTipHash.Equal(model.VirtualGenesisBlockHash) {
 			csm.lastValidBlock = newTipHash
 		}
 		newTips = append(newTips, newTipHash)
