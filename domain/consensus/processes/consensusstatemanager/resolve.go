@@ -9,6 +9,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/util/staging"
+	"github.com/pkg/errors"
 )
 
 // tipsInDecreasingDAGKnightOrder returns the current DAG tips in decreasing DAGKnight ordering.
@@ -156,7 +157,8 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 		log.Infof("Status: %s", status)
 	}
 
-	return nil, externalapi.StatusInvalid, nil
+	return nil, externalapi.StatusInvalid, errors.Errorf(
+		"no pending tip: all %d tips are disqualified/invalid", len(orderedTips))
 }
 
 // getGHOSTDAGLowerTips returns the set of tips which are lower in GHOSTDAG parent selection order than `pendingTip`. i.e.,
