@@ -142,23 +142,10 @@ func (csm *consensusStateManager) restorePastUTXO(
 			break
 		}
 
-		blockStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, nextBlockHash)
-		if err != nil {
-			return nil, err
-		}
-		if blockStatus == externalapi.StatusHeaderOnly {
-			log.Debugf("Block %s is header-only, treating as end of UTXO-diff chain for block %s",
-				nextBlockHash, blockHash)
-			break
-		}
-
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
-			// Treat missing UTXODiff the same as HeaderOnly – stop the walk.
-			// This is common during IBD / pruning-point import / virtual resolution.
 			if database.IsNotFoundError(err) {
-				log.Debugf("Block %s has no UTXO diff (not found), treating as end of UTXO-diff chain for block %s",
-					nextBlockHash, blockHash)
+				log.Debugf("Block %s has no UTXO diff (not found), treating as end of UTXO-diff chain for block %s", nextBlockHash, blockHash)
 				break
 			}
 			return nil, err
@@ -167,15 +154,6 @@ func (csm *consensusStateManager) restorePastUTXO(
 		utxoDiffs = append(utxoDiffs, utxoDiff)
 		log.Debugf("Collected UTXO diff for block %s: toAdd: %d, toRemove: %d",
 			nextBlockHash, utxoDiff.ToAdd().Len(), utxoDiff.ToRemove().Len())
-
-		exists, err := csm.utxoDiffStore.HasUTXODiffChild(csm.databaseContext, stagingArea, nextBlockHash)
-		if err != nil {
-			return nil, err
-		}
-		if !exists {
-			log.Debugf("Block %s does not have a UTXO diff child, meaning we reached the virtual", nextBlockHash)
-			break
-		}
 
 		nextBlockHash, err = csm.utxoDiffStore.UTXODiffChild(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
