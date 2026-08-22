@@ -427,8 +427,8 @@ func (flow *handleRelayInvsFlow) start() error {
 			log.Warnf("Accepted block %s from node %s with %d tx, but failed to get block info: %v",
 				inv.Hash, flow.netConnection.Address(), txslen, err)
 		} else {
-			log.Infof("Accepted block %s from node %s with %d tx (dynamic K: %d)",
-				inv.Hash, flow.netConnection.Address(), txslen, acceptedBlockInfo.DynamicK)
+			log.Infof("Accepted block %s from node %s with %d tx (dynamic K: %d) Status %s",
+				inv.Hash, flow.netConnection.Address(), txslen, acceptedBlockInfo.DynamicK, acceptedBlockInfo.BlockStatus)
 		}
 		err = flow.OnNewBlock(block)
 		if err != nil {
