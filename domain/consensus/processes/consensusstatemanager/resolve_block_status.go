@@ -298,7 +298,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 	err = csm.verifyUTXO(stagingArea, block, blockHash, pastUTXOSet, acceptanceData, multiset)
 	if err != nil {
 		if errors.As(err, &ruleerrors.RuleError{}) {
-			log.Debugf("UTXO verification for block %s failed: %s", blockHash, err)
+			log.Warnf("UTXO verification for block %s failed: %s", blockHash, err)
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
 
