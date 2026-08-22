@@ -1,6 +1,8 @@
 package utxo
 
 import (
+	"maps"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
@@ -19,14 +21,26 @@ func checkIntersection(collection1 utxoCollection, collection2 utxoCollection) b
 // checkIntersectionWithRule checks if there is an intersection between two utxoCollections satisfying arbitrary rule
 // returns the first outpoint in the two collections' intersection satisfying the rule, and a boolean indicating whether
 // such outpoint exists
-func checkIntersectionWithRule(collection1 utxoCollection, collection2 utxoCollection,
-	extraRule func(*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry) bool) (
-	*externalapi.DomainOutpoint, bool,
-) {
-	for outpoint, utxoEntry := range collection1 {
-		if diffEntry, ok := collection2.Get(&outpoint); ok {
-			if extraRule(&outpoint, utxoEntry, diffEntry) {
-				return &outpoint, true
+func checkIntersectionWithRule(collectionA utxoCollection, collectionB utxoCollection,
+	extraRule func(*externalapi.DomainOutpoint, externalapi.UTXOEntry, externalapi.UTXOEntry) bool,
+) (*externalapi.DomainOutpoint, bool) {
+	swapped := false
+	sourceMap, targetMap := collectionA, collectionB
+	if len(collectionA) > len(collectionB) {
+		sourceMap, targetMap = collectionB, collectionA
+		swapped = true
+	}
+
+	for outpoint, entry := range sourceMap {
+		if otherEntry, ok := targetMap.Get(&outpoint); ok {
+			entryA, entryB := entry, otherEntry
+			if swapped {
+				entryA, entryB = otherEntry, entry
+			}
+
+			if extraRule(&outpoint, entryA, entryB) {
+				outpointCopy := outpoint
+				return &outpointCopy, true
 			}
 		}
 	}
@@ -37,11 +51,24 @@ func checkIntersectionWithRule(collection1 utxoCollection, collection2 utxoColle
 // intersectionWithRemainderHavingDAAScoreInPlace calculates an intersection between two utxoCollections
 // having same DAA score, puts it into result and into remainder from collection1
 func intersectionWithRemainderHavingDAAScoreInPlace(collection1, collection2, result, remainder utxoCollection) {
-	for outpoint, utxoEntry := range collection1 {
-		if collection2.containsWithDAAScore(&outpoint, utxoEntry.BlockDAAScore()) {
-			result.add(&outpoint, utxoEntry)
+	// FAST PATH: If collection2 is smaller, iterate over collection2 instead of collection1
+	if len(collection2) < len(collection1) {
+		maps.Copy(remainder, collection1)
+		for outpoint, entry2 := range collection2 {
+			if entry1, ok := collection1[outpoint]; ok && entry1.BlockDAAScore() == entry2.BlockDAAScore() {
+				result[outpoint] = entry1
+				delete(remainder, outpoint)
+			}
+		}
+		return
+	}
+
+	// STANDARD PATH: collection1 is smaller or equal
+	for outpoint, entry1 := range collection1 {
+		if entry2, ok := collection2[outpoint]; ok && entry2.BlockDAAScore() == entry1.BlockDAAScore() {
+			result[outpoint] = entry1
 		} else {
-			remainder.add(&outpoint, utxoEntry)
+			remainder[outpoint] = entry1
 		}
 	}
 }
