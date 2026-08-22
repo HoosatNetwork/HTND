@@ -1125,17 +1125,46 @@ func (s *consensus) ResolveVirtual(progressReportCallback func(uint64, uint64)) 
 		}
 	}
 
+	// After the resolve loop, before return nil
 	stagingArea := model.NewStagingArea()
-	tips, _ := s.consensusStateStore.Tips(stagingArea, s.databaseContext)
-	virtualDAA, _ := s.GetVirtualDAAScore()
-	parents, _ := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
-	log.Infof("ResolveVirtual done: daa=%d tips=%d parents=%s", virtualDAA, len(tips), parents)
-	for _, tip := range tips {
-		st, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, tip)
-		log.Infof("  tip %s status=%s err=%v", tip, st, err)
+	tips, err := s.consensusStateStore.Tips(stagingArea, s.databaseContext)
+	if err != nil {
+		return err
 	}
-	if virtualDAA == 0 || len(tips) == 0 {
-		return errors.Errorf("ResolveVirtual finished in broken state: daa=%d tips=%d", virtualDAA, len(tips))
+	if len(tips) == 0 {
+		return errors.Errorf("ResolveVirtual finished with zero tips")
+	}
+
+	hasUsableTip := false
+	for _, tip := range tips {
+		status, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, tip)
+		if err != nil {
+			continue
+		}
+		if status == externalapi.StatusUTXOValid || status == externalapi.StatusUTXOPendingVerification {
+			hasUsableTip = true
+			break
+		}
+	}
+	if !hasUsableTip {
+		return errors.Errorf(
+			"ResolveVirtual finished with no UTXO-valid/pending tip (all tips disqualified or invalid); virtual cannot leave VirtualGenesis")
+	}
+
+	parents, err := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
+	if err != nil {
+		return err
+	}
+	if len(parents) == 1 && parents[0].Equal(model.VirtualGenesisBlockHash) {
+		return errors.Errorf("ResolveVirtual finished but virtual parents are still VirtualGenesis")
+	}
+
+	daa, err := s.GetVirtualDAAScore()
+	if err != nil {
+		return err
+	}
+	if daa == 0 {
+		return errors.Errorf("ResolveVirtual finished with virtual DAA score 0")
 	}
 
 	return nil
