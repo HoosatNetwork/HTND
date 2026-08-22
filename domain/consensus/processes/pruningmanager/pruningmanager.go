@@ -188,6 +188,14 @@ func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.Staging
 		return nil
 	}
 
+	status, err := pm.blockStatusStore.Get(pm.databaseContext, stagingArea, selectedParent)
+	if err != nil {
+		return err
+	}
+	if status != externalapi.StatusUTXOValid {
+		return nil
+	}
+
 	newPruningPoint, newCandidate, err := pm.nextPruningPointAndCandidateByBlockHash(stagingArea, virtualGHOSTDAGData.SelectedParent(), nil)
 	if err != nil {
 		return err
