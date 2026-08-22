@@ -25,7 +25,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Bloom filter configuration
 	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
 	// ────────────────────────────────────────────────
-	bloomBitsPerKey := 16
+	bloomBitsPerKey := 10
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 8 && n <= 20 {
 			bloomBitsPerKey = n
@@ -38,7 +38,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	const (
 		defaultMemTableMB           = 64
-		defaultMemTablesBeforeStall = 6
+		defaultMemTablesBeforeStall = 8
 	)
 
 	memTableBytes := int64(defaultMemTableMB) << 20
@@ -113,17 +113,17 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 6), // was 16 → align with compaction trigger
 
 		TargetFileSizes: [7]int64{
-			baseFileSize,       // L0
-			baseFileSize * 4,   // L1
-			baseFileSize * 10,  // L2
-			baseFileSize * 25,  // L3
-			baseFileSize * 50,  // L4
-			baseFileSize * 100, // L5
-			baseFileSize * 200, // L6
+			baseFileSize,
+			baseFileSize * 4,
+			baseFileSize * 10,
+			baseFileSize * 25,
+			baseFileSize * 50,
+			baseFileSize * 100,
+			baseFileSize * 200,
 		},
 
 		MaxManifestFileSize: 128 << 20,
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 4086),
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 40860),
 
 		// WAL is not needed for integration tests and disabling it avoids WAL
 		// rotation paths that can be problematic under constrained CI environments.
@@ -135,44 +135,44 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		Levels: [7]pebble.LevelOptions{
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      4 << 10,
+				IndexBlockSize: 8 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      4 << 10,
+				IndexBlockSize: 8 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      8 << 10,
+				IndexBlockSize: 8 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      8 << 10,
+				IndexBlockSize: 16 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      8 << 10,
+				IndexBlockSize: 16 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      8 << 10,
+				IndexBlockSize: 16 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
-				BlockSize:      32 << 10,
-				IndexBlockSize: 64 << 10,
+				BlockSize:      8 << 10,
+				IndexBlockSize: 16 << 10,
 				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
@@ -196,7 +196,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	// Read-triggered compactions: compact hot-read data more aggressively
 	// Helpful during long IBD phases with repeated ancestor / window lookups
-	opts.Experimental.ReadCompactionRate = 256 << 20
+	opts.Experimental.ReadCompactionRate = 0
 	opts.Experimental.ReadSamplingMultiplier = 2
 
 	// if v := os.Getenv("HTND_READ_COMPACTION_RATE_KB"); v != "" {
@@ -212,11 +212,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 	opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
 		return pebble.ValueSeparationPolicy{
-			Enabled:               true,          // keep it on for write amp, but tune it
-			MinimumSize:           16 << 10,      // 4 KiB (or try 8 KiB). Stop separating medium-sized values
-			MaxBlobReferenceDepth: 4,             // was 100 → much more aggressive rewriting of blobs to restore locality
-			RewriteMinimumAge:     6 * time.Hour, // or lower (e.g. 1–2h) so old blobs get rewritten sooner
-			TargetGarbageRatio:    0.15,          // slightly more aggressive space reclaim
+			Enabled: false,
 		}
 	}
 
