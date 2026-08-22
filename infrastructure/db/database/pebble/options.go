@@ -37,7 +37,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Memtable tuning
 	// ────────────────────────────────────────────────
 	const (
-		defaultMemTableMB           = 512
+		defaultMemTableMB           = 64
 		defaultMemTablesBeforeStall = 6
 	)
 
@@ -65,7 +65,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Target SST file size at base level
 	// ────────────────────────────────────────────────
-	baseFileSize := memTableBytes / 4
+	baseFileSize := memTableBytes
 	const (
 		minBaseFileSize = 32 << 20
 		maxBaseFileSize = 128 << 20
@@ -108,8 +108,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 
 		FlushSplitBytes: baseFileSize,
 
-		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 6),      // was 16 → start here, try up to 128–256 if still building up
-		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 24),    // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
+		L0CompactionThreshold:     getEnvInt("HTND_L0_COMPACTION_THRESHOLD", 8),      // was 16 → start here, try up to 128–256 if still building up
+		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 40),    // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
 		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 6), // was 16 → align with compaction trigger
 
 		TargetFileSizes: [7]int64{
@@ -123,7 +123,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		},
 
 		MaxManifestFileSize: 128 << 20,
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 1024),
+		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 4086),
 
 		// WAL is not needed for integration tests and disabling it avoids WAL
 		// rotation paths that can be problematic under constrained CI environments.
@@ -149,13 +149,13 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			{
 				BlockSize:      32 << 10,
 				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
 				BlockSize:      32 << 10,
 				IndexBlockSize: 64 << 10,
-				Compression:    func() *sstable.CompressionProfile { return sstable.NoCompression },
+				Compression:    func() *sstable.CompressionProfile { return sstable.SnappyCompression },
 				FilterPolicy:   bloomPolicy,
 			},
 			{
@@ -189,7 +189,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 
 	// How many L0 compactions can run concurrently
-	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 6)
+	opts.Experimental.L0CompactionConcurrency = getEnvInt("HTND_L0_COMPACTION_CONCURRENCY", 2)
 
 	// Trigger extra compaction workers when debt (pending bytes) is high
 	// opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
