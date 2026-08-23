@@ -326,7 +326,12 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 
 				isPruningPointOnSyncerChain, err := flow.Domain().Consensus().IsInSelectedParentChainOf(pruningPoint, locatorHashes[i])
 				if err != nil {
-					log.Errorf("Error checking isPruningPointOnSyncerChain: %s", err)
+					// locatorHashes[i] exists locally and isn't header-only, so its reachability
+					// data is expected to be present. An error here means our local data for this
+					// block is missing or corrupted - silently treating it as "unknown" would make
+					// the zoom-in loop re-derive the same boundary forever and never converge, so
+					// surface the error instead of masking it.
+					return nil, nil, errors.Wrapf(err, "failed checking isPruningPointOnSyncerChain for %s", locatorHashes[i])
 				}
 
 				// We're only interested in syncer chain blocks that have our pruning
@@ -335,7 +340,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				//    (hence we can ignore it unless merged by others).
 				// 2) syncerChainHash is actually in the past of our pruning point so there's no
 				//    point in syncing from it.
-				if err == nil && isPruningPointOnSyncerChain {
+				if isPruningPointOnSyncerChain {
 					currentHighestKnownSyncerChainHash = locatorHashes[i]
 					break
 				}
