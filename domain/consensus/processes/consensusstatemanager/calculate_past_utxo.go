@@ -100,7 +100,7 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	} else {
 		daaScore = header.DAAScore()
 	}
-	log.Infof("Calculating PastUTXO and acceptance data with DAAScore %d", daaScore)
+	log.Debugf("Calculating PastUTXO and acceptance data with DAAScore %d", daaScore)
 
 	log.Debugf("Applying blue blocks to the selected parent past UTXO of block %s", blockHash)
 	acceptanceData, utxoDiff, err := csm.applyMergeSetBlocks(stagingArea, blockHash, selectedParentPastUTXO, daaScore)
