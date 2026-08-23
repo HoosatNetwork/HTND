@@ -304,8 +304,13 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			log.Warnf("UTXO verification for block %s failed: %s", blockHash, err)
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
-
-			csm.stageDiff(stagingArea, blockHash, utxo.NewMutableUTXODiff().ToImmutable(), selectedParentHash)
+			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
+			if diffErr != nil || utxoDiff == nil {
+				csm.stageDiff(stagingArea, blockHash, utxo.NewMutableUTXODiff().ToImmutable(), selectedParentHash)
+			} else {
+				// Stage the real transition, when diffFrom won't fail from this.
+				csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
+			}
 			// Even for disqualified blocks, return the calculated past UTXO so the
 			// next block in the chain can use it when resolving a chain of
 			// disqualified statuses.
