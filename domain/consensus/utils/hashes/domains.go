@@ -18,6 +18,7 @@ const (
 	blockDomain                   = "BlockHash"
 	heavyHashDomain               = "HeavyHash"
 	merkleBranchDomain            = "MerkleBranchHash"
+	coinbaseEntropyDomain         = "CoinbaseEntropyHash"
 )
 
 // transactionSigningECDSADomainHash is a hashed version of transcationSigningECDSADomain that is used
@@ -139,6 +140,17 @@ func KeccakHeavyHashWriter() ShakeHashWriter {
 func NewMerkleBranchHashWriter() HashWriter {
 	var fixedSizeKey [32]byte
 	copy(fixedSizeKey[:], merkleBranchDomain)
+	blake := blake3.New(32, fixedSizeKey[:])
+	return HashWriter{blake}
+}
+
+// NewCoinbaseEntropyHashWriter returns a new HashWriter used for deriving the
+// per-block entropy folded into a coinbase transaction's payload (from block
+// version 8 onward), so that two blocks whose merge sets and DAA score happen
+// to coincide don't produce identical (colliding) coinbase transaction IDs.
+func NewCoinbaseEntropyHashWriter() HashWriter {
+	var fixedSizeKey [32]byte
+	copy(fixedSizeKey[:], coinbaseEntropyDomain)
 	blake := blake3.New(32, fixedSizeKey[:])
 	return HashWriter{blake}
 }

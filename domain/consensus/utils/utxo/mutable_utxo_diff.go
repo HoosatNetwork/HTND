@@ -106,7 +106,7 @@ func utxoCollectionsEqual(a, b externalapi.UTXOCollection) bool {
 		return false
 	}
 	iterator := a.Iterator()
-	for iterator.First(); iterator.Next(); {
+	for ok := iterator.First(); ok; ok = iterator.Next() {
 		outpoint, entryA, err := iterator.Get()
 		if err != nil {
 			return false

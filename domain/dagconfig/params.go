@@ -273,6 +273,7 @@ var MainnetParams = Params{
 		40,
 		40,
 		40,
+		40,
 	},
 	Name:        "hoosat-mainnet",
 	Net:         appmessage.Mainnet,
@@ -311,6 +312,7 @@ var MainnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
@@ -320,12 +322,14 @@ var MainnetParams = Params{
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
+		10800 * time.Second,
 	},
 	DifficultyAdjustmentWindowSize: []int{
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
+		2640,
 		2640,
 		2640,
 		2640,
@@ -339,9 +343,19 @@ var MainnetParams = Params{
 		43334184,
 		192792190,
 		213340776,
+		217137983,
 	},
 
-	PruningMultiplier: []uint64{0, 0, 0, 0, 1, 1, 1},
+	PruningMultiplier: []uint64{
+		0,
+		0,
+		0,
+		0,
+		1,
+		1,
+		1,
+		1,
+	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
@@ -349,7 +363,9 @@ var MainnetParams = Params{
 		defaultMaxBlockMass,
 		1_000_000,
 		1_000_000,
-		1_000_000},
+		1_000_000,
+		1_000_000,
+	},
 
 	// Consensus rule change deployments.
 	//
@@ -385,6 +401,7 @@ var MainnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -406,6 +423,7 @@ var MainnetParams = Params{
 		3600,
 		3600,
 		3600,
+		3600,
 	},
 }
 
@@ -418,7 +436,9 @@ var TestnetParams = Params{
 		defaultGHOSTDAGK,
 		40,
 		40,
-		40},
+		40,
+		40,
+	},
 	Name:        "hoosat-testnet",
 	Net:         appmessage.Testnet,
 	RPCPort:     "42422",
@@ -450,12 +470,14 @@ var TestnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -467,10 +489,32 @@ var TestnetParams = Params{
 		defaultDifficultyAdjustmentWindowSize,
 		2651,
 		2641,
-		2641},
+		2641,
+		2641,
+	},
 	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
-	POWScores:                   []uint64{1, 50, 100, 150, 200, 250},
-	PruningMultiplier:           []uint64{0, 0, 0, 0, 1, 1, 1},
+	// TODO: set the real activation DAA score for block version 8 (coinbase
+	// entropy hard fork) as the 7th entry. ^uint64(0) is a placeholder that
+	// never triggers, so version 8 stays inactive until this is set.
+	POWScores: []uint64{
+		1,
+		50,
+		100,
+		150,
+		200,
+		250,
+		300,
+	},
+	PruningMultiplier: []uint64{
+		0,
+		0,
+		0,
+		0,
+		1,
+		1,
+		1,
+		1,
+	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
@@ -478,7 +522,9 @@ var TestnetParams = Params{
 		defaultMaxBlockMass,
 		1_000_000,
 		1_000_000,
-		1_000_000},
+		1_000_000,
+		1_000_000,
+	},
 
 	// Consensus rule change deployments.
 	//
@@ -514,6 +560,7 @@ var TestnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -534,7 +581,9 @@ var TestnetParams = Params{
 		3600,
 		3600,
 		3600,
-		3600},
+		3600,
+		3600,
+	},
 }
 
 var TestnetParamsB5 = Params{

@@ -6,8 +6,46 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
 	"github.com/pkg/errors"
 )
+
+// coinbaseEntropyActivationVersion is the block version, activated by a hard fork,
+// from which per-block entropy is folded into the coinbase payload. Blocks below
+// this version keep the pre-fork payload layout so already-mined blocks continue
+// to validate unchanged.
+const coinbaseEntropyActivationVersion = 8
+
+// coinbaseEntropy derives per-block entropy from the block's own full merge set
+// (blues and reds, in their GHOSTDAG-canonical order, which starts with the
+// selected parent) and DAA score. It's folded into the coinbase payload so that
+// two blocks whose blue score, merge set and miner-supplied data would otherwise
+// coincide (e.g. sibling blocks mined on the same parents) don't produce
+// colliding coinbase transaction IDs. Every input is already-established
+// consensus state, known identically at both block-build time and validation
+// time, so this stays fully deterministic and verifiable.
+//
+// Only the first 8 bytes of the underlying hash are kept: that's already far more
+// collision resistance than this non-adversarial uniqueness check needs, and
+// keeping it small avoids also having to raise the network-wide
+// MaxCoinbasePayloadLength.
+func coinbaseEntropy(ghostdagData *externalapi.BlockGHOSTDAGData, daaScore uint64) [lengthOfEntropy]byte {
+	writer := hashes.NewCoinbaseEntropyHashWriter()
+	for _, blockHash := range ghostdagData.MergeSetBlues() {
+		writer.InfallibleWrite(blockHash.ByteSlice())
+	}
+	for _, blockHash := range ghostdagData.MergeSetReds() {
+		writer.InfallibleWrite(blockHash.ByteSlice())
+	}
+	var daaScoreBytes [uint64Len]byte
+	binary.LittleEndian.PutUint64(daaScoreBytes[:], daaScore)
+	writer.InfallibleWrite(daaScoreBytes[:])
+
+	var entropy [lengthOfEntropy]byte
+	copy(entropy[:], writer.Finalize().ByteSlice())
+	return entropy
+}
 
 func scriptLengthByte(length int) byte {
 	parsedLength, err := strconv.ParseUint(strconv.Itoa(length), 10, 8)
@@ -23,13 +61,24 @@ const (
 	uint64Len                   = 8
 	uint16Len                   = 2
 	lengthOfSubsidy             = uint64Len
+	lengthOfEntropy             = uint64Len
 	lengthOfScriptPubKeyLength  = 1
 	lengthOfVersionScriptPubKey = uint16Len
 )
 
+// prefixLengthForVersion returns the length of the fixed, consensus-derived
+// payload prefix (blue score + subsidy, plus entropy from
+// coinbaseEntropyActivationVersion onward) for the given block version.
+func prefixLengthForVersion(blockVersion uint16) int {
+	if blockVersion >= coinbaseEntropyActivationVersion {
+		return uint64Len + lengthOfSubsidy + lengthOfEntropy
+	}
+	return uint64Len + lengthOfSubsidy
+}
+
 // serializeCoinbasePayload builds the coinbase payload based on the provided scriptPubKey and extra data.
 func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
-	coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64,
+	coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, entropy [lengthOfEntropy]byte,
 ) ([]byte, error) {
 	scriptLengthOfScriptPubKey := len(coinbaseData.ScriptPublicKey.Script)
 	if scriptLengthOfScriptPubKey > int(c.coinbasePayloadScriptPublicKeyMaxLength) {
@@ -38,14 +87,18 @@ func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
 	}
 	scriptLengthOfScriptPubKeyByte := scriptLengthByte(scriptLengthOfScriptPubKey)
 
-	payload := make([]byte, uint64Len+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey+len(coinbaseData.ExtraData)+lengthOfSubsidy)
+	prefixLength := prefixLengthForVersion(constants.GetBlockVersion())
+	payload := make([]byte, prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey+len(coinbaseData.ExtraData))
 	binary.LittleEndian.PutUint64(payload[:uint64Len], blueScore)
-	binary.LittleEndian.PutUint64(payload[uint64Len:], subsidy)
+	binary.LittleEndian.PutUint64(payload[uint64Len:uint64Len+lengthOfSubsidy], subsidy)
+	if prefixLength > uint64Len+lengthOfSubsidy {
+		copy(payload[uint64Len+lengthOfSubsidy:prefixLength], entropy[:])
+	}
 
-	binary.LittleEndian.PutUint16(payload[uint64Len+lengthOfSubsidy:], coinbaseData.ScriptPublicKey.Version)
-	payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey] = scriptLengthOfScriptPubKeyByte
-	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength:], coinbaseData.ScriptPublicKey.Script)
-	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey:], coinbaseData.ExtraData)
+	binary.LittleEndian.PutUint16(payload[prefixLength:], coinbaseData.ScriptPublicKey.Version)
+	payload[prefixLength+lengthOfVersionScriptPubKey] = scriptLengthOfScriptPubKeyByte
+	copy(payload[prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength:], coinbaseData.ScriptPublicKey.Script)
+	copy(payload[prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey:], coinbaseData.ExtraData)
 
 	return payload, nil
 }
@@ -59,37 +112,61 @@ func ModifyCoinbasePayload(payload []byte, coinbaseData *externalapi.DomainCoinb
 	}
 	scriptLengthOfScriptPubKeyByte := scriptLengthByte(scriptLengthOfScriptPubKey)
 
-	newPayloadLen := uint64Len + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength + scriptLengthOfScriptPubKey + len(coinbaseData.ExtraData) + lengthOfSubsidy
+	prefixLength := prefixLengthForVersion(constants.GetBlockVersion())
+	newPayloadLen := prefixLength + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength + scriptLengthOfScriptPubKey + len(coinbaseData.ExtraData)
 	if len(payload) != newPayloadLen {
 		newPayload := make([]byte, newPayloadLen)
-		copy(newPayload, payload[:uint64Len+lengthOfSubsidy])
+		copyLength := prefixLength
+		if len(payload) < copyLength {
+			copyLength = len(payload)
+		}
+		copy(newPayload, payload[:copyLength])
 		payload = newPayload
 	}
 
-	binary.LittleEndian.PutUint16(payload[uint64Len+lengthOfSubsidy:uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey], coinbaseData.ScriptPublicKey.Version)
-	payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey] = scriptLengthOfScriptPubKeyByte
-	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength:], coinbaseData.ScriptPublicKey.Script)
-	copy(payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey:], coinbaseData.ExtraData)
+	binary.LittleEndian.PutUint16(payload[prefixLength:prefixLength+lengthOfVersionScriptPubKey], coinbaseData.ScriptPublicKey.Version)
+	payload[prefixLength+lengthOfVersionScriptPubKey] = scriptLengthOfScriptPubKeyByte
+	copy(payload[prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength:], coinbaseData.ScriptPublicKey.Script)
+	copy(payload[prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey:], coinbaseData.ExtraData)
 
 	return payload, nil
 }
 
 // ExtractCoinbaseDataBlueScoreAndSubsidy deserializes the coinbase payload to its component (scriptPubKey, extra data, and subsidy).
+//
+// This assumes coinbaseTx belongs to the block currently being built or
+// validated (i.e. constants.GetBlockVersion() reflects it). Callers that parse
+// a coinbase belonging to a *different* block - e.g. a merge-set block's
+// coinbase, looked up by hash, while reward-computing the block currently being
+// processed - must not use this: the ambient version won't necessarily match,
+// and blocks whose merge set spans the entropy hard fork boundary can mix pre-
+// and post-fork coinbase payloads. Use extractCoinbaseDataBlueScoreAndSubsidyForVersion
+// with that specific block's own version instead.
 func (c *coinbaseManager) ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTx *externalapi.DomainTransaction) (
 	blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error,
 ) {
-	minLength := uint64Len + lengthOfSubsidy + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength
+	return c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx, constants.GetBlockVersion())
+}
+
+// extractCoinbaseDataBlueScoreAndSubsidyForVersion is like ExtractCoinbaseDataBlueScoreAndSubsidy,
+// but takes the coinbase-owning block's version explicitly instead of assuming it
+// matches the ambient constants.GetBlockVersion().
+func (c *coinbaseManager) extractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx *externalapi.DomainTransaction, blockVersion uint16) (
+	blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error,
+) {
+	prefixLength := prefixLengthForVersion(blockVersion)
+	minLength := prefixLength + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength
 	if len(coinbaseTx.Payload) < minLength {
 		return 0, nil, 0, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen,
 			"coinbase payload is less than the minimum length of %d", minLength)
 	}
 
 	blueScore = binary.LittleEndian.Uint64(coinbaseTx.Payload[:uint64Len])
-	subsidy = binary.LittleEndian.Uint64(coinbaseTx.Payload[uint64Len:])
+	subsidy = binary.LittleEndian.Uint64(coinbaseTx.Payload[uint64Len : uint64Len+lengthOfSubsidy])
 
-	scriptPubKeyVersion := binary.LittleEndian.Uint16(coinbaseTx.Payload[uint64Len+lengthOfSubsidy : uint64Len+lengthOfSubsidy+uint16Len])
+	scriptPubKeyVersion := binary.LittleEndian.Uint16(coinbaseTx.Payload[prefixLength : prefixLength+uint16Len])
 
-	scriptPubKeyScriptLength := coinbaseTx.Payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey]
+	scriptPubKeyScriptLength := coinbaseTx.Payload[prefixLength+lengthOfVersionScriptPubKey]
 
 	if scriptPubKeyScriptLength > c.coinbasePayloadScriptPublicKeyMaxLength {
 		return 0, nil, 0, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen, "coinbase's payload script public key is "+
@@ -100,10 +177,11 @@ func (c *coinbaseManager) ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTx *ext
 		return 0, nil, 0, errors.Wrapf(ruleerrors.ErrBadCoinbasePayloadLen,
 			"coinbase payload doesn't have enough bytes to contain a script public key of %d bytes", scriptPubKeyScriptLength)
 	}
-	scriptPubKeyScript := coinbaseTx.Payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength : uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptPubKeyScriptLength]
+	scriptEnd := prefixLength + lengthOfVersionScriptPubKey + lengthOfScriptPubKeyLength + int(scriptPubKeyScriptLength)
+	scriptPubKeyScript := coinbaseTx.Payload[prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength : scriptEnd]
 
 	return blueScore, &externalapi.DomainCoinbaseData{
 		ScriptPublicKey: &externalapi.ScriptPublicKey{Script: scriptPubKeyScript, Version: scriptPubKeyVersion},
-		ExtraData:       coinbaseTx.Payload[uint64Len+lengthOfSubsidy+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptPubKeyScriptLength:],
+		ExtraData:       coinbaseTx.Payload[scriptEnd:],
 	}, subsidy, nil
 }

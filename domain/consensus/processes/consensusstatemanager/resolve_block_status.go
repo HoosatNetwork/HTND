@@ -10,7 +10,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
@@ -95,14 +94,11 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
 
 			utxoDiff, err := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
-			// if err != nil {
-			// 	panic(err)
-			// }
-			if utxoDiff != nil {
-				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
-			} else {
-				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxo.NewMutableUTXODiff().ToImmutable(), previousBlockHash)
+			if err != nil {
+				return 0, nil, errors.Wrapf(err, "failed to diff past UTXO of disqualified block %s against its "+
+					"selected parent %s", unverifiedBlockHash, previousBlockHash)
 			}
+			csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
 
 			previousBlockUTXOSet = pastUTXOSet
 		} else {
@@ -305,16 +301,14 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
 			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
-			if diffErr != nil || utxoDiff == nil {
-				csm.stageDiff(stagingArea, blockHash, utxo.NewMutableUTXODiff().ToImmutable(), selectedParentHash)
-			} else {
-				// Stage the real transition, when diffFrom won't fail from this.
-				csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
+			if diffErr != nil {
+				return 0, nil, errors.Wrapf(diffErr, "failed to diff past UTXO of disqualified block %s against "+
+					"its selected parent %s", blockHash, selectedParentHash)
 			}
+			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 			// Even for disqualified blocks, return the calculated past UTXO so the
 			// next block in the chain can use it when resolving a chain of
 			// disqualified statuses.
-			// panic(err)
 			return externalapi.StatusDisqualifiedFromChain, pastUTXOSet, nil
 		}
 		return 0, nil, err

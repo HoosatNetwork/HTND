@@ -169,7 +169,12 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 				log.Warnf("No coinbase transaction found for merge set block %d: %s", i, blockHash)
 				continue
 			}
-			_, blockCoinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidy(blockAcc.TransactionAcceptanceData[0].Transaction)
+			mergeSetBlockVersion, err := c.blockVersion(stagingArea, blockHash)
+			if err != nil {
+				return nil, false, err
+			}
+			_, blockCoinbaseData, _, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+				blockAcc.TransactionAcceptanceData[0].Transaction, mergeSetBlockVersion)
 			if err != nil {
 				return nil, false, err
 			}
@@ -210,7 +215,16 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		return nil, false, err
 	}
 
-	payload, err := c.serializeCoinbasePayload(ghostdagData.BlueScore(), coinbaseData, subsidy)
+	var entropy [lengthOfEntropy]byte
+	if constants.GetBlockVersion() >= coinbaseEntropyActivationVersion {
+		daaScore, err := c.daaBlocksStore.DAAScore(c.databaseContext, stagingArea, blockHash)
+		if err != nil {
+			return nil, false, err
+		}
+		entropy = coinbaseEntropy(ghostdagData, daaScore)
+	}
+
+	payload, err := c.serializeCoinbasePayload(ghostdagData.BlueScore(), coinbaseData, subsidy, entropy)
 	if err != nil {
 		return nil, false, err
 	}
@@ -230,6 +244,19 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		Payload:      payload,
 	}
 	return domainTransaction, hasRedReward, nil
+}
+
+// blockVersion returns blockHash's own header version. Used when parsing a coinbase
+// transaction that doesn't belong to the block currently being built/validated (e.g.
+// a merge-set block's coinbase, while computing another block's reward split), since
+// the ambient constants.GetBlockVersion() reflects that other, currently-processed
+// block instead.
+func (c *coinbaseManager) blockVersion(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint16, error) {
+	header, err := c.blockHeaderStore.BlockHeader(c.databaseContext, stagingArea, blockHash)
+	if err != nil {
+		return 0, err
+	}
+	return header.Version(), nil
 }
 
 func (c *coinbaseManager) daaAddedBlocksSet(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
@@ -274,7 +301,12 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 		log.Warnf("coinbaseOutputForBlueBlockV2: no coinbase transaction found in acceptance data for block %s", blueBlock)
 		return nil, nil, false, nil
 	}
-	_, coinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidy(blockAcceptanceData.TransactionAcceptanceData[0].Transaction)
+	blueBlockVersion, err := c.blockVersion(stagingArea, blueBlock)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	_, coinbaseData, _, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+		blockAcceptanceData.TransactionAcceptanceData[0].Transaction, blueBlockVersion)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -308,7 +340,12 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV1(stagingArea *model.Stagin
 	}
 
 	// the ScriptPublicKey for the coinbase is parsed from the coinbase payload
-	_, coinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidy(blockAcceptanceData.TransactionAcceptanceData[0].Transaction)
+	blueBlockVersion, err := c.blockVersion(stagingArea, blueBlock)
+	if err != nil {
+		return nil, false, err
+	}
+	_, coinbaseData, _, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+		blockAcceptanceData.TransactionAcceptanceData[0].Transaction, blueBlockVersion)
 	if err != nil {
 		return nil, false, err
 	}
@@ -502,7 +539,8 @@ func (c *coinbaseManager) calcMergedBlockReward(stagingArea *model.StagingArea, 
 		return 0, err
 	}
 
-	_, _, subsidy, err := c.ExtractCoinbaseDataBlueScoreAndSubsidy(block.Transactions[transactionhelper.CoinbaseTransactionIndex])
+	_, _, subsidy, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+		block.Transactions[transactionhelper.CoinbaseTransactionIndex], block.Header.Version())
 	if err != nil {
 		return 0, err
 	}

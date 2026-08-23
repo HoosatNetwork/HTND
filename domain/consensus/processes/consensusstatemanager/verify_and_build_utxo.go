@@ -102,6 +102,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			if err != nil {
 				mu.Lock()
 				if !errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+					mu.Unlock()
 					return
 				}
 				if firstErr == nil {

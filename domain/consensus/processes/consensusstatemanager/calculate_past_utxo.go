@@ -142,6 +142,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
 	var utxoDiffs []externalapi.UTXODiff
+	var utxoDiffHashes []*externalapi.DomainHash
 	nextBlockHash := blockHash
 	for {
 		if nextBlockHash.Equal(model.VirtualGenesisBlockHash) || nextBlockHash.Equal(csm.genesisHash) {
@@ -159,6 +160,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 		}
 
 		utxoDiffs = append(utxoDiffs, utxoDiff)
+		utxoDiffHashes = append(utxoDiffHashes, nextBlockHash)
 		log.Debugf("Collected UTXO diff for block %s: toAdd: %d, toRemove: %d",
 			nextBlockHash, utxoDiff.ToAdd().Len(), utxoDiff.ToRemove().Len())
 
@@ -175,11 +177,12 @@ func (csm *consensusStateManager) restorePastUTXO(
 	// apply the diffs in reverse order
 	log.Debugf("Applying the collected UTXO diffs for block %s in reverse order", blockHash)
 	accumulatedDiff := utxo.NewMutableUTXODiff()
-	for _, utxoDiff := range slices.Backward(utxoDiffs) {
+	for idx, utxoDiff := range slices.Backward(utxoDiffs) {
 		err := accumulatedDiff.WithDiffInPlace(utxoDiff)
 		if err != nil {
-			log.Debugf("restorePastUTXO: WithDiffInPlace on index %d failed while walking selected parent chain for %s", len(utxoDiffs), blockHash)
-			break
+			return nil, errors.Wrapf(err, "restorePastUTXO: failed to apply the UTXO diff of block %s while "+
+				"walking the selected parent chain for %s (chain order, %s to virtual: %v)",
+				utxoDiffHashes[idx], blockHash, blockHash, utxoDiffHashes)
 		}
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
