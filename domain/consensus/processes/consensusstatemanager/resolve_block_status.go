@@ -94,7 +94,10 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
 			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
 
-			utxoDiff, _ := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
+			utxoDiff, err := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
+			// if err != nil {
+			// 	panic(err)
+			// }
 			if utxoDiff != nil {
 				csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
 			} else {
@@ -302,14 +305,11 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
 
-			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
-			if diffErr != nil {
-				return 0, nil, diffErr
-			}
-			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
+			csm.stageDiff(stagingArea, blockHash, utxo.NewMutableUTXODiff().ToImmutable(), selectedParentHash)
 			// Even for disqualified blocks, return the calculated past UTXO so the
 			// next block in the chain can use it when resolving a chain of
 			// disqualified statuses.
+			// panic(err)
 			return externalapi.StatusDisqualifiedFromChain, pastUTXOSet, nil
 		}
 		return 0, nil, err
