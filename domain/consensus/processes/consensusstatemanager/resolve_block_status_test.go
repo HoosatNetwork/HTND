@@ -485,6 +485,11 @@ func TestResolveBlockStatusSanity(t *testing.T) {
 		}
 		defer teardown(false)
 
+		// This test mines a second competing chain from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		consensus.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		genesisHash := consensusConfig.GenesisHash
 		allHashes := []*externalapi.DomainHash{genesisHash}
 

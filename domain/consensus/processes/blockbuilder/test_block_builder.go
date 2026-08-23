@@ -19,9 +19,10 @@ import (
 
 type testBlockBuilder struct {
 	*blockBuilder
-	testConsensus testapi.TestConsensus
-	nonceCounter  uint64
-	timeCounter   int64
+	testConsensus                  testapi.TestConsensus
+	nonceCounter                   uint64
+	timeCounter                    int64
+	uniqueDefaultCoinbaseExtraData bool
 }
 
 // NewTestBlockBuilder creates an instance of a TestBlockBuilder
@@ -30,6 +31,13 @@ func NewTestBlockBuilder(baseBlockBuilder model.BlockBuilder, testConsensus test
 		blockBuilder:  baseBlockBuilder.(*blockBuilder),
 		testConsensus: testConsensus,
 	}
+}
+
+// EnableUniqueDefaultCoinbaseExtraData makes every subsequently built block that's
+// given a nil coinbaseData get distinct coinbase ExtraData instead of the shared
+// empty default. See the TestBlockBuilder interface doc for why this matters.
+func (bb *testBlockBuilder) EnableUniqueDefaultCoinbaseExtraData() {
+	bb.uniqueDefaultCoinbaseExtraData = true
 }
 
 func cleanBlockPrefilledFields(block *externalapi.DomainBlock) {
@@ -168,19 +176,26 @@ func (bb *testBlockBuilder) buildBlockWithParents(stagingArea *model.StagingArea
 	coinbaseData *externalapi.DomainCoinbaseData, transactions []*externalapi.DomainTransaction) (
 	*externalapi.DomainBlock, externalapi.UTXODiff, error,
 ) {
+	tempHash := bb.nextTempBlockHash()
+
 	if coinbaseData == nil {
 		scriptPublicKeyScript, err := txscript.PayToScriptHashScript([]byte{txscript.OpTrue})
 		if err != nil {
 			panic(errors.Wrapf(err, "Couldn't parse opTrueScript. This should never happen"))
 		}
 		scriptPublicKey := &externalapi.ScriptPublicKey{Script: scriptPublicKeyScript, Version: constants.MaxScriptPublicKeyVersion}
+		extraData := []byte{}
+		if bb.uniqueDefaultCoinbaseExtraData {
+			// See EnableUniqueDefaultCoinbaseExtraData: distinguish otherwise-identical
+			// siblings/parallel chains (same blue score, same default script, same empty
+			// extra data) so their coinbase transaction IDs don't collide.
+			extraData = tempHash.ByteSlice()[:8]
+		}
 		coinbaseData = &externalapi.DomainCoinbaseData{
 			ScriptPublicKey: scriptPublicKey,
-			ExtraData:       []byte{},
+			ExtraData:       extraData,
 		}
 	}
-
-	tempHash := bb.nextTempBlockHash()
 
 	bb.blockRelationStore.StageBlockRelation(stagingArea, tempHash, &model.BlockRelations{Parents: parentHashes})
 

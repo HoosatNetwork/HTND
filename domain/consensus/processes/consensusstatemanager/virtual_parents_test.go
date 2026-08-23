@@ -22,6 +22,11 @@ func TestConsensusStateManager_pickVirtualParents(t *testing.T) {
 		}
 		defer teardown(false)
 
+		// This test mines many chains and sibling blocks from the same
+		// ancestors, so blocks would otherwise share both blue score and
+		// default coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		getSortedVirtualParents := func(tc testapi.TestConsensus) ([]*externalapi.DomainHash, int) {
 			virtualRelations, err := tc.BlockRelationStore().BlockRelation(tc.DatabaseContext(), stagingArea, model.VirtualBlockHash)
 			if err != nil {

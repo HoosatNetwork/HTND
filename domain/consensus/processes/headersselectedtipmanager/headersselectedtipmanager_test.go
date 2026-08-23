@@ -21,6 +21,11 @@ func TestAddHeaderTip(t *testing.T) {
 		}
 		defer tearDown(false)
 
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		stagingArea := model.NewStagingArea()
 		checkExpectedSelectedChain := func(expectedSelectedChain []*externalapi.DomainHash) {
 			for i, blockHash := range expectedSelectedChain {

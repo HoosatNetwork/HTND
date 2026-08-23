@@ -25,7 +25,7 @@ func initializeTest(t *testing.T, testName string) (tc testapi.TestConsensus, te
 	t.Parallel()
 	SimnetParams := dagconfig.SimnetParams
 	SimnetParams.SkipProofOfWork = true
-	consensusConfig := consensus.Config{Params: dagconfig.SimnetParams}
+	consensusConfig := consensus.Config{Params: SimnetParams}
 	tc, teardown, err := consensus.NewFactory().NewTestConsensus(&consensusConfig, testName)
 	if err != nil {
 		t.Fatalf("Error setting up consensus: %+v", err)

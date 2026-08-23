@@ -91,6 +91,11 @@ func TestUpdateReindexRoot(t *testing.T) {
 
 		tc.ReachabilityManager().SetReachabilityReindexWindow(reachabilityReindexWindow)
 
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		stagingArea := model.NewStagingArea()
 
 		intervalSize := func(hash *externalapi.DomainHash) uint64 {

@@ -29,6 +29,11 @@ func TestReverseUTXODiffs(t *testing.T) {
 		}
 		defer teardown(false)
 
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		// Create a chain of 5 blocks
 		const initialChainLength = 5
 		previousBlockHash := consensusConfig.GenesisHash

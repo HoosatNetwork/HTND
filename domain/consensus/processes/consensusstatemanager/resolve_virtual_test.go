@@ -25,6 +25,11 @@ func TestAddBlockBetweenResolveVirtualCalls(t *testing.T) {
 		}
 		defer teardown(false)
 
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		hashes := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 
 		// Create a chain of blocks
@@ -110,6 +115,11 @@ func TestAddGenesisChildAfterOneResolveVirtualCall(t *testing.T) {
 		}
 		defer teardown(false)
 
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
+
 		hashes := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 
 		// Create a chain of blocks
@@ -173,6 +183,11 @@ func TestAddGenesisChildAfterTwoResolveVirtualCalls(t *testing.T) {
 			t.Fatalf("Error setting up consensus: %+v", err)
 		}
 		defer teardown(false)
+
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
 
 		hashes := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 
@@ -243,6 +258,11 @@ func TestResolveVirtualBackAndForthReorgs(t *testing.T) {
 			t.Fatalf("Error setting up consensus: %+v", err)
 		}
 		defer teardown(false)
+
+		// This test mines two competing chains from genesis, so blocks at
+		// matching heights would otherwise share both blue score and default
+		// coinbase data and collide on their coinbase transaction ID.
+		tc.BlockBuilder().EnableUniqueDefaultCoinbaseExtraData()
 
 		hashes := []*externalapi.DomainHash{consensusConfig.GenesisHash}
 		blocks := make(map[externalapi.DomainHash]string)
