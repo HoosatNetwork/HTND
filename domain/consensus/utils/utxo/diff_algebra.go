@@ -95,30 +95,41 @@ func subtractionWithRemainderHavingDAAScoreInPlace(collection1, collection2, res
 	}
 }
 
-// DiffFrom returns a new mutableUTXODiff with the difference between this mutableUTXODiff and another.
+// DiffFrom returns a new mutableUTXODiff with the difference between this mutableUTXODiff and another
+// Assumes that:
+// Both mutableUTXODiffs are from the same base
+// If a txOut exists in both mutableUTXODiffs, its underlying values would be the same
 //
-// Assumes that both diffs are from the same base when possible.
-// When the base assumption is violated (reorgs, pruning, virtual-genesis, header-only blocks, etc.)
-// the classic "both in this.toAdd and other.toRemove" situations are treated as cancellations
-// instead of hard errors. The conflicting outpoints are removed and a warning is logged.
-//
-// The 3×3 table is still respected for the normal cases:
+// diffFrom follows a set of rules represented by the following 3 by 3 table:
 //
 // .........|...........| this      |...........|...........
 // ---------+-----------+-----------+-----------+-----------
 // .........|...........| toAdd     | toRemove  | None
 // ---------+-----------+-----------+-----------+-----------
-// other    | toAdd     | -         | cancel    | toAdd
+// other    | toAdd     | -         | X         | toAdd
 // ---------+-----------+-----------+-----------+-----------
-// .........| toRemove  | cancel    | -         | toRemove
+// .........| toRemove  | X         | -         | toRemove
 // ---------+-----------+-----------+-----------+-----------
 // .........| None      | toRemove  | toAdd     | -
+//
+// Key:
+// -		Don't add anything to the result
+// X		Return an error
+// toAdd	Add the UTXO into the toAdd collection of the result
+// toRemove	Add the UTXO into the toRemove collection of the result
+//
+// Examples:
+//  1. This diff contains a UTXO in toAdd, and the other diff contains it in toRemove
+//     diffFrom results in an error
+//  2. This diff contains a UTXO in toRemove, and the other diff does not contain it
+//     diffFrom results in the UTXO being added to toAdd
 func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
-	// ------------------------------------------------------------------
-	// 1. Detect and cancel the two classic conflicting cases
-	// ------------------------------------------------------------------
+	// Note that the following cases are not accounted for, as they are impossible
+	// as long as the base utxoSet is the same:
+	// - if utxoEntry is in this.toAdd and other.toRemove
+	// - if utxoEntry is in this.toRemove and other.toAdd
 
-	// Case A: outpoint in this.toRemove AND other.toAdd
+	// check that NOT (entries with unequal DAA scores AND utxoEntry is in this.toAdd and/or other.toRemove) -> Error
 	isNotAddedOutputRemovedWithDAAScore := func(outpoint *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 		return !(diffEntry.BlockDAAScore() != utxoEntry.BlockDAAScore() &&
 			(this.toAdd.containsWithDAAScore(outpoint, diffEntry.BlockDAAScore()) ||
@@ -126,15 +137,10 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	}
 
 	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
-		log.Warnf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd "+
-			"(incompatible bases / DAA-score mismatch) – treating as cancelled", offendingOutpoint)
-
-		// Cancel the conflict so it cannot pollute the result
-		delete(this.toRemove, *offendingOutpoint)
-		delete(other.toAdd, *offendingOutpoint)
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd", offendingOutpoint)
 	}
 
-	// Case B: outpoint in this.toAdd AND other.toRemove
+	// check that NOT (entries with unequal DAA score AND utxoEntry is in this.toRemove and/or other.toAdd) -> Error
 	isNotRemovedOutputAddedWithDAAScore := func(outpoint *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 		return !(diffEntry.BlockDAAScore() != utxoEntry.BlockDAAScore() &&
 			(this.toRemove.containsWithDAAScore(outpoint, diffEntry.BlockDAAScore()) ||
@@ -142,18 +148,11 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	}
 
 	if offendingOutpoint, ok := checkIntersectionWithRule(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
-		log.Warnf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove "+
-			"(incompatible bases / DAA-score mismatch) – treating as cancelled", offendingOutpoint)
-
-		// Cancel the conflict
-		delete(this.toAdd, *offendingOutpoint)
-		delete(other.toRemove, *offendingOutpoint)
+		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove", offendingOutpoint)
 	}
 
-	// ------------------------------------------------------------------
-	// 2. Same outpoint in both toRemove collections with different DAA scores
-	//    (still treated as a hard error – this is almost always real corruption)
-	// ------------------------------------------------------------------
+	// if have the same entry in this.toRemove and other.toRemove
+	// and existing entry is with different DAA score, in this case - this is an error
 	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toRemove,
 		func(_ *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 			return utxoEntry.BlockDAAScore() != diffEntry.BlockDAAScore()
@@ -162,9 +161,6 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 			"DAA scores, with no corresponding entry in this.toAdd", offendingOutpoint)
 	}
 
-	// ------------------------------------------------------------------
-	// 3. Build the result using the normal algebra
-	// ------------------------------------------------------------------
 	result := &mutableUTXODiff{
 		toAdd:    make(utxoCollection),
 		toRemove: make(utxoCollection),
@@ -174,12 +170,10 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	// If they are not in other.toAdd - should be added in result.toRemove
 	inBothToAdd := make(utxoCollection)
 	subtractionWithRemainderHavingDAAScoreInPlace(this.toAdd, other.toAdd, result.toRemove, inBothToAdd)
-
-	// Safety check that should now almost never fire after the cancellations above
+	// If they are in other.toRemove - base utxoSet is not the same
 	if checkIntersection(inBothToAdd, this.toRemove) != checkIntersection(inBothToAdd, other.toRemove) {
-		log.Warnf("diffFrom: residual inconsistency after cancellation – outpoint both in this.toAdd, other.toAdd, " +
-			"and only one of this.toRemove / other.toRemove. Returning best-effort result.")
-		// We continue instead of failing hard
+		return nil, errors.New(
+			"diffFrom: outpoint both in this.toAdd, other.toAdd, and only one of this.toRemove and other.toRemove")
 	}
 
 	// All transactions in other.toRemove:
