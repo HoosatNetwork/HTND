@@ -42,11 +42,8 @@ func (uds *utxoDiffStore) Stage(stagingArea *model.StagingArea, blockHash *exter
 	utxoDiff externalapi.UTXODiff, utxoDiffChild *externalapi.DomainHash,
 ) {
 	stagingShard := uds.stagingShard(stagingArea)
-
 	stagingShard.utxoDiffToAdd[*blockHash] = utxoDiff
-	if utxoDiffChild != nil {
-		stagingShard.utxoDiffChildToAdd[*blockHash] = utxoDiffChild
-	}
+	stagingShard.utxoDiffChildToAdd[*blockHash] = utxoDiffChild
 }
 
 func (uds *utxoDiffStore) IsStaged(stagingArea *model.StagingArea) bool {

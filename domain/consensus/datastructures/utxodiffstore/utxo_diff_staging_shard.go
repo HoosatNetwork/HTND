@@ -38,6 +38,11 @@ func (udss *utxoDiffStagingShard) Commit(dbTx model.DBTransaction) error {
 
 	for hash, utxoDiffChild := range udss.utxoDiffChildToAdd {
 		if utxoDiffChild == nil {
+			err := dbTx.Delete(udss.store.utxoDiffChildHashAsKey(&hash))
+			if err != nil {
+				return err
+			}
+			udss.store.utxoDiffChildCache.Remove(&hash)
 			continue
 		}
 
