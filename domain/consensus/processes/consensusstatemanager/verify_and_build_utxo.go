@@ -26,7 +26,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	defer log.Tracef("verifyUTXO end for block %s", blockHash)
 
 	log.Debugf("Validating UTXO commitment for block %s", blockHash)
-	err := csm.validateUTXOCommitment(block, blockHash, multiset)
+	err := csm.validateUTXOCommitment(stagingArea, block, blockHash, multiset)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalap
 	return nil
 }
 
-func (csm *consensusStateManager) validateUTXOCommitment(
+func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.StagingArea,
 	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash, multiset model.Multiset,
 ) error {
 	log.Tracef("validateUTXOCommitment start for block %s", blockHash)
@@ -165,7 +165,6 @@ func (csm *consensusStateManager) validateUTXOCommitment(
 	if !calculatedCommitment.Equal(expectedCommitment) {
 		// --- DEBUG LOGGING START ---
 		log.Warnf("[UTXO-DEBUG] Block Hash: %s", blockHash)
-		stagingArea := model.NewStagingArea()
 		ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 		if err != nil {
 			log.Warnf("[UTXO-DEBUG] failed to fetch GhostDAGDAta")
