@@ -100,6 +100,7 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	} else {
 		daaScore = header.DAAScore()
 	}
+	log.Infof("Calculating PastUTXO and acceptance data with DAAScore %d", daaScore)
 
 	log.Debugf("Applying blue blocks to the selected parent past UTXO of block %s", blockHash)
 	acceptanceData, utxoDiff, err := csm.applyMergeSetBlocks(stagingArea, blockHash, selectedParentPastUTXO, daaScore)
@@ -290,10 +291,6 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	log.Tracef("Populating transaction %s with UTXO entries", transactionID)
 	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable())
 	if err != nil {
-		if !errors.As(err, &(ruleerrors.RuleError{})) {
-			return false, 0, err
-		}
-
 		return false, accumulatedMassBefore, nil
 	}
 
