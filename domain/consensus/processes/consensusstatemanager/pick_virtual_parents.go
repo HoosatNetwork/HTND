@@ -152,6 +152,7 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 	relevantChildCountCache := make(map[externalapi.DomainHash]uint32)
 	disqualifiedChildCount := make(map[externalapi.DomainHash]uint32)
 	pushedToHeap := make(map[externalapi.DomainHash]struct{})
+	processed := make(map[externalapi.DomainHash]struct{})
 
 	getStatus := func(hash *externalapi.DomainHash) (externalapi.BlockStatus, error) {
 		key := *hash
@@ -201,11 +202,12 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 		}
 		selectedParentCandidate := candidatesHeap.Pop()
 
-		// Skip candidate if it has already been marked as disqualified.
-		// Pass selectedParentCandidate directly as a pointer (*externalapi.DomainHash).
-		if disqualifiedCandidates.Contains(selectedParentCandidate) {
+		// Skip candidate if it has already been processed in this pass
+		candidateKey := *selectedParentCandidate
+		if _, ok := processed[candidateKey]; ok {
 			continue
 		}
+		processed[candidateKey] = struct{}{}
 
 		selectedParentCandidateStatus, err := getStatus(selectedParentCandidate)
 		if err != nil {
@@ -241,7 +243,6 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 			continue
 		}
 
-		// Add to disqualified set using the pointer directly
 		disqualifiedCandidates.Add(selectedParentCandidate)
 
 		candidateParents, err := csm.dagTopologyManager.Parents(stagingArea, selectedParentCandidate)
