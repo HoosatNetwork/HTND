@@ -164,16 +164,21 @@ func (csm *consensusStateManager) validateUTXOCommitment(
 
 	if !calculatedCommitment.Equal(expectedCommitment) {
 		// --- DEBUG LOGGING START ---
-		stagingArea := model.NewStagingArea()
-		ghostdagData, _ := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 		log.Warnf("[UTXO-DEBUG] Block Hash: %s", blockHash)
-		log.Warnf("[UTXO-DEBUG] Selected Parent: %s", ghostdagData.SelectedParent())
-		log.Warnf("[UTXO-DEBUG] Blue Score: %d", ghostdagData.BlueScore())
-		log.Warnf("[UTXO-DEBUG] Blue Work: %x", ghostdagData.BlueWork())
-		log.Warnf("[UTXO-DEBUG] MergeSetBlues Count: %d", len(ghostdagData.MergeSetBlues()))
-		for i, blue := range ghostdagData.MergeSetBlues() {
-			log.Warnf("[UTXO-DEBUG] Blue[%d]: %s", i, blue)
+		stagingArea := model.NewStagingArea()
+		ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
+		if err != nil {
+			log.Warnf("[UTXO-DEBUG] failed to fetch GhostDAGDAta")
+		} else {
+			log.Warnf("[UTXO-DEBUG] Selected Parent: %s", ghostdagData.SelectedParent())
+			log.Warnf("[UTXO-DEBUG] Blue Score: %d", ghostdagData.BlueScore())
+			log.Warnf("[UTXO-DEBUG] Blue Work: %x", ghostdagData.BlueWork())
+			log.Warnf("[UTXO-DEBUG] MergeSetBlues Count: %d", len(ghostdagData.MergeSetBlues()))
+			for i, blue := range ghostdagData.MergeSetBlues() {
+				log.Warnf("[UTXO-DEBUG] Blue[%d]: %s", i, blue)
+			}
 		}
+
 		log.Warnf("[UTXO-DEBUG] Header Expected UTXO Commitment: %s", expectedCommitment)
 		log.Warnf("[UTXO-DEBUG] Validation Calculated UTXO Commitment: %s", calculatedCommitment)
 		// --- DEBUG LOGGING END ---
