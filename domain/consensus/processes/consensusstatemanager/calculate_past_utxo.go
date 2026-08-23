@@ -90,19 +90,19 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	// IMPORTANT: For correct UTXO commitment, the DAA score used to build UTXOEntries must match
 	// the score implied by the block header. During pruning-point import/trusted flows, the DAA store
 	// might not yet be fully staged for all blocks, so prefer the header's DAAScore when available.
-	daaScore, err := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, blockHash)
+	header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	log.Debugf("Applying blue blocks to the selected parent past UTXO of block %s", blockHash)
-	acceptanceData, utxoDiff, err := csm.applyMergeSetBlocks(stagingArea, blockHash, selectedParentPastUTXO, daaScore)
+	acceptanceData, utxoDiff, err := csm.applyMergeSetBlocks(stagingArea, blockHash, selectedParentPastUTXO, header.DAAScore())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	log.Debugf("Calculating the multiset of %s", blockHash)
-	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData, daaScore)
+	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData, header.DAAScore())
 	if err != nil {
 		return nil, nil, nil, err
 	}
