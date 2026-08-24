@@ -3,7 +3,6 @@ package rpccontext
 import (
 	"encoding/hex"
 	"math"
-	"unsafe"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/util"
@@ -57,8 +56,7 @@ func encodeHexStringWithMaxValueLen(buffer []byte, value []byte, maxValueLen int
 		buffer = buffer[:needed]
 	}
 	hex.Encode(buffer, value)
-	str := unsafe.String(&buffer[0], len(buffer))
-	return buffer, str
+	return buffer, string(buffer)
 }
 
 // ConvertAddressStringsToUTXOsChangedNotificationAddresses converts address strings

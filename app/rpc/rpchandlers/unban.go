@@ -21,7 +21,7 @@ func HandleUnban(context *rpccontext.Context, _ *router.Router, request appmessa
 	ip := net.ParseIP(unbanRequest.IP)
 	if ip == nil {
 		hint := ""
-		if unbanRequest.IP[0] == '[' {
+		if len(unbanRequest.IP) > 0 && unbanRequest.IP[0] == '[' {
 			hint = " (try to remove “[” and “]” symbols)"
 		}
 		errorMessage := &appmessage.UnbanResponseMessage{}

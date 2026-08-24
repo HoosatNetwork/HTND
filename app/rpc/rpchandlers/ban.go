@@ -21,7 +21,7 @@ func HandleBan(context *rpccontext.Context, _ *router.Router, request appmessage
 	ip := net.ParseIP(banRequest.IP)
 	if ip == nil {
 		hint := ""
-		if banRequest.IP[0] == '[' {
+		if len(banRequest.IP) > 0 && banRequest.IP[0] == '[' {
 			hint = " (try to remove “[” and “]” symbols)"
 		}
 		errorMessage := &appmessage.BanResponseMessage{}
