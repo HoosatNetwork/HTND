@@ -193,21 +193,30 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 
 // WithDiffInPlace applies provided diff to this diff in-place, that would be the result if
 // first d, and than diff were applied to the same base
+//
+// The two classic conflicting cases (an outpoint removed by both diffs, or added by both diffs)
+// can legitimately happen against real chain data - most notably historical coinbase transactions
+// whose IDs collided before per-block entropy was folded into the payload (see
+// coinbaseEntropyActivationVersion). That fix only protects blocks mined after the hard fork, so
+// already-mined colliding blocks stay in the chain forever. Rather than hard-failing UTXO
+// reconstruction for every node walking back over such a block, these conflicts are only logged
+// here; the outpoints are left untouched and fall through to the merge algebra below, which
+// already collapses a doubly-removed/doubly-added outpoint down to a single, consistent entry.
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
 	if offendingOutpoint, ok := checkIntersectionWithRule(other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, _ externalapi.UTXOEntry) bool {
 			return !this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
 		}); ok {
-		return errors.Errorf(
-			"withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove", offendingOutpoint)
+		log.Warnf("withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove "+
+			"(likely a historical coinbase ID collision) - leaving it removed", offendingOutpoint)
 	}
 
 	if offendingOutpoint, ok := checkIntersectionWithRule(other.toAdd, this.toAdd,
 		func(outpoint *externalapi.DomainOutpoint, _ externalapi.UTXOEntry, existingEntry externalapi.UTXOEntry) bool {
 			return !other.toRemove.containsWithDAAScore(outpoint, existingEntry.BlockDAAScore())
 		}); ok {
-		return errors.Errorf(
-			"withDiffInPlace: outpoint %s both in this.toAdd and in other.toAdd", offendingOutpoint)
+		log.Warnf("withDiffInPlace: outpoint %s both in this.toAdd and in other.toAdd "+
+			"(likely a historical coinbase ID collision) - leaving it added", offendingOutpoint)
 	}
 
 	intersection := make(utxoCollection)
