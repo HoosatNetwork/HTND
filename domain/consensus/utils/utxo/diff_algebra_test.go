@@ -802,7 +802,12 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry0AltDAA},
 				toRemove: utxoCollection{*outpoint0: utxoEntry0},
 			},
-			expectedWithDiffResult: nil, // cannot have two different entries for same outpoint in toAdd
+			// Same amount/script, only DAA differs - tolerated (isTolerableConflict's second case).
+			expectedWithDiffResult: &mutableUTXODiff{
+				toAdd:    utxoCollection{*outpoint0: utxoEntry0AltDAA},
+				toRemove: utxoCollection{},
+			},
+			hadTolerableConflict: true,
 		},
 		{
 			name: "same outpoint different DAA – this.toRemove vs other.toRemove",
@@ -814,8 +819,16 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{*outpoint0: utxoEntry0AltDAA},
 			},
-			expectedDiffFromResult: nil, // different DAA scores in toRemove is an error
-			expectedWithDiffResult: nil,
+			// Same amount/script, only DAA differs - tolerated (isTolerableConflict's second case).
+			expectedDiffFromResult: &mutableUTXODiff{
+				toAdd:    utxoCollection{*outpoint0: utxoEntry0},
+				toRemove: utxoCollection{*outpoint0: utxoEntry0AltDAA},
+			},
+			expectedWithDiffResult: &mutableUTXODiff{
+				toAdd:    utxoCollection{},
+				toRemove: utxoCollection{*outpoint0: utxoEntry0AltDAA},
+			},
+			hadTolerableConflict: true,
 		},
 	}
 
@@ -895,13 +908,14 @@ func TestUTXODiffRules(t *testing.T) {
 // (diff_algebra.go): a conflict where the same outpoint is touched by both sides of a diffFrom/
 // withDiffInPlace composition is tolerated (logged, not errored) only when isTolerableConflict
 // says so - either both conflicting entries are coinbase outputs (a known pre-entropy-fork
-// transaction ID collision, see coinbaseEntropyActivationVersion), or the two entries are fully
-// identical (amount, script, and BlockDAAScore) yet still land on opposite sides of the conflict
-// (two independent reconstructions of overlapping DAG history - e.g. two competing tip candidates
-// during a reorg - simply disagreeing about whether the shared base already contained the same
-// real transaction - see isTolerableConflict's second case). Every other conflict shape - where
-// the entries genuinely disagree on value - must still hard-fail, even when a tolerable conflict
-// is mixed in with a real one in the same call.
+// transaction ID collision, see coinbaseEntropyActivationVersion), or the two entries agree on
+// amount and script - regardless of BlockDAAScore - yet still land on opposite sides of the
+// conflict (two independent reconstructions of overlapping DAG history - e.g. two competing tip
+// candidates during a reorg - simply disagreeing about whether the shared base already contained
+// the same real transaction, or about which accepting block's DAA score it was last recorded
+// under - see isTolerableConflict's second case). Every other conflict shape - where the entries
+// genuinely disagree on value - must still hard-fail, even when a tolerable conflict is mixed in
+// with a real one in the same call.
 func TestCoinbaseCollisionConflicts(t *testing.T) {
 	_, _, _, outpoint0, outpoint1, _, _, _, _, _ := testFixtures()
 	script := &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}
@@ -911,11 +925,12 @@ func TestCoinbaseCollisionConflicts(t *testing.T) {
 	// coinbaseEntropyActivationVersion).
 	coinbaseA := NewUTXOEntry(10, script, true, 0)
 	coinbaseB := NewUTXOEntry(10, script, true, 5)
-	// Fully identical (amount, script, and DAA score) but not coinbase, and distinct entry
-	// instances - the second tolerable shape: two independent reconstructions recording the exact
-	// same real transaction but disagreeing on which side of the conflict it lands on.
+	// Same amount and script but not coinbase, with different DAA scores and distinct entry
+	// instances - the second tolerable shape, matching what was actually observed in production:
+	// the same real transaction re-touched by different points in overlapping chain history ends
+	// up recorded under different accepting-block DAA scores.
 	identicalValueA := NewUTXOEntry(10, script, false, 7)
-	identicalValueB := NewUTXOEntry(10, script, false, 7)
+	identicalValueB := NewUTXOEntry(10, script, false, 12)
 	// Genuinely different values - this is what real corruption (e.g. an actual double-spend)
 	// would look like, and must never be swallowed regardless of coinbase status.
 	regularA := NewUTXOEntry(10, script, false, 0)
@@ -985,19 +1000,19 @@ func TestCoinbaseCollisionConflicts(t *testing.T) {
 		}
 	})
 
-	// This rule only ever fires when the two DAA scores differ (that's its trigger condition), so
-	// a non-coinbase pair that's otherwise identical still can't be tolerated here: isTolerableConflict's
-	// second case requires the DAA scores to match too. The two conditions are mutually exclusive
-	// for this specific rule, so this always hard-errors - documenting that on purpose rather than
-	// leaving it implicit.
-	t.Run("diffFrom: this.toRemove vs other.toRemove different DAA, same amount/script but not coinbase - still errors", func(t *testing.T) {
+	// This is the exact shape observed in production alongside the "this.toRemove vs other.toAdd"
+	// case above, for the very same outpoint in the very same reconstruction: the same real
+	// transaction re-touched at different points along overlapping chain history ends up recorded
+	// under different accepting-block DAA scores. Requiring DAA to match here (as an earlier,
+	// narrower version of this rule did) blocked tolerance in exactly the case it needed to cover,
+	// so isTolerableConflict's second case only requires amount and script to match.
+	t.Run("diffFrom: this.toRemove vs other.toRemove different DAA, same amount/script but not coinbase - tolerated", func(t *testing.T) {
 		sameValueDifferentDAA_A := NewUTXOEntry(10, script, false, 0)
 		sameValueDifferentDAA_B := NewUTXOEntry(10, script, false, 5)
 		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: sameValueDifferentDAA_A}}
 		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: sameValueDifferentDAA_B}}
-		if _, err := diffFrom(this, other); err == nil {
-			t.Error("expected this to still be rejected: this rule only fires on DAA mismatch, but " +
-				"non-coinbase tolerance requires DAA to match, so the two can never both hold")
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the identical-value conflict to be tolerated, got: %s", err)
 		}
 	})
 
