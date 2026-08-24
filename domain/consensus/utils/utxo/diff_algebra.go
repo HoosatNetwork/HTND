@@ -1,6 +1,7 @@
 package utxo
 
 import (
+	"fmt"
 	"maps"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -65,6 +66,18 @@ func isTolerableCoinbaseConflict(entryA, entryB externalapi.UTXOEntry) bool {
 	return entryA.IsCoinbase() && entryB.IsCoinbase()
 }
 
+// describeConflictEntry formats a UTXOEntry's diagnostically-relevant fields for a hard-error
+// conflict message, so the log itself says why isTolerableCoinbaseConflict rejected the pair
+// (which side isn't a coinbase output, and what the two entries actually contain) instead of
+// requiring a follow-up investigation to find out.
+func describeConflictEntry(entry externalapi.UTXOEntry) string {
+	if entry == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("amount: %d, scriptPublicKey: %s, daaScore: %d, isCoinbase: %t",
+		entry.Amount(), entry.ScriptPublicKey(), entry.BlockDAAScore(), entry.IsCoinbase())
+}
+
 // resolveConflicts scans collectionA/collectionB for every outpoint satisfying rule - one of the
 // classic "same outpoint touched by both sides" conflict shapes shared by diffFrom and
 // withDiffInPlace - and, for each one found, either logs and tolerates it
@@ -89,7 +102,8 @@ func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
 		entryA, _ := collectionA.Get(offendingOutpoint)
 		entryB, _ := collectionB.Get(offendingOutpoint)
 		if !isTolerableCoinbaseConflict(entryA, entryB) {
-			return errors.Errorf("%s: outpoint %s %s", funcName, offendingOutpoint, conflictDescription)
+			return errors.Errorf("%s: outpoint %s %s (entryA: %s, entryB: %s)", funcName, offendingOutpoint,
+				conflictDescription, describeConflictEntry(entryA), describeConflictEntry(entryB))
 		}
 		log.Warnf("%s: outpoint %s %s (historical coinbase ID collision) - leaving it as is",
 			funcName, offendingOutpoint, conflictDescription)
