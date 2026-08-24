@@ -75,7 +75,7 @@ func describeConflictEntry(entry externalapi.UTXOEntry) string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("amount: %d, scriptPublicKey: %s, daaScore: %d, isCoinbase: %t",
-		entry.Amount(), entry.ScriptPublicKey(), entry.BlockDAAScore(), entry.IsCoinbase())
+		entry.Amount(), entry.ScriptPublicKey().String(), entry.BlockDAAScore(), entry.IsCoinbase())
 }
 
 // resolveConflicts scans collectionA/collectionB for every outpoint satisfying rule - one of the
