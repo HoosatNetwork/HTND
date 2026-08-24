@@ -159,6 +159,12 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 	} else if mud.toAdd.Contains(outpoint) {
 		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
 	} else {
+		// Diagnostic only, no behavior change: see the matching comment in removeEntry.
+		if existingEntry, ok := mud.toRemove.Get(outpoint); ok {
+			log.Warnf("addEntry: outpoint %s is in toRemove with daaScore %d, but the entry being "+
+				"added has daaScore %d - not cancelling, adding to toAdd instead",
+				outpoint, existingEntry.BlockDAAScore(), entry.BlockDAAScore())
+		}
 		mud.toAdd.add(outpoint, entry)
 	}
 	return nil
@@ -170,6 +176,16 @@ func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, en
 	} else if mud.toRemove.Contains(outpoint) {
 		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)
 	} else {
+		// Diagnostic only, no behavior change: if outpoint is already in toAdd but under a
+		// different DAA score, the two are treated as unrelated below (matching prior behavior),
+		// but that's exactly the shape a mint/spend DAA-score mismatch within the same UTXO diff
+		// build would produce - log it so a real occurrence is visible instead of silently
+		// falling through to "existed before this diff's base".
+		if existingEntry, ok := mud.toAdd.Get(outpoint); ok {
+			log.Warnf("removeEntry: outpoint %s is in toAdd with daaScore %d, but the entry being "+
+				"removed has daaScore %d - not cancelling, adding to toRemove instead",
+				outpoint, existingEntry.BlockDAAScore(), entry.BlockDAAScore())
+		}
 		mud.toRemove.add(outpoint, entry)
 	}
 	return nil
