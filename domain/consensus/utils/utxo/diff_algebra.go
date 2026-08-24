@@ -48,6 +48,54 @@ func checkIntersectionWithRule(collectionA utxoCollection, collectionB utxoColle
 	return nil, false
 }
 
+// isTolerableCoinbaseConflict reports whether two UTXO entries found conflicting on the same
+// outpoint (both removed, both added, or removed-vs-added with mismatched DAA scores) are safe to
+// leave as-is rather than treated as corruption. This is true only when both entries are coinbase
+// outputs: coinbase transactions mined before per-block entropy was folded into the payload (see
+// coinbaseEntropyActivationVersion) derive their ID from just blueScore + subsidy + miner script +
+// extra data, so two blocks sharing those fields (e.g. sibling blocks from the same miner) can
+// legitimately produce byte-identical coinbase transactions - and since the payload bytes that
+// collide are also what the transaction's outputs are built from, a colliding pair always describes
+// the same spendable value; only their acceptance-time BlockDAAScore can differ. That fix only
+// protects blocks mined after the hard fork, so already-mined colliding pairs stay in the chain
+// forever and every node reconstructing that stretch of history will hit this. A conflict between
+// two non-coinbase entries, or a coinbase entry and a regular one, has no such explanation and is
+// real corruption.
+func isTolerableCoinbaseConflict(entryA, entryB externalapi.UTXOEntry) bool {
+	return entryA.IsCoinbase() && entryB.IsCoinbase()
+}
+
+// resolveConflicts scans collectionA/collectionB for every outpoint satisfying rule - one of the
+// classic "same outpoint touched by both sides" conflict shapes shared by diffFrom and
+// withDiffInPlace - and, for each one found, either logs and tolerates it
+// (isTolerableCoinbaseConflict) or returns an error describing it (real corruption). Conflicting
+// outpoints are never mutated: a tolerated conflict is left for the caller's own merge algebra to
+// resolve, which already collapses a doubly-touched outpoint down to one consistent entry.
+func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
+	rule func(outpoint *externalapi.DomainOutpoint, entryA, entryB externalapi.UTXOEntry) bool,
+	conflictDescription string,
+) error {
+	seen := make(map[externalapi.DomainOutpoint]bool)
+	for {
+		offendingOutpoint, ok := checkIntersectionWithRule(collectionA, collectionB,
+			func(outpoint *externalapi.DomainOutpoint, entryA, entryB externalapi.UTXOEntry) bool {
+				return !seen[*outpoint] && rule(outpoint, entryA, entryB)
+			})
+		if !ok {
+			return nil
+		}
+		seen[*offendingOutpoint] = true
+
+		entryA, _ := collectionA.Get(offendingOutpoint)
+		entryB, _ := collectionB.Get(offendingOutpoint)
+		if !isTolerableCoinbaseConflict(entryA, entryB) {
+			return errors.Errorf("%s: outpoint %s %s", funcName, offendingOutpoint, conflictDescription)
+		}
+		log.Warnf("%s: outpoint %s %s (historical coinbase ID collision) - leaving it as is",
+			funcName, offendingOutpoint, conflictDescription)
+	}
+}
+
 // intersectionWithRemainderHavingDAAScoreInPlace calculates an intersection between two utxoCollections
 // having same DAA score, puts it into result and into remainder from collection1
 func intersectionWithRemainderHavingDAAScoreInPlace(collection1, collection2, result, remainder utxoCollection) {
@@ -136,8 +184,9 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toRemove.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore); ok {
-		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and in other.toAdd", offendingOutpoint)
+	if err := resolveConflicts("diffFrom", this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore,
+		"both in this.toRemove and in other.toAdd"); err != nil {
+		return nil, err
 	}
 
 	// check that NOT (entries with unequal DAA score AND utxoEntry is in this.toRemove and/or other.toAdd) -> Error
@@ -147,18 +196,19 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toAdd.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	if offendingOutpoint, ok := checkIntersectionWithRule(this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore); ok {
-		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd and in other.toRemove", offendingOutpoint)
+	if err := resolveConflicts("diffFrom", this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore,
+		"both in this.toAdd and in other.toRemove"); err != nil {
+		return nil, err
 	}
 
 	// if have the same entry in this.toRemove and other.toRemove
 	// and existing entry is with different DAA score, in this case - this is an error
-	if offendingOutpoint, ok := checkIntersectionWithRule(this.toRemove, other.toRemove,
+	if err := resolveConflicts("diffFrom", this.toRemove, other.toRemove,
 		func(_ *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 			return utxoEntry.BlockDAAScore() != diffEntry.BlockDAAScore()
-		}); ok {
-		return nil, errors.Errorf("diffFrom: outpoint %s both in this.toRemove and other.toRemove with different "+
-			"DAA scores, with no corresponding entry in this.toAdd", offendingOutpoint)
+		}, "both in this.toRemove and other.toRemove with different DAA scores, with no corresponding "+
+			"entry in this.toAdd"); err != nil {
+		return nil, err
 	}
 
 	result := &mutableUTXODiff{
@@ -195,28 +245,21 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 // first d, and than diff were applied to the same base
 //
 // The two classic conflicting cases (an outpoint removed by both diffs, or added by both diffs)
-// can legitimately happen against real chain data - most notably historical coinbase transactions
-// whose IDs collided before per-block entropy was folded into the payload (see
-// coinbaseEntropyActivationVersion). That fix only protects blocks mined after the hard fork, so
-// already-mined colliding blocks stay in the chain forever. Rather than hard-failing UTXO
-// reconstruction for every node walking back over such a block, these conflicts are only logged
-// here; the outpoints are left untouched and fall through to the merge algebra below, which
-// already collapses a doubly-removed/doubly-added outpoint down to a single, consistent entry.
+// are handled the same way diffFrom handles its own conflict shapes - see resolveConflicts and
+// isTolerableCoinbaseConflict.
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
-	if offendingOutpoint, ok := checkIntersectionWithRule(other.toRemove, this.toRemove,
+	if err := resolveConflicts("withDiffInPlace", other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, _ externalapi.UTXOEntry) bool {
 			return !this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
-		}); ok {
-		log.Warnf("withDiffInPlace: outpoint %s both in this.toRemove and in other.toRemove "+
-			"(likely a historical coinbase ID collision) - leaving it removed", offendingOutpoint)
+		}, "both in this.toRemove and in other.toRemove"); err != nil {
+		return err
 	}
 
-	if offendingOutpoint, ok := checkIntersectionWithRule(other.toAdd, this.toAdd,
+	if err := resolveConflicts("withDiffInPlace", other.toAdd, this.toAdd,
 		func(outpoint *externalapi.DomainOutpoint, _ externalapi.UTXOEntry, existingEntry externalapi.UTXOEntry) bool {
 			return !other.toRemove.containsWithDAAScore(outpoint, existingEntry.BlockDAAScore())
-		}); ok {
-		log.Warnf("withDiffInPlace: outpoint %s both in this.toAdd and in other.toAdd "+
-			"(likely a historical coinbase ID collision) - leaving it added", offendingOutpoint)
+		}, "both in this.toAdd and in other.toAdd"); err != nil {
+		return err
 	}
 
 	intersection := make(utxoCollection)

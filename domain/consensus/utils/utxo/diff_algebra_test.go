@@ -211,12 +211,18 @@ func TestUTXODiff(t *testing.T) {
 // Each test case represents a cell in the two tables outlined in the documentation for mutableUTXODiff.
 // Extended with multi-outpoint cases and explicit duplicate-outpoint scenarios.
 func TestUTXODiffRules(t *testing.T) {
-	// Replace utxoEntry1 and utxoEntry2 with _ since they are immediately overwritten below
-	_, _, _, outpoint0, outpoint1, outpoint2, utxoEntry0, _, _, utxoEntry0AltDAA := testFixtures()
+	// Replace utxoEntry0/1/2 and utxoEntry0AltDAA with _ since they are immediately overwritten below.
+	// This table exercises the diff algebra's general conflict/error-path correctness, independent of
+	// the coinbase-collision-tolerance carve-out (see TestCoinbaseCollisionConflicts) - every entry
+	// here is deliberately non-coinbase so that carve-out never kicks in and these cases keep testing
+	// what they were designed to test.
+	_, _, _, outpoint0, outpoint1, outpoint2, _, _, _, _ := testFixtures()
 
 	// Keep the original single-outpoint names used by the classic table (now using := to declare them)
-	utxoEntry1 := NewUTXOEntry(10, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, true, 0)
-	utxoEntry2 := NewUTXOEntry(20, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, true, 1)
+	utxoEntry0 := NewUTXOEntry(10, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, false, 0)
+	utxoEntry1 := NewUTXOEntry(10, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, false, 0)
+	utxoEntry2 := NewUTXOEntry(20, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, false, 1)
+	utxoEntry0AltDAA := NewUTXOEntry(10, &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}, false, 99)
 
 	// Classic single-outpoint table (identical to original)
 	tests := []struct {
@@ -225,13 +231,6 @@ func TestUTXODiffRules(t *testing.T) {
 		other                  *mutableUTXODiff
 		expectedDiffFromResult *mutableUTXODiff
 		expectedWithDiffResult *mutableUTXODiff
-		// withDiffHadConflict marks a case where this and other disagree on the same outpoint
-		// (both remove it, or both add it, without one side undoing the other). withDiffInPlace
-		// no longer hard-fails on that - it logs a warning and lets the outpoint fall through to
-		// whichever side the merge algebra happens to keep. That's an intentionally lossy
-		// resolution (see withDiffInPlace's doc comment), so the WithDiff -> diffFrom round trip
-		// below, which assumes an exact algebraic inverse, does not hold for these cases.
-		withDiffHadConflict bool
 	}{
 		{
 			name: "first toAdd in this, first toAdd in other",
@@ -247,11 +246,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd in this, second in toAdd in other",
@@ -267,11 +262,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
 				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
-				toRemove: utxoCollection{},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd in this, second in toRemove in other",
@@ -300,11 +291,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{*outpoint0: utxoEntry2},
 			},
 			expectedDiffFromResult: nil,
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{*outpoint0: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd in this and toRemove in other, second in toAdd in other",
@@ -387,11 +374,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{*outpoint0: utxoEntry1},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toRemove in this, second in toRemove in other",
@@ -404,11 +387,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{*outpoint0: utxoEntry2},
 			},
 			expectedDiffFromResult: nil,
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{*outpoint0: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toRemove in this and toAdd in other, second in toRemove in other",
@@ -421,11 +400,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{*outpoint0: utxoEntry2},
 			},
 			expectedDiffFromResult: nil,
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{*outpoint0: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toRemove in this and other, second in toAdd in other",
@@ -441,11 +416,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
 				toRemove: utxoCollection{},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
-				toRemove: utxoCollection{*outpoint0: utxoEntry1},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toRemove in this, empty other",
@@ -477,11 +448,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{},
 			},
 			expectedDiffFromResult: nil,
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{*outpoint0: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd in this, second in toRemove in this and toAdd in other",
@@ -494,11 +461,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{},
 			},
 			expectedDiffFromResult: nil,
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd in this and toRemove in other, second in toRemove in this",
@@ -530,11 +493,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{*outpoint0: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd and second in toRemove in both this and other",
@@ -550,11 +509,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
-				toRemove: utxoCollection{*outpoint0: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 		{
 			name: "first in toAdd in this and toRemove in other, second in toRemove in this and toAdd in other",
@@ -763,11 +718,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry0, *outpoint1: utxoEntry1},
-				toRemove: utxoCollection{*outpoint2: utxoEntry2},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil, // duplicate toAdd / toRemove
 		},
 
 		// ---------- Different-DAA-score edge cases ----------
@@ -786,11 +737,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry0AltDAA},
 				toRemove: utxoCollection{*outpoint0: utxoEntry0},
 			},
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint0: utxoEntry0AltDAA},
-				toRemove: utxoCollection{},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil, // cannot have two different entries for same outpoint in toAdd
 		},
 		{
 			name: "same outpoint different DAA – this.toRemove vs other.toRemove",
@@ -803,11 +750,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{*outpoint0: utxoEntry0AltDAA},
 			},
 			expectedDiffFromResult: nil, // different DAA scores in toRemove is an error
-			expectedWithDiffResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{*outpoint0: utxoEntry0AltDAA},
-			},
-			withDiffHadConflict: true,
+			expectedWithDiffResult: nil,
 		},
 	}
 
@@ -867,10 +810,8 @@ func TestUTXODiffRules(t *testing.T) {
 					test.expectedWithDiffResult, thisClone)
 			}
 
-			// Round-trip: diffFrom after a successful WithDiff must recover the original "other".
-			// Skipped for cases where this and other conflicted on the same outpoint: withDiffInPlace
-			// resolves those leniently (see withDiffHadConflict above), which isn't invertible.
-			if isWithDiffOk && !test.withDiffHadConflict {
+			// Round-trip: diffFrom after a successful WithDiff must recover the original "other"
+			if isWithDiffOk {
 				otherResult, err := diffFrom(test.this, withDiffResult)
 				if err != nil {
 					t.Errorf("diffFrom after WithDiff unexpectedly failed: %s", err)
@@ -881,6 +822,123 @@ func TestUTXODiffRules(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCoinbaseCollisionConflicts exercises the narrow carve-out in resolveConflicts
+// (diff_algebra.go): a conflict where the same outpoint is touched by both sides of a diffFrom/
+// withDiffInPlace composition is tolerated (logged, not errored) only when both conflicting entries
+// are coinbase outputs - the one entity class whose transaction ID can legitimately collide against
+// real chain data (see isTolerableCoinbaseConflict). Every other conflict shape must still hard-fail,
+// including when only one side of a coinbase-looking pair is actually a coinbase output, and even
+// when a tolerable conflict is mixed in with a real one in the same call.
+func TestCoinbaseCollisionConflicts(t *testing.T) {
+	_, _, _, outpoint0, outpoint1, _, _, _, _, _ := testFixtures()
+	script := &externalapi.ScriptPublicKey{Script: []byte{}, Version: 0}
+
+	// Two coinbase entries for the same outpoint with different DAA scores, standing in for two
+	// blocks whose pre-entropy-fork coinbase payloads collided on transaction ID (see
+	// coinbaseEntropyActivationVersion).
+	coinbaseA := NewUTXOEntry(10, script, true, 0)
+	coinbaseB := NewUTXOEntry(10, script, true, 5)
+	// The same shape, but not coinbase outputs - this is what real corruption (e.g. an actual
+	// double-spend) would look like, and must never be swallowed.
+	regularA := NewUTXOEntry(10, script, false, 0)
+	regularB := NewUTXOEntry(10, script, false, 5)
+
+	t.Run("diffFrom: this.toRemove vs other.toAdd, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: coinbaseA}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: coinbaseB}, toRemove: utxoCollection{}}
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("diffFrom: this.toRemove vs other.toAdd, not coinbase - still errors", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: regularA}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: regularB}, toRemove: utxoCollection{}}
+		if _, err := diffFrom(this, other); err == nil {
+			t.Error("expected a non-coinbase conflict to still be rejected")
+		}
+	})
+
+	t.Run("diffFrom: this.toAdd vs other.toRemove, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: coinbaseA}, toRemove: utxoCollection{}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: coinbaseB}}
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("diffFrom: this.toAdd vs other.toRemove, not coinbase - still errors", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: regularA}, toRemove: utxoCollection{}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: regularB}}
+		if _, err := diffFrom(this, other); err == nil {
+			t.Error("expected a non-coinbase conflict to still be rejected")
+		}
+	})
+
+	t.Run("diffFrom: this.toRemove vs other.toRemove different DAA, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: coinbaseA}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: coinbaseB}}
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("diffFrom: this.toRemove vs other.toRemove different DAA, not coinbase - still errors", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: regularA}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: regularB}}
+		if _, err := diffFrom(this, other); err == nil {
+			t.Error("expected a non-coinbase conflict to still be rejected")
+		}
+	})
+
+	t.Run("withDiffInPlace: this.toRemove vs other.toRemove, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: coinbaseA}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: coinbaseB}}
+		if err := withDiffInPlace(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("withDiffInPlace: this.toRemove vs other.toRemove, not coinbase - still errors", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: regularA}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{}, toRemove: utxoCollection{*outpoint0: regularB}}
+		if err := withDiffInPlace(this, other); err == nil {
+			t.Error("expected a non-coinbase conflict to still be rejected")
+		}
+	})
+
+	t.Run("withDiffInPlace: this.toAdd vs other.toAdd, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: coinbaseA}, toRemove: utxoCollection{}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: coinbaseB}, toRemove: utxoCollection{}}
+		if err := withDiffInPlace(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("withDiffInPlace: this.toAdd vs other.toAdd, not coinbase - still errors", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: regularA}, toRemove: utxoCollection{}}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: regularB}, toRemove: utxoCollection{}}
+		if err := withDiffInPlace(this, other); err == nil {
+			t.Error("expected a non-coinbase conflict to still be rejected")
+		}
+	})
+
+	t.Run("withDiffInPlace: a tolerable conflict does not mask a real one in the same call", func(t *testing.T) {
+		this := &mutableUTXODiff{
+			toAdd:    utxoCollection{},
+			toRemove: utxoCollection{*outpoint0: coinbaseA, *outpoint1: regularA},
+		}
+		other := &mutableUTXODiff{
+			toAdd:    utxoCollection{},
+			toRemove: utxoCollection{*outpoint0: coinbaseB, *outpoint1: regularB},
+		}
+		if err := withDiffInPlace(this, other); err == nil {
+			t.Error("expected the real (non-coinbase) conflict to still be rejected, " +
+				"even with a tolerable coinbase conflict on another outpoint in the same call")
+		}
+	})
 }
 
 // TestAddRemoveEntryDuplicates exercises the low-level addEntry / removeEntry
