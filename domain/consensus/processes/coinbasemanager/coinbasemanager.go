@@ -173,7 +173,7 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			if err != nil {
 				return nil, false, err
 			}
-			_, blockCoinbaseData, _, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+			_, blockCoinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 				blockAcc.TransactionAcceptanceData[0].Transaction, mergeSetBlockVersion)
 			if err != nil {
 				return nil, false, err
@@ -305,7 +305,7 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 	if err != nil {
 		return nil, nil, false, err
 	}
-	_, coinbaseData, _, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+	_, coinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 		blockAcceptanceData.TransactionAcceptanceData[0].Transaction, blueBlockVersion)
 	if err != nil {
 		return nil, nil, false, err
@@ -344,7 +344,7 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV1(stagingArea *model.Stagin
 	if err != nil {
 		return nil, false, err
 	}
-	_, coinbaseData, _, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+	_, coinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 		blockAcceptanceData.TransactionAcceptanceData[0].Transaction, blueBlockVersion)
 	if err != nil {
 		return nil, false, err
@@ -539,7 +539,7 @@ func (c *coinbaseManager) calcMergedBlockReward(stagingArea *model.StagingArea, 
 		return 0, err
 	}
 
-	_, _, subsidy, err := c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+	_, _, subsidy, err := c.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 		block.Transactions[transactionhelper.CoinbaseTransactionIndex], block.Header.Version())
 	if err != nil {
 		return 0, err

@@ -10,5 +10,5 @@ type CoinbaseManager interface {
 	ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea *StagingArea, blockHash *externalapi.DomainHash,
 		coinbaseData *externalapi.DomainCoinbaseData, acceptanceData externalapi.AcceptanceData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error)
 	CalcBlockSubsidy(stagingArea *StagingArea, blockHash *externalapi.DomainHash, blockVersion uint16) (uint64, error)
-	ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTx *externalapi.DomainTransaction) (blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error)
+	ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx *externalapi.DomainTransaction, blockVersion uint16) (blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error)
 }

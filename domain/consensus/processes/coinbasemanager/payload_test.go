@@ -58,7 +58,7 @@ func TestCoinbasePayloadRoundTripAcrossForkVersions(t *testing.T) {
 			mismatchedVersion = coinbaseEntropyActivationVersion - 1
 		}
 		constants.SetBlockVersion(mismatchedVersion)
-		blueScore, gotData, subsidy, err := cm.extractCoinbaseDataBlueScoreAndSubsidyForVersion(
+		blueScore, gotData, subsidy, err := cm.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 			&externalapi.DomainTransaction{Payload: payload}, version)
 		if err != nil {
 			t.Fatalf("version %d: extract failed: %v", version, err)

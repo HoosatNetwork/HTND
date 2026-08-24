@@ -165,7 +165,8 @@ func (v *blockValidator) checkCoinbaseSubsidy(stagingArea *model.StagingArea, bl
 		return 0, err
 	}
 
-	_, _, subsidy, err := v.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidy(block.Transactions[transactionhelper.CoinbaseTransactionIndex])
+	_, _, subsidy, err := v.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
+		block.Transactions[transactionhelper.CoinbaseTransactionIndex], block.Header.Version())
 	if err != nil {
 		return 0, err
 	}

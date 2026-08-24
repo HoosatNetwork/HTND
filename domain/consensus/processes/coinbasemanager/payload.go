@@ -132,26 +132,15 @@ func ModifyCoinbasePayload(payload []byte, coinbaseData *externalapi.DomainCoinb
 	return payload, nil
 }
 
-// ExtractCoinbaseDataBlueScoreAndSubsidy deserializes the coinbase payload to its component (scriptPubKey, extra data, and subsidy).
-//
-// This assumes coinbaseTx belongs to the block currently being built or
-// validated (i.e. constants.GetBlockVersion() reflects it). Callers that parse
-// a coinbase belonging to a *different* block - e.g. a merge-set block's
-// coinbase, looked up by hash, while reward-computing the block currently being
-// processed - must not use this: the ambient version won't necessarily match,
-// and blocks whose merge set spans the entropy hard fork boundary can mix pre-
-// and post-fork coinbase payloads. Use extractCoinbaseDataBlueScoreAndSubsidyForVersion
-// with that specific block's own version instead.
-func (c *coinbaseManager) ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTx *externalapi.DomainTransaction) (
-	blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error,
-) {
-	return c.extractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx, constants.GetBlockVersion())
-}
-
-// extractCoinbaseDataBlueScoreAndSubsidyForVersion is like ExtractCoinbaseDataBlueScoreAndSubsidy,
-// but takes the coinbase-owning block's version explicitly instead of assuming it
-// matches the ambient constants.GetBlockVersion().
-func (c *coinbaseManager) extractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx *externalapi.DomainTransaction, blockVersion uint16) (
+// ExtractCoinbaseDataBlueScoreAndSubsidyForVersion deserializes the coinbase payload to its
+// component (scriptPubKey, extra data, and subsidy). blockVersion must be the coinbase-owning
+// block's own header version - not necessarily the ambient constants.GetBlockVersion(), which
+// tracks whichever block is currently being built/relayed and can be stale or ahead when parsing
+// a coinbase belonging to a different block (e.g. a merge-set block's coinbase looked up by hash,
+// or a historical block validated in batch during IBD with trusted data). Blocks whose merge set
+// spans the entropy hard fork boundary can mix pre- and post-fork coinbase payloads, so this must
+// always be threaded through explicitly rather than assumed.
+func (c *coinbaseManager) ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx *externalapi.DomainTransaction, blockVersion uint16) (
 	blueScore uint64, coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, err error,
 ) {
 	prefixLength := prefixLengthForVersion(blockVersion)

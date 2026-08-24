@@ -93,7 +93,8 @@ func (v *blockValidator) ValidateBodyInIsolation(stagingArea *model.StagingArea,
 }
 
 func (v *blockValidator) checkCoinbaseBlueScore(block *externalapi.DomainBlock) error {
-	coinbaseBlueScore, _, _, err := v.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidy(block.Transactions[transactionhelper.CoinbaseTransactionIndex])
+	coinbaseBlueScore, _, _, err := v.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
+		block.Transactions[transactionhelper.CoinbaseTransactionIndex], block.Header.Version())
 	if err != nil {
 		return err
 	}

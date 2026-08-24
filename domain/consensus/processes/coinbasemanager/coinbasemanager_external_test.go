@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
 )
 
@@ -44,7 +45,7 @@ func TestExtractCoinbaseDataBlueScoreAndSubsidy(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, cbData, _, err := tc.CoinbaseManager().ExtractCoinbaseDataBlueScoreAndSubsidy(coinbaseTx)
+			_, cbData, _, err := tc.CoinbaseManager().ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTx, constants.GetBlockVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
