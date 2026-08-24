@@ -339,7 +339,18 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		if isNewSelectedTip {
 			log.Debugf("Block %s is the new selected tip, therefore setting it as old selected tip's diffChild", blockHash)
 
-			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
+			// pastUTXOSet and oldSelectedTipUTXOSet were reconstructed by independently walking two
+			// competing chain branches, so they can disagree on the BlockDAAScore of an
+			// outpoint they both otherwise agree on (see reconcileWinningBranchUTXO). blockHash is
+			// becoming canonical here, so its own reconstruction (pastUTXOSet) wins that
+			// disagreement.
+			reconciledOldSelectedTipUTXOSet, err := reconcileWinningBranchUTXO(pastUTXOSet, oldSelectedTipUTXOSet)
+			if err != nil {
+				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to reconcile old selected tip "+
+					"%s against new selected tip %s", oldSelectedTip, blockHash)
+			}
+
+			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(reconciledOldSelectedTipUTXOSet)
 			if err != nil {
 				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff new selected tip %s "+
 					"against old selected tip %s (this=pastUTXOSet of %s, other=oldSelectedTipUTXOSet of %s)",
@@ -354,7 +365,15 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		} else {
 			log.Debugf("Block %s is the tip of currently resolved chain, but not the new selected tip,"+
 				"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
-			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
+			// oldSelectedTip remains canonical here (blockHash lost the tip race), so its
+			// reconstruction wins any BlockDAAScore-only disagreement with pastUTXOSet - see
+			// reconcileWinningBranchUTXO and the comment in the isNewSelectedTip branch above.
+			reconciledPastUTXOSet, err := reconcileWinningBranchUTXO(oldSelectedTipUTXOSet, pastUTXOSet)
+			if err != nil {
+				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to reconcile resolved-chain tip "+
+					"%s against current selected tip %s", blockHash, oldSelectedTip)
+			}
+			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(reconciledPastUTXOSet)
 			if err != nil {
 				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff resolved-chain tip %s "+
 					"against current selected tip %s (this=oldSelectedTipUTXOSet of %s, other=pastUTXOSet of %s)",
