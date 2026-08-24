@@ -285,13 +285,9 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
-			// outpoint0 is a tolerated this.toAdd/other.toRemove conflict: diffFrom has no basis for
-			// picking a side, so it leaves the outpoint out of the result entirely (a true no-op)
-			// rather than guessing result.toRemove, which would delete a UTXO that may still be
-			// genuinely unspent.
 			expectedDiffFromResult: &mutableUTXODiff{
 				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{},
+				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
 			expectedWithDiffResult: &mutableUTXODiff{
 				toAdd:    utxoCollection{},
@@ -326,12 +322,9 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
 				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
-			// outpoint0 is a tolerated this.toAdd/other.toRemove conflict (utxoEntry1 on both sides),
-			// stripped from the result as a no-op - see the "first in toAdd in this, second in
-			// toRemove in other" case above for why.
 			expectedDiffFromResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{},
+				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
+				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
 			expectedWithDiffResult: &mutableUTXODiff{
 				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
@@ -368,11 +361,8 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
 				toRemove: utxoCollection{},
 			},
-			// outpoint0 is a tolerated this.toRemove/other.toAdd conflict (identical entries):
-			// stripped from the result as a no-op rather than guessing result.toAdd, which would
-			// resurrect a UTXO that may actually have been genuinely spent.
 			expectedDiffFromResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{},
+				toAdd:    utxoCollection{*outpoint0: utxoEntry1},
 				toRemove: utxoCollection{},
 			},
 			expectedWithDiffResult: &mutableUTXODiff{
@@ -509,11 +499,9 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
 				toRemove: utxoCollection{},
 			},
-			// outpoint0 is a tolerated this.toRemove/other.toAdd conflict (identical entries):
-			// stripped from the result as a no-op.
 			expectedDiffFromResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{},
+				toAdd:    utxoCollection{*outpoint0: utxoEntry2},
+				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
 			expectedWithDiffResult: nil,
 			hadTolerableConflict: true,
@@ -745,12 +733,10 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{},
 				toRemove: utxoCollection{*outpoint0: utxoEntry0},
 			},
-			// outpoint0 is the identical entry (utxoEntry0) on both sides of a conflict - tolerated,
-			// and stripped from the result as a no-op (unlike outpoint1, which has no conflict and
-			// so still follows the plain this.toAdd/other.None -> toRemove rule).
+			// outpoint0 is the identical entry (utxoEntry0) on both sides of a conflict - tolerated.
 			expectedDiffFromResult: &mutableUTXODiff{
 				toAdd:    utxoCollection{},
-				toRemove: utxoCollection{*outpoint1: utxoEntry1},
+				toRemove: utxoCollection{*outpoint0: utxoEntry0, *outpoint1: utxoEntry1},
 			},
 			expectedWithDiffResult: &mutableUTXODiff{
 				toAdd:    utxoCollection{*outpoint1: utxoEntry1},
@@ -768,12 +754,9 @@ func TestUTXODiffRules(t *testing.T) {
 				toAdd:    utxoCollection{*outpoint1: utxoEntry1, *outpoint2: utxoEntry2},
 				toRemove: utxoCollection{},
 			},
-			// outpoint1 is the identical entry (utxoEntry1) on both sides of a conflict - tolerated
-			// and stripped from the result as a no-op; outpoint0 and outpoint2 have no conflict and
-			// still follow the plain rules (this.toAdd/other.None -> toRemove, this.None/other.toAdd
-			// -> toAdd).
+			// outpoint1 is the identical entry (utxoEntry1) on both sides of a conflict - tolerated.
 			expectedDiffFromResult: &mutableUTXODiff{
-				toAdd:    utxoCollection{*outpoint2: utxoEntry2},
+				toAdd:    utxoCollection{*outpoint1: utxoEntry1, *outpoint2: utxoEntry2},
 				toRemove: utxoCollection{*outpoint0: utxoEntry0},
 			},
 			expectedWithDiffResult: &mutableUTXODiff{

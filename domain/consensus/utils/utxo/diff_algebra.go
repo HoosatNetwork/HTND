@@ -102,42 +102,33 @@ func describeConflictEntry(entry externalapi.UTXOEntry) string {
 // resolveConflicts scans collectionA/collectionB for every outpoint satisfying rule - one of the
 // classic "same outpoint touched by both sides" conflict shapes shared by diffFrom and
 // withDiffInPlace - and, for each one found, either logs and tolerates it (isTolerableConflict)
-// or returns an error describing it (real corruption). collectionA/collectionB are never mutated
-// (they may be a caller's live diff, e.g. diffFrom's "this"/"other"); instead every tolerated
-// outpoint is returned so the caller can strip it back out of whatever it derives from these
-// collections. That stripping matters because the generic merge algebra below (the
-// subtraction/intersection helpers) was written assuming these conflicts never reach it: left
-// alone, it buckets a tolerated outpoint into whichever single side its own iteration order
-// happens to land on - e.g. diffFrom's this.toAdd-vs-other.toRemove conflict lands the outpoint in
-// result.toRemove unconditionally - not into a genuine no-op, even though "tolerated" means the two
-// sides couldn't agree on the outpoint's status in the first place. See diffFrom's use of this
-// return value for the fix.
+// or returns an error describing it (real corruption). Conflicting outpoints are never mutated: a
+// tolerated conflict is left for the caller's own merge algebra to resolve, which already
+// collapses a doubly-touched outpoint down to one consistent entry.
 func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
 	rule func(outpoint *externalapi.DomainOutpoint, entryA, entryB externalapi.UTXOEntry) bool,
 	conflictDescription string,
-) ([]externalapi.DomainOutpoint, error) {
+) error {
 	seen := make(map[externalapi.DomainOutpoint]bool)
-	var tolerated []externalapi.DomainOutpoint
 	for {
 		offendingOutpoint, ok := checkIntersectionWithRule(collectionA, collectionB,
 			func(outpoint *externalapi.DomainOutpoint, entryA, entryB externalapi.UTXOEntry) bool {
 				return !seen[*outpoint] && rule(outpoint, entryA, entryB)
 			})
 		if !ok {
-			return tolerated, nil
+			return nil
 		}
 		seen[*offendingOutpoint] = true
 
 		entryA, _ := collectionA.Get(offendingOutpoint)
 		entryB, _ := collectionB.Get(offendingOutpoint)
 		if !isTolerableConflict(entryA, entryB) {
-			return nil, errors.Errorf("%s: outpoint %s %s (entryA: %s, entryB: %s)", funcName, offendingOutpoint,
+			return errors.Errorf("%s: outpoint %s %s (entryA: %s, entryB: %s)", funcName, offendingOutpoint,
 				conflictDescription, describeConflictEntry(entryA), describeConflictEntry(entryB))
 		}
 		log.Debugf("%s: outpoint %s %s (entries agree on value - historical coinbase ID collision or "+
 			"duplicate cross-reconstruction acceptance) - leaving it as is",
 			funcName, offendingOutpoint, conflictDescription)
-		tolerated = append(tolerated, *offendingOutpoint)
 	}
 }
 
@@ -229,9 +220,8 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toRemove.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	toleratedRemovedVsAdded, err := resolveConflicts("diffFrom", this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore,
-		"both in this.toRemove and in other.toAdd")
-	if err != nil {
+	if err := resolveConflicts("diffFrom", this.toRemove, other.toAdd, isNotAddedOutputRemovedWithDAAScore,
+		"both in this.toRemove and in other.toAdd"); err != nil {
 		return nil, err
 	}
 
@@ -242,15 +232,14 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 				other.toAdd.containsWithDAAScore(outpoint, utxoEntry.BlockDAAScore())))
 	}
 
-	toleratedAddedVsRemoved, err := resolveConflicts("diffFrom", this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore,
-		"both in this.toAdd and in other.toRemove")
-	if err != nil {
+	if err := resolveConflicts("diffFrom", this.toAdd, other.toRemove, isNotRemovedOutputAddedWithDAAScore,
+		"both in this.toAdd and in other.toRemove"); err != nil {
 		return nil, err
 	}
 
 	// if have the same entry in this.toRemove and other.toRemove
 	// and existing entry is with different DAA score, in this case - this is an error
-	if _, err := resolveConflicts("diffFrom", this.toRemove, other.toRemove,
+	if err := resolveConflicts("diffFrom", this.toRemove, other.toRemove,
 		func(_ *externalapi.DomainOutpoint, utxoEntry, diffEntry externalapi.UTXOEntry) bool {
 			return utxoEntry.BlockDAAScore() != diffEntry.BlockDAAScore()
 		}, "both in this.toRemove and other.toRemove with different DAA scores, with no corresponding "+
@@ -285,24 +274,6 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	// If they are not in this.toAdd - should be added in result.toAdd
 	subtractionHavingDAAScoreInPlace(other.toAdd, this.toAdd, result.toAdd)
 
-	// The two loops above have no notion of the tolerated conflicts resolved earlier: they were
-	// written assuming this.toAdd/other.toRemove and this.toRemove/other.toAdd never intersect (see
-	// the "impossible cases" note at the top of this function), so a tolerated outpoint - one where
-	// the two sides couldn't actually agree on the outpoint's status - gets deterministically
-	// bucketed into a single side of result regardless of which side is correct: e.g.
-	// this.toAdd/other.toRemove always lands in result.toRemove, which would delete a UTXO that may
-	// still be genuinely unspent. Since "tolerated" means we have no basis for picking a side, strip
-	// these outpoints back out so the composition leaves them untouched (a true no-op) rather than
-	// guessing.
-	for _, outpoint := range toleratedRemovedVsAdded {
-		delete(result.toAdd, outpoint)
-		delete(result.toRemove, outpoint)
-	}
-	for _, outpoint := range toleratedAddedVsRemoved {
-		delete(result.toAdd, outpoint)
-		delete(result.toRemove, outpoint)
-	}
-
 	return result, nil
 }
 
@@ -313,14 +284,14 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 // are handled the same way diffFrom handles its own conflict shapes - see resolveConflicts and
 // isTolerableConflict.
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
-	if _, err := resolveConflicts("withDiffInPlace", other.toRemove, this.toRemove,
+	if err := resolveConflicts("withDiffInPlace", other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, _ externalapi.UTXOEntry) bool {
 			return !this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())
 		}, "both in this.toRemove and in other.toRemove"); err != nil {
 		return err
 	}
 
-	if _, err := resolveConflicts("withDiffInPlace", other.toAdd, this.toAdd,
+	if err := resolveConflicts("withDiffInPlace", other.toAdd, this.toAdd,
 		func(outpoint *externalapi.DomainOutpoint, _ externalapi.UTXOEntry, existingEntry externalapi.UTXOEntry) bool {
 			return !other.toRemove.containsWithDAAScore(outpoint, existingEntry.BlockDAAScore())
 		}, "both in this.toAdd and in other.toAdd"); err != nil {
