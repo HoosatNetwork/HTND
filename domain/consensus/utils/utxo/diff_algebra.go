@@ -126,7 +126,7 @@ func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
 			return errors.Errorf("%s: outpoint %s %s (entryA: %s, entryB: %s)", funcName, offendingOutpoint,
 				conflictDescription, describeConflictEntry(entryA), describeConflictEntry(entryB))
 		}
-		log.Warnf("%s: outpoint %s %s (entries agree on value - historical coinbase ID collision or "+
+		log.Debugf("%s: outpoint %s %s (entries agree on value - historical coinbase ID collision or "+
 			"duplicate cross-reconstruction acceptance) - leaving it as is",
 			funcName, offendingOutpoint, conflictDescription)
 	}
