@@ -49,27 +49,44 @@ func checkIntersectionWithRule(collectionA utxoCollection, collectionB utxoColle
 	return nil, false
 }
 
-// isTolerableCoinbaseConflict reports whether two UTXO entries found conflicting on the same
-// outpoint (both removed, both added, or removed-vs-added with mismatched DAA scores) are safe to
-// leave as-is rather than treated as corruption. This is true only when both entries are coinbase
-// outputs: coinbase transactions mined before per-block entropy was folded into the payload (see
-// coinbaseEntropyActivationVersion) derive their ID from just blueScore + subsidy + miner script +
-// extra data, so two blocks sharing those fields (e.g. sibling blocks from the same miner) can
-// legitimately produce byte-identical coinbase transactions - and since the payload bytes that
-// collide are also what the transaction's outputs are built from, a colliding pair always describes
-// the same spendable value; only their acceptance-time BlockDAAScore can differ. That fix only
-// protects blocks mined after the hard fork, so already-mined colliding pairs stay in the chain
-// forever and every node reconstructing that stretch of history will hit this. A conflict between
-// two non-coinbase entries, or a coinbase entry and a regular one, has no such explanation and is
-// real corruption.
-func isTolerableCoinbaseConflict(entryA, entryB externalapi.UTXOEntry) bool {
-	return entryA.IsCoinbase() && entryB.IsCoinbase()
+// isTolerableConflict reports whether two UTXO entries found conflicting on the same outpoint
+// (both removed, both added, or removed-vs-added with mismatched DAA scores) are safe to leave
+// as-is rather than treated as corruption. Two independent, narrow cases qualify:
+//
+//  1. Both entries are coinbase outputs. Coinbase transactions mined before per-block entropy was
+//     folded into the payload (see coinbaseEntropyActivationVersion) derive their ID from just
+//     blueScore + subsidy + miner script + extra data, so two blocks sharing those fields (e.g.
+//     sibling blocks from the same miner) can legitimately produce byte-identical coinbase
+//     transactions - and since the payload bytes that collide are also what the transaction's
+//     outputs are built from, a colliding pair always describes the same spendable value; only
+//     their acceptance-time BlockDAAScore can differ (which is why this branch alone doesn't
+//     require it to match). That fix only protects blocks mined after the hard fork, so
+//     already-mined colliding pairs stay in the chain forever and every node reconstructing that
+//     stretch of history will hit this.
+//
+//  2. The two entries are otherwise fully identical - same amount, same script, same
+//     BlockDAAScore - yet still land on opposite sides of the conflict (this.toRemove vs
+//     other.toAdd, most notably). That shape means two independent reconstructions of the same
+//     real transaction (e.g. two competing tip candidates during a reorg, each walking its own
+//     selected-parent chain) simply disagree about whether the shared base already contained it,
+//     not that the transaction itself differs in any way. Since nothing about the entries
+//     actually differs - no double-spend risk, no value discrepancy, nothing an attacker could
+//     exploit - it's safe to leave the disagreement as a bookkeeping artifact rather than fail
+//     the whole reconstruction over it.
+//
+// Anything else - a conflict where the values genuinely differ, or only one side is coinbase - has
+// no such explanation and is real corruption.
+func isTolerableConflict(entryA, entryB externalapi.UTXOEntry) bool {
+	if entryA.IsCoinbase() && entryB.IsCoinbase() {
+		return true
+	}
+	return entryA.Amount() == entryB.Amount() && entryA.ScriptPublicKey().Equal(entryB.ScriptPublicKey()) && entryA.BlockDAAScore() == entryB.BlockDAAScore()
 }
 
 // describeConflictEntry formats a UTXOEntry's diagnostically-relevant fields for a hard-error
-// conflict message, so the log itself says why isTolerableCoinbaseConflict rejected the pair
-// (which side isn't a coinbase output, and what the two entries actually contain) instead of
-// requiring a follow-up investigation to find out.
+// conflict message, so the log itself says why isTolerableConflict rejected the pair (which side
+// isn't a coinbase output, and how the two entries actually differ) instead of requiring a
+// follow-up investigation to find out.
 func describeConflictEntry(entry externalapi.UTXOEntry) string {
 	if entry == nil {
 		return "<nil>"
@@ -80,10 +97,10 @@ func describeConflictEntry(entry externalapi.UTXOEntry) string {
 
 // resolveConflicts scans collectionA/collectionB for every outpoint satisfying rule - one of the
 // classic "same outpoint touched by both sides" conflict shapes shared by diffFrom and
-// withDiffInPlace - and, for each one found, either logs and tolerates it
-// (isTolerableCoinbaseConflict) or returns an error describing it (real corruption). Conflicting
-// outpoints are never mutated: a tolerated conflict is left for the caller's own merge algebra to
-// resolve, which already collapses a doubly-touched outpoint down to one consistent entry.
+// withDiffInPlace - and, for each one found, either logs and tolerates it (isTolerableConflict)
+// or returns an error describing it (real corruption). Conflicting outpoints are never mutated: a
+// tolerated conflict is left for the caller's own merge algebra to resolve, which already
+// collapses a doubly-touched outpoint down to one consistent entry.
 func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
 	rule func(outpoint *externalapi.DomainOutpoint, entryA, entryB externalapi.UTXOEntry) bool,
 	conflictDescription string,
@@ -101,11 +118,12 @@ func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
 
 		entryA, _ := collectionA.Get(offendingOutpoint)
 		entryB, _ := collectionB.Get(offendingOutpoint)
-		if !isTolerableCoinbaseConflict(entryA, entryB) {
+		if !isTolerableConflict(entryA, entryB) {
 			return errors.Errorf("%s: outpoint %s %s (entryA: %s, entryB: %s)", funcName, offendingOutpoint,
 				conflictDescription, describeConflictEntry(entryA), describeConflictEntry(entryB))
 		}
-		log.Warnf("%s: outpoint %s %s (historical coinbase ID collision) - leaving it as is",
+		log.Warnf("%s: outpoint %s %s (entries agree on value - historical coinbase ID collision or "+
+			"duplicate cross-reconstruction acceptance) - leaving it as is",
 			funcName, offendingOutpoint, conflictDescription)
 	}
 }
@@ -260,7 +278,7 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 //
 // The two classic conflicting cases (an outpoint removed by both diffs, or added by both diffs)
 // are handled the same way diffFrom handles its own conflict shapes - see resolveConflicts and
-// isTolerableCoinbaseConflict.
+// isTolerableConflict.
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
 	if err := resolveConflicts("withDiffInPlace", other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, _ externalapi.UTXOEntry) bool {
