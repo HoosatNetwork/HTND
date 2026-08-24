@@ -136,7 +136,9 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 		// needed data (tip's selectedParent and selectedParent's UTXODiff)
 		selectedParentUTXODiff, err := previousBlockUTXOSet.DiffFrom(oneBeforeLastResolvedBlockUTXOSet)
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, errors.Wrapf(err, "ResolveBlockStatus: failed to prepare UTXO diff reversal data "+
+				"(this=previousBlockUTXOSet of %s, other=oneBeforeLastResolvedBlockUTXOSet of %s)",
+				previousBlockHash, oneBeforeLastResolvedBlockHash)
 		}
 
 		reversalData = &model.UTXODiffReversalData{
@@ -302,8 +304,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
 			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
 			if diffErr != nil {
-				return 0, nil, errors.Wrapf(diffErr, "failed to diff past UTXO of disqualified block %s against "+
-					"its selected parent %s", blockHash, selectedParentHash)
+				return 0, nil, errors.Wrapf(diffErr, "resolveSingleBlockStatus: failed to diff past UTXO of "+
+					"disqualified block %s (this=selectedParentPastUTXOSet of %s, other=pastUTXOSet of %s)",
+					blockHash, selectedParentHash, blockHash)
 			}
 			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
 			// Even for disqualified blocks, return the calculated past UTXO so the
@@ -338,7 +341,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 
 			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
 			if err != nil {
-				return 0, nil, err
+				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff new selected tip %s "+
+					"against old selected tip %s (this=pastUTXOSet of %s, other=oldSelectedTipUTXOSet of %s)",
+					blockHash, oldSelectedTip, blockHash, oldSelectedTip)
 			}
 			log.Debugf("Setting the old selected tip's (%s) diffChild to be the new selected tip (%s)",
 				oldSelectedTip, blockHash)
@@ -351,7 +356,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 				"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
 			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
 			if err != nil {
-				return 0, nil, err
+				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff resolved-chain tip %s "+
+					"against current selected tip %s (this=oldSelectedTipUTXOSet of %s, other=pastUTXOSet of %s)",
+					blockHash, oldSelectedTip, oldSelectedTip, blockHash)
 			}
 			csm.stageDiff(stagingArea, blockHash, utxoDiff, oldSelectedTip)
 		}
@@ -363,7 +370,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			"therefore temporarily setting selectedParent as it's diffChild", blockHash)
 		utxoDiff, err := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff block %s against its "+
+				"selected parent %s (this=selectedParentPastUTXOSet of %s, other=pastUTXOSet of %s)",
+				blockHash, selectedParentHash, selectedParentHash, blockHash)
 		}
 
 		csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
