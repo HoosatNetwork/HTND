@@ -258,6 +258,10 @@ func (s *consensus) BuildBlock(coinbaseData *externalapi.DomainCoinbaseData,
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	if err := s.ensureVirtualUpdatedNoLock(); err != nil {
+		return nil, err
+	}
+
 	block, _, err := s.blockBuilder.BuildBlock(coinbaseData, transactions)
 	return block, err
 }
@@ -270,6 +274,10 @@ func (s *consensus) BuildBlockTemplate(coinbaseData *externalapi.DomainCoinbaseD
 ) (*externalapi.DomainBlockTemplate, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+	if err := s.ensureVirtualUpdatedNoLock(); err != nil {
+		return nil, err
+	}
 
 	block, hasRedReward, err := s.blockBuilder.BuildBlock(coinbaseData, transactions)
 	if err != nil {
@@ -1199,6 +1207,28 @@ func (s *consensus) resolveVirtualChunkWithLock(maxBlocksToResolve uint64) (virt
 
 	virtualChangeSet, isCompletelyResolved, err = s.resolveVirtualChunkNoLock(maxBlocksToResolve)
 	return virtualChangeSet, isCompletelyResolved, err
+}
+
+// ensureVirtualUpdatedNoLock drains any pending virtual resolution, exactly like
+// ValidateAndInsertBlock does before it touches the DAG. Must be called with s.lock held.
+// Without this, a block template built while virtual is only partially resolved (e.g. mid
+// IBD or a large reorg, resolved in virtualResolveChunk-sized steps) reads blue score/DAA
+// score/parents off an intermediate virtual snapshot that's about to be superseded, rather
+// than the state real validation will eventually judge the mined block against.
+func (s *consensus) ensureVirtualUpdatedNoLock() error {
+	for s.virtualNotUpdated {
+		_, isCompletelyResolved, err := s.resolveVirtualChunkNoLock(virtualResolveChunk)
+		if err != nil {
+			return err
+		}
+		if isCompletelyResolved {
+			return nil
+		}
+		// Unlock to allow other threads to enter consensus, then relock for the next chunk.
+		s.lock.Unlock()
+		s.lock.Lock()
+	}
+	return nil
 }
 
 func (s *consensus) resolveVirtualChunkNoLock(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error) {
