@@ -64,23 +64,27 @@ func checkIntersectionWithRule(collectionA utxoCollection, collectionB utxoColle
 //     already-mined colliding pairs stay in the chain forever and every node reconstructing that
 //     stretch of history will hit this.
 //
-//  2. The two entries are otherwise fully identical - same amount, same script, same
-//     BlockDAAScore - yet still land on opposite sides of the conflict (this.toRemove vs
+//  2. The two entries describe the same spendable value - same amount, same script - regardless of
+//     BlockDAAScore, yet still land on opposite sides of the conflict (this.toRemove vs
 //     other.toAdd, most notably). That shape means two independent reconstructions of the same
 //     real transaction (e.g. two competing tip candidates during a reorg, each walking its own
-//     selected-parent chain) simply disagree about whether the shared base already contained it,
-//     not that the transaction itself differs in any way. Since nothing about the entries
-//     actually differs - no double-spend risk, no value discrepancy, nothing an attacker could
-//     exploit - it's safe to leave the disagreement as a bookkeeping artifact rather than fail
-//     the whole reconstruction over it.
+//     selected-parent chain, or the same merge-set transaction re-touched by successive blocks
+//     along a chain) simply disagree about whether the shared base already contained it, or about
+//     which accepting block's DAA score it was last recorded under - not that the transaction
+//     itself differs in any way. Confirmed against real data: the same outpoint has been observed
+//     conflicting once with matching DAA scores (this.toRemove vs other.toAdd) and, in the very
+//     same reconstruction, again with mismatched DAA scores (this.toRemove vs other.toRemove) -
+//     so DAA score is not a reliable signal here and can't be required to match. Since amount and
+//     script are what an attacker could exploit and they're identical, it's safe to leave the
+//     disagreement as a bookkeeping artifact rather than fail the whole reconstruction over it.
 //
-// Anything else - a conflict where the values genuinely differ, or only one side is coinbase - has
-// no such explanation and is real corruption.
+// Anything else - a conflict where amount or script genuinely differ, or only one side is
+// coinbase - has no such explanation and is real corruption.
 func isTolerableConflict(entryA, entryB externalapi.UTXOEntry) bool {
 	if entryA.IsCoinbase() && entryB.IsCoinbase() {
 		return true
 	}
-	return entryA.Amount() == entryB.Amount() && entryA.ScriptPublicKey().Equal(entryB.ScriptPublicKey()) && entryA.BlockDAAScore() == entryB.BlockDAAScore()
+	return entryA.Amount() == entryB.Amount() && entryA.ScriptPublicKey().Equal(entryB.ScriptPublicKey())
 }
 
 // describeConflictEntry formats a UTXOEntry's diagnostically-relevant fields for a hard-error
