@@ -121,7 +121,19 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		log.Tracef("Processing %d blue blocks in merge set", len(ghostdagData.MergeSetBlues()))
 		// For v2, process both blue and red blocks individually to avoid bucketing
 		// Process all merge set blocks in sorted order for determinism
-		allMergeBlocks := append(ghostdagData.MergeSetBlues(), ghostdagData.MergeSetReds()...)
+		//
+		// MergeSetBlues()/MergeSetReds() return the GHOSTDAGData's own slices, not copies (and
+		// that data is a cached/staged pointer shared with the rest of this block's processing
+		// pipeline, and later persisted to disk and the LRU cache as-is). Appending directly onto
+		// MergeSetBlues() here would, whenever it has spare capacity, write MergeSetReds() into its
+		// backing array in place, and the sort below would then reorder that shared array -
+		// corrupting the block's persisted merge set for every future reader. Build a fresh slice
+		// instead so this function never mutates GHOSTDAGData's own storage.
+		blues := ghostdagData.MergeSetBlues()
+		reds := ghostdagData.MergeSetReds()
+		allMergeBlocks := make([]*externalapi.DomainHash, 0, len(blues)+len(reds))
+		allMergeBlocks = append(allMergeBlocks, blues...)
+		allMergeBlocks = append(allMergeBlocks, reds...)
 		// Sort merge set blocks by hash to ensure consistent ordering
 		sort.Slice(allMergeBlocks, func(i, j int) bool {
 			return allMergeBlocks[i].String() < allMergeBlocks[j].String()
