@@ -30,11 +30,19 @@ func TestCoinbasePayloadRoundTripAcrossForkVersions(t *testing.T) {
 			entropy = [lengthOfEntropy]byte{1, 2, 3, 4, 5, 6, 7, 8}
 		}
 
-		// serializeCoinbasePayload (like the rest of production code) always targets
-		// the ambient "currently active" block version - set it to simulate building
-		// this specific block.
-		constants.SetBlockVersion(version)
-		payload, err := cm.serializeCoinbasePayload(12345, coinbaseData, 999, entropy)
+		// Deliberately land on the *other side* of the fork threshold, so a version that
+		// (bugfully) fell back to the ambient global would compute the wrong prefix length
+		// instead of just happening to agree by coincidence.
+		mismatchedVersion := uint16(coinbaseEntropyActivationVersion)
+		if version >= coinbaseEntropyActivationVersion {
+			mismatchedVersion = coinbaseEntropyActivationVersion - 1
+		}
+
+		// Both serializeCoinbasePayload and ExtractCoinbaseDataBlueScoreAndSubsidyForVersion take
+		// the coinbase-owning block's own version explicitly - set the ambient version to the
+		// mismatched one throughout, to prove neither of them reads it.
+		constants.SetBlockVersion(mismatchedVersion)
+		payload, err := cm.serializeCoinbasePayload(12345, coinbaseData, 999, entropy, version)
 		if err != nil {
 			t.Fatalf("version %d: serialize failed: %v", version, err)
 		}
@@ -45,19 +53,11 @@ func TestCoinbasePayloadRoundTripAcrossForkVersions(t *testing.T) {
 			t.Fatalf("version %d: payload length = %d, want %d", version, len(payload), wantPayloadLen)
 		}
 
-		// Parse it back as if it were a merge-set block's coinbase being examined while
-		// some *other*, differently-versioned block is the one currently being
-		// processed - i.e. exactly the scenario that broke: the ambient version here
-		// deliberately does NOT match the payload's own version, and extraction must
-		// still use the version passed in explicitly, not the ambient one.
-		// Deliberately land on the *other side* of the fork threshold, so a version
-		// that (bugfully) fell back to the ambient global would compute the wrong
-		// prefix length instead of just happening to agree by coincidence.
-		mismatchedVersion := uint16(coinbaseEntropyActivationVersion)
-		if version >= coinbaseEntropyActivationVersion {
-			mismatchedVersion = coinbaseEntropyActivationVersion - 1
-		}
-		constants.SetBlockVersion(mismatchedVersion)
+		// Parse it back as if it were a merge-set block's coinbase being examined while some
+		// *other*, differently-versioned block is the one currently being processed - i.e. exactly
+		// the scenario that broke: the ambient version here deliberately does NOT match the
+		// payload's own version, and extraction must still use the version passed in explicitly,
+		// not the ambient one.
 		blueScore, gotData, subsidy, err := cm.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 			&externalapi.DomainTransaction{Payload: payload}, version)
 		if err != nil {

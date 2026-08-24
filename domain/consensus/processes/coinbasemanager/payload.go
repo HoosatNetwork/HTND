@@ -76,9 +76,12 @@ func prefixLengthForVersion(blockVersion uint16) int {
 	return uint64Len + lengthOfSubsidy
 }
 
-// serializeCoinbasePayload builds the coinbase payload based on the provided scriptPubKey and extra data.
+// serializeCoinbasePayload builds the coinbase payload based on the provided scriptPubKey and extra
+// data. blockVersion must be the coinbase-owning block's own header version - see
+// ExtractCoinbaseDataBlueScoreAndSubsidyForVersion's doc comment for why the ambient
+// constants.GetBlockVersion() can't be assumed here either.
 func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
-	coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, entropy [lengthOfEntropy]byte,
+	coinbaseData *externalapi.DomainCoinbaseData, subsidy uint64, entropy [lengthOfEntropy]byte, blockVersion uint16,
 ) ([]byte, error) {
 	scriptLengthOfScriptPubKey := len(coinbaseData.ScriptPublicKey.Script)
 	if scriptLengthOfScriptPubKey > int(c.coinbasePayloadScriptPublicKeyMaxLength) {
@@ -87,7 +90,7 @@ func (c *coinbaseManager) serializeCoinbasePayload(blueScore uint64,
 	}
 	scriptLengthOfScriptPubKeyByte := scriptLengthByte(scriptLengthOfScriptPubKey)
 
-	prefixLength := prefixLengthForVersion(constants.GetBlockVersion())
+	prefixLength := prefixLengthForVersion(blockVersion)
 	payload := make([]byte, prefixLength+lengthOfVersionScriptPubKey+lengthOfScriptPubKeyLength+scriptLengthOfScriptPubKey+len(coinbaseData.ExtraData))
 	binary.LittleEndian.PutUint64(payload[:uint64Len], blueScore)
 	binary.LittleEndian.PutUint64(payload[uint64Len:uint64Len+lengthOfSubsidy], subsidy)

@@ -210,13 +210,26 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		hasRedReward = len(ghostdagData.MergeSetReds()) > 0
 	}
 
-	subsidy, err := c.CalcBlockSubsidy(stagingArea, blockHash, constants.GetBlockVersion())
+	// blockHash's own version, not the ambient constants.GetBlockVersion(): this function is used to
+	// reconstruct/verify a historical block's expected coinbase, potentially long after the node's
+	// ambient version has advanced past blockHash's own version (e.g. during a later IBD pass such as
+	// ResolveVirtual re-walking history already processed once before). Using the ambient version here
+	// would compute a different subsidy and/or wrongly fold in per-block entropy for a pre-fork block,
+	// producing a different coinbase transaction (and therefore a different transaction ID) than what
+	// was actually mined - exactly the kind of coinbase ID mismatch coinbaseEntropyActivationVersion
+	// was meant to prevent, just reintroduced by reading the wrong version.
+	ownBlockVersion, err := c.blockVersion(stagingArea, blockHash)
+	if err != nil {
+		return nil, false, err
+	}
+
+	subsidy, err := c.CalcBlockSubsidy(stagingArea, blockHash, ownBlockVersion)
 	if err != nil {
 		return nil, false, err
 	}
 
 	var entropy [lengthOfEntropy]byte
-	if constants.GetBlockVersion() >= coinbaseEntropyActivationVersion {
+	if ownBlockVersion >= coinbaseEntropyActivationVersion {
 		daaScore, err := c.daaBlocksStore.DAAScore(c.databaseContext, stagingArea, blockHash)
 		if err != nil {
 			return nil, false, err
@@ -224,7 +237,7 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		entropy = coinbaseEntropy(ghostdagData, daaScore)
 	}
 
-	payload, err := c.serializeCoinbasePayload(ghostdagData.BlueScore(), coinbaseData, subsidy, entropy)
+	payload, err := c.serializeCoinbasePayload(ghostdagData.BlueScore(), coinbaseData, subsidy, entropy, ownBlockVersion)
 	if err != nil {
 		return nil, false, err
 	}
@@ -251,8 +264,17 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 // a merge-set block's coinbase, while computing another block's reward split), since
 // the ambient constants.GetBlockVersion() reflects that other, currently-processed
 // block instead.
+//
+// blockHash may have no stored header at all: model.VirtualBlockHash/VirtualGenesisBlockHash are
+// markers rather than real mined blocks, and a block still under construction (including a test
+// harness's temporary placeholder hash) hasn't had its header staged yet either. In every such
+// case blockHash necessarily *is* the block currently being built, so the ambient version is the
+// correct answer there - it's only wrong when blockHash names a real, already-mined block.
 func (c *coinbaseManager) blockVersion(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint16, error) {
 	header, err := c.blockHeaderStore.BlockHeader(c.databaseContext, stagingArea, blockHash)
+	if database.IsNotFoundError(err) {
+		return constants.GetBlockVersion(), nil
+	}
 	if err != nil {
 		return 0, err
 	}
