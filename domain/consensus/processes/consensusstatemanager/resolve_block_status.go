@@ -300,6 +300,27 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 	if err != nil {
 		if errors.As(err, &ruleerrors.RuleError{}) {
 			log.Warnf("UTXO verification for block %s failed: %s", blockHash, err)
+
+			// Two independent self-consistency checks to localize the drift: does the STARTING
+			// point (selected parent's already-stored multiset) already disagree with its own
+			// actual UTXO set (drift predates this block, inherited), or does blockHash's own
+			// freshly-computed multiset disagree with the actual set its own diff produces (drift
+			// introduced right here, in this resolution's Add/Remove accounting)? See
+			// verifyMultisetSelfConsistency's comment for what a PASS/FAIL on each actually proves.
+			if storedSelectedParentMultiset, msErr := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParentHash); msErr == nil {
+				csm.verifyMultisetSelfConsistency(stagingArea, "selected parent", selectedParentHash,
+					selectedParentPastUTXOSet, storedSelectedParentMultiset)
+			} else {
+				log.Warnf("[UTXO-DEBUG] could not fetch stored multiset for selected parent %s: %s", selectedParentHash, msErr)
+			}
+			csm.verifyMultisetSelfConsistency(stagingArea, "failing block", blockHash, pastUTXOSet, multiset)
+
+			// Entry-level check: pinpoint the exact outpoint(s), not just whether hashes agree.
+			// applyMergeSetBlocks (built pastUTXOSet/diff) and calculateMultiset (built multiset) are
+			// two separate implementations walking the same acceptanceData - this checks they agree
+			// on every single amount/script/isCoinbase/daaScore, not just that the aggregate matches.
+			csm.verifyAcceptanceDataAgainstDiff("failing block", blockHash, acceptanceData, pastUTXOSet, block.Header.DAAScore())
+
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
 			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)

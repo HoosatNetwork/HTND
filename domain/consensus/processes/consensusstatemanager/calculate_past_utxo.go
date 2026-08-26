@@ -97,8 +97,18 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		log.Warnf("[UTXO-DEBUG] %s: blockHeaderStore.BlockHeader failed (%s) - fell back to "+
+			"daaBlocksStore.DAAScore()=%d instead of header.DAAScore(). checkDAAScore only enforces a "+
+			"one-sided threshold, not equality, so this is not guaranteed to match what a node that "+
+			"successfully read the header would have used.", blockHash, err, daaScore)
 	} else {
 		daaScore = header.DAAScore()
+		if canonicalDAAScore, canonErr := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, blockHash); canonErr == nil && canonicalDAAScore != daaScore {
+			log.Warnf("[UTXO-DEBUG] %s: header.DAAScore()=%d differs from daaBlocksStore.DAAScore()=%d "+
+				"(the canonical, independently-computed value) - using the header value for the multiset per "+
+				"current logic, but this is the exact divergence checkDAAScore's threshold tolerates without "+
+				"rejecting the block.", blockHash, daaScore, canonicalDAAScore)
+		}
 	}
 	log.Debugf("Calculating PastUTXO and acceptance data with DAAScore %d", daaScore)
 
@@ -239,6 +249,17 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		isSelectedParent := i == 0
 		log.Tracef("Is merge set block %s the selected parent: %t", mergeSetBlockHash, isSelectedParent)
 
+		// [UTXO-DEBUG] Every transaction in this merge set block gets stamped with `daaScore`
+		// (blockHash's own DAA score, the block currently being resolved) regardless of
+		// mergeSetBlockHash's own DAA score - that's what's fed into SerializeUTXO/the multiset for
+		// every UTXO entry created here. Logging both so a mismatched multiset can be checked against
+		// what a reference node/explorer actually used for this same outpoint.
+		if ownHeader, ownHeaderErr := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, mergeSetBlockHash); ownHeaderErr == nil {
+			log.Warnf("[UTXO-DEBUG] Resolving %s: merge set block %s (isSelectedParent=%t) own DAA score=%d, "+
+				"but will be stamped with resolving block's DAA score=%d on every UTXO entry it produces here",
+				blockHash, mergeSetBlockHash, isSelectedParent, ownHeader.DAAScore(), daaScore)
+		}
+
 		for j, transaction := range mergeSetBlock.Transactions {
 			var isAccepted bool
 
@@ -246,6 +267,15 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 				isSelectedParent, accumulatedUTXODiff, accumulatedMass, selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, err
+			}
+
+			if isAccepted && j == 0 && isSelectedParent {
+				txID := consensushashing.TransactionID(transaction)
+				for outIdx, output := range transaction.Outputs {
+					log.Warnf("[UTXO-DEBUG] Finalizing coinbase of %s into multiset via child %s: "+
+						"outpoint %s:%d amount=%d script=%x daaScoreStamped=%d",
+						mergeSetBlockHash, blockHash, txID, outIdx, output.Value, output.ScriptPublicKey.Script, daaScore)
+				}
 			}
 
 			var transactionInputUTXOEntries []externalapi.UTXOEntry

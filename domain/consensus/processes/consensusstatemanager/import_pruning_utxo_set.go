@@ -39,19 +39,32 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 		return err
 	}
 
-	// Disable because HTN pruning points are messed up.
-	// newPruningPointHeader, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
-	// if err != nil {
-	// 	return err
-	// }
-	// log.Debugf("The UTXO commitment of the pruning point: %s",
-	// 	newPruningPointHeader.UTXOCommitment())
-
-	// if !newPruningPointHeader.UTXOCommitment().Equal(importedPruningPointMultiset.Hash()) {
-	// 	return errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet, "the expected multiset hash of the pruning "+
-	// 		"point UTXO set is %s but got %s\n. This is most likely because missing UTXO diff which are caused by disqualified blocks. Please find another node to sync from",
-	// 		newPruningPointHeader.UTXOCommitment(), *importedPruningPointMultiset.Hash())
-	// }
+	// [UTXO-DEBUG] This check was previously disabled ("HTN pruning points are messed up") with the
+	// hard-failure removed entirely, so a wrong imported pruning-point UTXO set/multiset - the trust
+	// anchor every block resolved for the rest of this sync gets built forward from via
+	// csm.multisetStore.Get(newPruningPoint) - was never caught here. It would only surface much
+	// later, as an unrelated-looking ErrBadUTXOCommitment on whatever's the first real block resolved
+	// after IBD. Restored as a non-fatal warning (not a hard return) so it can't block sync while we
+	// confirm whether this is actually where the corruption enters.
+	newPruningPointHeader, headerErr := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
+	if headerErr != nil {
+		log.Warnf("[UTXO-DEBUG] could not fetch pruning point header to validate imported UTXO set: %s", headerErr)
+	} else {
+		log.Debugf("The UTXO commitment of the pruning point: %s", newPruningPointHeader.UTXOCommitment())
+		if !newPruningPointHeader.UTXOCommitment().Equal(importedPruningPointMultiset.Hash()) {
+			log.Errorf("[UTXO-DEBUG] IMPORTED PRUNING POINT UTXO SET DOES NOT MATCH ITS OWN HEADER: "+
+				"pruning point %s header expects UTXO commitment %s, but the imported pruning point "+
+				"multiset hashes to %s. Every block resolved from here forward builds on this "+
+				"(wrong) baseline via multisetStore.Get(%s) - this is very likely the actual source "+
+				"of the ErrBadUTXOCommitment seen on the first block resolved after IBD, not a bug in "+
+				"that later block's own resolution at all.",
+				newPruningPoint, newPruningPointHeader.UTXOCommitment(), importedPruningPointMultiset.Hash(), newPruningPoint)
+		} else {
+			log.Warnf("[UTXO-DEBUG] Imported pruning point UTXO set MATCHES its own header's UTXO "+
+				"commitment (%s) - the trust anchor is correct; the corruption (if any) is introduced "+
+				"after this point, not at import.", newPruningPointHeader.UTXOCommitment())
+		}
+	}
 
 	log.Debugf("The new pruning point UTXO commitment validation passed")
 
