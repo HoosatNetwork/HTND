@@ -182,6 +182,25 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 		}
 		mud.toRemove.remove(outpoint)
 	} else if mud.toAdd.Contains(outpoint) {
+		if entry.IsCoinbase() {
+			if existing, ok := mud.toAdd.Get(outpoint); ok && existing.Amount() == entry.Amount() &&
+				existing.ScriptPublicKey().Equal(entry.ScriptPublicKey()) {
+				// Same reasoning as the toRemove-collision branch above: two blocks whose coinbase
+				// transactions are byte-identical (a genuine content-derived ID collision, or the
+				// same mining template reused across multiple valid nonces before being refreshed -
+				// see the isTolerableConflict-style handling above) can both attempt to add this
+				// exact outpoint within a single accumulated diff, e.g. when
+				// calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData replays
+				// every accepted transaction across an entire pruning-point-to-pruning-point chain
+				// segment. A same-valued duplicate is a legitimate no-op, not corruption - erroring
+				// here only forces a fallback to the diff-chain-walk reconstruction, which is the
+				// mechanism actually proven unreliable this session.
+				log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) already "+
+					"present in toAdd with the same value - treated as a legitimate duplicate, not "+
+					"re-added", outpoint, entry.Amount(), entry.BlockDAAScore())
+				return nil
+			}
+		}
 		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
 	} else {
 		mud.toAdd.add(outpoint, entry)

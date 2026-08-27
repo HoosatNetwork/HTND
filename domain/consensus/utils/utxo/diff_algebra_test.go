@@ -150,8 +150,13 @@ func TestUTXODiff(t *testing.T) {
 
 	// ---------- Duplicate handling ----------
 
-	// Adding the same outpoint a second time must fail
-	err := diff.addEntry(outpoint0, utxoEntry0)
+	// Adding a second, distinct (non-coinbase) outpoint that's already in toAdd must still fail.
+	// Coinbase outpoints have their own dedicated tolerance-vs-error behavior, covered by
+	// TestAddRemoveEntryDuplicates.
+	if err := diff.addEntry(outpoint2, utxoEntry2); err != nil {
+		t.Fatalf("error adding entry: %s", err)
+	}
+	err := diff.addEntry(outpoint2, utxoEntry2)
 	if err == nil {
 		t.Errorf("expected error when adding duplicate outpoint to toAdd, got nil")
 	} else if !strings.Contains(err.Error(), "Cannot add outpoint") {
@@ -1085,14 +1090,47 @@ func TestCoinbaseCollisionConflicts(t *testing.T) {
 func TestAddRemoveEntryDuplicates(t *testing.T) {
 	_, _, _, outpoint0, outpoint1, _, utxoEntry0, utxoEntry1, _, utxoEntry0AltDAA := testFixtures()
 
-	t.Run("double add same outpoint same DAA", func(t *testing.T) {
+	t.Run("double add same outpoint same DAA (non-coinbase)", func(t *testing.T) {
+		d := newMutableUTXODiff()
+		if err := d.addEntry(outpoint1, utxoEntry1); err != nil {
+			t.Fatalf("first add failed: %v", err)
+		}
+		err := d.addEntry(outpoint1, utxoEntry1)
+		if err == nil {
+			t.Fatal("expected error on second add of same outpoint")
+		}
+		if !strings.Contains(err.Error(), "Cannot add outpoint") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("double add same-valued coinbase outpoint is tolerated as a no-op", func(t *testing.T) {
+		// Two blocks can legitimately produce byte-identical coinbase transactions (a
+		// content-derived ID collision, or the same mining template reused across multiple valid
+		// nonces before being refreshed) - when that same entry gets added to the same accumulated
+		// diff twice (e.g. while replaying acceptance data across an entire pruning-point-to-
+		// pruning-point chain segment), it must not be treated as corruption.
 		d := newMutableUTXODiff()
 		if err := d.addEntry(outpoint0, utxoEntry0); err != nil {
 			t.Fatalf("first add failed: %v", err)
 		}
-		err := d.addEntry(outpoint0, utxoEntry0)
+		if err := d.addEntry(outpoint0, utxoEntry0); err != nil {
+			t.Fatalf("expected same-valued coinbase duplicate to be tolerated, got error: %v", err)
+		}
+		if len(d.toAdd) != 1 {
+			t.Errorf("expected exactly one toAdd entry after tolerated duplicate, got %d", len(d.toAdd))
+		}
+	})
+
+	t.Run("double add different-valued coinbase outpoint still errors", func(t *testing.T) {
+		d := newMutableUTXODiff()
+		if err := d.addEntry(outpoint0, utxoEntry0); err != nil {
+			t.Fatalf("first add failed: %v", err)
+		}
+		differentValue := NewUTXOEntry(utxoEntry0.Amount()+1, utxoEntry0.ScriptPublicKey(), true, utxoEntry0.BlockDAAScore())
+		err := d.addEntry(outpoint0, differentValue)
 		if err == nil {
-			t.Fatal("expected error on second add of same outpoint")
+			t.Fatal("expected error on second add of same outpoint with a genuinely different value")
 		}
 		if !strings.Contains(err.Error(), "Cannot add outpoint") {
 			t.Errorf("unexpected error: %v", err)
