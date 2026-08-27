@@ -337,10 +337,21 @@ func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, 
 
 			for _, input := range transaction.Inputs {
 				if !diff.ToRemove().Contains(&input.PreviousOutpoint) {
-					mismatches++
-					log.Warnf("[UTXO-DEBUG] %s (%s): accepted tx %s input %s:%d is MISSING from diff.ToRemove() - "+
-						"the multiset would remove it but diff doesn't have it removed",
-						label, blockHash, transactionID, input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index)
+					if diff.ToAdd().Contains(&input.PreviousOutpoint) {
+						mismatches++
+						log.Warnf("[UTXO-DEBUG] %s (%s): accepted tx %s input %s:%d is MISSING from "+
+							"diff.ToRemove() AND still present in diff.ToAdd() - the multiset would remove it "+
+							"but diff never actually removed it", label, blockHash, transactionID,
+							input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index)
+						continue
+					}
+					// Absent from BOTH toAdd and toRemove is the expected signature of a legitimate
+					// net-zero cancellation: this outpoint was created and spent within the same
+					// accumulated diff (populateTransactionWithUTXOEntriesFromVirtualOrDiff populates
+					// an input's value directly from diff.ToAdd() when present there, so the value
+					// removeEntry compares against is guaranteed identical to what's already in
+					// toAdd - see addEntry/removeEntry's own toAdd/toRemove-collision handling in
+					// mutable_utxo_diff.go). Not a bug - don't flag it.
 				}
 			}
 		}
