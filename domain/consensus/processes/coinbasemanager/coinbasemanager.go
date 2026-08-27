@@ -37,13 +37,20 @@ type coinbaseManager struct {
 	blockHeaderStore    model.BlockHeaderStore
 }
 
-// ExpectedCoinbaseTransactionWithAcceptanceData implements model.CoinbaseManager.
+// ExpectedCoinbaseTransactionWithAcceptanceData implements model.CoinbaseManager. blockHash always
+// names an already-mined block being validated here (never a block still under construction), so
+// it always has its own stored header - candidateTimestamp is passed as 0 since blockTimestamp
+// will never fall back to it for this caller.
 func (c *coinbaseManager) ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, coinbaseData *externalapi.DomainCoinbaseData, acceptanceData externalapi.AcceptanceData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
-	return c.ExpectedCoinbaseTransactionInternal(stagingArea, blockHash, coinbaseData, acceptanceData)
+	return c.ExpectedCoinbaseTransactionInternal(stagingArea, blockHash, coinbaseData, acceptanceData, 0)
 }
 
+// ExpectedCoinbaseTransaction implements model.CoinbaseManager. candidateTimestamp must be the
+// timestamp the caller is about to commit to blockHash's own header - required only when blockHash
+// has no stored header yet (i.e. blockHash names the block currently being built - see
+// blockTimestamp), which is always true for this entry point's real callers (blockBuilder).
 func (c *coinbaseManager) ExpectedCoinbaseTransaction(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	coinbaseData *externalapi.DomainCoinbaseData,
+	coinbaseData *externalapi.DomainCoinbaseData, candidateTimestamp int64,
 ) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
 	acceptanceData, err := c.acceptanceDataStore.Get(c.databaseContext, stagingArea, blockHash)
 	if database.IsNotFoundError(err) {
@@ -53,10 +60,10 @@ func (c *coinbaseManager) ExpectedCoinbaseTransaction(stagingArea *model.Staging
 	if err != nil {
 		return nil, false, err
 	}
-	return c.ExpectedCoinbaseTransactionInternal(stagingArea, blockHash, coinbaseData, acceptanceData)
+	return c.ExpectedCoinbaseTransactionInternal(stagingArea, blockHash, coinbaseData, acceptanceData, candidateTimestamp)
 }
 
-func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, coinbaseData *externalapi.DomainCoinbaseData, acceptanceData externalapi.AcceptanceData) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
+func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, coinbaseData *externalapi.DomainCoinbaseData, acceptanceData externalapi.AcceptanceData, candidateTimestamp int64) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
 	ghostdagData, err := c.ghostdagDataStore.Get(c.databaseContext, stagingArea, blockHash, false)
 	// If there's ghostdag data with trusted data we prefer it because we need the original merge set non-pruned merge set.
 	if database.IsNotFoundError(err) {
@@ -94,9 +101,24 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		return nil, false, err
 	}
 
+	// blockHash's own version, not the ambient constants.GetBlockVersion(): this function is used to
+	// reconstruct/verify a historical block's expected coinbase, potentially long after the node's
+	// ambient version has advanced past blockHash's own version (e.g. during a later IBD pass such as
+	// ResolveVirtual re-walking history already processed once before). Using the ambient version
+	// here doesn't just affect subsidy/entropy - it picks the wrong output-structure model entirely
+	// (v1's single bucketed output per blue block vs v2's per-block output with a separate dev-fee
+	// output), producing a coinbase with a different output count and no dev fee at all when the
+	// block was actually mined under the other model. That's a structural mismatch, not just a value
+	// mismatch, and was the confirmed root cause of every UTXO commitment disagreement traced back to
+	// this function this session - see ExpectedCoinbaseTransactionInternal's git history.
+	ownBlockVersion, err := c.blockVersion(stagingArea, blockHash)
+	if err != nil {
+		return nil, false, err
+	}
+
 	txOuts := make([]*externalapi.DomainTransactionOutput, 0, len(ghostdagData.MergeSetBlues()))
 	acceptanceDataMap := acceptanceDataFromArrayToMap(filteredAcceptanceData)
-	if constants.GetBlockVersion() == 1 {
+	if ownBlockVersion == 1 {
 		for _, blue := range ghostdagData.MergeSetBlues() {
 			txOut, hasReward, err := c.coinbaseOutputForBlueBlockV1(stagingArea, blue, acceptanceDataMap[*blue], daaAddedBlocksSet)
 			if err != nil {
@@ -117,7 +139,7 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		if hasRedReward {
 			txOuts = append(txOuts, txOut)
 		}
-	} else if constants.GetBlockVersion() >= 2 {
+	} else if ownBlockVersion >= 2 {
 		log.Tracef("Processing %d blue blocks in merge set", len(ghostdagData.MergeSetBlues()))
 		// For v2, process both blue and red blocks individually to avoid bucketing
 		// Process all merge set blocks in sorted order for determinism
@@ -222,19 +244,6 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		hasRedReward = len(ghostdagData.MergeSetReds()) > 0
 	}
 
-	// blockHash's own version, not the ambient constants.GetBlockVersion(): this function is used to
-	// reconstruct/verify a historical block's expected coinbase, potentially long after the node's
-	// ambient version has advanced past blockHash's own version (e.g. during a later IBD pass such as
-	// ResolveVirtual re-walking history already processed once before). Using the ambient version here
-	// would compute a different subsidy and/or wrongly fold in per-block entropy for a pre-fork block,
-	// producing a different coinbase transaction (and therefore a different transaction ID) than what
-	// was actually mined - exactly the kind of coinbase ID mismatch coinbaseEntropyActivationVersion
-	// was meant to prevent, just reintroduced by reading the wrong version.
-	ownBlockVersion, err := c.blockVersion(stagingArea, blockHash)
-	if err != nil {
-		return nil, false, err
-	}
-
 	subsidy, err := c.CalcBlockSubsidy(stagingArea, blockHash, ownBlockVersion)
 	if err != nil {
 		return nil, false, err
@@ -246,7 +255,15 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		if err != nil {
 			return nil, false, err
 		}
-		entropy = coinbaseEntropy(ghostdagData, daaScore)
+		timestamp, err := c.blockTimestamp(stagingArea, blockHash, candidateTimestamp)
+		if err != nil {
+			return nil, false, err
+		}
+		entropy = coinbaseEntropy(ghostdagData, daaScore, ownBlockVersion, timestamp)
+		log.Tracef("coinbaseEntropy computed for block %s: ownBlockVersion=%d "+
+			"(timestampEntropyActive=%t) daaScore=%d candidateTimestamp=%d resolvedTimestamp=%d "+
+			"entropy=%x", blockHash, ownBlockVersion, ownBlockVersion >= CoinbaseTimestampEntropyActivationVersion,
+			daaScore, candidateTimestamp, timestamp, entropy)
 	}
 
 	payload, err := c.serializeCoinbasePayload(ghostdagData.BlueScore(), coinbaseData, subsidy, entropy, ownBlockVersion)
@@ -291,6 +308,23 @@ func (c *coinbaseManager) blockVersion(stagingArea *model.StagingArea, blockHash
 		return 0, err
 	}
 	return header.Version(), nil
+}
+
+// blockTimestamp returns blockHash's own header timestamp (milliseconds), for folding into
+// coinbase entropy from CoinbaseTimestampEntropyActivationVersion onward. Mirrors blockVersion's
+// handling of a not-yet-built block: blockHash may have no stored header yet (model.VirtualBlockHash
+// during block building, or a test harness's temporary placeholder), in which case blockHash
+// necessarily *is* the block currently being built, and candidateTimestamp - the timestamp the
+// builder is about to commit to that block's own header - is the correct answer instead.
+func (c *coinbaseManager) blockTimestamp(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, candidateTimestamp int64) (int64, error) {
+	header, err := c.blockHeaderStore.BlockHeader(c.databaseContext, stagingArea, blockHash)
+	if database.IsNotFoundError(err) {
+		return candidateTimestamp, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return header.TimeInMilliseconds(), nil
 }
 
 func (c *coinbaseManager) daaAddedBlocksSet(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (

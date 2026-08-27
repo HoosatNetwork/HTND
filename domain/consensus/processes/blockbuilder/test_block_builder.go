@@ -242,7 +242,15 @@ func (bb *testBlockBuilder) buildBlockWithParents(stagingArea *model.StagingArea
 
 	bb.acceptanceDataStore.Stage(stagingArea, tempHash, acceptanceData)
 
-	coinbase, _, err := bb.coinbaseManager.ExpectedCoinbaseTransaction(stagingArea, tempHash, coinbaseData)
+	// tempHash has no stored header yet, so ExpectedCoinbaseTransaction needs the candidate timestamp
+	// buildUTXOInvalidHeader (called below via buildHeaderWithParents) will independently compute for
+	// this same tempHash - minBlockTime is pure given the same stagingArea/hash, so both calls land
+	// on the identical value without needing to be threaded together explicitly.
+	candidateTimestamp, err := bb.minBlockTime(stagingArea, tempHash)
+	if err != nil {
+		return nil, nil, err
+	}
+	coinbase, _, err := bb.coinbaseManager.ExpectedCoinbaseTransaction(stagingArea, tempHash, coinbaseData, candidateTimestamp)
 	if err != nil {
 		return nil, nil, err
 	}

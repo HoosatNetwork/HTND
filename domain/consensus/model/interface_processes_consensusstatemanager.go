@@ -20,4 +20,8 @@ type ConsensusStateManager interface {
 	ResolveBlockStatus(stagingArea *StagingArea, blockHash *externalapi.DomainHash, useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, *UTXODiffReversalData, error)
 	// ResolveBlockStatusCacheLen returns the number of entries in the ResolveBlockStatus cache
 	ResolveBlockStatusCacheLen() int
+	// ReproduceDisqualification re-resolves blockHash (already StatusDisqualifiedFromChain from a
+	// previous run) against its selectedParentHash (StatusUTXOValid) directly, bypassing the normal
+	// cascade path so the original verifyUTXO failure - and its diagnostics - fire again.
+	ReproduceDisqualification(blockHash, selectedParentHash *externalapi.DomainHash) error
 }

@@ -313,12 +313,14 @@ var MainnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -333,9 +335,15 @@ var MainnetParams = Params{
 		2640,
 		2640,
 		2640,
+		2640,
 	},
 	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
 	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
+	// The 8th entry (block version 9) is the CoinbaseTimestampEntropyActivationVersion hard fork -
+	// see domain/consensus/processes/coinbasemanager/payload.go. ^uint64(0) is a placeholder that
+	// never triggers: this needs a real, coordinated activation DAA score chosen deliberately
+	// (with enough lead time for every mainnet node operator to upgrade) before it goes live -
+	// do not set this without that coordination.
 	POWScores: []uint64{
 		17500000,
 		21821800,
@@ -344,6 +352,7 @@ var MainnetParams = Params{
 		192792190,
 		213340776,
 		217137983,
+		218735007,
 	},
 
 	PruningMultiplier: []uint64{
@@ -355,12 +364,14 @@ var MainnetParams = Params{
 		1,
 		1,
 		1,
+		1,
 	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000,
@@ -402,6 +413,7 @@ var MainnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -424,6 +436,7 @@ var MainnetParams = Params{
 		3600,
 		3600,
 		3600,
+		3600,
 	},
 }
 
@@ -434,6 +447,7 @@ var TestnetParams = Params{
 		defaultGHOSTDAGK,
 		defaultGHOSTDAGK,
 		defaultGHOSTDAGK,
+		40,
 		40,
 		40,
 		40,
@@ -471,12 +485,14 @@ var TestnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -491,11 +507,16 @@ var TestnetParams = Params{
 		2641,
 		2641,
 		2641,
+		2641,
 	},
 	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
 	// TODO: set the real activation DAA score for block version 8 (coinbase
 	// entropy hard fork) as the 7th entry. ^uint64(0) is a placeholder that
 	// never triggers, so version 8 stays inactive until this is set.
+	// The 8th entry (block version 9) is the CoinbaseTimestampEntropyActivationVersion hard fork -
+	// see domain/consensus/processes/coinbasemanager/payload.go. Testnet can use a real,
+	// soon-reachable value freely (low stakes); this just needs to stay comfortably above the
+	// 7th entry so the two hard forks exercise as distinct transitions during testing.
 	POWScores: []uint64{
 		1,
 		50,
@@ -504,6 +525,7 @@ var TestnetParams = Params{
 		200,
 		250,
 		300,
+		350,
 	},
 	PruningMultiplier: []uint64{
 		0,
@@ -514,12 +536,14 @@ var TestnetParams = Params{
 		1,
 		1,
 		1,
+		1,
 	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000,
@@ -561,6 +585,7 @@ var TestnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -578,6 +603,7 @@ var TestnetParams = Params{
 		defaultMergeDepth,
 		defaultMergeDepth,
 		defaultMergeDepth,
+		3600,
 		3600,
 		3600,
 		3600,

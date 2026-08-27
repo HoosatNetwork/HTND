@@ -97,18 +97,8 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		log.Warnf("[UTXO-DEBUG] %s: blockHeaderStore.BlockHeader failed (%s) - fell back to "+
-			"daaBlocksStore.DAAScore()=%d instead of header.DAAScore(). checkDAAScore only enforces a "+
-			"one-sided threshold, not equality, so this is not guaranteed to match what a node that "+
-			"successfully read the header would have used.", blockHash, err, daaScore)
 	} else {
 		daaScore = header.DAAScore()
-		if canonicalDAAScore, canonErr := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, blockHash); canonErr == nil && canonicalDAAScore != daaScore {
-			log.Warnf("[UTXO-DEBUG] %s: header.DAAScore()=%d differs from daaBlocksStore.DAAScore()=%d "+
-				"(the canonical, independently-computed value) - using the header value for the multiset per "+
-				"current logic, but this is the exact divergence checkDAAScore's threshold tolerates without "+
-				"rejecting the block.", blockHash, daaScore, canonicalDAAScore)
-		}
 	}
 	log.Debugf("Calculating PastUTXO and acceptance data with DAAScore %d", daaScore)
 
@@ -224,6 +214,19 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	}
 	mergeSetHashes = filtered
 
+	seenMergeSetHashes := make(map[externalapi.DomainHash]int, len(mergeSetHashes))
+	for _, h := range mergeSetHashes {
+		seenMergeSetHashes[*h]++
+	}
+	for h, count := range seenMergeSetHashes {
+		if count > 1 {
+			hCopy := h
+			log.Warnf("[UTXO-DEBUG] applyMergeSetBlocks: block %s's own merge set contains %s %d times - "+
+				"its coinbase (or any of its transactions) would be processed multiple times in this call",
+				blockHash, &hCopy, count)
+		}
+	}
+
 	log.Debugf("Merge set for block %s is %v", blockHash, mergeSetHashes)
 	mergeSetBlocks, err := csm.blockStore.Blocks(csm.databaseContext, stagingArea, mergeSetHashes)
 	if err != nil {
@@ -249,17 +252,6 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		isSelectedParent := i == 0
 		log.Tracef("Is merge set block %s the selected parent: %t", mergeSetBlockHash, isSelectedParent)
 
-		// [UTXO-DEBUG] Every transaction in this merge set block gets stamped with `daaScore`
-		// (blockHash's own DAA score, the block currently being resolved) regardless of
-		// mergeSetBlockHash's own DAA score - that's what's fed into SerializeUTXO/the multiset for
-		// every UTXO entry created here. Logging both so a mismatched multiset can be checked against
-		// what a reference node/explorer actually used for this same outpoint.
-		if ownHeader, ownHeaderErr := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, mergeSetBlockHash); ownHeaderErr == nil {
-			log.Warnf("[UTXO-DEBUG] Resolving %s: merge set block %s (isSelectedParent=%t) own DAA score=%d, "+
-				"but will be stamped with resolving block's DAA score=%d on every UTXO entry it produces here",
-				blockHash, mergeSetBlockHash, isSelectedParent, ownHeader.DAAScore(), daaScore)
-		}
-
 		for j, transaction := range mergeSetBlock.Transactions {
 			var isAccepted bool
 
@@ -267,15 +259,6 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 				isSelectedParent, accumulatedUTXODiff, accumulatedMass, selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, err
-			}
-
-			if isAccepted && j == 0 && isSelectedParent {
-				txID := consensushashing.TransactionID(transaction)
-				for outIdx, output := range transaction.Outputs {
-					log.Warnf("[UTXO-DEBUG] Finalizing coinbase of %s into multiset via child %s: "+
-						"outpoint %s:%d amount=%d script=%x daaScoreStamped=%d",
-						mergeSetBlockHash, blockHash, txID, outIdx, output.Value, output.ScriptPublicKey.Script, daaScore)
-				}
 			}
 
 			var transactionInputUTXOEntries []externalapi.UTXOEntry
@@ -328,7 +311,8 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	}
 
 	// Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain.
-	if transactionhelper.IsCoinBase(transaction) {
+	isCoinbase := transactionhelper.IsCoinBase(transaction)
+	if isCoinbase {
 		if !isSelectedParent {
 			log.Tracef("Transaction %s is the coinbase of block %s "+
 				"but said block is not in the selected parent chain. "+
@@ -352,11 +336,51 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		log.Tracef("Validation passed for transaction %s in block %s", transactionID, blockHash)
 	}
 
+	var coinbasePreExistingInToRemove []int
+	if isCoinbase && transactionIDPtr != nil {
+		for i := range transaction.Outputs {
+			outpoint := externalapi.NewDomainOutpoint(transactionIDPtr, uint32(i))
+			if accumulatedUTXODiff.ToRemove().Contains(outpoint) {
+				coinbasePreExistingInToRemove = append(coinbasePreExistingInToRemove, i)
+			}
+		}
+	}
+
 	log.Tracef("Adding transaction %s in block %s to the accumulated diff", transactionID, blockHash)
 	err = accumulatedUTXODiff.AddTransaction(transaction, blockDAAScore)
 	if err != nil {
-		log.Tracef("Failed to add transaction %s, because: ", err.Error())
+		log.Warnf("[UTXO-DEBUG] Failed to add transaction %s in block %s to accumulated diff: %s",
+			transactionID, blockHash, err)
 		return false, 0, nil
+	}
+
+	if isCoinbase && transactionIDPtr != nil {
+		for i := range transaction.Outputs {
+			outpoint := externalapi.NewDomainOutpoint(transactionIDPtr, uint32(i))
+			if _, ok := accumulatedUTXODiff.ToAdd().Get(outpoint); !ok {
+				wasPreExisting := slices.Contains(coinbasePreExistingInToRemove, i)
+				if wasPreExisting {
+					// Explained: addEntry's toRemove collision path (mutable_utxo_diff.go) already
+					// accounts for this - either a benign same-valued cancel (this coinbase is
+					// byte-identical to one already accounted for, e.g. the same mining template
+					// producing multiple valid nonces before being refreshed) or a genuine mismatch,
+					// which addEntry itself already logs. Nothing new to report here.
+					log.Debugf("[UTXO-DEBUG] coinbase tx %s output %d in block %s: MISSING from "+
+						"accumulatedUTXODiff.ToAdd(), but was already in ToRemove before the call "+
+						"(explained by addEntry's own logging), daaScore=%d",
+						transactionID, i, blockHash, blockDAAScore)
+				} else {
+					// Not explained by the toRemove-collision mechanism at all - this output is
+					// missing from ToAdd() despite AddTransaction succeeding and no pre-existing
+					// toRemove entry for it. Worth investigating if this ever fires.
+					log.Warnf("[UTXO-DEBUG] coinbase tx %s output %d in block %s: MISSING from "+
+						"accumulatedUTXODiff.ToAdd() after AddTransaction returned no error, and it was "+
+						"NOT already present in ToRemove before the call - not explained by the known "+
+						"toRemove-collision mechanism, daaScore=%d",
+						transactionID, i, blockHash, blockDAAScore)
+				}
+			}
+		}
 	}
 
 	return true, accumulatedMassAfter, nil

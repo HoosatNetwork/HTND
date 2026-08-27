@@ -76,6 +76,11 @@ type Config struct {
 	IsArchival bool
 	// EnableSanityCheckPruningUTXOSet checks the full pruning point utxo set against the commitment at every pruning movement
 	EnableSanityCheckPruningUTXOSet bool
+	// EnableUTXODebugDiagnostics runs the expensive [UTXO-DEBUG] startup self-consistency checks
+	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) - each pass can take
+	// 15-20+ minutes on a mature chain. Off by default; only for actively investigating a UTXO
+	// commitment mismatch.
+	EnableUTXODebugDiagnostics bool
 
 	SkipAddingGenesis bool
 
@@ -627,6 +632,23 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	err = pruningManager.UpdatePruningPointIfRequired()
 	if err != nil {
 		return nil, false, err
+	}
+
+	// [UTXO-DEBUG] Gated behind --enable-utxo-debug-diagnostics: each of these can take 15-20+
+	// minutes on a mature chain (multiple full UTXO-set scans), and produce the same result on every
+	// boot until the underlying data actually changes - not something to run unconditionally on
+	// every startup. Only for actively investigating a UTXO commitment mismatch.
+	if config.EnableUTXODebugDiagnostics {
+		// Checks this node's CURRENT pruningPointUTXOSetBucket - what it serves to any syncing peer
+		// right now - against its own pruning point's header commitment. See
+		// VerifyCurrentPruningPointUTXOSet's comment.
+		pruningManager.VerifyCurrentPruningPointUTXOSet()
+
+		// Finds whatever block is the actual root of any already-persisted disqualification cascade
+		// and re-resolves it directly, so its original verifyUTXO failure (and diagnostics) fire
+		// again even though normal resolution - including a completely fresh IBD run - would just
+		// cascade past it silently from here on. See FindAndReproduceRootDisqualification's comment.
+		pruningManager.FindAndReproduceRootDisqualification(model.NewStagingArea())
 	}
 
 	return c, false, nil

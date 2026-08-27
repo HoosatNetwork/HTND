@@ -253,6 +253,33 @@ func (csm *consensusStateManager) getUnverifiedChainBlocks(stagingArea *model.St
 	}
 }
 
+// ReproduceDisqualification re-resolves blockHash directly against selectedParentHash, bypassing
+// ResolveBlockStatus's normal cascade path entirely. That path only calls resolveSingleBlockStatus
+// (and its [UTXO-DEBUG] diagnostics) for a block whose selected parent status isn't already
+// StatusDisqualifiedFromChain - once a root disqualification has happened and been persisted, every
+// later call for anything built on top of it goes through the cascade branch instead, which never
+// re-runs verifyUTXO or fires those diagnostics. This lets a known-already-disqualified root be
+// re-verified on demand, on a fresh process, to get that original failure's diagnostics without
+// waiting for a brand new one to occur naturally.
+func (csm *consensusStateManager) ReproduceDisqualification(blockHash, selectedParentHash *externalapi.DomainHash) error {
+	stagingArea := model.NewStagingArea()
+	log.Warnf("[UTXO-DEBUG] ReproduceDisqualification: re-resolving %s against selected parent %s to "+
+		"reproduce the original verifyUTXO failure", blockHash, selectedParentHash)
+
+	selectedParentPastUTXOSet, err := csm.restorePastUTXO(stagingArea, selectedParentHash)
+	if err != nil {
+		return errors.Wrapf(err, "ReproduceDisqualification: failed to restore past UTXO for selected parent %s",
+			selectedParentHash)
+	}
+
+	status, _, err := csm.resolveSingleBlockStatus(stagingArea, blockHash, selectedParentHash, selectedParentPastUTXOSet, false)
+	if err != nil {
+		return errors.Wrapf(err, "ReproduceDisqualification: resolveSingleBlockStatus failed for %s", blockHash)
+	}
+	log.Warnf("[UTXO-DEBUG] ReproduceDisqualification: %s re-resolved to status %s", blockHash, status)
+	return nil
+}
+
 func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.StagingArea,
 	blockHash, selectedParentHash *externalapi.DomainHash, selectedParentPastUTXOSet externalapi.UTXODiff, isResolveTip bool) (
 	externalapi.BlockStatus, externalapi.UTXODiff, error,
@@ -307,19 +334,35 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			// freshly-computed multiset disagree with the actual set its own diff produces (drift
 			// introduced right here, in this resolution's Add/Remove accounting)? See
 			// verifyMultisetSelfConsistency's comment for what a PASS/FAIL on each actually proves.
-			if storedSelectedParentMultiset, msErr := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParentHash); msErr == nil {
-				csm.verifyMultisetSelfConsistency(stagingArea, "selected parent", selectedParentHash,
-					selectedParentPastUTXOSet, storedSelectedParentMultiset)
-			} else {
-				log.Warnf("[UTXO-DEBUG] could not fetch stored multiset for selected parent %s: %s", selectedParentHash, msErr)
-			}
-			csm.verifyMultisetSelfConsistency(stagingArea, "failing block", blockHash, pastUTXOSet, multiset)
+			//
+			// Rate-limited: this branch fires on ANY RuleError from resolving a new block, not just
+			// commitment mismatches, and each check here is a full UTXO-set scan (multi-minute on a
+			// mature chain). If the underlying drift causes routine failures on live blocks, running
+			// this unconditionally would pile a multi-minute scan onto every single one of them.
+			if csm.expensiveDiagnosticRunsRemaining > 0 {
+				csm.expensiveDiagnosticRunsRemaining--
+				if storedSelectedParentMultiset, msErr := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParentHash); msErr == nil {
+					csm.verifyMultisetSelfConsistency(stagingArea, "selected parent", selectedParentHash,
+						selectedParentPastUTXOSet, storedSelectedParentMultiset)
+				} else {
+					log.Warnf("[UTXO-DEBUG] could not fetch stored multiset for selected parent %s: %s", selectedParentHash, msErr)
+				}
+				csm.verifyMultisetSelfConsistency(stagingArea, "failing block", blockHash, pastUTXOSet, multiset)
 
-			// Entry-level check: pinpoint the exact outpoint(s), not just whether hashes agree.
-			// applyMergeSetBlocks (built pastUTXOSet/diff) and calculateMultiset (built multiset) are
-			// two separate implementations walking the same acceptanceData - this checks they agree
-			// on every single amount/script/isCoinbase/daaScore, not just that the aggregate matches.
-			csm.verifyAcceptanceDataAgainstDiff("failing block", blockHash, acceptanceData, pastUTXOSet, block.Header.DAAScore())
+				// Entry-level check: pinpoint the exact outpoint(s), not just whether hashes agree.
+				// applyMergeSetBlocks (built pastUTXOSet/diff) and calculateMultiset (built multiset) are
+				// two separate implementations walking the same acceptanceData - this checks they agree
+				// on every single amount/script/isCoinbase/daaScore, not just that the aggregate matches.
+				csm.verifyAcceptanceDataAgainstDiff("failing block", blockHash, acceptanceData, pastUTXOSet, block.Header.DAAScore())
+
+				if csm.expensiveDiagnosticRunsRemaining == 0 {
+					log.Warnf("[UTXO-DEBUG] expensive self-consistency diagnostics have run their cap (3) times " +
+						"this process - skipping on further disqualified blocks to avoid piling multi-minute " +
+						"scans onto routine failures.")
+				}
+			} else {
+				log.Debugf("[UTXO-DEBUG] skipping expensive self-consistency diagnostics for %s (cap reached)", blockHash)
+			}
 
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)

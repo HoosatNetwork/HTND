@@ -155,6 +155,31 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 
 func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
 	if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
+		if entry.IsCoinbase() {
+			existing, _ := mud.toRemove.Get(outpoint)
+			valueDiffers := existing == nil || existing.Amount() != entry.Amount() ||
+				!existing.ScriptPublicKey().Equal(entry.ScriptPublicKey())
+			if valueDiffers {
+				// A coinbase output can't legitimately be removed-then-recreated within a single
+				// AddTransaction call (it has no inputs of its own to trigger that), and a genuine
+				// coinbase-ID collision (see isTolerableConflict below) always carries the same
+				// spendable value on both sides. A DIFFERENT value landing on the same
+				// (outpoint, DAA score) pair here isn't explained by either of those - dropping this
+				// coinbase's real, freshly minted reward from the diff with no error would be wrong
+				// regardless of the exact cause. Drop the stale toRemove entry and still record this
+				// output as newly added.
+				log.Warnf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) collided with "+
+					"a DIFFERENT-valued pre-existing toRemove entry (amount=%d) - adding to toAdd instead of "+
+					"silently cancelling out", outpoint, entry.Amount(), entry.BlockDAAScore(), existing.Amount())
+				mud.toRemove.remove(outpoint)
+				mud.toAdd.add(outpoint, entry)
+				return nil
+			}
+			log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d isCoinbase=%t) cancels "+
+				"out against a same-valued pre-existing toRemove entry (amount=%d isCoinbase=%t) - treated as "+
+				"legitimate no-op", outpoint, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase(),
+				existing.Amount(), existing.IsCoinbase())
+		}
 		mud.toRemove.remove(outpoint)
 	} else if mud.toAdd.Contains(outpoint) {
 		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
@@ -166,6 +191,16 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 
 func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
 	if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
+		if entry.IsCoinbase() {
+			if existing, ok := mud.toAdd.Get(outpoint); ok && (existing.Amount() != entry.Amount() ||
+				!existing.ScriptPublicKey().Equal(entry.ScriptPublicKey())) {
+				log.Warnf("[UTXO-DEBUG] removeEntry: coinbase outpoint %s being spent (amount=%d daaScore=%d) "+
+					"matches a DIFFERENT-valued entry already in toAdd (amount=%d) - removing that toAdd entry "+
+					"instead of the one actually being spent. Likely the same content-derived coinbase ID "+
+					"collision as addEntry, hitting the removal path instead.",
+					outpoint, entry.Amount(), entry.BlockDAAScore(), existing.Amount())
+			}
+		}
 		mud.toAdd.remove(outpoint)
 	} else if mud.toRemove.Contains(outpoint) {
 		return errors.Errorf("removeEntry: Cannot remove outpoint %s twice", outpoint)

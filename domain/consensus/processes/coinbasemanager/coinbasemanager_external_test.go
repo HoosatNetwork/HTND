@@ -8,6 +8,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/util/mstime"
 )
 
 func TestExtractCoinbaseDataBlueScoreAndSubsidy(t *testing.T) {
@@ -40,7 +41,7 @@ func TestExtractCoinbaseDataBlueScoreAndSubsidy(t *testing.T) {
 					Version: test.scriptPublicKeyVersion,
 				},
 				ExtraData: nil,
-			})
+			}, mstime.Now().UnixMilliseconds())
 			if err != nil {
 				t.Fatal(err)
 			}

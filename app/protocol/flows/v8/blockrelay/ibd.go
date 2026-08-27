@@ -303,6 +303,9 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	chainNegotiationRestartCounter := 0
 	chainNegotiationZoomCounts := 0
 	maxZoomSteps := len(locatorHashes) * 64
+	// [IBD-DEBUG] Tracks the previous zoom step's bounds so non-convergence (bounds not actually
+	// narrowing between iterations) can be detected and logged - see the zoom-in loop below.
+	var lastZoomLow, lastZoomHigh *externalapi.DomainHash
 	pruningPoint, err := flow.Domain().Consensus().PruningPoint()
 	if err != nil {
 		return nil, nil, err
@@ -379,6 +382,21 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 			chainNegotiationZoomCounts++
 			log.Debugf("IBD chain negotiation with peer %s zoomed in (%d) and received %d hashes (%s, %s)", flow.peer,
 				chainNegotiationZoomCounts, len(locatorHashes), locatorHashes[0], locatorHashes[len(locatorHashes)-1])
+
+			// [IBD-DEBUG] A properly-narrowing exponential search should converge in a few dozen
+			// steps even for a chain of hundreds of millions of blocks (log2), not the 1000+ seen
+			// before banning peers - which means the (low, high) bounds sent to the peer likely
+			// aren't actually narrowing between iterations. Surface the bounds (and whether they
+			// changed since last iteration) at a visible level, rate-limited, so a non-converging
+			// run can actually be diagnosed instead of just banning the peer and moving on.
+			if chainNegotiationZoomCounts <= 20 || chainNegotiationZoomCounts%50 == 0 {
+				boundsUnchanged := lastZoomLow != nil && lastZoomHigh != nil &&
+					lastZoomLow.Equal(lowestUnknownSyncerChainHash) && lastZoomHigh.Equal(currentHighestKnownSyncerChainHash)
+				log.Warnf("[IBD-DEBUG] zoom step %d/%d with peer %s: bounds (low=%s, high=%s), %d hashes returned, "+
+					"unchanged-since-last-step=%t", chainNegotiationZoomCounts, maxZoomSteps, flow.peer,
+					lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash, len(locatorHashes), boundsUnchanged)
+			}
+			lastZoomLow, lastZoomHigh = lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash
 
 			if len(locatorHashes) == 2 {
 				// We found our search target

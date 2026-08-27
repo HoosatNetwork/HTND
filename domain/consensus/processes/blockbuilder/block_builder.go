@@ -115,13 +115,25 @@ func (bb *blockBuilder) buildBlock(stagingArea *model.StagingArea, coinbaseData 
 		return nil, false, err
 	}
 	constants.SetBlockVersion(bb.blockVersionForDAAScore(newBlockDAAScore))
-	coinbase, coinbaseHasRedReward, err := bb.newBlockCoinbaseTransaction(stagingArea, coinbaseData)
+
+	// The timestamp must be picked before the coinbase is built (rather than inside buildHeader, as
+	// before) so it can be folded into coinbase entropy from CoinbaseTimestampEntropyActivationVersion
+	// onward (see coinbasemanager.coinbaseEntropy), and the exact same value must then be reused
+	// verbatim for the header itself rather than recomputed - recomputing would risk a different
+	// wall-clock value and desync the coinbase's entropy from what a validator recomputes from the
+	// stored header.
+	newBlockTimeInMilliseconds, err := bb.newBlockTime(stagingArea)
+	if err != nil {
+		return nil, false, err
+	}
+
+	coinbase, coinbaseHasRedReward, err := bb.newBlockCoinbaseTransaction(stagingArea, coinbaseData, newBlockTimeInMilliseconds)
 	if err != nil {
 		return nil, false, err
 	}
 	transactionsWithCoinbase := append([]*externalapi.DomainTransaction{coinbase}, transactions...)
 
-	header, err := bb.buildHeader(stagingArea, transactionsWithCoinbase, newBlockPruningPoint)
+	header, err := bb.buildHeader(stagingArea, transactionsWithCoinbase, newBlockPruningPoint, newBlockTimeInMilliseconds)
 	if err != nil {
 		return nil, false, err
 	}
@@ -198,13 +210,13 @@ func (bb *blockBuilder) validateTransaction(
 }
 
 func (bb *blockBuilder) newBlockCoinbaseTransaction(stagingArea *model.StagingArea,
-	coinbaseData *externalapi.DomainCoinbaseData,
+	coinbaseData *externalapi.DomainCoinbaseData, candidateTimestamp int64,
 ) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
-	return bb.coinbaseManager.ExpectedCoinbaseTransaction(stagingArea, model.VirtualBlockHash, coinbaseData)
+	return bb.coinbaseManager.ExpectedCoinbaseTransaction(stagingArea, model.VirtualBlockHash, coinbaseData, candidateTimestamp)
 }
 
 func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions []*externalapi.DomainTransaction,
-	newBlockPruningPoint *externalapi.DomainHash,
+	newBlockPruningPoint *externalapi.DomainHash, timeInMilliseconds int64,
 ) (externalapi.BlockHeader, error) {
 	daaScore, err := bb.newBlockDAAScore(stagingArea)
 	if err != nil {
@@ -216,10 +228,6 @@ func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions
 		return nil, err
 	}
 
-	timeInMilliseconds, err := bb.newBlockTime(stagingArea)
-	if err != nil {
-		return nil, err
-	}
 	bits, err := bb.newBlockDifficulty(stagingArea)
 	if err != nil {
 		return nil, err

@@ -186,7 +186,8 @@ func (btb *blockTemplateBuilder) ModifyBlockTemplate(newCoinbaseData *consensuse
 ) (*consensusexternalapi.DomainBlockTemplate, error) {
 	// The first transaction is always the coinbase transaction
 	coinbaseTx := blockTemplateToModify.Block.Transactions[transactionhelper.CoinbaseTransactionIndex]
-	newPayload, err := coinbasemanager.ModifyCoinbasePayload(coinbaseTx.Payload, newCoinbaseData, btb.coinbasePayloadScriptPublicKeyMaxLength)
+	blockVersion := blockTemplateToModify.Block.Header.Version()
+	newPayload, err := coinbasemanager.ModifyCoinbasePayload(coinbaseTx.Payload, newCoinbaseData, btb.coinbasePayloadScriptPublicKeyMaxLength, blockVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -200,11 +201,21 @@ func (btb *blockTemplateBuilder) ModifyBlockTemplate(newCoinbaseData *consensuse
 	// TODO: can be optimized to O(log(#transactions)) by caching the whole merkle tree in BlockTemplate and changing only the relevant path
 	mutableHeader.SetHashMerkleRoot(merkle.CalculateHashMerkleRoot(blockTemplateToModify.Block.Transactions))
 
-	newTimestamp := mstime.Now().UnixMilliseconds()
-	if newTimestamp >= mutableHeader.TimeInMilliseconds() {
-		// Only if new time stamp is later than current, update the header. Otherwise,
-		// we keep the previous time as built by internal consensus median time logic
-		mutableHeader.SetTimeInMilliseconds(newTimestamp)
+	// From CoinbaseTimestampEntropyActivationVersion onward, the coinbase's own entropy bytes are a
+	// function of this exact header timestamp (see coinbasemanager.coinbaseEntropy) and
+	// ModifyCoinbasePayload only rewrites the script/extra-data portion of the payload, not the
+	// entropy prefix - bumping the timestamp here without also recomputing entropy would desync the
+	// two and make this template fail its own validation. The original build-time timestamp already
+	// satisfies every timestamp rule that matters (it's still >= the past median time; there's no
+	// separate "too stale" rule - see block_header_in_context.go/block_header_in_isolation.go), so
+	// for these versions it's left untouched rather than bumped.
+	if blockVersion < coinbasemanager.CoinbaseTimestampEntropyActivationVersion {
+		newTimestamp := mstime.Now().UnixMilliseconds()
+		if newTimestamp >= mutableHeader.TimeInMilliseconds() {
+			// Only if new time stamp is later than current, update the header. Otherwise,
+			// we keep the previous time as built by internal consensus median time logic
+			mutableHeader.SetTimeInMilliseconds(newTimestamp)
+		}
 	}
 
 	blockTemplateToModify.Block.Header = mutableHeader.ToImmutable()

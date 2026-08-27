@@ -23,6 +23,14 @@ var (
 	updatingPruningPointUTXOSetKeyName = []byte("updating-pruning-point-utxo-set")
 	pruningPointByIndexBucketName      = []byte("pruning-point-by-index")
 	lastPruningTimeKeyName             = []byte("last-pruning-time")
+
+	// Persisted so the expensive --enable-utxo-debug-diagnostics startup checks
+	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) don't unconditionally
+	// re-run their full multi-minute scan on every single boot when the underlying data - the
+	// current pruning point, or the root of any disqualification cascade - hasn't actually changed
+	// since the last time they ran.
+	lastUTXODebugCheckedPruningPointKeyName = []byte("last-utxo-debug-checked-pruning-point")
+	lastUTXODebugReproducedRootHashKeyName  = []byte("last-utxo-debug-reproduced-root-disqualified-block")
 )
 
 // pruningStore represents a store for the current pruning state
@@ -41,6 +49,9 @@ type pruningStore struct {
 	importedPruningPointMultisetKey model.DBKey
 	pruningPointByIndexBucket       model.DBBucket
 	lastPruningTimeKey              model.DBKey
+
+	lastUTXODebugCheckedPruningPointKey model.DBKey
+	lastUTXODebugReproducedRootHashKey  model.DBKey
 }
 
 // New instantiates a new PruningStore
@@ -56,6 +67,9 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.Pru
 		importedPruningPointMultisetKey: prefixBucket.Key(importedPruningPointMultisetKeyName),
 		pruningPointByIndexBucket:       prefixBucket.Bucket(pruningPointByIndexBucketName),
 		lastPruningTimeKey:              prefixBucket.Key(lastPruningTimeKeyName),
+
+		lastUTXODebugCheckedPruningPointKey: prefixBucket.Key(lastUTXODebugCheckedPruningPointKeyName),
+		lastUTXODebugReproducedRootHashKey:  prefixBucket.Key(lastUTXODebugReproducedRootHashKeyName),
 	}
 }
 
@@ -412,6 +426,51 @@ func (ps *pruningStore) LastPruningTime(dbContext model.DBReader) (time.Time, er
 
 	ps.lastPruningTimeCache = &lastPruningTime
 	return lastPruningTime, nil
+}
+
+// SetLastUTXODebugCheckedPruningPoint records the pruning point that
+// --enable-utxo-debug-diagnostics's VerifyCurrentPruningPointUTXOSet last actually checked, so a
+// later boot with the flag still on can skip re-running the multi-minute scan when the pruning
+// point hasn't moved since. Written directly (no staging area) since this is a debug convenience
+// marker, not consensus-critical state.
+func (ps *pruningStore) SetLastUTXODebugCheckedPruningPoint(dbContext model.DBWriter, pruningPoint *externalapi.DomainHash) error {
+	hashBytes, err := ps.serializeHash(pruningPoint)
+	if err != nil {
+		return err
+	}
+	return dbContext.Put(ps.lastUTXODebugCheckedPruningPointKey, hashBytes)
+}
+
+// LastUTXODebugCheckedPruningPoint returns the pruning point last checked by
+// VerifyCurrentPruningPointUTXOSet, or a database.ErrNotFound-wrapping error if it's never run.
+func (ps *pruningStore) LastUTXODebugCheckedPruningPoint(dbContext model.DBReader) (*externalapi.DomainHash, error) {
+	hashBytes, err := dbContext.Get(ps.lastUTXODebugCheckedPruningPointKey)
+	if err != nil {
+		return nil, err
+	}
+	return ps.deserializePruningPoint(hashBytes)
+}
+
+// SetLastUTXODebugReproducedRootHash records which block FindAndReproduceRootDisqualification last
+// re-resolved, so a later boot with the flag still on can skip re-reproducing the same root
+// disqualification when it's still the same block. Written directly (no staging area) since this is
+// a debug convenience marker, not consensus-critical state.
+func (ps *pruningStore) SetLastUTXODebugReproducedRootHash(dbContext model.DBWriter, rootHash *externalapi.DomainHash) error {
+	hashBytes, err := ps.serializeHash(rootHash)
+	if err != nil {
+		return err
+	}
+	return dbContext.Put(ps.lastUTXODebugReproducedRootHashKey, hashBytes)
+}
+
+// LastUTXODebugReproducedRootHash returns the block last reproduced by
+// FindAndReproduceRootDisqualification, or a database.ErrNotFound-wrapping error if it's never run.
+func (ps *pruningStore) LastUTXODebugReproducedRootHash(dbContext model.DBReader) (*externalapi.DomainHash, error) {
+	hashBytes, err := dbContext.Get(ps.lastUTXODebugReproducedRootHashKey)
+	if err != nil {
+		return nil, err
+	}
+	return ps.deserializePruningPoint(hashBytes)
 }
 
 // Helper methods to serialize time

@@ -53,6 +53,14 @@ type consensusStateManager struct {
 	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
 	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
 	lastValidBlock          *externalapi.DomainHash
+
+	// expensiveDiagnosticRunsRemaining caps how many times the [UTXO-DEBUG] self-consistency checks
+	// in resolveSingleBlockStatus's failure branch (verifyMultisetSelfConsistency,
+	// verifyAcceptanceDataAgainstDiff) will actually run a full UTXO-set scan. Those checks fire on
+	// any RuleError from a new block's resolution, not just commitment mismatches - if the
+	// underlying drift causes routine failures on live blocks, this prevents each one from adding a
+	// multi-minute full-scan on top of the failure itself.
+	expensiveDiagnosticRunsRemaining int
 }
 
 // New instantiates a new ConsensusStateManager
@@ -124,6 +132,8 @@ func New(
 		mergeDepthRootStore:       mergeDepthRootStore,
 		windowHeapSliceStore:      windowHeapSliceStore,
 		resolveBlockStatusCache:   lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
+
+		expensiveDiagnosticRunsRemaining: 3,
 
 		stores: []model.Store{
 			consensusStateStore,

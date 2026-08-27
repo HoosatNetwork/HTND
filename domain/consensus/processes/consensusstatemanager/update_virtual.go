@@ -5,6 +5,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/pkg/errors"
 )
 
 func (csm *consensusStateManager) updateVirtual(stagingArea *model.StagingArea, newBlockHash *externalapi.DomainHash,
@@ -122,10 +123,34 @@ func (csm *consensusStateManager) updateSelectedTipUTXODiff(
 	}
 	newDiff, err := virtualUTXODiff.DiffFrom(selectedTipUTXODiff)
 	if err != nil {
-		// DiffFrom can fail during reorgs when UTXO sets have incompatible DAA scores.
-		// Fall back to using the virtualUTXODiff directly with nil diffChild.
-		log.Debugf("DiffFrom failed in updateSelectedTipUTXODiff (err: %v), using virtualUTXODiff directly", err)
-		newDiff = virtualUTXODiff
+		// virtualUTXODiff and selectedTipUTXODiff were reconstructed by independently walking two
+		// branches (virtual's new state vs. the previous selected tip), so - same as
+		// resolveSingleBlockStatus's isResolveTip branch - they can disagree on the BlockDAAScore of
+		// an outpoint they both otherwise agree on. Reconcile before diffing, exactly like that
+		// existing tip-transition logic does, instead of masking the failure: virtualUTXODiff is
+		// becoming canonical here, so its own reconstruction wins the disagreement.
+		//
+		// [UTXO-DEBUG] This used to fall back to staging virtualUTXODiff directly, with a nil
+		// diffChild, as if it were selectedTip's own small diff. virtualUTXODiff is the FULL,
+		// absolute diff (genesis/accumulation-start through virtual), not a delta relative to
+		// selectedTip - substituting it here silently corrupted selectedTip's persisted diff-chain
+		// entry every time this fallback fired, on every affected reorg, since this runs on every
+		// new block (far more often than pruning-point advancement). That fallback is the confirmed
+		// source of the drift traced this session: it reached even consensusStateStore's live
+		// virtual UTXO table, not just pruning-point snapshots.
+		log.Warnf("[UTXO-DEBUG] DiffFrom failed in updateSelectedTipUTXODiff for selected tip %s (err: %v) - "+
+			"reconciling against virtual's own reconstruction instead of masking it.", selectedTip, err)
+		reconciledSelectedTipUTXODiff, reconcileErr := reconcileWinningBranchUTXO(virtualUTXODiff, selectedTipUTXODiff)
+		if reconcileErr != nil {
+			return errors.Wrapf(reconcileErr, "updateSelectedTipUTXODiff: failed to reconcile selected tip "+
+				"%s against virtual after DiffFrom failed (original DiffFrom error: %s)", selectedTip, err)
+		}
+		newDiff, err = virtualUTXODiff.DiffFrom(reconciledSelectedTipUTXODiff)
+		if err != nil {
+			return errors.Wrapf(err, "updateSelectedTipUTXODiff: DiffFrom still failed for selected tip %s "+
+				"after reconciliation - this is a genuine conflict (not just a BlockDAAScore mismatch), "+
+				"not something safe to paper over", selectedTip)
+		}
 	}
 
 	log.Debugf("Staging new UTXO diff for virtual diff parent %s", selectedTip)

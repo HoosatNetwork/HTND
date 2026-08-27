@@ -160,6 +160,7 @@ type Flags struct {
 	DeletionDepth                   uint64        `long:"deletion-depth" hidden:"true" description:"The depth at which pruning deletes blocks, multiplies pruning depth. Defaults to 0, which uses the configured pruning depth. (Warning: Setting a custom depth may significantly increase disk usage.)"`
 	AllowSubmitBlockWhenNotSynced   bool          `long:"allow-submit-block-when-not-synced" hidden:"true" description:"Allow the node to accept blocks from RPC while not synced (this flag is mainly used for testing)"`
 	EnableSanityCheckPruningUTXOSet bool          `long:"enable-sanity-check-pruning-utxo" hidden:"true" description:"When moving the pruning point - check that the utxo set matches the utxo commitment"`
+	EnableUTXODebugDiagnostics      bool          `long:"enable-utxo-debug-diagnostics" hidden:"true" description:"At startup, run the expensive [UTXO-DEBUG] pruning-point/virtual-UTXO-set self-consistency checks and root-disqualification bisection (each pass can take 15-20+ minutes on a mature chain). Off by default - only for actively investigating a UTXO commitment mismatch."`
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
 
 	// Compound transaction rate limiting flags

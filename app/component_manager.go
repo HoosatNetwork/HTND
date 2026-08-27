@@ -117,6 +117,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		DataRetentionDuration:           dataRetentionDuration,
 		PruningInterval:                 pruningInterval,
 		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
+		EnableUTXODebugDiagnostics:      cfg.EnableUTXODebugDiagnostics,
 		UseHoohashCLibrary:              cfg.UseHoohashCLibrary,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)

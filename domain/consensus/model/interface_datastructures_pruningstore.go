@@ -38,6 +38,16 @@ type PruningStore interface {
 	StageLastPruningTime(stagingArea *StagingArea, lastPruningTime time.Time)
 	LastPruningTime(dbContext DBReader) (time.Time, error)
 
+	// SetLastUTXODebugCheckedPruningPoint/LastUTXODebugCheckedPruningPoint and
+	// SetLastUTXODebugReproducedRootHash/LastUTXODebugReproducedRootHash persist debug-diagnostic
+	// progress markers (see pruning_store.go's comments) so --enable-utxo-debug-diagnostics's
+	// expensive startup checks can skip re-running when the underlying data hasn't changed since the
+	// last boot. Not consensus-critical state - written directly, no staging area.
+	SetLastUTXODebugCheckedPruningPoint(dbContext DBWriter, pruningPoint *externalapi.DomainHash) error
+	LastUTXODebugCheckedPruningPoint(dbContext DBReader) (*externalapi.DomainHash, error)
+	SetLastUTXODebugReproducedRootHash(dbContext DBWriter, rootHash *externalapi.DomainHash) error
+	LastUTXODebugReproducedRootHash(dbContext DBReader) (*externalapi.DomainHash, error)
+
 	CacheLen() int
 	UnstageAll(stagingArea *StagingArea)
 }
