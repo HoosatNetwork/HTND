@@ -29,6 +29,21 @@ import (
 // further details
 var orphanResolutionRange uint32 = 5
 
+// blockVersionForDAAScore returns the block version a block with the given DAA score is expected
+// to have, per powScores. Must be used instead of the ambient constants.GetBlockVersion() when
+// validating a specific, already-received block's own version - that ratchet only ever increases
+// and reflects whatever version this node has most recently seen or built, not necessarily this
+// particular block's own correct version.
+func blockVersionForDAAScore(powScores []uint64, daaScore uint64) uint16 {
+	var version uint16 = 1
+	for _, powScore := range powScores {
+		if daaScore >= powScore {
+			version++
+		}
+	}
+	return version
+}
+
 // RelayInvsContext is the interface for the context needed for the HandleRelayInvs flow.
 type RelayInvsContext interface {
 	Domain() domain.Domain
@@ -291,16 +306,16 @@ func (flow *handleRelayInvsFlow) start() error {
 		if block.PoWHash == "" && block.Header.Version() >= constants.BanMinVersion {
 			flow.banConnection(false)
 		}
-		daaScore := block.Header.DAAScore()
-		var version uint16 = 1
-		for _, powScore := range flow.Config().ActiveNetParams.POWScores {
-			if daaScore >= powScore {
-				version++
-			}
-		}
+		version := blockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, block.Header.DAAScore())
 		constants.SetBlockVersion(version)
-		if block.Header.Version() != constants.GetBlockVersion() {
-			log.Infof("Cannot process %s, Wrong block version %d, it should be %d", consensushashing.BlockHash(block), block.Header.Version(), constants.GetBlockVersion())
+		// Compare against this block's own correctly-computed version, not the ambient
+		// constants.GetBlockVersion() - SetBlockVersion is a one-way ratchet that never decreases,
+		// so once it's been bumped higher by anything else (this node building its own candidate
+		// block template, or a previously-relayed higher-daaScore block), an older, legitimately
+		// lower-version block relayed afterward would be compared against a stale-high value and
+		// wrongly rejected, even though it's exactly the version its own daaScore calls for.
+		if block.Header.Version() != version {
+			log.Infof("Cannot process %s, Wrong block version %d, it should be %d", consensushashing.BlockHash(block), block.Header.Version(), version)
 			log.Infof("Unprocessable block relayed by %s", flow.netConnection.NetAddress().String())
 			if block.Header.Version() >= constants.BanMinVersion {
 				flow.banConnection(false)
@@ -560,7 +575,13 @@ func (flow *handleRelayInvsFlow) processOrphan(block *externalapi.DomainBlock) e
 		return nil
 	}
 
-	if block.Header.Version() != constants.GetBlockVersion() {
+	// Compare against this block's own correctly-computed version (see the identical fix and
+	// rationale in handleInvsMsgs above), not the ambient constants.GetBlockVersion() - that
+	// ratchet only ever increases, so a legitimately older/lower-version orphan relayed after the
+	// ambient value has already been bumped higher by something else would otherwise be wrongly
+	// skipped here.
+	expectedVersion := blockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, block.Header.DAAScore())
+	if block.Header.Version() != expectedVersion {
 		log.Debugf("Skipping orphan processing for block %s because it is wrong block version", blockHash)
 		return nil
 	}
