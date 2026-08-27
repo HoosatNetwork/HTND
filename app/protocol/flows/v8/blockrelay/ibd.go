@@ -432,6 +432,41 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 					stuckOnDisqualifiedHash, stuckOnDisqualifiedHash)
 			}
 
+			// [IBD-DEBUG] Stuck for a while and NOT explained by a disqualified block - dump every
+			// entry in the current locator window (status, and whether our pruning point is on its
+			// selected chain) exactly once, so the actual reason this specific window can never
+			// narrow is visible instead of inferred. Fires once per stuck run (not every iteration)
+			// via the == check.
+			if consecutiveUnchangedZoomSteps == 20 && stuckOnDisqualifiedHash == nil {
+				log.Warnf("[IBD-DEBUG] zoom stuck for %d consecutive steps with peer %s, not explained by a "+
+					"disqualified block - dumping full locator window (%d entries) for direct diagnosis:",
+					consecutiveUnchangedZoomSteps, flow.peer, len(locatorHashes))
+				for i, hash := range locatorHashes {
+					info, infoErr := flow.Domain().Consensus().GetBlockInfo(hash)
+					if infoErr != nil {
+						log.Warnf("[IBD-DEBUG]   [%d] %s: GetBlockInfo failed: %s", i, hash, infoErr)
+						continue
+					}
+					if !info.Exists {
+						log.Warnf("[IBD-DEBUG]   [%d] %s: does not exist locally", i, hash)
+						continue
+					}
+					if info.BlockStatus == externalapi.StatusHeaderOnly {
+						log.Warnf("[IBD-DEBUG]   [%d] %s: status=%s (header downloaded, no body)",
+							i, hash, info.BlockStatus)
+						continue
+					}
+					onSyncerChain, chainErr := flow.Domain().Consensus().IsInSelectedParentChainOf(pruningPoint, hash)
+					if chainErr != nil {
+						log.Warnf("[IBD-DEBUG]   [%d] %s: status=%s, IsInSelectedParentChainOf failed: %s",
+							i, hash, info.BlockStatus, chainErr)
+						continue
+					}
+					log.Warnf("[IBD-DEBUG]   [%d] %s: status=%s, pruningPointOnItsChain=%t",
+						i, hash, info.BlockStatus, onSyncerChain)
+				}
+			}
+
 			if len(locatorHashes) == 2 {
 				// We found our search target
 				highestKnownSyncerChainHash = currentHighestKnownSyncerChainHash
