@@ -306,6 +306,13 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	// [IBD-DEBUG] Tracks the previous zoom step's bounds so non-convergence (bounds not actually
 	// narrowing between iterations) can be detected and logged - see the zoom-in loop below.
 	var lastZoomLow, lastZoomHigh *externalapi.DomainHash
+	// [IBD-DEBUG] Tracks how many consecutive zoom steps had unchanged bounds, and - if the
+	// non-convergence is explained by a locally disqualified block, which can never become
+	// "known" no matter how many times it's re-queried - that block's hash. See the early-exit
+	// check below: a disqualified block getting stuck here means OUR local data is the problem,
+	// not the peer, so banning the peer would be both wrong and pointless.
+	consecutiveUnchangedZoomSteps := 0
+	var stuckOnDisqualifiedHash *externalapi.DomainHash
 	pruningPoint, err := flow.Domain().Consensus().PruningPoint()
 	if err != nil {
 		return nil, nil, err
@@ -313,6 +320,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 
 	for {
 		var lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash *externalapi.DomainHash
+		var lowestUnknownIsDisqualified bool
 		for i := 0; i < len(locatorHashes); i++ {
 			info, err := flow.Domain().Consensus().GetBlockInfo(locatorHashes[i])
 			if err != nil {
@@ -349,6 +357,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				}
 			}
 			lowestUnknownSyncerChainHash = locatorHashes[i]
+			lowestUnknownIsDisqualified = info.Exists && info.BlockStatus == externalapi.StatusDisqualifiedFromChain
 		}
 		// No unknown blocks, break. Note this can only happen in the first iteration
 		if lowestUnknownSyncerChainHash == nil {
@@ -389,14 +398,39 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 			// aren't actually narrowing between iterations. Surface the bounds (and whether they
 			// changed since last iteration) at a visible level, rate-limited, so a non-converging
 			// run can actually be diagnosed instead of just banning the peer and moving on.
+			boundsUnchanged := lastZoomLow != nil && lastZoomHigh != nil &&
+				lastZoomLow.Equal(lowestUnknownSyncerChainHash) && lastZoomHigh.Equal(currentHighestKnownSyncerChainHash)
 			if chainNegotiationZoomCounts <= 20 || chainNegotiationZoomCounts%50 == 0 {
-				boundsUnchanged := lastZoomLow != nil && lastZoomHigh != nil &&
-					lastZoomLow.Equal(lowestUnknownSyncerChainHash) && lastZoomHigh.Equal(currentHighestKnownSyncerChainHash)
 				log.Warnf("[IBD-DEBUG] zoom step %d/%d with peer %s: bounds (low=%s, high=%s), %d hashes returned, "+
 					"unchanged-since-last-step=%t", chainNegotiationZoomCounts, maxZoomSteps, flow.peer,
 					lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash, len(locatorHashes), boundsUnchanged)
 			}
 			lastZoomLow, lastZoomHigh = lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash
+
+			if boundsUnchanged {
+				consecutiveUnchangedZoomSteps++
+				if lowestUnknownIsDisqualified {
+					stuckOnDisqualifiedHash = lowestUnknownSyncerChainHash
+				}
+			} else {
+				consecutiveUnchangedZoomSteps = 0
+				stuckOnDisqualifiedHash = nil
+			}
+
+			// A block that's locally StatusDisqualifiedFromChain can never become "known" no
+			// matter how many times this same boundary gets re-queried - the peer's responses are
+			// consistent and the bounds will never narrow, so the normal maxZoomSteps ban below
+			// would eventually fire on a peer that did nothing wrong. Bail out well before that,
+			// without banning, and point directly at the local block responsible so it can be
+			// investigated with the pruning/disqualification diagnostics instead.
+			if consecutiveUnchangedZoomSteps >= 20 && stuckOnDisqualifiedHash != nil {
+				return nil, nil, errors.Errorf("IBD chain negotiation with peer %s is stuck (%d consecutive "+
+					"unchanged zoom steps) because local block %s is StatusDisqualifiedFromChain and can "+
+					"never resolve as known - this is a local data problem, not a misbehaving peer, so not "+
+					"banning it. Investigate %s with FindAndReproduceRootDisqualification/"+
+					"--enable-utxo-debug-diagnostics", flow.peer, consecutiveUnchangedZoomSteps,
+					stuckOnDisqualifiedHash, stuckOnDisqualifiedHash)
+			}
 
 			if len(locatorHashes) == 2 {
 				// We found our search target
