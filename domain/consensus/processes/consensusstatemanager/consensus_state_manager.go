@@ -62,12 +62,11 @@ type consensusStateManager struct {
 	// multi-minute full-scan on top of the failure itself.
 	expensiveDiagnosticRunsRemaining int
 
-	// baselineInconsistencyPruningPoint / baselineInconsistency memoise pruningPointBaselineIsInconsistent's
-	// verdict (does the current pruning point's stored multiset disagree with its own header
-	// UTXOCommitment) against the pruning point hash it was computed for, so it re-evaluates only
-	// when the pruning point advances rather than on every tolerated block.
-	baselineInconsistencyPruningPoint *externalapi.DomainHash
-	baselineInconsistency             bool
+	// toleratedUTXOCommitmentOffsetLogged makes validateUTXOCommitment log the first tolerated
+	// inherited-offset mismatch at warn level and every subsequent one at debug level, so a full
+	// re-sync on top of an incomplete imported pruning-point UTXO set doesn't emit one warn line
+	// per block.
+	toleratedUTXOCommitmentOffsetLogged bool
 }
 
 // New instantiates a new ConsensusStateManager
