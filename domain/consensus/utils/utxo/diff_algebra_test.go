@@ -1083,6 +1083,59 @@ func TestCoinbaseCollisionConflicts(t *testing.T) {
 				"rejected, even with a tolerable coinbase conflict on another outpoint in the same call")
 		}
 	})
+
+	// The fourth, previously-unprotected conflict shape in diffFrom: an outpoint that both this
+	// and other independently agree belongs in toAdd (same value, same DAA score - otherwise it
+	// wouldn't land in inBothToAdd at all), where only one side also has it in toRemove. Live-
+	// reproduced in production as a mass, repeating "resolveSingleBlockStatus: failed to diff new
+	// selected tip" failure blocking every new block from advancing the tip. This is deliberately
+	// exercised with matching DAA scores throughout so none of the three resolveConflicts calls
+	// above (which all require differing DAA scores to flag anything) absorb it first - isolating
+	// this specific, previously-hard-coded-to-always-error check.
+	t.Run("diffFrom: outpoint in both toAdd (agreed), only in this.toRemove, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{
+			toAdd:    utxoCollection{*outpoint0: coinbaseA},
+			toRemove: utxoCollection{*outpoint0: coinbaseA},
+		}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: coinbaseA}, toRemove: utxoCollection{}}
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("diffFrom: outpoint in both toAdd (agreed), only in other.toRemove, both coinbase - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: coinbaseA}, toRemove: utxoCollection{}}
+		other := &mutableUTXODiff{
+			toAdd:    utxoCollection{*outpoint0: coinbaseA},
+			toRemove: utxoCollection{*outpoint0: coinbaseA},
+		}
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the coinbase collision to be tolerated, got: %s", err)
+		}
+	})
+
+	t.Run("diffFrom: outpoint in both toAdd (agreed), only in this.toRemove, not coinbase - still errors", func(t *testing.T) {
+		differentValueSameDAA := NewUTXOEntry(999, script, false, 0)
+		this := &mutableUTXODiff{
+			toAdd:    utxoCollection{*outpoint0: regularA},
+			toRemove: utxoCollection{*outpoint0: differentValueSameDAA},
+		}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: regularA}, toRemove: utxoCollection{}}
+		if _, err := diffFrom(this, other); err == nil {
+			t.Error("expected a non-coinbase, different-valued conflict to still be rejected")
+		}
+	})
+
+	t.Run("diffFrom: outpoint in both toAdd (agreed), only in this.toRemove, not coinbase but identical value - tolerated", func(t *testing.T) {
+		this := &mutableUTXODiff{
+			toAdd:    utxoCollection{*outpoint0: regularA},
+			toRemove: utxoCollection{*outpoint0: regularA},
+		}
+		other := &mutableUTXODiff{toAdd: utxoCollection{*outpoint0: regularA}, toRemove: utxoCollection{}}
+		if _, err := diffFrom(this, other); err != nil {
+			t.Errorf("expected the identical-value conflict to be tolerated, got: %s", err)
+		}
+	})
 }
 
 // TestAddRemoveEntryDuplicates exercises the low-level addEntry / removeEntry

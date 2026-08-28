@@ -256,10 +256,33 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 	// If they are not in other.toAdd - should be added in result.toRemove
 	inBothToAdd := make(utxoCollection)
 	subtractionWithRemainderHavingDAAScoreInPlace(this.toAdd, other.toAdd, result.toRemove, inBothToAdd)
-	// If they are in other.toRemove - base utxoSet is not the same
-	if checkIntersection(inBothToAdd, this.toRemove) != checkIntersection(inBothToAdd, other.toRemove) {
-		return nil, errors.New(
-			"diffFrom: outpoint both in this.toAdd, other.toAdd, and only one of this.toRemove and other.toRemove")
+	// If they are in exactly one of this.toRemove/other.toRemove, this and other disagree about
+	// whether the outpoint is still present, despite both independently agreeing it was added (same
+	// value, same DAA score, or they wouldn't be in inBothToAdd at all). Same reasoning as the
+	// resolveConflicts calls above (see isTolerableConflict): this is the expected shape when only
+	// one of two competing reconstructions also observed a spend of a coinbase-ID-colliding
+	// outpoint - not corruption. Trust the toAdd agreement and leave the outpoint out of the result
+	// diff entirely (no change) rather than hard-erroring the whole reconstruction over it.
+	for outpoint, addedEntry := range inBothToAdd {
+		inThisToRemove := this.toRemove.Contains(&outpoint)
+		inOtherToRemove := other.toRemove.Contains(&outpoint)
+		if inThisToRemove == inOtherToRemove {
+			continue
+		}
+		var removedEntry externalapi.UTXOEntry
+		if inThisToRemove {
+			removedEntry, _ = this.toRemove.Get(&outpoint)
+		} else {
+			removedEntry, _ = other.toRemove.Get(&outpoint)
+		}
+		if !isTolerableConflict(addedEntry, removedEntry) {
+			return nil, errors.Errorf("diffFrom: outpoint %s both in this.toAdd, other.toAdd, and only "+
+				"one of this.toRemove and other.toRemove (addedEntry: %s, removedEntry: %s)",
+				outpoint, describeConflictEntry(addedEntry), describeConflictEntry(removedEntry))
+		}
+		log.Debugf("diffFrom: outpoint %s both in this.toAdd, other.toAdd, and only one of this.toRemove "+
+			"and other.toRemove (entries agree on value - historical coinbase ID collision or duplicate "+
+			"cross-reconstruction acceptance) - leaving it out of the result diff", outpoint)
 	}
 
 	// All transactions in other.toRemove:
