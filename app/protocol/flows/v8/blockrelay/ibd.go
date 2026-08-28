@@ -313,6 +313,12 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	// not the peer, so banning the peer would be both wrong and pointless.
 	consecutiveUnchangedZoomSteps := 0
 	var stuckOnDisqualifiedHash *externalapi.DomainHash
+	// [IBD-DEBUG] Set when the non-convergence is explained by every block strictly between the
+	// search bounds being locally StatusHeaderOnly: those are skipped during the scan so they can
+	// never move the (low, high) boundary, and the peer is behaving correctly. Like the disqualified
+	// case, this is a local data gap (bodies for this range not downloaded yet), not a misbehaving
+	// peer, so the early-exit below bails without banning.
+	stuckOnHeaderOnlyWindow := false
 	pruningPoint, err := flow.Domain().Consensus().PruningPoint()
 	if err != nil {
 		return nil, nil, err
@@ -321,6 +327,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	for {
 		var lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash *externalapi.DomainHash
 		var lowestUnknownIsDisqualified bool
+		headerOnlyInWindow := 0
 		for i := 0; i < len(locatorHashes); i++ {
 			info, err := flow.Domain().Consensus().GetBlockInfo(locatorHashes[i])
 			if err != nil {
@@ -332,6 +339,7 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				}
 
 				if info.BlockStatus == externalapi.StatusHeaderOnly {
+					headerOnlyInWindow++
 					continue
 				}
 
@@ -412,9 +420,17 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				if lowestUnknownIsDisqualified {
 					stuckOnDisqualifiedHash = lowestUnknownSyncerChainHash
 				}
+				// Every hash strictly between the two bounds is header-only (len-2 of them, since the
+				// bounds themselves are locatorHashes[0] and locatorHashes[len-1] by the assert above),
+				// so the scan skipped all of them and the boundary can't move. Local missing-bodies
+				// gap, not a bad peer.
+				if len(locatorHashes) > 2 && headerOnlyInWindow >= len(locatorHashes)-2 {
+					stuckOnHeaderOnlyWindow = true
+				}
 			} else {
 				consecutiveUnchangedZoomSteps = 0
 				stuckOnDisqualifiedHash = nil
+				stuckOnHeaderOnlyWindow = false
 			}
 
 			// A block that's locally StatusDisqualifiedFromChain can never become "known" no
@@ -430,6 +446,19 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 					"banning it. Investigate %s with FindAndReproduceRootDisqualification/"+
 					"--enable-utxo-debug-diagnostics", flow.peer, consecutiveUnchangedZoomSteps,
 					stuckOnDisqualifiedHash, stuckOnDisqualifiedHash)
+			}
+
+			// Same idea for a window whose entire interior is header-only: the peer is answering
+			// correctly, we just don't have the bodies for this range yet, so the zoom can never
+			// narrow. Bail without banning; a later IBD attempt (after these bodies are downloaded,
+			// or from another peer) can get past it.
+			if consecutiveUnchangedZoomSteps >= 20 && stuckOnHeaderOnlyWindow {
+				return nil, nil, errors.Errorf("IBD chain negotiation with peer %s is stuck (%d consecutive "+
+					"unchanged zoom steps): every block between the search bounds (low=%s, high=%s) is locally "+
+					"StatusHeaderOnly, so the zoom window can never narrow. This is a local missing-bodies gap, "+
+					"not a misbehaving peer, so not banning it - retry IBD once bodies for this range are "+
+					"downloaded.", flow.peer, consecutiveUnchangedZoomSteps,
+					lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash)
 			}
 
 			// [IBD-DEBUG] Stuck for a while and NOT explained by a disqualified block - dump every
