@@ -70,6 +70,16 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	}
 	log.Tracef("The past median time of %s is %d", blockHash, selectedParentMedianTime)
 
+	// When the chain is built on an incomplete imported pruning-point UTXO set (see
+	// blockInheritsKnownUTXOCommitmentOffset), some real, spendable outputs are simply absent from
+	// this node's UTXO set, and any block-body transaction that spends one of them fails here with
+	// ErrMissingTxOut through no fault of its own. In that regime the missing-input transaction is
+	// skipped (its inputs are not verified and are left in place) so virtual resolution can advance.
+	// This means the block body is NOT being fully validated - the node is trusting the network's
+	// acceptance of it - and only ever happens on a chain already known to be offset from the true
+	// UTXO set.
+	tolerateMissingTxOut := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var stagingMu sync.Mutex
@@ -100,8 +110,13 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff)
 			stagingMu.Unlock()
 			if err != nil {
+				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})
+				if isMissingTxOut && tolerateMissingTxOut {
+					csm.logToleratedMissingTxOut(blockHash, transactionID, err)
+					return
+				}
 				mu.Lock()
-				if !errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+				if !isMissingTxOut {
 					mu.Unlock()
 					return
 				}
@@ -117,6 +132,10 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			err = csm.transactionValidator.ValidateTransactionInContextAndPopulateFee(
 				stagingArea, tx, blockHash, block.Header.DAAScore())
 			if err != nil {
+				if tolerateMissingTxOut && errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+					csm.logToleratedMissingTxOut(blockHash, transactionID, err)
+					return
+				}
 				mu.Lock()
 				if firstErr == nil {
 					firstErr = err
@@ -132,6 +151,23 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 
 	wg.Wait()
 	return firstErr
+}
+
+// logToleratedMissingTxOut logs the first skipped missing-input transaction at warn level and every
+// subsequent one at debug level, so a full re-sync on top of an incomplete pruning-point UTXO set
+// doesn't emit one warn line per affected transaction.
+func (csm *consensusStateManager) logToleratedMissingTxOut(blockHash *externalapi.DomainHash,
+	transactionID *externalapi.DomainTransactionID, err error,
+) {
+	if csm.toleratedMissingTxOutLogged.CompareAndSwap(false, true) {
+		log.Warnf("Block %s transaction %s SKIPPED during past-UTXO validation (%s): the chain is built on "+
+			"an incomplete imported pruning-point UTXO set, so this spend cannot be verified locally. The "+
+			"block body is NOT being fully validated. Further occurrences are logged at debug level.",
+			blockHash, transactionID, err)
+		return
+	}
+	log.Debugf("Block %s transaction %s skipped during past-UTXO validation (missing inputs, inherited "+
+		"pruning-point offset): %s", blockHash, transactionID, err)
 }
 
 func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalapi.DomainBlock,

@@ -1,6 +1,8 @@
 package consensusstatemanager
 
 import (
+	"sync/atomic"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
@@ -62,11 +64,14 @@ type consensusStateManager struct {
 	// multi-minute full-scan on top of the failure itself.
 	expensiveDiagnosticRunsRemaining int
 
-	// toleratedUTXOCommitmentOffsetLogged makes validateUTXOCommitment log the first tolerated
-	// inherited-offset mismatch at warn level and every subsequent one at debug level, so a full
-	// re-sync on top of an incomplete imported pruning-point UTXO set doesn't emit one warn line
-	// per block.
+	// toleratedUTXOCommitmentOffsetLogged / toleratedMissingTxOutLogged make the inherited-offset
+	// toleration paths (validateUTXOCommitment, validateBlockTransactionsAgainstPastUTXO) log their
+	// first occurrence at warn level and every subsequent one at debug level, so a full re-sync on
+	// top of an incomplete imported pruning-point UTXO set doesn't emit one warn line per block.
+	// toleratedMissingTxOutLogged is atomic because it is set from validateBlockTransactionsAgainstPastUTXO's
+	// per-transaction goroutines.
 	toleratedUTXOCommitmentOffsetLogged bool
+	toleratedMissingTxOutLogged         atomic.Bool
 }
 
 // New instantiates a new ConsensusStateManager
