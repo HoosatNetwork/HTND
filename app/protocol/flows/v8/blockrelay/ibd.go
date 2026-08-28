@@ -906,6 +906,12 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		// Cache to store received blocks for this batch only
 		clear(receivedBlocks) // Re-use is better than re-allocation :)
 
+		// [UTXO-DEBUG] Times the network request+wait phase separately from local processing below,
+		// so a slow IBD run shows directly whether the bottleneck is waiting on the peer (this
+		// timer) or validating/inserting blocks locally (the processing timer further down).
+		networkPhaseStart := time.Now()
+		retryCount := 0
+
 		// Request blocks
 		err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(hashesToRequest))
 		if err != nil {
@@ -933,7 +939,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 					return err
 				}
 
-				log.Debugf("Timeout waiting for blocks, re-requesting %d missing blocks", len(missingHashes))
+				retryCount++
+				log.Warnf("[UTXO-DEBUG] Timeout (%s) waiting for blocks from %s after %s, re-requesting %d/%d "+
+					"missing blocks (retry #%d for this batch)", flow.Config().IBDDequeueTimeout, flow.peer,
+					time.Since(networkPhaseStart), len(missingHashes), len(hashesToRequest), retryCount)
 				if err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(missingHashes)); err != nil {
 					return err
 				}
@@ -972,9 +981,15 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			}
 		}
 
+		networkPhaseElapsed := time.Since(networkPhaseStart)
+
 		sort.Slice(hashesToRequest, func(i, j int) bool {
 			return receivedBlocks[*hashesToRequest[i]].Header.DAAScore() < receivedBlocks[*hashesToRequest[j]].Header.DAAScore()
 		})
+
+		// [UTXO-DEBUG] Times local validation+insertion separately from the network phase above.
+		processingPhaseStart := time.Now()
+		processedInBatch := 0
 
 		// Process blocks in the order of expected hashes
 		for _, expectedHash := range hashesToRequest {
@@ -997,12 +1012,23 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 			highestProcessedDAAScore = block.Header.DAAScore()
 			flow.blocksProcessedSinceLast++
+			processedInBatch++
 			// Periodic rate check (e.g., every 10 seconds) inside loop
 			if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
 				if err := flow.checkPeriodicRate("blocks"); err != nil {
 					return err
 				}
 			}
+		}
+
+		// [UTXO-DEBUG] Only logged when a batch is slow enough to matter, so this stays quiet
+		// during normal operation - directly answers "is IBD slow because of network wait or
+		// local processing" instead of continuing to guess between the two.
+		if processingPhaseElapsed := time.Since(processingPhaseStart); networkPhaseElapsed > 2*time.Second ||
+			processingPhaseElapsed > 2*time.Second {
+			log.Warnf("[UTXO-DEBUG] IBD batch of %d blocks (%d retries): network wait=%s, local "+
+				"processing=%s (%d blocks processed)", len(hashesToRequest), retryCount,
+				networkPhaseElapsed, processingPhaseElapsed, processedInBatch)
 		}
 
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
