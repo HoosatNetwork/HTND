@@ -4,6 +4,7 @@ import (
 	// we need to embed the utxoset of mainnet genesis here
 	_ "embed"
 	"fmt"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -85,7 +86,14 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 	isPruningPoint bool, shouldValidateAgainstUTXO bool, isBlockWithTrustedData bool, trusted bool, powSkip bool,
 ) (*externalapi.VirtualChangeSet, externalapi.BlockStatus, error) {
 	blockHash := consensushashing.HeaderHash(block.Header)
+	// [UTXO-DEBUG] Per-block stage timing, only logged when the block's total processing time
+	// exceeds 100ms - splits validateBlock/AddBlock/UpdatePruningPointByVirtual/CommitAllChanges so
+	// a slow IBD run shows exactly which stage the ~400ms/block cost is actually in, instead of
+	// requiring another round of narrowing.
+	blockProcessingStart := time.Now()
+	validateBlockStart := time.Now()
 	err := bp.validateBlock(stagingArea, block, isBlockWithTrustedData, trusted, powSkip)
+	validateBlockElapsed := time.Since(validateBlockStart)
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
 	}
@@ -139,9 +147,12 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 	var virtualUTXODiff externalapi.UTXODiff
 	var reversalData *model.UTXODiffReversalData
 	isHeaderOnlyBlock := isHeaderOnlyBlock(block)
+	var addBlockElapsed time.Duration
 	if !isHeaderOnlyBlock {
 		// Attempt to add the block to the virtual
+		addBlockStart := time.Now()
 		selectedParentChainChanges, virtualUTXODiff, reversalData, err = bp.consensusStateManager.AddBlock(stagingArea, blockHash, shouldValidateAgainstUTXO)
+		addBlockElapsed = time.Since(addBlockStart)
 		if err != nil {
 			return nil, externalapi.StatusInvalid, err
 		}
@@ -154,17 +165,28 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 		}
 	}
 
+	var updatePruningPointElapsed time.Duration
 	if !isHeaderOnlyBlock && shouldValidateAgainstUTXO {
 		// Trigger pruning, which will check if the pruning point changed and delete the data if it did.
+		updatePruningPointStart := time.Now()
 		err = bp.pruningManager.UpdatePruningPointByVirtual(stagingArea)
+		updatePruningPointElapsed = time.Since(updatePruningPointStart)
 		if err != nil {
 			return nil, externalapi.StatusInvalid, err
 		}
 	}
 
+	commitStart := time.Now()
 	err = staging.CommitAllChanges(bp.databaseContext, stagingArea)
+	commitElapsed := time.Since(commitStart)
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
+	}
+
+	if totalElapsed := time.Since(blockProcessingStart); totalElapsed > 100*time.Millisecond {
+		log.Warnf("[UTXO-DEBUG] block %s processing took %s total: validateBlock=%s AddBlock=%s "+
+			"UpdatePruningPointByVirtual=%s CommitAllChanges=%s", blockHash, totalElapsed,
+			validateBlockElapsed, addBlockElapsed, updatePruningPointElapsed, commitElapsed)
 	}
 
 	if reversalData != nil {
