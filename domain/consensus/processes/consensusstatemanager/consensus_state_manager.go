@@ -1,7 +1,7 @@
 package consensusstatemanager
 
 import (
-	"sync/atomic"
+	"sync"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -64,14 +64,12 @@ type consensusStateManager struct {
 	// multi-minute full-scan on top of the failure itself.
 	expensiveDiagnosticRunsRemaining int
 
-	// toleratedUTXOCommitmentOffsetLogged / toleratedMissingTxOutLogged make the inherited-offset
-	// toleration paths (validateUTXOCommitment, validateBlockTransactionsAgainstPastUTXO) log their
-	// first occurrence at warn level and every subsequent one at debug level, so a full re-sync on
-	// top of an incomplete imported pruning-point UTXO set doesn't emit one warn line per block.
-	// toleratedMissingTxOutLogged is atomic because it is set from validateBlockTransactionsAgainstPastUTXO's
+	// toleratedIssuesLogged tracks which inherited-offset toleration points (keyed by a short step
+	// label) have already emitted their one warn line, so a full re-sync on top of an incomplete
+	// imported pruning-point UTXO set logs each kind of tolerated issue once at warn and the rest at
+	// debug rather than one warn per block. It is a sync.Map because some toleration points run in
 	// per-transaction goroutines.
-	toleratedUTXOCommitmentOffsetLogged bool
-	toleratedMissingTxOutLogged         atomic.Bool
+	toleratedIssuesLogged sync.Map
 }
 
 // New instantiates a new ConsensusStateManager

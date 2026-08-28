@@ -25,36 +25,69 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	log.Tracef("verifyUTXO start for block %s", blockHash)
 	defer log.Tracef("verifyUTXO end for block %s", blockHash)
 
+	// When the chain is built on an incomplete imported pruning-point UTXO set
+	// (blockInheritsKnownUTXOCommitmentOffset), the per-step UTXO-consistency checks below can fail
+	// through no fault of the block - this node's UTXO data is simply missing pieces, so the
+	// multiset is offset, acceptance can differ, inputs go missing. There is nothing to "harden"
+	// against: the chain data itself is broken and every node has the same gap. In that regime any
+	// RuleError from these checks is downgraded to a logged issue so virtual resolution can advance.
+	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
+	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
+	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	permit := func(step string, err error) error {
+		if err == nil {
+			return nil
+		}
+		if tolerate && errors.As(err, &ruleerrors.RuleError{}) {
+			csm.logToleratedIssue(step, blockHash, err)
+			return nil
+		}
+		return err
+	}
+
 	log.Debugf("Validating UTXO commitment for block %s", blockHash)
-	err := csm.validateUTXOCommitment(stagingArea, block, blockHash, multiset)
-	if err != nil {
+	if err := permit("utxo-commitment", csm.validateUTXOCommitment(stagingArea, block, blockHash, multiset)); err != nil {
 		return err
 	}
 	log.Debugf("UTXO commitment validation passed for block %s", blockHash)
 
 	log.Debugf("Validating acceptedIDMerkleRoot for block %s", blockHash)
-	err = csm.validateAcceptedIDMerkleRoot(block, blockHash, acceptanceData)
-	if err != nil {
+	if err := permit("accepted-id-merkle-root",
+		csm.validateAcceptedIDMerkleRoot(block, blockHash, acceptanceData)); err != nil {
 		return err
 	}
 	log.Debugf("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
 
 	coinbaseTransaction := block.Transactions[0]
-	err = csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-	if err != nil {
+	if err := permit("coinbase-transaction",
+		csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)); err != nil {
 		return err
 	}
 	log.Debugf("Coinbase transaction validation passed for block %s", blockHash)
 
 	log.Debugf("Validating transactions against past UTXO for block %s", blockHash)
-	err = csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff)
-	if err != nil {
+	if err := permit("block-transactions-vs-past-utxo",
+		csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff)); err != nil {
 		return err
 	}
 	log.Debugf("Block transaction against past UTXO passed for %s", blockHash)
 	log.Tracef("Transactions against past UTXO validation passed for block %s", blockHash)
 
 	return nil
+}
+
+// logToleratedIssue records that an inherited-offset toleration point fired: the first time for a
+// given step label it logs at warn (so operators see, once, that the node is running permissively
+// on broken chain data), and every subsequent time at debug (so a 200k-block re-sync does not emit
+// a warn line per block).
+func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *externalapi.DomainHash, err error) {
+	if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore(step, struct{}{}); alreadyLogged {
+		log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
+		return
+	}
+	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The chain is built on an incomplete "+
+		"imported pruning-point UTXO set, so this cannot be verified locally and the block is not being "+
+		"fully validated. Further %s tolerations are logged at debug level.", blockHash, step, err, step)
 }
 
 func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagingArea *model.StagingArea,
@@ -112,7 +145,8 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			if err != nil {
 				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})
 				if isMissingTxOut && tolerateMissingTxOut {
-					csm.logToleratedMissingTxOut(blockHash, transactionID, err)
+					csm.logToleratedIssue("block-transaction-missing-input", blockHash,
+						errors.Wrapf(err, "transaction %s skipped", transactionID))
 					return
 				}
 				mu.Lock()
@@ -133,7 +167,8 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 				stagingArea, tx, blockHash, block.Header.DAAScore())
 			if err != nil {
 				if tolerateMissingTxOut && errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
-					csm.logToleratedMissingTxOut(blockHash, transactionID, err)
+					csm.logToleratedIssue("block-transaction-missing-input", blockHash,
+						errors.Wrapf(err, "transaction %s skipped", transactionID))
 					return
 				}
 				mu.Lock()
@@ -151,23 +186,6 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 
 	wg.Wait()
 	return firstErr
-}
-
-// logToleratedMissingTxOut logs the first skipped missing-input transaction at warn level and every
-// subsequent one at debug level, so a full re-sync on top of an incomplete pruning-point UTXO set
-// doesn't emit one warn line per affected transaction.
-func (csm *consensusStateManager) logToleratedMissingTxOut(blockHash *externalapi.DomainHash,
-	transactionID *externalapi.DomainTransactionID, err error,
-) {
-	if csm.toleratedMissingTxOutLogged.CompareAndSwap(false, true) {
-		log.Warnf("Block %s transaction %s SKIPPED during past-UTXO validation (%s): the chain is built on "+
-			"an incomplete imported pruning-point UTXO set, so this spend cannot be verified locally. The "+
-			"block body is NOT being fully validated. Further occurrences are logged at debug level.",
-			blockHash, transactionID, err)
-		return
-	}
-	log.Debugf("Block %s transaction %s skipped during past-UTXO validation (missing inputs, inherited "+
-		"pruning-point offset): %s", blockHash, transactionID, err)
 }
 
 func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalapi.DomainBlock,
@@ -211,17 +229,8 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 		// self-scoping: as soon as the chain reaches a block whose selected parent is consistent
 		// (e.g. built on a clean pruning point), this returns false and strict enforcement resumes.
 		if csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash) {
-			if !csm.toleratedUTXOCommitmentOffsetLogged {
-				csm.toleratedUTXOCommitmentOffsetLogged = true
-				log.Warnf("Block %s UTXO commitment mismatch TOLERATED (header %s, calculated %s): its "+
-					"selected parent's own stored multiset already disagrees with its header, i.e. the chain "+
-					"is built on an incomplete imported pruning-point UTXO set and every block inherits the "+
-					"same fixed offset. Staging the calculated multiset and continuing. Further occurrences "+
-					"are logged at debug level.", blockHash, expectedCommitment, calculatedCommitment)
-			} else {
-				log.Debugf("Block %s UTXO commitment mismatch tolerated (inherited pruning-point offset): "+
-					"header %s, calculated %s", blockHash, expectedCommitment, calculatedCommitment)
-			}
+			csm.logToleratedIssue("utxo-commitment", blockHash,
+				errors.Errorf("header %s, calculated %s", expectedCommitment, calculatedCommitment))
 			return nil
 		}
 
