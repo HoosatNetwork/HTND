@@ -349,8 +349,16 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)
 	log.Tracef("given coinbase hash: %s, expected coinbase hash: %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 
+	coinbaseMismatch := !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash)
+	// Only dump the full actual-vs-expected comparison for a mismatch that isn't the already-known
+	// inherited pruning-point offset. In that regime the expected coinbase is fee-less because the
+	// fee-paying transactions spend UTXOs missing from the incomplete snapshot; verifyUTXO tolerates
+	// ErrBadCoinbaseTransaction and logs it once via logToleratedIssue, so the per-block dump would
+	// just be noise.
+	verboseCoinbaseDiff := coinbaseMismatch && !csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+
 	// Debug: compare outputs in detail if hashes differ
-	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
+	if verboseCoinbaseDiff {
 		if len(coinbaseTransaction.Outputs) == len(expectedCoinbaseTransaction.Outputs) {
 			for i := range coinbaseTransaction.Outputs {
 				actOut := coinbaseTransaction.Outputs[i]
@@ -370,7 +378,11 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		}
 	}
 
-	if !coinbaseTransactionHash.Equal(expectedCoinbaseTransactionHash) {
+	if coinbaseMismatch {
+		if !verboseCoinbaseDiff {
+			return errors.Wrap(ruleerrors.ErrBadCoinbaseTransaction, "coinbase transaction is not built as expected")
+		}
+
 		log.Infof("Transaction hashes, coinbase %s != expected %s", coinbaseTransactionHash, expectedCoinbaseTransactionHash)
 
 		// Log all transaction fields for comparison
