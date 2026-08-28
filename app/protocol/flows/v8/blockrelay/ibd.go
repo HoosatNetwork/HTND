@@ -403,15 +403,20 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 			// [IBD-DEBUG] A properly-narrowing exponential search should converge in a few dozen
 			// steps even for a chain of hundreds of millions of blocks (log2), not the 1000+ seen
 			// before banning peers - which means the (low, high) bounds sent to the peer likely
-			// aren't actually narrowing between iterations. Surface the bounds (and whether they
-			// changed since last iteration) at a visible level, rate-limited, so a non-converging
-			// run can actually be diagnosed instead of just banning the peer and moving on.
+			// aren't actually narrowing between iterations. On the healthy path (bounds moving) this
+			// is just per-step trace noise, so it's logged at debug; once the bounds stop narrowing
+			// it's promoted to warn (rate-limited) so a non-converging run can actually be diagnosed
+			// instead of just banning the peer and moving on.
 			boundsUnchanged := lastZoomLow != nil && lastZoomHigh != nil &&
 				lastZoomLow.Equal(lowestUnknownSyncerChainHash) && lastZoomHigh.Equal(currentHighestKnownSyncerChainHash)
-			if chainNegotiationZoomCounts <= 20 || chainNegotiationZoomCounts%50 == 0 {
+			if boundsUnchanged || consecutiveUnchangedZoomSteps > 0 {
 				log.Warnf("[IBD-DEBUG] zoom step %d/%d with peer %s: bounds (low=%s, high=%s), %d hashes returned, "+
 					"unchanged-since-last-step=%t", chainNegotiationZoomCounts, maxZoomSteps, flow.peer,
 					lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash, len(locatorHashes), boundsUnchanged)
+			} else {
+				log.Debugf("[IBD-DEBUG] zoom step %d/%d with peer %s: bounds (low=%s, high=%s), %d hashes returned",
+					chainNegotiationZoomCounts, maxZoomSteps, flow.peer,
+					lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash, len(locatorHashes))
 			}
 			lastZoomLow, lastZoomHigh = lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash
 
