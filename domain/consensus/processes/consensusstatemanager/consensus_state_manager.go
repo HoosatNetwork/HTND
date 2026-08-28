@@ -61,6 +61,13 @@ type consensusStateManager struct {
 	// underlying drift causes routine failures on live blocks, this prevents each one from adding a
 	// multi-minute full-scan on top of the failure itself.
 	expensiveDiagnosticRunsRemaining int
+
+	// baselineInconsistencyPruningPoint / baselineInconsistency memoise pruningPointBaselineIsInconsistent's
+	// verdict (does the current pruning point's stored multiset disagree with its own header
+	// UTXOCommitment) against the pruning point hash it was computed for, so it re-evaluates only
+	// when the pruning point advances rather than on every tolerated block.
+	baselineInconsistencyPruningPoint *externalapi.DomainHash
+	baselineInconsistency             bool
 }
 
 // New instantiates a new ConsensusStateManager
