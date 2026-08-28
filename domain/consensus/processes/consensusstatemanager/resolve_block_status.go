@@ -3,6 +3,7 @@ package consensusstatemanager
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/util/staging"
 
@@ -366,7 +367,17 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 
 			log.Tracef("Staging the multiset of disqualified block %s", blockHash)
 			csm.multisetStore.Stage(stagingArea, blockHash, multiset)
+			// [UTXO-DEBUG] Unconditional (not rate-limited) on every disqualified block, unlike the
+			// expensive self-consistency checks above - if a disqualification cascade is the source
+			// of slow IBD processing, this cost (proportional to selectedParentPastUTXOSet/pastUTXOSet
+			// size, both restorePastUTXO-derived) is paid by every single one of them, not just the
+			// first 3. Cheap to time (no extra work), so no rate limit needed here either.
+			diffFromStart := time.Now()
 			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
+			if diffFromElapsed := time.Since(diffFromStart); diffFromElapsed > 500*time.Millisecond {
+				log.Warnf("[UTXO-DEBUG] resolveSingleBlockStatus: DiffFrom for disqualified block %s took %s",
+					blockHash, diffFromElapsed)
+			}
 			if diffErr != nil {
 				return 0, nil, errors.Wrapf(diffErr, "resolveSingleBlockStatus: failed to diff past UTXO of "+
 					"disqualified block %s (this=selectedParentPastUTXOSet of %s, other=pastUTXOSet of %s)",

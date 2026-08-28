@@ -2,6 +2,7 @@ package consensusstatemanager
 
 import (
 	"slices"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
@@ -141,6 +142,13 @@ func (csm *consensusStateManager) restorePastUTXO(
 
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
 
+	// [UTXO-DEBUG] Cheap (no extra work beyond what the loop already does) walk-length/timing
+	// instrumentation, surfaced only when the walk is unusually long, to find out whether
+	// restorePastUTXO's walk-and-accumulate is the source of slow IBD processing/disqualification
+	// handling, rather than continuing to guess. No rate limit needed - this is O(1) overhead per
+	// call, not a full UTXO-set scan.
+	walkStart := time.Now()
+
 	var utxoDiffs []externalapi.UTXODiff
 	var utxoDiffHashes []*externalapi.DomainHash
 	nextBlockHash := blockHash
@@ -174,8 +182,17 @@ func (csm *consensusStateManager) restorePastUTXO(
 		}
 	}
 
+	walkElapsed := time.Since(walkStart)
+	if len(utxoDiffs) > 20 || walkElapsed > 500*time.Millisecond {
+		log.Warnf("[UTXO-DEBUG] restorePastUTXO for block %s: walked %d hops from block to virtual "+
+			"collecting diffs in %s - this cost is paid on every call for this block, and every "+
+			"disqualified block during a cascade pays it fresh via its own restorePastUTXO call",
+			blockHash, len(utxoDiffs), walkElapsed)
+	}
+
 	// apply the diffs in reverse order
 	log.Debugf("Applying the collected UTXO diffs for block %s in reverse order", blockHash)
+	applyStart := time.Now()
 	accumulatedDiff := utxo.NewMutableUTXODiff()
 	for idx, utxoDiff := range slices.Backward(utxoDiffs) {
 		err := accumulatedDiff.WithDiffInPlace(utxoDiff)
@@ -184,6 +201,10 @@ func (csm *consensusStateManager) restorePastUTXO(
 				"walking the selected parent chain for %s (chain order, %s to virtual: %v)",
 				utxoDiffHashes[idx], blockHash, blockHash, utxoDiffHashes)
 		}
+	}
+	if applyElapsed := time.Since(applyStart); len(utxoDiffs) > 20 || applyElapsed > 500*time.Millisecond {
+		log.Warnf("[UTXO-DEBUG] restorePastUTXO for block %s: merging %d collected diffs via "+
+			"WithDiffInPlace took %s", blockHash, len(utxoDiffs), applyElapsed)
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
 	return accumulatedDiff.ToImmutable(), nil
