@@ -417,13 +417,38 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 		return nil, err
 	}
 
-	selectedChildIterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, pruningPoint, false)
+	// SelectedChildIterator requires its low anchor to be on highHash's selected parent chain, and
+	// normally the pruning point always is. But if this node's selected chain has diverged from the
+	// syncer's - e.g. after resolving virtual across blocks the two disagree about, then advancing
+	// (and pruning to) a pruning point on the divergent branch - the pruning point can sit on a
+	// chain highHash's selected chain never passes through, and the iterator can't be built at all.
+	// Fall back to the deepest ancestor of the pruning point that IS on highHash's selected chain
+	// (the same slide antiPastHashesBetween does internally below), so body sync can still proceed
+	// from the shared point instead of aborting IBD outright.
+	lowAnchor := pruningPoint
+	isPruningPointInHighHashChain, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, pruningPoint, highHash)
+	if err != nil {
+		return nil, err
+	}
+	if !isPruningPointInHighHashChain {
+		lowAnchor, err = sm.findLowHashInHighHashSelectedParentChain(stagingArea, pruningPoint, highHash)
+		if err != nil {
+			return nil, errors.Wrapf(err, "pruning point %s is not on %s's selected parent chain and no "+
+				"shared ancestor could be found (this node's chain has diverged from the syncer's below "+
+				"available data - a full resync is required)", pruningPoint, highHash)
+		}
+		log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain - this "+
+			"node's selected chain has diverged from the syncer's; syncing bodies from shared ancestor %s",
+			pruningPoint, highHash, lowAnchor)
+	}
+
+	selectedChildIterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowAnchor, false)
 	if err != nil {
 		return nil, err
 	}
 	defer selectedChildIterator.Close()
 
-	lowHash := pruningPoint
+	lowHash := lowAnchor
 	foundHeaderOnlyBlock := false
 	for ok := selectedChildIterator.First(); ok; ok = selectedChildIterator.Next() {
 		selectedChild, err := selectedChildIterator.Get()
