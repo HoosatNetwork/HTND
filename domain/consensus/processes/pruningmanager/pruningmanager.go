@@ -1851,31 +1851,24 @@ func (pm *pruningManager) shouldDeferDeletion(stagingArea *model.StagingArea, pr
 // PoW-secured header UTXO commitment. This tests the OUTPUT directly instead of reasoning about
 // which method "should" be correct, and pins the exact pruning-point transition where a bad diff
 // was introduced, if any.
-func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *model.StagingArea,
-	previousPruningHash, currentPruningHash *externalapi.DomainHash, utxoSetDiff externalapi.UTXODiff, methodUsed string,
-) {
-	startingMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, previousPruningHash)
-	if err != nil {
-		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch starting multiset for %s: %s",
-			methodUsed, previousPruningHash, err)
-		return
-	}
-	resultingMultiset := startingMultiset.Clone()
+// applyDiffToMultiset returns a clone of startMultiset with utxoSetDiff's toAdd entries added and
+// its toRemove entries removed - the multiset of "startMultiset's UTXO set, transformed by
+// utxoSetDiff".
+func applyDiffToMultiset(startMultiset model.Multiset, utxoSetDiff externalapi.UTXODiff) (model.Multiset, error) {
+	result := startMultiset.Clone()
 
 	toAddIterator := utxoSetDiff.ToAdd().Iterator()
 	defer toAddIterator.Close()
 	for ok := toAddIterator.First(); ok; ok = toAddIterator.Next() {
 		outpoint, entry, err := toAddIterator.Get()
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): toAdd iterator failed: %s", methodUsed, err)
-			return
+			return nil, err
 		}
 		serialized, err := utxo.SerializeUTXO(entry, outpoint)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): SerializeUTXO (toAdd) failed: %s", methodUsed, err)
-			return
+			return nil, err
 		}
-		resultingMultiset.Add(serialized)
+		result.Add(serialized)
 	}
 
 	toRemoveIterator := utxoSetDiff.ToRemove().Iterator()
@@ -1883,22 +1876,44 @@ func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *m
 	for ok := toRemoveIterator.First(); ok; ok = toRemoveIterator.Next() {
 		outpoint, entry, err := toRemoveIterator.Get()
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): toRemove iterator failed: %s", methodUsed, err)
-			return
+			return nil, err
 		}
 		serialized, err := utxo.SerializeUTXO(entry, outpoint)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): SerializeUTXO (toRemove) failed: %s", methodUsed, err)
-			return
+			return nil, err
 		}
-		resultingMultiset.Remove(serialized)
+		result.Remove(serialized)
+	}
+
+	return result, nil
+}
+
+// verifyPruningPointDiffAgainstCommitment logs whether applying utxoSetDiff to previousPruningHash's
+// stored per-block multiset reproduces currentPruningHash's own header UTXO commitment, and returns
+// that verdict. A false result means either the diff for this transition is wrong, or the baseline
+// it's applied to is already offset from the header (the network-wide condition where an imported
+// pruning-point UTXO set doesn't match its own header).
+func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *model.StagingArea,
+	previousPruningHash, currentPruningHash *externalapi.DomainHash, utxoSetDiff externalapi.UTXODiff, methodUsed string,
+) bool {
+	startingMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, previousPruningHash)
+	if err != nil {
+		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch starting multiset for %s: %s",
+			methodUsed, previousPruningHash, err)
+		return false
+	}
+
+	resultingMultiset, err := applyDiffToMultiset(startingMultiset, utxoSetDiff)
+	if err != nil {
+		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): applying diff failed: %s", methodUsed, err)
+		return false
 	}
 
 	currentHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, currentPruningHash)
 	if err != nil {
 		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch header for %s: %s",
 			methodUsed, currentPruningHash, err)
-		return
+		return false
 	}
 
 	resultHash := resultingMultiset.Hash()
@@ -1907,12 +1922,108 @@ func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *m
 		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s) PASSED: applying the computed diff to "+
 			"%s's multiset produces %s, matching %s's own header UTXO commitment exactly.",
 			methodUsed, previousPruningHash, resultHash, currentPruningHash)
-	} else {
-		log.Errorf("[UTXO-DEBUG] pruning point diff verification (%s) FAILED: applying the computed diff to "+
-			"%s's multiset produces %s, but %s's own header expects UTXO commitment %s. The diff computed by "+
-			"%s for THIS transition is wrong - this pruning point advancement is the corruption event.",
-			methodUsed, previousPruningHash, resultHash, currentPruningHash, expectedCommitment, methodUsed)
+		return true
 	}
+	log.Errorf("[UTXO-DEBUG] pruning point diff verification (%s) FAILED: applying the computed diff to "+
+		"%s's multiset produces %s, but %s's own header expects UTXO commitment %s.",
+		methodUsed, previousPruningHash, resultHash, currentPruningHash, expectedCommitment)
+	return false
+}
+
+// pruningPointBucketMultiset hashes the entire served pruning-point UTXO set bucket into a multiset.
+// O(bucket size) - only called when a cheaper check has already failed.
+func (pm *pruningManager) pruningPointBucketMultiset() (model.Multiset, int, error) {
+	iterator, err := pm.pruningStore.PruningPointUTXOIterator(pm.databaseContext)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer iterator.Close()
+
+	bucketMultiset := multiset.New()
+	entryCount := 0
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		outpoint, entry, err := iterator.Get()
+		if err != nil {
+			return nil, 0, err
+		}
+		serialized, err := utxo.SerializeUTXO(entry, outpoint)
+		if err != nil {
+			return nil, 0, err
+		}
+		bucketMultiset.Add(serialized)
+		entryCount++
+	}
+	return bucketMultiset, entryCount, nil
+}
+
+// pickConsistentPruningPointDiff chooses which prev-PP -> current-PP diff to actually apply to the
+// served bucket, when the cheap header check has already failed.
+//
+// On a network where an imported pruning-point UTXO set doesn't match its own header, every derived
+// bucket and every per-block multiset inherits the same fixed offset delta from that import, so no
+// diff can ever reproduce the header. But a *correct* diff still makes the served bucket agree with
+// currentPruningHash's own stored per-block multiset (they carry the same delta). That check is what
+// distinguishes "the diff is right, just applied on top of the inherited offset" from "the diff
+// itself is wrong and would compound the offset". So: try the primary diff against that target, and
+// if it fails, try the other derivation method; keep whichever agrees. If neither does, keep the
+// primary and log that the served set is genuinely wrong (not just offset).
+func (pm *pruningManager) pickConsistentPruningPointDiff(stagingArea *model.StagingArea,
+	previousPruningHash, currentPruningHash *externalapi.DomainHash,
+	primaryDiff externalapi.UTXODiff, primaryMethod string,
+) (externalapi.UTXODiff, string) {
+	targetMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, currentPruningHash)
+	if err != nil {
+		log.Warnf("pruning point %s: could not fetch per-block multiset to pick a consistent diff (%s) - "+
+			"keeping the %s diff", currentPruningHash, err, primaryMethod)
+		return primaryDiff, primaryMethod
+	}
+	targetHash := targetMultiset.Hash()
+
+	bucketMultiset, entryCount, err := pm.pruningPointBucketMultiset()
+	if err != nil {
+		log.Warnf("pruning point %s: could not hash the served bucket to pick a consistent diff (%s) - "+
+			"keeping the %s diff", currentPruningHash, err, primaryMethod)
+		return primaryDiff, primaryMethod
+	}
+
+	diffAgrees := func(diff externalapi.UTXODiff) bool {
+		resulting, applyErr := applyDiffToMultiset(bucketMultiset, diff)
+		if applyErr != nil {
+			return false
+		}
+		return resulting.Hash().Equal(targetHash)
+	}
+
+	if diffAgrees(primaryDiff) {
+		log.Warnf("pruning point %s: the %s diff doesn't reproduce the header (inherited import offset) but "+
+			"is consistent with this node's own per-block multiset chain - using it", currentPruningHash, primaryMethod)
+		return primaryDiff, primaryMethod
+	}
+
+	altMethod := "diff-chain-walk"
+	altDiffFunc := pm.calculateDiffBetweenPreviousAndCurrentPruningPoints
+	if primaryMethod == "diff-chain-walk" {
+		altMethod = "acceptance-data"
+		altDiffFunc = pm.calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData
+	}
+	altDiff, altErr := altDiffFunc(stagingArea, currentPruningHash)
+	if altErr != nil {
+		log.Warnf("pruning point %s: %s diff is inconsistent and the alternate derivation (%s) failed: %s - "+
+			"keeping the %s diff", currentPruningHash, primaryMethod, altMethod, altErr, primaryMethod)
+		return primaryDiff, primaryMethod
+	}
+	if diffAgrees(altDiff) {
+		log.Warnf("pruning point %s: the %s diff was inconsistent with this node's per-block multiset chain "+
+			"but the %s diff is - switching to %s to keep the pruning-point offset from compounding",
+			currentPruningHash, primaryMethod, altMethod, altMethod)
+		return altDiff, altMethod
+	}
+
+	log.Errorf("pruning point %s: NEITHER the %s nor the %s diff makes the served bucket (%d entries) agree "+
+		"with this node's own per-block multiset chain - the served pruning-point UTXO set for this "+
+		"transition is genuinely wrong, not just offset. Applying the %s diff anyway.",
+		currentPruningHash, primaryMethod, altMethod, entryCount, primaryMethod)
+	return primaryDiff, primaryMethod
 }
 
 func (pm *pruningManager) updatePruningPoint() error {
@@ -1944,12 +2055,18 @@ func (pm *pruningManager) updatePruningPoint() error {
 		}
 	}
 
-	// [UTXO-DEBUG] Empirically verify whichever method produced utxoSetDiff against the new
-	// pruning point's own header commitment, before it gets applied to the served bucket.
+	// Verify whichever method produced utxoSetDiff against the new pruning point's own header
+	// commitment, before it gets applied to the served bucket. If it doesn't match, don't just log
+	// it - try the other derivation method and keep whichever one keeps the served bucket consistent
+	// with this node's own per-block multiset chain, so a buggy derivation can't compound the
+	// pruning-point offset from one advancement to the next.
 	if !pruningPoint.Equal(pm.genesisHash) {
 		if pruningPointIndex, idxErr := pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea); idxErr == nil && pruningPointIndex > 0 {
 			if previousPruningHash, prevErr := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, pruningPointIndex-1); prevErr == nil {
-				pm.verifyPruningPointDiffAgainstCommitment(stagingArea, previousPruningHash, pruningPoint, utxoSetDiff, methodUsed)
+				if !pm.verifyPruningPointDiffAgainstCommitment(stagingArea, previousPruningHash, pruningPoint, utxoSetDiff, methodUsed) {
+					utxoSetDiff, methodUsed = pm.pickConsistentPruningPointDiff(
+						stagingArea, previousPruningHash, pruningPoint, utxoSetDiff, methodUsed)
+				}
 			} else {
 				log.Warnf("[UTXO-DEBUG] could not fetch previous pruning point for diff verification: %s", prevErr)
 			}
@@ -1957,7 +2074,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 			log.Warnf("[UTXO-DEBUG] could not fetch pruning point index for diff verification: %s", idxErr)
 		}
 	}
-	log.Info("Restored the pruning point UTXO set")
+	log.Infof("Restored the pruning point UTXO set (diff method: %s)", methodUsed)
 
 	log.Info("Updating the pruning point UTXO set")
 	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)
