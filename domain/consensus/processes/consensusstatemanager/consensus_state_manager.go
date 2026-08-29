@@ -70,6 +70,13 @@ type consensusStateManager struct {
 	// debug rather than one warn per block. It is a sync.Map because some toleration points run in
 	// per-transaction goroutines.
 	toleratedIssuesLogged sync.Map
+
+	// baselineOffsetPruningPoint / baselineOffset memoise pruningPointBaselineIsOffset's verdict
+	// (does the current pruning point's stored multiset disagree with its own header UTXOCommitment)
+	// against the pruning point hash it was computed for, so it re-evaluates only when the pruning
+	// point advances.
+	baselineOffsetPruningPoint *externalapi.DomainHash
+	baselineOffset             bool
 }
 
 // New instantiates a new ConsensusStateManager

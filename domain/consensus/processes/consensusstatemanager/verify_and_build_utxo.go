@@ -260,22 +260,33 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 	return nil
 }
 
-// blockInheritsKnownUTXOCommitmentOffset reports whether blockHash's selected parent already carries
-// a UTXO commitment discrepancy - its stored multiset does not hash to its own header's
-// UTXOCommitment. That is the signature of a chain built on an incomplete imported pruning-point
-// UTXO set (see verifyAndRepairImportedPruningPointUTXOSet): the missing entries shift the multiset
-// by a fixed amount, and because MuHash is homomorphic every descendant inherits the exact same
-// shift. When the selected parent shows it, blockHash's own mismatch is that same inherited offset
-// rather than fresh corruption.
+// blockInheritsKnownUTXOCommitmentOffset reports whether blockHash sits on a chain whose UTXO
+// multiset is already offset from what the block headers commit to - the signature of a chain built
+// on an incomplete pruning-point UTXO set (see verifyAndRepairImportedPruningPointUTXOSet). Because
+// MuHash is homomorphic, that fixed offset propagates verbatim to every descendant, so blockHash's
+// own commitment mismatch is that same inherited offset, not fresh corruption.
 //
-// This is a purely local check against the selected parent, which resolveSingleBlockStatus always
-// resolves and stages before the block itself, so it needs no persisted marker and works on an
-// already-imported database. It is self-scoping: the first block whose selected parent's multiset
-// does agree with its header (e.g. anything built on a consistent pruning point) makes this return
-// false and full ErrBadUTXOCommitment enforcement resumes.
+// Two independent signals, either is sufficient:
+//
+//  1. The current pruning point's own stored multiset does not hash to its header's UTXOCommitment.
+//     This is the network-wide "we are on the offset baseline" condition and is always available
+//     (the pruning point's multiset is always committed), so it also covers live block processing
+//     where a just-accepted selected parent may still be UTXOPendingVerification with no staged
+//     multiset yet. Memoised against the pruning point hash.
+//
+//  2. blockHash's selected parent's stored multiset does not hash to its header's UTXOCommitment.
+//     Catches propagation when signal 1 is momentarily inconclusive, and keeps this self-scoping:
+//     once the chain reaches a block whose selected parent's multiset does agree with its header,
+//     both signals go false and full ErrBadUTXOCommitment enforcement resumes.
+//
+// Needs no persisted marker; works on an already-synced database.
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) bool {
+	if csm.pruningPointBaselineIsOffset(stagingArea) {
+		return true
+	}
+
 	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 	if err != nil {
 		return false
@@ -295,6 +306,39 @@ func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(staging
 		return false
 	}
 	return !selectedParentMultiset.Hash().Equal(selectedParentHeader.UTXOCommitment())
+}
+
+// pruningPointBaselineIsOffset reports whether the current pruning point's stored per-block multiset
+// disagrees with its own header UTXOCommitment - the always-available, network-wide signal that this
+// node is running on an offset UTXO baseline. Memoised against the pruning point hash so it costs a
+// couple of LRU-cached lookups only when the pruning point advances.
+func (csm *consensusStateManager) pruningPointBaselineIsOffset(stagingArea *model.StagingArea) bool {
+	hasPruningPoint, err := csm.pruningStore.HasPruningPoint(csm.databaseContext, stagingArea)
+	if err != nil || !hasPruningPoint {
+		return false
+	}
+	pruningPoint, err := csm.pruningStore.PruningPoint(csm.databaseContext, stagingArea)
+	if err != nil || pruningPoint.Equal(csm.genesisHash) {
+		return false
+	}
+	if csm.baselineOffsetPruningPoint != nil && csm.baselineOffsetPruningPoint.Equal(pruningPoint) {
+		return csm.baselineOffset
+	}
+
+	pruningPointMultiset, msErr := csm.multisetStore.Get(csm.databaseContext, stagingArea, pruningPoint)
+	pruningPointHeader, headerErr := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, pruningPoint)
+	if msErr != nil || headerErr != nil {
+		return false
+	}
+	offset := !pruningPointMultiset.Hash().Equal(pruningPointHeader.UTXOCommitment())
+	csm.baselineOffsetPruningPoint = pruningPoint
+	csm.baselineOffset = offset
+	if offset {
+		log.Warnf("Pruning point %s stored multiset (%s) does not match its header UTXO commitment (%s) - "+
+			"this node is on an offset UTXO baseline; inherited per-block commitment mismatches are tolerated",
+			pruningPoint, pruningPointMultiset.Hash(), pruningPointHeader.UTXOCommitment())
+	}
+	return offset
 }
 
 func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.AcceptanceData) *externalapi.DomainHash {
