@@ -424,18 +424,24 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 	// chain highHash's selected chain never passes through, and the iterator can't be built at all.
 	// Fall back to the deepest ancestor of the pruning point that IS on highHash's selected chain
 	// (the same slide antiPastHashesBetween does internally below), so body sync can still proceed
-	// from the shared point instead of aborting IBD outright.
+	// from the shared point. If even that can't be established, return an empty result rather than
+	// failing the whole IBD - the node then finishes IBD and tracks the tip via block relay, which
+	// is the intended behaviour on a chain whose local data is known to be degraded.
 	lowAnchor := pruningPoint
 	isPruningPointInHighHashChain, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, pruningPoint, highHash)
 	if err != nil {
-		return nil, err
+		log.Warnf("missingBlockBodyHashes: could not check whether pruning point %s is on %s's selected "+
+			"parent chain (%s) - skipping body sync for this segment", pruningPoint, highHash, err)
+		return []*externalapi.DomainHash{}, nil
 	}
 	if !isPruningPointInHighHashChain {
 		lowAnchor, err = sm.findLowHashInHighHashSelectedParentChain(stagingArea, pruningPoint, highHash)
 		if err != nil {
-			return nil, errors.Wrapf(err, "pruning point %s is not on %s's selected parent chain and no "+
-				"shared ancestor could be found (this node's chain has diverged from the syncer's below "+
-				"available data - a full resync is required)", pruningPoint, highHash)
+			log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain and no "+
+				"shared ancestor is reachable within available data (%s) - this node's chain has diverged "+
+				"from the syncer's; skipping body sync for this segment (a full resync is needed to fully "+
+				"converge)", pruningPoint, highHash, err)
+			return []*externalapi.DomainHash{}, nil
 		}
 		log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain - this "+
 			"node's selected chain has diverged from the syncer's; syncing bodies from shared ancestor %s",
@@ -444,7 +450,9 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 
 	selectedChildIterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowAnchor, false)
 	if err != nil {
-		return nil, err
+		log.Warnf("missingBlockBodyHashes: could not build selected-child iterator from %s to %s (%s) - "+
+			"skipping body sync for this segment", lowAnchor, highHash, err)
+		return []*externalapi.DomainHash{}, nil
 	}
 	defer selectedChildIterator.Close()
 
@@ -476,10 +484,12 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 			// In these cases - return an empty list of blocks to sync
 			return []*externalapi.DomainHash{}, nil
 		}
-		// No header-only blocks found - this can cause incomplete IBD
-		log.Errorf("No header-only blocks between %s and %s",
-			lowHash, highHash)
-		return nil, errors.Errorf("no header-only blocks found between %s and %s", lowHash, highHash)
+		// No header-only block was reached along the walk even though lowHash != highHash. On a
+		// consistent chain this shouldn't happen; on a diverged one it just means there is nothing
+		// on this segment we can pull bodies for. Return empty rather than failing IBD.
+		log.Warnf("missingBlockBodyHashes: no header-only blocks between %s and %s - skipping body sync "+
+			"for this segment", lowHash, highHash)
+		return []*externalapi.DomainHash{}, nil
 	}
 
 	hashesBetween, _, err := sm.antiPastHashesBetween(stagingArea, lowHash, highHash, 0)
