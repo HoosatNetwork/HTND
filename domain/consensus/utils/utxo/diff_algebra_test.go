@@ -509,7 +509,7 @@ func TestUTXODiffRules(t *testing.T) {
 				toRemove: utxoCollection{*outpoint0: utxoEntry1},
 			},
 			expectedWithDiffResult: nil,
-			hadTolerableConflict: true,
+			hadTolerableConflict:   true,
 		},
 		{
 			name: "first in toAdd in this and toRemove in other, second in toRemove in this",
