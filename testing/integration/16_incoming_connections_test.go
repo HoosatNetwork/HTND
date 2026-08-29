@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/internal/ci"
 )
 
 func Test16IncomingConnections(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping Test16IncomingConnections test (Takes way too long to execute in CI)")
 	os.Setenv("HTND_TEST_MODE", "true")
 	defer os.Unsetenv("HTND_TEST_MODE")
 	// Much more than 16 hosts creates a risk of running out of available file descriptors for leveldb

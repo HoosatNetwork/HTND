@@ -10,6 +10,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/internal/ci"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -239,12 +240,14 @@ func addAlternatingReorgBlocks(t *testing.T, tc testapi.TestConsensus, tips []*e
 }
 
 func TestNoAttack(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping TestNoAttack test (Takes way too long to execute in CI)")
 	tc, teardown := initializeTest(t, "TestNoAttack")
 	defer teardown(false)
 	buildJSONDAG(t, tc, false)
 }
 
 func TestAttack(t *testing.T) {
+	ci.SkipLongTest(t, "Skipping TestAttack test (Takes way too long to execute in CI)")
 	tc, teardown := initializeTest(t, "TestAttack")
 	defer teardown(false)
 	buildJSONDAG(t, tc, true)
