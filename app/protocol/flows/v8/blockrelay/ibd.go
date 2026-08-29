@@ -501,6 +501,22 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 				}
 			}
 
+			// The bounds have not moved for 20+ steps and it is not one of the specifically
+			// locally-explained cases above (disqualified boundary block, all-header-only interior) -
+			// the window dump just above shows why for this run. Whatever the cause, a negotiation
+			// that has stopped narrowing against a node whose own chain data is in a degraded state is
+			// a local problem, not peer misbehaviour, and banning each peer it stalls against just
+			// burns the peer list and makes recovery harder. Abandon this peer without banning; IBD
+			// retries (with this peer once its data heals, or another peer). The maxZoomSteps ban
+			// below still catches a peer that keeps sending changing-but-never-converging locators.
+			if consecutiveUnchangedZoomSteps >= 20 {
+				return nil, nil, errors.Errorf("IBD chain negotiation with peer %s abandoned after %d "+
+					"consecutive non-narrowing zoom steps (bounds low=%s high=%s, %d hashes) - local chain "+
+					"data is degraded, not a misbehaving peer, so not banning it", flow.peer,
+					consecutiveUnchangedZoomSteps, lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash,
+					len(locatorHashes))
+			}
+
 			if len(locatorHashes) == 2 {
 				// We found our search target
 				highestKnownSyncerChainHash = currentHighestKnownSyncerChainHash
