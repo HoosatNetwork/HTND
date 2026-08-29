@@ -418,15 +418,15 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 	}
 
 	// SelectedChildIterator requires its low anchor to be on highHash's selected parent chain, and
-	// normally the pruning point always is. But if this node's selected chain has diverged from the
-	// syncer's - e.g. after resolving virtual across blocks the two disagree about, then advancing
-	// (and pruning to) a pruning point on the divergent branch - the pruning point can sit on a
-	// chain highHash's selected chain never passes through, and the iterator can't be built at all.
-	// Fall back to the deepest ancestor of the pruning point that IS on highHash's selected chain
-	// (the same slide antiPastHashesBetween does internally below), so body sync can still proceed
-	// from the shared point. If even that can't be established, return an empty result rather than
-	// failing the whole IBD - the node then finishes IBD and tracks the tip via block relay, which
-	// is the intended behaviour on a chain whose local data is known to be degraded.
+	// normally the pruning point always is. On this network it sometimes isn't - the canonical
+	// pruning-point / chain data served by peers doesn't fully self-reconcile (the same condition
+	// that makes an imported pruning-point UTXO set fail its own header commitment), so the pruning
+	// point this node settled on can sit off the chain highHash's selected chain passes through.
+	// This is hit even on a completely fresh sync, so it must not fail IBD. Fall back to the deepest
+	// ancestor of the pruning point that IS on highHash's selected chain (the same slide
+	// antiPastHashesBetween does internally below) and sync bodies from there; if even that can't be
+	// established, return an empty result so IBD still completes and the node tracks the tip via
+	// block relay.
 	lowAnchor := pruningPoint
 	isPruningPointInHighHashChain, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, pruningPoint, highHash)
 	if err != nil {
@@ -438,14 +438,13 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 		lowAnchor, err = sm.findLowHashInHighHashSelectedParentChain(stagingArea, pruningPoint, highHash)
 		if err != nil {
 			log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain and no "+
-				"shared ancestor is reachable within available data (%s) - this node's chain has diverged "+
-				"from the syncer's; skipping body sync for this segment (a full resync is needed to fully "+
-				"converge)", pruningPoint, highHash, err)
+				"shared ancestor is reachable within available data (%s) - the network's pruning-point/chain "+
+				"data does not fully reconcile here; skipping body sync for this segment", pruningPoint, highHash, err)
 			return []*externalapi.DomainHash{}, nil
 		}
-		log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain - this "+
-			"node's selected chain has diverged from the syncer's; syncing bodies from shared ancestor %s",
-			pruningPoint, highHash, lowAnchor)
+		log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain (the "+
+			"network's pruning-point/chain data does not fully reconcile here) - syncing bodies from shared "+
+			"ancestor %s", pruningPoint, highHash, lowAnchor)
 	}
 
 	selectedChildIterator, err := sm.dagTraversalManager.SelectedChildIterator(stagingArea, highHash, lowAnchor, false)
@@ -485,8 +484,8 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 			return []*externalapi.DomainHash{}, nil
 		}
 		// No header-only block was reached along the walk even though lowHash != highHash. On a
-		// consistent chain this shouldn't happen; on a diverged one it just means there is nothing
-		// on this segment we can pull bodies for. Return empty rather than failing IBD.
+		// fully self-consistent chain this shouldn't happen; here it just means there is nothing on
+		// this segment we can pull bodies for. Return empty rather than failing IBD.
 		log.Warnf("missingBlockBodyHashes: no header-only blocks between %s and %s - skipping body sync "+
 			"for this segment", lowHash, highHash)
 		return []*externalapi.DomainHash{}, nil
