@@ -1,2 +1,6 @@
 vendor/
 **/docker-compose.yml
+
+# NOTE: .git must stay in the build context. The Go toolchain stamps the commit
+# hash into the binaries at build time (see version/version.go); excluding .git
+# here would silently drop the commit from the reported version.
