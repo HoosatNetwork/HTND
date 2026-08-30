@@ -1,6 +1,8 @@
 package syncmanager
 
 import (
+	"sort"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -54,46 +56,57 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			lowBlockGHOSTDAGData.BlueScore(), highBlockGHOSTDAGData.BlueScore())
 	}
 
-	// Collect all hashes by concatenating the merge-sets of all blocks between highHash and lowHash
+	// Collect all hashes by concatenating the merge sets of every chain block between lowHash and
+	// highHash.
+	//
+	// The traversal below is a BFS over children, which is NOT a topological order: a block can be
+	// dequeued before another path to one of its own parents has been explored. The batch is
+	// therefore sorted before it is returned.
+	//
+	// That sort must key on blue WORK. The receiving peer inserts headers in the order they arrive
+	// and rejects any block whose parents it hasn't seen yet with ErrMissingParents, aborting the
+	// whole IBD. Blue work is strictly increasing from any parent to its child - a block's selected
+	// parent is its maximum-blue-work parent, and the block's own blue work is that plus the work of
+	// every blue block it merges - so ordering by it can never place a block before an ancestor.
+	//
+	// This previously sorted by blue SCORE, which has no such property: blue score counts blue
+	// blocks rather than accumulating their difficulty, so a parent on a long low-difficulty branch
+	// can outscore the child that merges it. Such a pair was emitted child-first and the peer
+	// rejected it. It only misfires when a diverged-difficulty pair lands in the same batch, which
+	// is why it hit some nodes and not others.
 	blockHashes := []*externalapi.DomainHash{}
 	seen := make(map[externalapi.DomainHash]struct{})
+	actualHighHash = lowHash
+
 	iterator, err := sm.dagTraversalManager.ChildIterator(stagingArea, highHash, lowHash, false)
 	if err != nil {
 		return nil, nil, err
 	}
-	// log.Infof("LowHash %s, HighHash %s", lowHash, highHash)
 	defer iterator.Close()
+
 	for ok := iterator.First(); ok; ok = iterator.Next() {
 		current, err := iterator.Get()
 		if err != nil {
 			return nil, nil, err
 		}
-		// log.Infof("Child iterator returned %s", current)
-		if current.Equal(actualHighHash) {
-			log.Debugf("Found actual HighHash %d", current)
-			highHash = actualHighHash
-			break
-		}
 
-		total := len(blockHashes)
-		if total < 0 {
-			// Should never happen, but guard for safety
+		// Budget check before starting another merge set, so a batch overshoots by at most one
+		// merge set (which is why maxBlocks must be >= mergeSetSizeLimit + 1).
+		if maxBlocks != 0 && uint64(len(blockHashes)) > maxBlocks {
 			break
 		}
-		if maxBlocks != 0 && uint64(total) > maxBlocks {
-			break
-		}
-
-		highHash = current
 
 		isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, current, originalLowHash)
 		if err != nil {
 			return nil, nil, err
 		}
 		if isInPastOfOriginalLowHash {
-			// log.Infof("Skipping %s sorted mergeset, because IsAncestorOf %s", current, originalLowHash)
+			// The peer already has this block and its whole past; skip its merge set but still
+			// advance, so a run of already-known blocks can't stall the batch.
+			actualHighHash = current
 			continue
 		}
+
 		sortedMergeSet, err := sm.ghostdagManager.GetSortedMergeSet(stagingArea, current)
 		if err != nil {
 			return nil, nil, err
@@ -104,7 +117,6 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 				return nil, nil, err
 			}
 			if isInPastOfOriginalLowHash {
-				// log.Infof("Skipping %s on %s sorted mergeset, because IsAncestorOf %s", blockHash, current, originalLowHash)
 				continue
 			}
 			if _, exists := seen[*blockHash]; !exists {
@@ -116,24 +128,16 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			seen[*current] = struct{}{}
 			blockHashes = append(blockHashes, current)
 		}
+
+		actualHighHash = current
 	}
 
-	// The process above doesn't return highHash, so include it explicitly, unless highHash == lowHash
-	if !lowHash.Equal(highHash) {
-		if _, exists := seen[*highHash]; !exists {
-			blockHashes = append(blockHashes, highHash)
-		}
-	}
-
-	// Sort by blue score to get topological order
-	if err := sm.sortByBlueScore(stagingArea, blockHashes); err != nil {
+	// BFS order is not topological - sort before handing the batch to the peer.
+	if err := sm.sortInTopologicalOrder(stagingArea, blockHashes); err != nil {
 		return nil, nil, err
 	}
-	// for i, hash := range blockHashes {
-	// 	log.Infof("%d, %s", i, hash)
-	// }
 
-	return blockHashes, highHash, nil
+	return blockHashes, actualHighHash, nil
 }
 
 // antiPastHashesBetween returns the hashes of the blocks between the
@@ -331,8 +335,9 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 	}
 	blockHashes = hashset.NewFromSlice(blockHashes...).ToSlice()
 
-	// Sort by blue score to get topological order
-	if err := sm.sortByBlueScore(stagingArea, blockHashes); err != nil {
+	// Sort into topological order. The receiving peer inserts headers in the order they arrive and
+	// rejects any block whose parents it hasn't seen yet, so a block must never precede an ancestor.
+	if err := sm.sortInTopologicalOrder(stagingArea, blockHashes); err != nil {
 		return nil, nil, err
 	}
 
@@ -343,46 +348,47 @@ func (sm *syncManager) antiPastHashesBetweenBrute(stagingArea *model.StagingArea
 	return blockHashes, highHash, nil
 }
 
-// sortByBlueScore sorts a slice of block hashes by their blue score in ascending order.
-// Blue score is monotonically increasing along any chain, so sorting by it
-// ensures ancestors come before descendants, which is the definition of topological order.
-func (sm *syncManager) sortByBlueScore(stagingArea *model.StagingArea, hashes []*externalapi.DomainHash) error {
+// sortInTopologicalOrder sorts a slice of block hashes so that every block comes after all of its
+// ancestors.
+//
+// The key is blue WORK, not blue score. Blue work strictly increases from any parent to its child: a
+// block's selected parent is its maximum-blue-work parent, and the block's own blue work is its
+// selected parent's plus the work of every blue block it merges, so
+// blueWork(child) > blueWork(selectedParent) >= blueWork(anyOtherParent). By transitivity that holds
+// for every ancestor, which is exactly the guarantee a syncing peer needs.
+//
+// Blue score does NOT have this property. It counts blue blocks instead of accumulating work, so a
+// branch of many low-difficulty blocks can give a parent a HIGHER blue score than the child that
+// merges it. Sorting by blue score emits such a pair in the wrong order and the receiving peer
+// rejects the child with ErrMissingParents, aborting the IBD - which is why this used to fail on
+// some nodes and not others, depending on which merge sets landed in a batch.
+//
+// Ties are broken by hash, matching ghostdagManager.Less, so the order is total and identical on
+// every node.
+func (sm *syncManager) sortInTopologicalOrder(stagingArea *model.StagingArea, hashes []*externalapi.DomainHash) error {
 	if len(hashes) <= 1 {
 		return nil
 	}
 
-	// Use bubble sort for simplicity (the slice is typically small)
-	swapped := true
-	for swapped {
-		swapped = false
-		for i := 0; i < len(hashes)-1; i++ {
-			if hashes[i].Equal(hashes[i+1]) {
-				continue
-			}
-			iScore, err := sm.getBlueScore(stagingArea, hashes[i])
-			if err != nil {
-				return err
-			}
-			jScore, err := sm.getBlueScore(stagingArea, hashes[i+1])
-			if err != nil {
-				return err
-			}
-			if iScore > jScore {
-				hashes[i], hashes[i+1] = hashes[i+1], hashes[i]
-				swapped = true
-			}
+	// Fetch each block's GHOSTDAG data once up front. The sort makes O(n log n) comparisons and each
+	// one would otherwise be a store lookup.
+	ghostdagData := make(map[externalapi.DomainHash]*externalapi.BlockGHOSTDAGData, len(hashes))
+	for _, hash := range hashes {
+		if _, exists := ghostdagData[*hash]; exists {
+			continue
 		}
+		data, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, hash, false)
+		if err != nil {
+			return err
+		}
+		ghostdagData[*hash] = data
 	}
-	return nil
-}
 
-// getBlueScore is a helper function to get the blue score of a block
-func (sm *syncManager) getBlueScore(stagingArea *model.StagingArea, hash *externalapi.DomainHash) (uint64, error) {
-	ghostdagData, err := sm.ghostdagDataStore.Get(sm.databaseContext, stagingArea, hash, false)
-	if err != nil {
-		return 0, err
-	}
-	return ghostdagData.BlueScore(), nil
+	sort.Slice(hashes, func(i, j int) bool {
+		return sm.ghostdagManager.Less(hashes[i], ghostdagData[*hashes[i]], hashes[j], ghostdagData[*hashes[j]])
+	})
+
+	return nil
 }
 
 func (sm *syncManager) findLowHashInHighHashSelectedParentChain(stagingArea *model.StagingArea,

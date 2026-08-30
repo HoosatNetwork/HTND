@@ -1,7 +1,6 @@
 package blockrelay
 
 import (
-	"sort"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
@@ -1021,10 +1020,6 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		}
 
 		networkPhaseElapsed := time.Since(networkPhaseStart)
-
-		sort.Slice(hashesToRequest, func(i, j int) bool {
-			return receivedBlocks[*hashesToRequest[i]].Header.DAAScore() < receivedBlocks[*hashesToRequest[j]].Header.DAAScore()
-		})
 
 		// [UTXO-DEBUG] Times local validation+insertion separately from the network phase above.
 		processingPhaseStart := time.Now()
