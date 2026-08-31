@@ -96,14 +96,29 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			break
 		}
 
+		// actualHighHash is handed back to the caller as next round's lowHash. It must only ever
+		// be a block that's actually on highHash's selected parent chain (or highHash itself):
+		// the ChildIterator's BFS visits any child that's an ancestor of highHash, which includes
+		// off-chain merge-set blocks that are NOT on the chain. If actualHighHash were set to one
+		// of those, the next call's findLowHashInHighHashSelectedParentChain would slide it
+		// backward to the nearest chain ancestor instead of resuming forward - re-serving the same
+		// window forever instead of making progress. Off-chain blocks still get included in
+		// blockHashes below; they just can't be used as the resume checkpoint.
+		isCurrentOnChain, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, current, highHash)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, current, originalLowHash)
 		if err != nil {
 			return nil, nil, err
 		}
 		if isInPastOfOriginalLowHash {
 			// The peer already has this block and its whole past; skip its merge set but still
-			// advance, so a run of already-known blocks can't stall the batch.
-			actualHighHash = current
+			// advance the checkpoint, so a run of already-known chain blocks can't stall the batch.
+			if isCurrentOnChain || current.Equal(highHash) {
+				actualHighHash = current
+			}
 			continue
 		}
 
@@ -129,7 +144,9 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			blockHashes = append(blockHashes, current)
 		}
 
-		actualHighHash = current
+		if isCurrentOnChain || current.Equal(highHash) {
+			actualHighHash = current
+		}
 	}
 
 	// BFS order is not topological - sort before handing the batch to the peer.

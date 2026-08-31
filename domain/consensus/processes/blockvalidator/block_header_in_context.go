@@ -145,7 +145,7 @@ func (v *blockValidator) checkParentsStatus(stagingArea *model.StagingArea, head
 	for _, parentHash := range directParents {
 		status, err := v.blockStatusStore.Get(v.databaseContext, stagingArea, parentHash)
 		if database.IsNotFoundError(err) {
-			log.Infof("checkParentsStatus failed to retrieve with %s\n", parentHash)
+			// log.Infof("checkParentsStatus failed to retrieve with %s\n", parentHash)
 			continue
 		}
 		if err != nil {
