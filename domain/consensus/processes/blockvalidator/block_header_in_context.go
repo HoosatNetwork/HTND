@@ -74,7 +74,7 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 			if err != nil {
 				return err
 			}
-			
+
 			// Only validate level 0 (direct parents) during IBD
 			if len(expectedParents) > 0 {
 				areDirectParentsEqual := header.Parents()[0].Equal(expectedParents[0])

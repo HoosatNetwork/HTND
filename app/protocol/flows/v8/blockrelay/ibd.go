@@ -670,12 +670,12 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 			processedAny := false
 			// Collect headers to process in this pass to avoid modifying map during iteration
 			toProcess := make([]externalapi.DomainHash, 0, len(headerBuffer))
-			
+
 			for hash, header := range headerBuffer {
 				// Convert to domain header to get direct parents
 				domainHeader := appmessage.BlockHeaderToDomainBlockHeader(header)
 				directParents := domainHeader.DirectParents()
-				
+
 				// Check if all direct parents exist in the consensus
 				allParentsExist := true
 				for _, parentHash := range directParents {
@@ -690,19 +690,19 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 						break
 					}
 				}
-				
+
 				if allParentsExist {
 					toProcess = append(toProcess, hash)
 				}
 			}
-			
+
 			// Process all headers that are ready
 			for _, hash := range toProcess {
 				header := headerBuffer[hash]
 				// Process this header
 				err := flow.processHeader(consensus, header)
 				if err != nil {
-					// If processing fails due to missing parents (race condition), 
+					// If processing fails due to missing parents (race condition),
 					// keep it in the buffer and try again
 					// Check for ErrMissingParents wrapped in RuleError
 					var missingParentsErr ruleerrors.ErrMissingParents
@@ -716,13 +716,13 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 				flow.headersProcessedSinceLast++
 				processedCount++
 				processedAny = true
-				
+
 				// Track the highest DAA score processed
 				domainHeader := appmessage.BlockHeaderToDomainBlockHeader(header)
 				if domainHeader.DAAScore() > highestProcessedDAAScore {
 					highestProcessedDAAScore = domainHeader.DAAScore()
 				}
-				
+
 				// Periodic rate check (e.g., every 10 seconds)
 				if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
 					if err := flow.checkPeriodicRate("headers"); err != nil {
@@ -730,7 +730,7 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 					}
 				}
 			}
-			
+
 			// If no headers were processed in this pass, we have headers with missing parents
 			// that aren't in the buffer yet. Break and wait for more headers.
 			if !processedAny {
@@ -860,14 +860,14 @@ func (flow *handleIBDFlow) processBufferedHeaders(
 		processedAny := false
 		processedCount := 0
 		var highestProcessedDAAScore uint64
-		
+
 		// Collect headers to process in this pass to avoid modifying map during iteration
 		toProcess := make([]externalapi.DomainHash, 0, len(*headerBuffer))
-		
+
 		for hash, header := range *headerBuffer {
 			domainHeader := appmessage.BlockHeaderToDomainBlockHeader(header)
 			directParents := domainHeader.DirectParents()
-			
+
 			allParentsExist := true
 			for _, parentHash := range directParents {
 				parentInfo, err := consensus.GetBlockInfo(parentHash)
@@ -880,18 +880,18 @@ func (flow *handleIBDFlow) processBufferedHeaders(
 					break
 				}
 			}
-			
+
 			if allParentsExist {
 				toProcess = append(toProcess, hash)
 			}
 		}
-		
+
 		// Process all headers that are ready
 		for _, hash := range toProcess {
 			header := (*headerBuffer)[hash]
 			err := flow.processHeader(consensus, header)
 			if err != nil {
-				// If processing fails due to missing parents (race condition), 
+				// If processing fails due to missing parents (race condition),
 				// keep it in the buffer and try again
 				// Check for ErrMissingParents wrapped in RuleError
 				var missingParentsErr ruleerrors.ErrMissingParents
@@ -905,13 +905,13 @@ func (flow *handleIBDFlow) processBufferedHeaders(
 			flow.headersProcessedSinceLast++
 			processedCount++
 			processedAny = true
-			
+
 			// Track the highest DAA score processed
 			domainHeader := appmessage.BlockHeaderToDomainBlockHeader(header)
 			if domainHeader.DAAScore() > highestProcessedDAAScore {
 				highestProcessedDAAScore = domainHeader.DAAScore()
 			}
-			
+
 			// Periodic rate check
 			if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
 				if err := flow.checkPeriodicRate("headers"); err != nil {
@@ -919,11 +919,11 @@ func (flow *handleIBDFlow) processBufferedHeaders(
 				}
 			}
 		}
-		
+
 		if processedAny && highestProcessedDAAScore > 0 && progressReporter != nil {
 			progressReporter.reportProgress(processedCount, highestProcessedDAAScore)
 		}
-		
+
 		if !processedAny {
 			// No more headers can be processed, some have missing parents
 			break
