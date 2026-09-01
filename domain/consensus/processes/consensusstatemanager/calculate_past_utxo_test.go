@@ -89,19 +89,19 @@ func checkBlockUTXOCommitment(t *testing.T, consensus testapi.TestConsensus, blo
 
 	// Get the network name from the consensus DAG params
 	networkName := consensus.DAGParams().Name
-	
+
 	// Get the expected commitment for this network and block
 	expectedCommitmentStr, ok := expectedUTXOCommitments[networkName][blockName]
 	if !ok {
 		t.Fatalf("No expected UTXO commitment found for network %s, block %s", networkName, blockName)
 	}
-	
+
 	// Parse the expected commitment string to a DomainHash
 	expectedCommitment, err := externalapi.NewDomainHashFromString(expectedCommitmentStr)
 	if err != nil {
 		t.Fatalf("Failed to parse expected UTXO commitment for block %s: %s", blockName, expectedCommitmentStr)
 	}
-	
+
 	// Compare the actual (stored) commitment with the expected one
 	actualCommitment := block.Header.UTXOCommitment()
 	if !expectedCommitment.Equal(actualCommitment) {
