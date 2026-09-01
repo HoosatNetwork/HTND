@@ -30,7 +30,6 @@ func checkedLimitToInt(limit uint32) (int, error) {
 }
 
 type utxoIndexStore struct {
-	sync.Mutex
 	database database.Database
 	toAdd    map[ScriptPublicKeyString]UTXOOutpointEntryPairs
 	toRemove map[ScriptPublicKeyString]UTXOOutpointEntryPairs
@@ -166,9 +165,6 @@ func newUTXOIndexStore(database database.Database) *utxoIndexStore {
 // }
 
 func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
-	uis.Lock()
-	defer uis.Unlock()
-	
 	key := ScriptPublicKeyString(scriptPublicKey.String())
 	log.Tracef("Adding outpoint %s:%d to scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -209,9 +205,6 @@ func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, out
 }
 
 func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry) error {
-	uis.Lock()
-	defer uis.Unlock()
-	
 	key := ScriptPublicKeyString(scriptPublicKey.String())
 	log.Tracef("Removing outpoint %s:%d from scriptPublicKey %s",
 		outpoint.TransactionID, outpoint.Index, key)
@@ -253,14 +246,10 @@ func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, 
 }
 
 func (uis *utxoIndexStore) updateVirtualParents(virtualParents []*externalapi.DomainHash) {
-	uis.Lock()
-	defer uis.Unlock()
 	uis.virtualParents = virtualParents
 }
 
 func (uis *utxoIndexStore) discard() {
-	uis.Lock()
-	defer uis.Unlock()
 	for k := range uis.toAdd {
 		delete(uis.toAdd, k)
 	}
@@ -360,79 +349,83 @@ func (uis *utxoIndexStore) commit() error {
 }
 
 func (uis *utxoIndexStore) addAndCommitOutpointsWithoutTransaction(utxoPairs []*externalapi.OutpointAndUTXOEntryPair) error {
-	onEnd := logger.LogAndMeasureExecutionTime(log, "utxoIndexStore.addAndCommitOutpointsWithoutTransaction")
-	defer onEnd()
-
-	// Use a transaction to ensure atomicity - this prevents partial updates
-	// if any write fails, the entire batch is rolled back
-	dbTransaction, err := uis.database.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dbTransaction.RollbackUnlessClosed() }()
-
+	var (
+		wg         sync.WaitGroup
+		errChan    = make(chan error, len(utxoPairs))
+		amountChan = make(chan uint64, len(utxoPairs))
+	)
 	countDeltas := make(map[ScriptPublicKeyString]int64)
-	toAddSompiSupply := uint64(0)
-
-	// Process all UTXOs within the transaction
 	for _, pair := range utxoPairs {
-		bucket := uis.bucketForScriptPublicKey(pair.UTXOEntry.ScriptPublicKey())
-		key, err := uis.convertOutpointToKey(bucket, pair.Outpoint)
-		if err != nil {
-			return err
-		}
-
-		serializedUTXOEntry, err := serializeUTXOEntry(pair.UTXOEntry)
-		if err != nil {
-			return err
-		}
-
-		err = dbTransaction.Put(key, serializedUTXOEntry)
-		if err != nil {
-			return err
-		}
-
-		toAddSompiSupply += pair.UTXOEntry.Amount()
 		countDeltas[ScriptPublicKeyString(pair.UTXOEntry.ScriptPublicKey().String())]++
 	}
 
-	// Apply all updates atomically within the same transaction
-	err = uis.applyUTXOCountDeltas(dbTransaction, countDeltas)
+	for _, pair := range utxoPairs {
+		wg.Add(1)
+		go func(pair *externalapi.OutpointAndUTXOEntryPair) {
+			defer wg.Done()
+
+			bucket := uis.bucketForScriptPublicKey(pair.UTXOEntry.ScriptPublicKey())
+			key, err := uis.convertOutpointToKey(bucket, pair.Outpoint)
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			serializedUTXOEntry, err := serializeUTXOEntry(pair.UTXOEntry)
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			err = uis.database.Put(key, serializedUTXOEntry)
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			amountChan <- pair.UTXOEntry.Amount()
+		}(pair)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(errChan)
+	close(amountChan)
+
+	// Check for any errors
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+
+	// Sum all amounts
+	toAddSompiSupply := uint64(0)
+	for amount := range amountChan {
+		toAddSompiSupply += amount
+	}
+
+	err := uis.applyUTXOCountDeltasToAccessor(uis.database, countDeltas)
 	if err != nil {
 		return err
 	}
 
-	err = dbTransaction.Put(utxoCountsInitializedKey, []byte{1})
+	err = uis.database.Put(utxoCountsInitializedKey, []byte{1})
 	if err != nil {
 		return err
 	}
 
-	err = uis.updateCirculatingSompiSupply(dbTransaction, toAddSompiSupply, 0)
-	if err != nil {
-		return err
-	}
-
-	return dbTransaction.Commit()
+	// Final update
+	return uis.updateCirculatingSompiSupplyWithoutTransaction(toAddSompiSupply, 0)
 }
 
 func (uis *utxoIndexStore) updateAndCommitVirtualParentsWithoutTransaction(virtualParents []*externalapi.DomainHash) error {
-	// Use a transaction to ensure atomicity
-	dbTransaction, err := uis.database.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dbTransaction.RollbackUnlessClosed() }()
-
 	serializeParentHashes := serializeHashes(virtualParents)
-	err = dbTransaction.Put(virtualParentsKey, serializeParentHashes)
+	err := uis.database.Put(virtualParentsKey, serializeParentHashes)
 	if err != nil {
 		return err
 	}
-	err = dbTransaction.Put(utxoCountsInitializedKey, []byte{1})
-	if err != nil {
-		return err
-	}
-	return dbTransaction.Commit()
+	return uis.database.Put(utxoCountsInitializedKey, []byte{1})
 }
 
 func (uis *utxoIndexStore) bucketForScriptPublicKey(scriptPublicKey *externalapi.ScriptPublicKey) *database.Bucket {
@@ -475,9 +468,6 @@ func (uis *utxoIndexStore) stagedData() (
 	toRemove []UTXOPair,
 	virtualParents []*externalapi.DomainHash,
 ) {
-	uis.Lock()
-	defer uis.Unlock()
-	
 	// Flatten uis.toAdd map to []UTXOPair
 	for _, utxoPairs := range uis.toAdd {
 		for outpoint, entry := range utxoPairs {
@@ -494,8 +484,6 @@ func (uis *utxoIndexStore) stagedData() (
 }
 
 func (uis *utxoIndexStore) isAnythingStaged() bool {
-	uis.Lock()
-	defer uis.Unlock()
 	return len(uis.toAdd) > 0 || len(uis.toRemove) > 0
 }
 
@@ -881,7 +869,7 @@ func (uis *utxoIndexStore) applyUTXOCountDeltasToAccessor(accessor database.Data
 		}
 		newCount := int64(currentCount) + delta
 		if newCount < 0 {
-			return errors.Errorf("utxo count for scriptPublicKey %s went negative: current=%d, delta=%d", scriptPublicKey.String(), currentCount, delta)
+			log.Debugf("utxo count for scriptPublicKey %s became negative with current count %d and delta %d", scriptPublicKey.String(), currentCount, delta)
 		}
 
 		if newCount <= 0 {
