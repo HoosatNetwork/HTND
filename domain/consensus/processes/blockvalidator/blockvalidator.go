@@ -14,19 +14,19 @@ import (
 // blockValidator exposes a set of validation classes, after which
 // it's possible to determine whether either a block is valid
 type blockValidator struct {
-	powMax                                *big.Int
-	skipPoW                               bool
-	genesisHash                           *externalapi.DomainHash
-	enableNonNativeSubnetworks            bool
-	powMaxBits                            uint32
-	maxBlockMass                          []uint64
-	mergeSetSizeLimit                     uint64
-	maxBlockParents                       []externalapi.KType
-	timestampDeviationTolerance           int
-	targetTimePerBlock                    []time.Duration
-	POWScores                             []uint64
-	maxBlockLevel                         int
-	pastMedianTimeValidationTolerance     int
+	powMax                            *big.Int
+	skipPoW                           bool
+	genesisHash                       *externalapi.DomainHash
+	enableNonNativeSubnetworks        bool
+	powMaxBits                        uint32
+	maxBlockMass                      []uint64
+	mergeSetSizeLimit                 uint64
+	maxBlockParents                   []externalapi.KType
+	timestampDeviationTolerance       int
+	targetTimePerBlock                []time.Duration
+	POWScores                         []uint64
+	maxBlockLevel                     int
+	pastMedianTimeValidationTolerance int
 
 	databaseContext       model.DBReader
 	difficultyManager     model.DifficultyManager
@@ -97,34 +97,34 @@ func New(powMax *big.Int,
 	txMassCalculator *txmass.Calculator,
 ) model.BlockValidator {
 	return &blockValidator{
-		powMax:                                powMax,
-		skipPoW:                               skipPoW,
-		genesisHash:                           genesisHash,
-		enableNonNativeSubnetworks:            enableNonNativeSubnetworks,
-		powMaxBits:                            difficulty.BigToCompact(powMax),
-		maxBlockMass:                          maxBlockMass,
-		mergeSetSizeLimit:                     mergeSetSizeLimit,
-		maxBlockParents:                       maxBlockParents,
-		POWScores:                             powScores,
-		maxBlockLevel:                         maxBlockLevel,
+		powMax:                     powMax,
+		skipPoW:                    skipPoW,
+		genesisHash:                genesisHash,
+		enableNonNativeSubnetworks: enableNonNativeSubnetworks,
+		powMaxBits:                 difficulty.BigToCompact(powMax),
+		maxBlockMass:               maxBlockMass,
+		mergeSetSizeLimit:          mergeSetSizeLimit,
+		maxBlockParents:            maxBlockParents,
+		POWScores:                  powScores,
+		maxBlockLevel:              maxBlockLevel,
 
-		timestampDeviationTolerance:           timestampDeviationTolerance,
-		pastMedianTimeValidationTolerance:     pastMedianTimeValidationTolerance,
-		targetTimePerBlock:                    targetTimePerBlock,
-		databaseContext:                       databaseContext,
-		difficultyManager:           difficultyManager,
-		pastMedianTimeManager:       pastMedianTimeManager,
-		transactionValidator:        transactionValidator,
-		ghostdagManagers:            ghostdagManagers,
-		dagTopologyManagers:         dagTopologyManagers,
-		dagTraversalManager:         dagTraversalManager,
-		coinbaseManager:             coinbaseManager,
-		mergeDepthManager:           mergeDepthManager,
-		reachabilityManager:         reachabilityManager,
-		finalityManager:             finalityManager,
-		blockParentBuilder:          blockParentBuilder,
-		pruningManager:              pruningManager,
-		parentsManager:              parentsManager,
+		timestampDeviationTolerance:       timestampDeviationTolerance,
+		pastMedianTimeValidationTolerance: pastMedianTimeValidationTolerance,
+		targetTimePerBlock:                targetTimePerBlock,
+		databaseContext:                   databaseContext,
+		difficultyManager:                 difficultyManager,
+		pastMedianTimeManager:             pastMedianTimeManager,
+		transactionValidator:              transactionValidator,
+		ghostdagManagers:                  ghostdagManagers,
+		dagTopologyManagers:               dagTopologyManagers,
+		dagTraversalManager:               dagTraversalManager,
+		coinbaseManager:                   coinbaseManager,
+		mergeDepthManager:                 mergeDepthManager,
+		reachabilityManager:               reachabilityManager,
+		finalityManager:                   finalityManager,
+		blockParentBuilder:                blockParentBuilder,
+		pruningManager:                    pruningManager,
+		parentsManager:                    parentsManager,
 
 		pruningStore:        pruningStore,
 		blockStore:          blockStore,
