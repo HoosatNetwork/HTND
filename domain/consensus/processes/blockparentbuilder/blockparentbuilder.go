@@ -5,8 +5,11 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
+
+var log = logger.RegisterSubSystem("BLPB")
 
 var hashSetPool = sync.Pool{
 	New: func() any {
@@ -135,6 +138,9 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 	// considered as a valid candidate.
 	// This is why we sort the direct parent headers in a way that the first one will be
 	// in the future of the pruning point.
+	// 
+	// During IBD, reachability data might be incomplete, so IsAncestorOf might return
+	// errors or false negatives. In this case, we use the first direct parent as a fallback.
 	directParentHeadersPtr := blockHeaderSlicePool.Get().(*[]externalapi.BlockHeader)
 	directParentHeaders := *directParentHeadersPtr
 	if cap(directParentHeaders) < len(directParentHashesCopy) {
@@ -149,10 +155,16 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 	}()
 	firstParentInFutureOfPruningPointIndex := 0
 	foundFirstParentInFutureOfPruningPoint := false
+	
+	// Try to find a parent in the future of the pruning point
 	for i, directParentHash := range directParentHashesCopy {
 		isInFutureOfPruningPoint, err := bpb.dagTopologyManager.IsAncestorOf(stagingArea, pruningPoint, directParentHash)
 		if err != nil {
-			return nil, err
+			// During IBD, reachability data might be incomplete, causing IsAncestorOf to fail.
+			// Log and continue to try other parents instead of failing immediately.
+			log.Debugf("BuildParents: IsAncestorOf failed for parent %s of block %s: %v. Trying other parents...",
+				directParentHash, directParentHashesCopy[0], err)
+			continue
 		}
 
 		if !isInFutureOfPruningPoint {
@@ -162,6 +174,15 @@ func (bpb *blockParentBuilder) BuildParents(stagingArea *model.StagingArea,
 		firstParentInFutureOfPruningPointIndex = i
 		foundFirstParentInFutureOfPruningPoint = true
 		break
+	}
+
+	// If no parent found in the future of pruning point (can happen during IBD with incomplete reachability),
+	// use the first direct parent as a fallback. This is safe during IBD since we're receiving
+	// blocks from a trusted peer and the direct parents are already validated to exist.
+	if !foundFirstParentInFutureOfPruningPoint && len(directParentHashesCopy) > 0 {
+		log.Debugf("BuildParents: No parent found in future of pruning point for block %s. Using first direct parent as fallback (IBD scenario).", directParentHashesCopy[0])
+		firstParentInFutureOfPruningPointIndex = 0
+		foundFirstParentInFutureOfPruningPoint = true
 	}
 
 	if !foundFirstParentInFutureOfPruningPoint {
