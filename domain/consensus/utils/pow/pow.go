@@ -4,6 +4,7 @@ package pow
 
 import (
 	"math/big"
+	"sync/atomic"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
@@ -26,10 +27,16 @@ type State struct {
 	BlockVersion uint16
 }
 
-var UseHoohashCLibrary bool
+var useHoohashCLibrary atomic.Bool
 
+// UseHoohashCLibrary returns whether the Hoohash C library is being used
+func UseHoohashCLibrary() bool {
+	return useHoohashCLibrary.Load()
+}
+
+// SetUseHoohashCLibrary sets whether to use the Hoohash C library
 func SetUseHoohashCLibrary(use bool) {
-	UseHoohashCLibrary = false // Not available on not aarch64 linux
+	useHoohashCLibrary.Store(false) // Not available on not aarch64 linux
 	_ = use
 }
 

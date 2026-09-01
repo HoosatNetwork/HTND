@@ -15,6 +15,7 @@ import "C"
 import (
 	//  "fmt"
 	"math/big"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -25,10 +26,16 @@ import (
 	"github.com/HoosatNetwork/HTND/util/difficulty"
 )
 
-var UseHoohashCLibrary bool
+var useHoohashCLibrary atomic.Bool
 
+// UseHoohashCLibrary returns whether the Hoohash C library is being used
+func UseHoohashCLibrary() bool {
+	return useHoohashCLibrary.Load()
+}
+
+// SetUseHoohashCLibrary sets whether to use the Hoohash C library
 func SetUseHoohashCLibrary(use bool) {
-	UseHoohashCLibrary = use
+	useHoohashCLibrary.Store(use)
 }
 
 type State struct {
@@ -65,7 +72,7 @@ func NewState(header externalapi.MutableBlockHeader) *State {
 			Timestamp:    timestamp,
 			Nonce:        nonce,
 			BlockVersion: header.Version(),
-			useCLibrary:  UseHoohashCLibrary,
+			useCLibrary:  UseHoohashCLibrary(),
 		}
 
 		// ALWAYS let Go generate the matrix. There's no divergence in this.

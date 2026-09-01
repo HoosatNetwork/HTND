@@ -1,6 +1,7 @@
 package rpcclient
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,7 @@ type RPCClient struct {
 
 	rpcAddress           string
 	rpcRouter            *rpcRouter
+	rpcRouterMutex       sync.RWMutex
 	isConnected          atomic.Uint32
 	isClosed             atomic.Uint32
 	isReconnecting       atomic.Uint32
@@ -66,7 +68,9 @@ func (c *RPCClient) connect() error {
 	rpcClient.AttachRouter(rpcRouter.router)
 
 	c.GRPCClient = rpcClient
+	c.rpcRouterMutex.Lock()
 	c.rpcRouter = rpcRouter
+	c.rpcRouterMutex.Unlock()
 
 	log.Debugf("Connected to %s", c.rpcAddress)
 
@@ -75,8 +79,11 @@ func (c *RPCClient) connect() error {
 	getInfoResponse, err := c.GetInfo()
 	c.timeout = originalTimeout
 	if err != nil {
-		if c.rpcRouter != nil {
-			c.rpcRouter.router.Close()
+		c.rpcRouterMutex.RLock()
+		rpcRouter := c.rpcRouter
+		c.rpcRouterMutex.RUnlock()
+		if rpcRouter != nil {
+			rpcRouter.router.Close()
 		}
 		closeErr := c.GRPCClient.Close()
 		if closeErr != nil {
@@ -147,9 +154,11 @@ func (c *RPCClient) Reconnect() error {
 
 func (c *RPCClient) handleClientDisconnected() {
 	c.isConnected.Store(0)
+	c.rpcRouterMutex.RLock()
 	if c.rpcRouter != nil {
 		c.rpcRouter.router.Close()
 	}
+	c.rpcRouterMutex.RUnlock()
 	if c.isConnecting.Load() == 1 {
 		return
 	}
@@ -185,7 +194,11 @@ func (c *RPCClient) Close() error {
 	if !swapped {
 		return errors.Errorf("Cannot close a client that had already been closed")
 	}
-	c.rpcRouter.router.Close()
+	c.rpcRouterMutex.RLock()
+	if c.rpcRouter != nil {
+		c.rpcRouter.router.Close()
+	}
+	c.rpcRouterMutex.RUnlock()
 	return c.GRPCClient.Close()
 }
 
@@ -195,6 +208,8 @@ func (c *RPCClient) Address() string {
 }
 
 func (c *RPCClient) route(command appmessage.MessageCommand) *routerpkg.Route {
+	c.rpcRouterMutex.RLock()
+	defer c.rpcRouterMutex.RUnlock()
 	return c.rpcRouter.routes[command]
 }
 

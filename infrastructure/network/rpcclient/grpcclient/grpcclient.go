@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
@@ -29,6 +30,7 @@ type GRPCClient struct {
 	connection            *grpc.ClientConn
 	onErrorHandler        OnErrorHandler
 	onDisconnectedHandler OnDisconnectedHandler
+	closeSendMutex        sync.Mutex
 }
 
 // Connect connects to the RPC server with the given address
@@ -81,6 +83,8 @@ func (c *GRPCClient) Close() error {
 
 // Disconnect disconnects from the RPC server
 func (c *GRPCClient) Disconnect() error {
+	c.closeSendMutex.Lock()
+	defer c.closeSendMutex.Unlock()
 	return c.stream.CloseSend()
 }
 
