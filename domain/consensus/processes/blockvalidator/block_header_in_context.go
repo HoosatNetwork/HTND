@@ -205,7 +205,10 @@ func (v *blockValidator) validateMedianTime(stagingArea *model.StagingArea, head
 		return err
 	}
 
-	if header.TimeInMilliseconds() < pastMedianTime {
+	// Allow a small tolerance for clock drift, especially during IBD
+	// Blocks must have timestamp >= pastMedianTime - tolerance
+	const medianTimeTolerance = 2000 // 2 seconds tolerance
+	if header.TimeInMilliseconds() < pastMedianTime-medianTimeTolerance {
 		return errors.Wrapf(ruleerrors.ErrTimeTooOld, "block timestamp of %d is not after expected %d",
 			header.TimeInMilliseconds(), pastMedianTime)
 	}
