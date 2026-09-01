@@ -1,174 +1,244 @@
-# HTND Release Notes v2.16.0
+# HTND v2.16.0 Release Notes
 
-This release includes significant improvements to consensus stability, IBD (Initial Block Download) reliability, UTXO diff handling, and performance optimizations. Over 360 commits contribute to this release, with major focus areas including DAGKnight consensus integration, virtual block handling, pruning point management, and numerous bug fixes.
+Release date: 2026-09-01
 
-## Highlights
+This release includes 365 commits with ~7856 lines added and ~1606 lines deleted across 173 files. Major focus areas include IBD reliability improvements, UTXO diff corruption fixes, coinbase handling with block versions 8 and 9 activation, virtual block management, and performance optimizations.
 
-### Consensus & DAGKnight Integration
-- **DAGKnight Consensus**: Full integration of DAGKnight consensus algorithm with HTND, including selected-parent fix activation at DAA score 214,600,000 (Block version 8)
-- Block version 8 introduces DAAScore-gated selected-parent fix for improved consensus security
-- Fixed DAGKnight selected-parent attribution and error propagation
-- Added filtering of disqualified blocks in GHOSTDAG/DAGKnight merge sets
-- Enabled native subnetwork transaction payloads
-- Added OP_CHECKTEMPLATEVERIFY (CTV) v2 support and L2 script v1 splice operations
+---
 
-### IBD (Initial Block Download) Improvements
-- **Header-only block handling**: Comprehensive fixes for IBD with header-only blocks, including proper handling in zoom windows and pruning point scenarios
-- **Zoom stall fixes**: Multiple fixes preventing bans for legitimate IBD stalls caused by all-header-only windows or local disqualifications
-- **Pruning point tolerance**: Added tolerance for inherited pruning-point offsets in UTXO commitment validation, preventing IBD failures on diverged local chains
-- **BFS iterator**: Replaced selected child iterator with BFS (Breadth-First Search) in antiPastHashesBetween for improved parent-closure completeness
-- **Performance instrumentation**: Added per-block stage timing and separated network-wait from local-processing time to identify and address ~400ms/block IBD processing cost
-- Fixed integer overflow in IBD zooming
-- Added configurable past median time tolerance (2 seconds) to accommodate clock drift between nodes
-- Improved nearly-synced detection and handling
+## Consensus & Block Processing
 
-### UTXO Diff Algebra
-- **Pruning point offset handling**: Comprehensive fixes for inherited pruning-point offsets, including:
-  - Toleration of UTXO commitment mismatches below inconsistent pruning points
-  - Robust marker-free UTXO commitment toleration
-  - Repair of imported pruning-point UTXO multisets at import time
-  - Proper offset baseline detection from pruning points
-- **Coinbase validation**: Fixed coinbase transaction validation to use correct GHOSTDAG data, with improved error reporting
-- **Diff corruption fixes**: Fixed UTXO diff corruption in reorg merges and coinbase ID collisions
-- **Conflict tolerance**: Enhanced isTolerableConflict to handle same-valued coinbase duplicates and fully identical conflicting entries
-- Added tolerance for missing-input block transactions on inherited pruning-point offsets
+### Block Version 8 & 9 Activation
+- **Block version 8 activated** at DAA score 217,137,983 (POWScores[6])
+- **Block version 9 activated** at DAA score 218,735,007 (POWScores[7])
+- Added per-block coinbase entropy (version 8+) based on merge set + DAA score to prevent transaction ID collisions between sibling blocks
+- Added timestamp-based coinbase entropy (version 9+) that additionally folds the block's own header timestamp into entropy for stronger collision resistance
+- All version-indexed parameter arrays extended to 9 entries to support versions 8 and 9
 
-### Virtual Block & Genesis Handling
-- Comprehensive fixes for virtual genesis and virtual block handling across the codebase
-- Fixed virtual block staging and retrieval
-- Added guards and checks for virtual genesis blocks in blue anticone calculations
-- Improved handling of virtual blocks in IBD, including proper window heap processing
-- Fixed nil pointer dereferences related to virtual genesis blocks
+### Coinbase & UTXO
+- Fixed coinbase manager to use each block's own version (not ambient `GetBlockVersion()`) when building expected coinbase transactions
+- Fixed UTXO diff corruption in reorg merges caused by coinbase ID collisions
+- Fixed `AddTransaction` in mutable UTXO diff to properly handle outpoint collisions (only treat same-valued collisions as no-op)
+- Restored previously-disabled pruning-point-import UTXO commitment validation
+- Fixed `updateSelectedTipUTXODiff` to reconcile full absolute virtual diff with selected tip's relative diff instead of silently staging wrong diff
+
+### Reorg & Diff Handling
+- Added `reconcile_reorg_utxo.go` with reconciliation logic for reorg UTXO sets
+- Fixed `resolve_block_status.go` to properly handle disqualified blocks and their UTXO diffs
+- Added tolerance for inherited pruning-point offsets in UTXO commitment validation
+- Made `verifyUTXO` uniformly permissive on inherited pruning-point offsets
+- Added repair of imported pruning-point UTXO multisets at import time
+- Fixed the fourth unprotected conflict shape in diffFrom
+- Fixed missing-input block transaction handling on inherited pruning-point offsets
+- Added robust, marker-free UTXO commitment toleration
+
+### Virtual Blocks
+- Comprehensive fixes for virtual genesis and virtual block handling
+- Fixed virtual block staging and retrieval in consensus state manager
+- Added guards for virtual genesis blocks in blue anticone calculations
+- Fixed `pick_virtual_parents.go` to not select disqualified blocks
 - Ensured virtual genesis/blocks are not added as last valid blocks in tip calculations
 - Added filtering of virtual genesis hashes from merge sets
+- Fixed child iterators to properly handle nil high/low values against virtual blocks
+- Added mutex to block retrieval to prevent race conditions
 
-### Blue Anticone & Performance
-- **Blue Anticone Size**: Added max walk limits and optimizations to prevent excessive traversal
-- Increased max traversal limits where needed (5x increase in some scenarios)
-- Added PebbleDB settings optimizations based on community feedback
-- Increased UTXODiff LRU cache size to improve restorePastUTXO performance
-- Better Pebble value separation (1KB was too small)
-- Improved BFS child iterator with proper high/low hash boundaries
+### Pruning
+- Added pruning store with 2-entry cache (new file)
+- Added pruning point validation: ensure pruning point is in selected parent chain of locator hash
+- Fixed pruning point diff calculation and messages
+- Added `CheckMergeSetBluesAndIfBlockExistsInThem` to validate pruning points
+- Don't create pruning point with any other than UTXO valid blocks
+- Increased UTXODiff LRU cache size from 1000 to 250,000
 
-### Security & Stability
-- **Nil pointer dereference fixes**: Over 20 fixes for nil pointer dereferences across ghostdag manager, dagTraversalManager, blueAnticoneSize, and other components
-- **Race condition fixes**: Fixed races to pass CI tests
-- **Memory safety**: Reverted unsafe byteslice operations in serialization code
+---
+
+## IBD (Initial Block Download)
+
+### Core IBD Fixes
+- Replaced selected child iterator with BFS (Breadth-First Search) in `antiPastHashesBetween` for improved parent-closure completeness
+- Fixed antiPastHashesBetween parent-closure completeness bug causing IBD missing parents
+- Fixed missing parent errors in antiPastHashesBetween by ensuring actualHighHash progress
+- Fixed integer overflow on IBD zooming
+- Added configurable past median time tolerance (2 seconds) to accommodate clock drift between nodes
+
+### Zoom & Stall Handling
+- Root-cause fix: conclude IBD negotiation when the zoom window is all header-only
+- Don't ban peers for IBD zoom stalls caused by all-header-only windows
+- Abandon (don't ban) peers on any prolonged IBD zoom stall
+- Stop banning peers for IBD zoom-in stalls caused by local disqualification
+- Log IBD zoom steps at debug level on healthy path, warn only when stuck
+- Dump full locator window when IBD zoom stalls for non-disqualification reasons
+- Fixed premature NO-OP exit from ResolveVirtual during IBD
+
+### Header-Only Blocks
+- Send blocks in IBD even if header-only, but mark their PoW hash as header-only and don't process them
+- Don't send header-only blocks in normal operation
+- Don't use header-only blocks as lowest unknown syncer chain hash
+- Fixed resolve virtual failure with header-only blocks in IBD
+- Fixed pruning point error during IBD with headers proof
+- Fixed IBD with headers proof when pruning point is unchanged
+- Fall back to shared ancestor when pruning point isn't on syncer tip's chain
+- Never fail IBD in missingBlockBodyHashes on a diverged local chain
+
+### Performance
+- Added per-block stage timing to identify ~400ms/block IBD processing cost
+- Separated IBD network-wait time from local-processing time per batch
+- Instrumented restorePastUTXO and DiffFrom to find IBD slowness sources
+
+---
+
+## GHOSTDAG & DAGKnight
+
+### DAGKnight
+- DAGKnight consensus algorithm is present in codebase (dagknight.go)
+- Fixed DAGKnight selected-parent attribution and error propagation
+- Added filtering of disqualified blocks in GHOSTDAG/DAGKnight merge sets
+- Added check in `findSelectedParent` to skip disqualified blocks
+- Added MaxDAGKnightTips constant (24)
+- Added DAGKnight faithfulness analysis document
+
+### GHOSTDAG Manager
+- Fixed nil pointer dereference in ghostdag manager that propagated to get anticone
+- Fixed `getChainPath` to handle nil blocks and nil selected parents
+- Removed excessive logging from partitionByLCAFuture
+- Fixed `agrees` function to handle nil B or C parameters
+- Added sorting of antipast by blue score
+- Fixed child iterator to respect not going beyond high hash and include low hash support
+
+---
+
+## Network & Peer Management
+
+- Fixed nil pointer dereferences in sendLoop, receiveLoop, and fromAppMessage
+- Added mutex to get block operations
+- Ignore inv for virtual hashes
+- Added proper error handling for missing blocks
+
+---
+
+## Performance & Database
+
+### PebbleDB
+- Better PebbleDB settings based on AI feedback (Claude, Gemini, Grok)
+
+### Caching
+- Increased UTXODiff LRU cache size from 1000 to 250,000
+- Removed redundant calls from restorePastUTXO
+
+### Blue Anticone
+- Added max walk limits to blueAnticoneSize to prevent excessive traversal
+- Increased max traversal by 5x where needed
+- Fixed nil pointer dereference in blueAnticoneSize
+- Fixed blueAnticoneSize to not fetch ghostdag data for virtual block hashes
+- Small optimization: cut one iteration of loop when candidateBluesAnticoneSizes exceeds max
+
+---
+
+## Security & Stability
+
+- 20+ nil pointer dereference fixes across: ghostdag manager, dagTraversalManager, blueAnticoneSize, sendLoop, receiveLoop, fromAppMessage, ghostdag data store, block validator, etc.
+- Fixed races to pass CI tests
+- Fixed double-close panic in RPC stats Stop()
+- Fixed panic in ghostdag data store when block hash is nil
+- Added validation that block hash cannot be nil from ghostdag datastore
+- Reverted unsafe byteslice operations in serialization code for memory safety
 - Removed hardcoded GitHub personal access token from source code
 - Added proper mutex locking for thread-safe operations
-- Fixed double-close panic in RPC stats
-- Added validation for node fee outputs in consensus
+- Don't propagate ErrMissingTxOut error
+- If transaction is missing outpoints, don't error - just don't accept the transaction
 
-### Network & Peer Management
-- Don't ban peers for legitimate IBD zoom stalls
-- Abandon (don't ban) peers on prolonged IBD zoom stalls
-- Added force-same-version peer filtering to prevent protocol mismatches
-- Prevent getting stuck talking to very slow senders (tar pit mitigation)
-- Handle ErrUnexpectedParents gracefully in block relay
-- Added checks to prevent relaying blocks with disqualified parents
-- Don't ban for sending disqualified blocks when node already has them
-- Disabled indirect parent check temporarily
+---
 
-### Auto-Updater & Reporting
-- Made auto-updater and auto-reporting **opt-in** (changed from opt-out)
-- Auto-updater now self-updates HTND and its binaries from GitHub releases
-- Added automatic GitHub issue reporting on panics (opt-in)
-- Added random delay before installing updates to prevent mass simultaneous updates
+## Auto-Updater && Auto-Reporter
+
+- Changed auto-updater and auto-reporter to **opt-in** (was opt-out) per NonKYC request
 - Fixed race condition in updater with updateInProgress flag
-- Fixed GitHub release API issues
-- Updated Dockerfile to disable auto-updating by default
 
-### Build & Infrastructure
-- **Go version support**: Upgraded to Go 1.26.0 and added Go 1.27 support
-- Cross-platform rlimit support (including Windows-safe implementation)
+---
+
+## Build & Infrastructure
+
+- Upgraded to Go 1.27
+- Cross-platform rlimit support with Windows-safe implementation
 - Dockerfile updated to Go 1.27
 - Better build system for Docker images
-- Removed genalphabet reference
 - Updated module dependencies
-- Added lefthook for pre-commit git hook usage
+- Added lefthook for pre-commit git hooks
+- Added sample lefthook.yml and letfhook.yml files
 
-### Code Quality & Testing
+---
+
+## Code Quality & Testing
+
 - Added skip to long-running tests
 - Fixed numerous test golden data comparisons
 - Improved debug logging across consensus, UTXO, and network components
-- Moved excessive logging from INFO/WRN to DBG level for better signal-to-noise ratio
-- Fixed format string errors throughout the codebase
+- Moved excessive logging from INFO/WRN to DBG level
+- Fixed format string errors (%d to %s) throughout
 - Removed code coverage requirements where not needed
 - Fixed test failures and build errors
-
-### Known Issues & Workarounds
-- Some finality tests are currently disabled as they are not yet compatible with DAGKnight consensus
-- Pruning point validation is temporarily disabled in some scenarios
-- Header-only block guards have been adjusted to accommodate IBD scenarios
-
-## Detailed Changes
-
-### Consensus Layer
-- Fixed block template and validation to have different blue scores
-- Reconciled reorg UTXOs
-- Added validation that pruning point is in the selected parent chain of locator hash
-- Staged consensus UTXO diff and multiset in consensus state manager
-- Fixed validation and insertion of imported pruning point blocks
 - Added detailed script comparison logging for coinbase validation
-- Added backup validation for coinbase red block outputs
-- Fixed coinbase validation to use each block's own version
-- Fixed block relay to use correct block versions
+- Added targeted IBD/virtual-resolution diagnostic logging
+- Fixed TestReverseUTXODiffs
 
-### Database & Storage
-- Applied PebbleDB settings from v2.10.1
-- Better PebbleDB value separation
-- Fixed LRU cache issues
-- Disabled LRU cache mutexes (they were slowing down the node)
-- Increased UTXODiff LRU cache size
-- Removed redundant calls from restorePastUTXO
+---
 
-### Network Protocol
-- Fixed missing parent errors in antiPastHashesBetween
-- Fixed antiPastHashesBetween parent-closure completeness bug causing IBD missing parents
-- Sort antiPast by blue score for consistent ordering
-- Ignore inv for virtual hashes
-- Added mutex to get block operations
-- Fixed send/receive loop nil pointer dereferences
-- Added proper error handling for missing blocks
+## RPC & API
 
-### Block Processing
-- Don't send header-only blocks in normal operation
-- Mark header-only blocks in IBD and don't process them
-- Don't use header-only blocks as lowest unknown syncer chain hash
-- Fixed premature NO-OP exit from ResolveVirtual during IBD
-- Fixed resolve virtual failure with header-only blocks in IBD
-- Fixed ResolveVirtual not finding pending blocks and not updating tips
-
-### Wallet
-- Added fee estimation to wallet (cherrypick from Kaspa #2291)
-- Wallet compounder improvements to prevent mempool orphans and selfish mining
-
-### API & RPC
 - Fixed nil pointer dereference in RPC routerInitializer
 - Fixed format string errors in various RPC handlers
 - Removed ASCII art from output
+- Added info of block status to received blocks
+- Return error if header DAA score does not exist, use daaBlockStore
+- Use headers DAA score, not daaBlockStore DAA score for consistency
 
-### Block Version 8 Features
-- DAAScore-gated selected-parent fix activation at 214,600,000
-- Proper selected parent attribution in DAGKnight
-- Error propagation improvements
-- Compatibility fixes for DAGKnight consensus
+---
+
+## Wallet
+
+- Added fee estimation to wallet (cherrypick from Kaspa #2291)
+- Wallet compounder improvements to prevent mempool orphans and selfish mining
+
+---
+
+## Mining
+
+- Fixed block template builder to use correct blue scores
+- Reconciled reorg UTXOs for proper mining
+- Don't stage disqualified block UTXOs
+- Added backup validation for coinbase red block outputs
+- Added detailed debug logging to coinbase manager
+- Stopped bucketing red block merge rewards
+
+---
+
+## Configuration
+
+- Added `PastMedianTimeValidationTolerance` config option (default: 2000ms = 2 seconds)
+
+
+---
+
+
+## Known Issues
+
+- Pruning point validation is temporarily disabled in some scenarios because of utxo commitment mismatches with pruning points.
+
+---
 
 ## Breaking Changes
 
 None. This is a backward-compatible release.
 
-## Upgrade Notes
+---
 
-- Auto-updater is now **opt-in**. Users who want automatic updates must explicitly enable them.
-- Block version 8 activates at DAA score 214,600,000. Nodes should upgrade before this point to avoid consensus issues.
-- Go 1.26.0 or later is recommended for building from source.
-- The unsafe byteslice operations have been reverted for safety. Performance impact is minimal.
+## Files Changed
 
-## Contributors
-
-Major contributions from Toni Lukkaroinen with assistance from AI tools (Claude, Gemini, Grok) for code review and optimization suggestions.
+- 173 files changed
+- 7856 insertions(+)
+- 1606 deletions(-)
+- New files: `pruningstore/pruning_store.go`, `child_iterator.go`, `reconcile_reorg_utxo.go`, `antipast_test.go`, `antipast_order_test.go`, rlimit files, lefthook configs, etc.
 
 ---
 
-*Generated from commits between v2.15.0 and HEAD (2026-09-01)*
+*Generated from commits between v2.15.0 (2426ce95d) and HEAD (9b37508d5)*
