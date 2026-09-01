@@ -382,7 +382,7 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 		return err
 	}
 
-	reachabilityManagers, dagTopologyManagers, ghostdagManagers := ppm.dagProcesses(maxLevel, blockHeaderStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores)
+	reachabilityManagers, dagTopologyManagers, ghostdagManagers, _ := ppm.dagProcesses(maxLevel, blockHeaderStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores)
 
 	defer func() {
 		for i := 0; i <= maxLevel; i++ {
@@ -749,10 +749,12 @@ func (ppm *pruningProofManager) dagProcesses(
 	[]model.ReachabilityManager,
 	[]model.DAGTopologyManager,
 	[]model.GHOSTDAGManager,
+	[]model.DAGTraversalManager,
 ) {
 	reachabilityManagers := make([]model.ReachabilityManager, ppm.maxBlockLevel+1)
 	dagTopologyManagers := make([]model.DAGTopologyManager, ppm.maxBlockLevel+1)
 	ghostdagManagers := make([]model.GHOSTDAGManager, ppm.maxBlockLevel+1)
+	dagTraversalManagers := make([]model.DAGTraversalManager, ppm.maxBlockLevel+1)
 
 	for i := 0; i <= maxLevel; i++ {
 		reachabilityManagers[i] = reachabilitymanager.New(
@@ -775,9 +777,21 @@ func (ppm *pruningProofManager) dagProcesses(
 			nil,
 			ppm.k,
 			ppm.genesisHash)
+
+		dagTraversalManagers[i] = dagtraversalmanager.New(
+			ppm.databaseContext,
+			dagTopologyManagers[i],
+			ghostdagDataStores[i],
+			reachabilityManagers[i],
+			ghostdagManagers[i],
+			nil,
+			nil,
+			nil,
+			[]int{0})
+		ghostdagManagers[i].SetDAGTraversalManager(dagTraversalManagers[i])
 	}
 
-	return reachabilityManagers, dagTopologyManagers, ghostdagManagers
+	return reachabilityManagers, dagTopologyManagers, ghostdagManagers, dagTraversalManagers
 }
 
 func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPointProof *externalapi.PruningPointProof,
