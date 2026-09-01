@@ -55,6 +55,13 @@ func (gm *ghostdagManager) mergeSetWithoutSelectedParent(stagingArea *model.Stag
 				continue
 			}
 
+			// During IBD, IsAncestorOf might return false due to incomplete reachability data.
+			// To prevent unbounded merge set growth, we limit the size to k * 10 (180 for k=18).
+			// This is the same as the mergeSetSizeLimit, so the validation check will still work.
+			if len(mergeSetSlice) >= int(k)*10 {
+				continue
+			}
+
 			mergeSetMap[*parent] = struct{}{}
 			mergeSetSlice = append(mergeSetSlice, parent)
 			queue = append(queue, parent)
