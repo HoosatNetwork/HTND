@@ -400,7 +400,7 @@ func TestTransactionAcceptance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error getting redBlock: %+v", err)
 		}
-		blockG, found, err := testConsensus.GetBlock(blockHashG)
+		_, found, err := testConsensus.GetBlock(blockHashG)
 		if err != nil {
 			t.Fatalf("Error getting blockG: %+v", err)
 		}
@@ -411,8 +411,8 @@ func TestTransactionAcceptance(t *testing.T) {
 
 		// The acceptance data is calculated from the POV of the validating block.
 		// For UTXO entries created while applying the merge set, the consensus state manager
-		// uses the validating block header's DAA score (see CalculatePastUTXOAndAcceptanceData).
-		expectedAddedUTXOEntryDAAScore := blockG.Header.DAAScore()
+		// uses the block that created the UTXO entry's DAA score (see CalculatePastUTXOAndAcceptanceData).
+		expectedAddedUTXOEntryDAAScore := redBlock.Header.DAAScore()
 		// We expect the second transaction in the "blue block" (blueChildOfRedBlock) to be accepted because the merge set is ordered topologically
 		// and the red block is ordered topologically before the "blue block" so the input is known in the UTXOSet.
 		expectedAcceptanceData := externalapi.AcceptanceData{

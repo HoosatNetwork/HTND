@@ -79,7 +79,7 @@ func TestVirtualDiff(t *testing.T) {
 				output.Value,
 				output.ScriptPublicKey,
 				true,
-				blockB.Header.DAAScore()+1,
+				blockB.Header.DAAScore(),
 			)) {
 				t.Fatalf("Unexpected entry %s", entry)
 			}
