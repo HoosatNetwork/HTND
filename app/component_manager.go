@@ -111,14 +111,15 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		return nil, err
 	}
 	consensusConfig := consensus.Config{
-		Params:                          *cfg.ActiveNetParams,
-		IsArchival:                      cfg.IsArchivalNode,
-		DeletionDepth:                   cfg.DeletionDepth,
-		DataRetentionDuration:           dataRetentionDuration,
-		PruningInterval:                 pruningInterval,
-		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
-		EnableUTXODebugDiagnostics:      cfg.EnableUTXODebugDiagnostics,
-		UseHoohashCLibrary:              cfg.UseHoohashCLibrary,
+		Params:                              *cfg.ActiveNetParams,
+		IsArchival:                          cfg.IsArchivalNode,
+		DeletionDepth:                       cfg.DeletionDepth,
+		DataRetentionDuration:               dataRetentionDuration,
+		PruningInterval:                     pruningInterval,
+		EnableSanityCheckPruningUTXOSet:     cfg.EnableSanityCheckPruningUTXOSet,
+		EnableUTXODebugDiagnostics:          cfg.EnableUTXODebugDiagnostics,
+		UseHoohashCLibrary:                  cfg.UseHoohashCLibrary,
+		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs

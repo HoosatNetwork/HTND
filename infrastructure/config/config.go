@@ -182,6 +182,8 @@ type Flags struct {
 
 	UseHoohashCLibrary bool `long:"use-hoohash-c-library" description:"Use the hoohash C library for calculating ProofOfWorkValue for block versions >= 5"`
 
+	PastMedianTimeValidationTolerance int `long:"past-median-time-validation-tolerance" description:"Tolerance in milliseconds for past median time validation" default:"2000"`
+
 	// Auto-update configuration
 	AutoUpdateEnabled       Bool          `long:"autoupdate" description:"Enable automatic updates from GitHub releases (opt-in, disabled by default)"`
 	AutoUpdateCheckInterval time.Duration `long:"autoupdate-interval" description:"Interval between update checks (e.g., 24h, 72h)" default:"24h"`
@@ -265,6 +267,7 @@ func defaultFlags() *Flags {
 		UTXODefaultMaxLimit:            defaultUTXODefaultMaxLimit,
 		DisallowLoopbackP2PConnections: false,
 		UseHoohashCLibrary:             runtime.GOOS == "linux" && runtime.GOARCH == "arm64",
+		PastMedianTimeValidationTolerance: 2000,
 		AutoUpdateEnabled:              false,
 		AutoUpdateCheckInterval:        24 * time.Hour,
 		AutoUpdateChannel:              "stable",

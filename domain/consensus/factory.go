@@ -97,6 +97,9 @@ type Config struct {
 
 	// UseHoohashCLibrary indicates whether to use the hoohash C library for block versions >= 5
 	UseHoohashCLibrary bool
+
+	// PastMedianTimeValidationTolerance is the tolerance in milliseconds for past median time validation
+	PastMedianTimeValidationTolerance int
 }
 
 // Factory instantiates new Consensuses
@@ -411,6 +414,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.TargetTimePerBlock,
 		config.POWScores,
 		config.MaxBlockLevel,
+		config.PastMedianTimeValidationTolerance,
 
 		dbManager,
 		difficultyManager,
