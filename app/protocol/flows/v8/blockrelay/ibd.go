@@ -629,10 +629,6 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 	}
 	progressReporter := newIBDProgressReporter(highestSharedBlockHeader.DAAScore(), highBlockDAAScoreHint, "block headers")
 
-	// Buffer for headers that cannot be processed yet because their parents are missing
-	// Maps block hash to the header message
-	headerBuffer := make(map[externalapi.DomainHash]*appmessage.MsgBlockHeader)
-
 	for {
 		// Receive next batch of headers (this call blocks)
 		blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
@@ -641,13 +637,6 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		}
 
 		if doneIBD {
-			// Process any remaining buffered headers before finishing
-			if len(headerBuffer) > 0 {
-				log.Infof("Processing %d buffered headers before finishing IBD", len(headerBuffer))
-				if err := flow.processBufferedHeaders(consensus, &headerBuffer, progressReporter); err != nil {
-					return err
-				}
-			}
 			log.Debugf("IBD Done!")
 			// IBD of headers is finished → proceed to sync relay past
 			return flow.syncMissingRelayPast(consensus, syncerHeaderSelectedTipHash, relayBlockHash)
@@ -658,96 +647,27 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 		}
 		log.Infof("Received %d headers", len(blockHeadersMessage.BlockHeaders))
 
-		// First, add all new headers to the buffer
+		// Process all headers in this batch
 		for _, header := range blockHeadersMessage.BlockHeaders {
-			headerBuffer[*header.BlockHash()] = header
-		}
-
-		// Then process headers from the buffer that have all their parents available
-		processedCount := 0
-		var highestProcessedDAAScore uint64
-		for len(headerBuffer) > 0 {
-			processedAny := false
-			// Collect headers to process in this pass to avoid modifying map during iteration
-			toProcess := make([]externalapi.DomainHash, 0, len(headerBuffer))
-
-			for hash, header := range headerBuffer {
-				// Convert to domain header to get direct parents
-				domainHeader := appmessage.BlockHeaderToDomainBlockHeader(header)
-				directParents := domainHeader.DirectParents()
-
-				// Check if all direct parents exist in the consensus
-				allParentsExist := true
-				for _, parentHash := range directParents {
-					parentInfo, err := consensus.GetBlockInfo(parentHash)
-					if err != nil {
-						// If we can't check, assume parent doesn't exist to be safe
-						allParentsExist = false
-						break
-					}
-					if !parentInfo.Exists {
-						allParentsExist = false
-						break
-					}
-				}
-
-				if allParentsExist {
-					toProcess = append(toProcess, hash)
-				}
+			// log.Infof("Processing header %s", header.BlockHash())
+			err = flow.processHeader(consensus, header)
+			if err != nil {
+				return err
 			}
-
-			// Process all headers that are ready
-			for _, hash := range toProcess {
-				header := headerBuffer[hash]
-				// Process this header
-				err := flow.processHeader(consensus, header)
-				if err != nil {
-					// If processing fails due to missing parents (race condition),
-					// keep it in the buffer and try again
-					// Check for ErrMissingParents wrapped in RuleError
-					var missingParentsErr ruleerrors.ErrMissingParents
-					if errors.As(err, &missingParentsErr) {
-						log.Debugf("Header %s has missing parents, will retry later", hash)
-						continue
-					}
+			flow.headersProcessedSinceLast++
+			// Periodic rate check (e.g., every 10 seconds) inside loop
+			if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
+				if err := flow.checkPeriodicRate("headers"); err != nil {
 					return err
 				}
-				delete(headerBuffer, hash)
-				flow.headersProcessedSinceLast++
-				processedCount++
-				processedAny = true
-
-				// Track the highest DAA score processed
-				domainHeader := appmessage.BlockHeaderToDomainBlockHeader(header)
-				if domainHeader.DAAScore() > highestProcessedDAAScore {
-					highestProcessedDAAScore = domainHeader.DAAScore()
-				}
-
-				// Periodic rate check (e.g., every 10 seconds)
-				if time.Since(flow.lastRateCheckTime) >= 10*time.Second {
-					if err := flow.checkPeriodicRate("headers"); err != nil {
-						return err
-					}
-				}
-			}
-
-			// If no headers were processed in this pass, we have headers with missing parents
-			// that aren't in the buffer yet. Break and wait for more headers.
-			if !processedAny {
-				break
 			}
 		}
 
-		// Report progress - use the highest DAA score from processed headers
+		// Report progress
 		lastReceivedHeader := blockHeadersMessage.BlockHeaders[len(blockHeadersMessage.BlockHeaders)-1]
-		if highestProcessedDAAScore > 0 {
-			progressReporter.reportProgress(processedCount, highestProcessedDAAScore)
-		} else {
-			// Fallback: use the last received header's DAA score
-			progressReporter.reportProgress(processedCount, lastReceivedHeader.DAAScore)
-		}
+		progressReporter.reportProgress(len(blockHeadersMessage.BlockHeaders), lastReceivedHeader.DAAScore)
 
-		// Ask for the next batch if we haven't reached the selected tip
+		// Ask for the next batch
 		if !lastReceivedHeader.BlockHash().Equal(syncerHeaderSelectedTipHash) {
 			log.Infof("Requesting more with last received header %s", lastReceivedHeader.BlockHash())
 		}
