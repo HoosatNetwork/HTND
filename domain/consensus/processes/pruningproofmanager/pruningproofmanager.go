@@ -820,6 +820,8 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	blockRelationStoreForTargetReachabilityManager := blockrelationstore.New(bucket, 0, false)
 	dagTopologyManagerForTargetReachabilityManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, blockRelationStoreForTargetReachabilityManager, nil)
 	ghostdagManagerForTargetReachabilityManager := ghostdagmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, nil, ghostdagDataStoreForTargetReachabilityManager, ppm.blockHeaderStore, nil, ppm.k, nil)
+	dagTraversalManagerForTargetReachabilityManager := dagtraversalmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, ghostdagDataStoreForTargetReachabilityManager, targetReachabilityManager, ghostdagManagerForTargetReachabilityManager, nil, nil, nil, []int{0})
+	ghostdagManagerForTargetReachabilityManager.SetDAGTraversalManager(dagTraversalManagerForTargetReachabilityManager)
 	err = dagTopologyManagerForTargetReachabilityManager.SetParents(stagingArea, model.VirtualGenesisBlockHash, nil)
 	if err != nil {
 		return err
