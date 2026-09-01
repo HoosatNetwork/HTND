@@ -77,6 +77,7 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 	blockHashes := []*externalapi.DomainHash{}
 	seen := make(map[externalapi.DomainHash]struct{})
 	actualHighHash = lowHash
+	var lastOnChainBlock *externalapi.DomainHash
 
 	iterator, err := sm.dagTraversalManager.ChildIterator(stagingArea, highHash, lowHash, false)
 	if err != nil {
@@ -107,6 +108,11 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 		isCurrentOnChain, err := sm.dagTopologyManager.IsInSelectedParentChainOf(stagingArea, current, highHash)
 		if err != nil {
 			return nil, nil, err
+		}
+
+		// Track the most recent on-chain block we've seen for potential use as actualHighHash
+		if isCurrentOnChain {
+			lastOnChainBlock = current
 		}
 
 		isInPastOfOriginalLowHash, err := sm.dagTopologyManager.IsAncestorOf(stagingArea, current, originalLowHash)
@@ -144,9 +150,18 @@ func (sm *syncManager) antiPastHashesBetween(stagingArea *model.StagingArea, low
 			blockHashes = append(blockHashes, current)
 		}
 
+		// Update actualHighHash for on-chain blocks or when we reach highHash
 		if isCurrentOnChain || current.Equal(highHash) {
 			actualHighHash = current
 		}
+	}
+
+	// If we processed any on-chain blocks but actualHighHash was never updated from lowHash,
+	// update it to the most recent on-chain block to ensure forward progress.
+	// This prevents missing parent errors when off-chain blocks were processed
+	// but we haven't reached highHash yet (e.g., due to maxBlocks limit).
+	if lastOnChainBlock != nil && actualHighHash == lowHash {
+		actualHighHash = lastOnChainBlock
 	}
 
 	// BFS order is not topological - sort before handing the batch to the peer.
