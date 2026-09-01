@@ -1084,11 +1084,11 @@ func (pm *pruningManager) finalityScore(blueScore uint64) uint64 {
 func (pm *pruningManager) FindAndReproduceRootDisqualification(stagingArea *model.StagingArea) {
 	tips, err := pm.consensusStateStore.Tips(stagingArea, pm.databaseContext)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch tips: %s", err)
+		log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch tips: %s", err)
 		return
 	}
 	if len(tips) == 0 {
-		log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: no tips found")
+		log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: no tips found")
 		return
 	}
 
@@ -1097,11 +1097,11 @@ func (pm *pruningManager) FindAndReproduceRootDisqualification(stagingArea *mode
 	for i := 0; i < maxWalk; i++ {
 		status, err := pm.blockStatusStore.Get(pm.databaseContext, stagingArea, current)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch status for %s: %s", current, err)
+			log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch status for %s: %s", current, err)
 			return
 		}
 		if status != externalapi.StatusDisqualifiedFromChain {
-			log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: walked back %d blocks from tip %s "+
+			log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: walked back %d blocks from tip %s "+
 				"without finding any disqualified block (reached %s with status %s) - nothing to reproduce.",
 				i, tips[0], current, status)
 			return
@@ -1109,18 +1109,18 @@ func (pm *pruningManager) FindAndReproduceRootDisqualification(stagingArea *mode
 
 		ghostdagData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, current, false)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch GHOSTDAG data for %s: %s", current, err)
+			log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch GHOSTDAG data for %s: %s", current, err)
 			return
 		}
 		parent := ghostdagData.SelectedParent()
 		if parent == nil {
-			log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: reached the end of the chain at %s "+
+			log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: reached the end of the chain at %s "+
 				"(still disqualified) without finding a healthy parent.", current)
 			return
 		}
 		parentStatus, err := pm.blockStatusStore.Get(pm.databaseContext, stagingArea, parent)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch status for %s: %s", parent, err)
+			log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not fetch status for %s: %s", parent, err)
 			return
 		}
 		if parentStatus != externalapi.StatusDisqualifiedFromChain {
@@ -1128,11 +1128,11 @@ func (pm *pruningManager) FindAndReproduceRootDisqualification(stagingArea *mode
 			// hasn't moved, but ReproduceDisqualification (restorePastUTXO + full resolution) is
 			// expensive - skip it if this is the same root already reproduced on a previous boot.
 			if lastRoot, lastRootErr := pm.pruningStore.LastUTXODebugReproducedRootHash(pm.databaseContext); lastRootErr == nil && lastRoot.Equal(current) {
-				log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: root disqualified block %s was "+
+				log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: root disqualified block %s was "+
 					"already reproduced on a previous boot and hasn't changed - skipping.", current)
 				return
 			}
-			log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: found root disqualified block %s "+
+			log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: found root disqualified block %s "+
 				"(selected parent %s has status %s) after walking back %d blocks from tip %s. Reproducing...",
 				current, parent, parentStatus, i, tips[0])
 			if err := pm.consensusStateManager.ReproduceDisqualification(current, parent); err != nil {
@@ -1140,14 +1140,14 @@ func (pm *pruningManager) FindAndReproduceRootDisqualification(stagingArea *mode
 				return
 			}
 			if setErr := pm.pruningStore.SetLastUTXODebugReproducedRootHash(pm.databaseContext, current); setErr != nil {
-				log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not persist last-reproduced marker for %s: %s",
+				log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: could not persist last-reproduced marker for %s: %s",
 					current, setErr)
 			}
 			return
 		}
 		current = parent
 	}
-	log.Warnf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: walked %d blocks without finding the root "+
+	log.Debugf("[UTXO-DEBUG] FindAndReproduceRootDisqualification: walked %d blocks without finding the root "+
 		"- giving up.", maxWalk)
 }
 
@@ -1176,15 +1176,15 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 	stagingArea := model.NewStagingArea()
 	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not fetch current pruning point: %s", err)
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not fetch current pruning point: %s", err)
 		return
 	}
 	if pruningPoint.Equal(pm.genesisHash) {
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: current pruning point is genesis, skipping")
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: current pruning point is genesis, skipping")
 		return
 	}
 	if lastChecked, lastCheckedErr := pm.pruningStore.LastUTXODebugCheckedPruningPoint(pm.databaseContext); lastCheckedErr == nil && lastChecked.Equal(pruningPoint) {
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: %s was already checked on a previous "+
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: %s was already checked on a previous "+
 			"boot and hasn't changed - skipping.", pruningPoint)
 		return
 	}
@@ -1197,21 +1197,21 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 			return
 		}
 		if setErr := pm.pruningStore.SetLastUTXODebugCheckedPruningPoint(pm.databaseContext, pruningPoint); setErr != nil {
-			log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not persist last-checked marker for %s: %s",
+			log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not persist last-checked marker for %s: %s",
 				pruningPoint, setErr)
 		}
 	}()
 
 	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPoint)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not fetch header for %s: %s", pruningPoint, err)
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not fetch header for %s: %s", pruningPoint, err)
 		return
 	}
 	expectedCommitment := header.UTXOCommitment()
 
 	utxoSetIterator, err := pm.pruningStore.PruningPointUTXOIterator(pm.databaseContext)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not get bucket iterator: %s", err)
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not get bucket iterator: %s", err)
 		return
 	}
 	defer utxoSetIterator.Close()
@@ -1223,12 +1223,12 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
 		outpoint, entry, err := utxoSetIterator.Get()
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: bucket iterator.Get failed: %s", err)
+			log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: bucket iterator.Get failed: %s", err)
 			return
 		}
 		serialized, err := utxo.SerializeUTXO(entry, outpoint)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: SerializeUTXO failed: %s", err)
+			log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: SerializeUTXO failed: %s", err)
 			return
 		}
 		bucketMultiset.Add(serialized)
@@ -1240,7 +1240,7 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 	perBlockMultiset, perBlockErr := pm.multiSetStore.Get(pm.databaseContext, stagingArea, pruningPoint)
 	var perBlockHash *externalapi.DomainHash
 	if perBlockErr != nil {
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not fetch per-block multiset for %s: %s",
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not fetch per-block multiset for %s: %s",
 			pruningPoint, perBlockErr)
 	} else {
 		perBlockHash = perBlockMultiset.Hash()
@@ -1249,14 +1249,14 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 	bucketMatchesHeader := bucketHash.Equal(expectedCommitment)
 	perBlockMatchesHeader := perBlockHash != nil && perBlockHash.Equal(expectedCommitment)
 
-	log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet for %s: entries=%d | header expects=%s | "+
+	log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet for %s: entries=%d | header expects=%s | "+
 		"bucket-derived=%s (matchesHeader=%t) | per-block multiset=%s (matchesHeader=%t)",
 		pruningPoint, entryCount, expectedCommitment, bucketHash, bucketMatchesHeader, perBlockHash, perBlockMatchesHeader)
 
 	reachedVerdict = true
 	switch {
 	case bucketMatchesHeader:
-		log.Warnf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet PASSED for %s: the served bucket matches "+
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet PASSED for %s: the served bucket matches "+
 			"its own header commitment exactly.", pruningPoint)
 	case perBlockHash == nil:
 		log.Errorf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet FAILED for %s: bucket does not match header, "+
@@ -1295,7 +1295,7 @@ func (pm *pruningManager) checkHistoricalPruningPoints(stagingArea *model.Stagin
 		log.Errorf("[UTXO-DEBUG] checkHistoricalPruningPoints: could not fetch current pruning point index: %s", err)
 		return
 	}
-	log.Warnf("[UTXO-DEBUG] checkHistoricalPruningPoints: walking recorded pruning points below index %d", belowIndex)
+	log.Debugf("[UTXO-DEBUG] checkHistoricalPruningPoints: walking recorded pruning points below index %d", belowIndex)
 
 	// examined bounds total loop iterations regardless of resolvability - a long run of
 	// HeaderOnly/not-found entries (expected: pruning-point advancement and actual body deletion
@@ -1329,7 +1329,7 @@ func (pm *pruningManager) checkHistoricalPruningPoints(stagingArea *model.Stagin
 				} else {
 					reason = fmt.Sprintf("status=%s, not resolvable", status)
 				}
-				log.Warnf("[UTXO-DEBUG] checkHistoricalPruningPoints: index %d (%s): %s - skipping "+
+				log.Debugf("[UTXO-DEBUG] checkHistoricalPruningPoints: index %d (%s): %s - skipping "+
 					"(%d unresolvable in a row so far)", idx, hash, reason, unresolvableStreak)
 			}
 			continue
@@ -1379,7 +1379,7 @@ func (pm *pruningManager) checkHistoricalPruningPoints(stagingArea *model.Stagin
 		}
 
 		restoreMatches := ms.Hash().Equal(expectedCommitment)
-		log.Warnf("[UTXO-DEBUG] checkHistoricalPruningPoints: index %d (%s): header=%s | restorePastUTXO=%s "+
+		log.Debugf("[UTXO-DEBUG] checkHistoricalPruningPoints: index %d (%s): header=%s | restorePastUTXO=%s "+
 			"(matches=%t) | per-block multiset=%s (matches=%t)",
 			idx, hash, expectedCommitment, ms.Hash(), restoreMatches, perBlockMultiset.Hash(), perBlockMatches)
 
@@ -1417,7 +1417,7 @@ func (pm *pruningManager) checkHistoricalPruningPoints(stagingArea *model.Stagin
 // diffs get computed/walked/merged on top of it (restorePastUTXO, updatePruningPoint) - not in the
 // underlying data. If they disagree, even the base table has drifted.
 func (pm *pruningManager) verifyVirtualUTXOSetSelfConsistency(stagingArea *model.StagingArea) {
-	log.Warnf("[UTXO-DEBUG] verifyVirtualUTXOSetSelfConsistency: checking consensusStateStore's raw virtual " +
+	log.Debugf("[UTXO-DEBUG] verifyVirtualUTXOSetSelfConsistency: checking consensusStateStore's raw virtual " +
 		"UTXO table against its own stored multiset (no diff involved)...")
 
 	storedMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, model.VirtualBlockHash)
@@ -1480,7 +1480,7 @@ func (pm *pruningManager) verifyVirtualUTXOSetSelfConsistency(stagingArea *model
 // an indexed ancestor list as a side effect of walking, so jumping to a given distance is O(1) once
 // that far has already been walked - never re-walked from scratch for each check.
 func (pm *pruningManager) bisectRestorePastUTXODivergence(stagingArea *model.StagingArea, badBlock *externalapi.DomainHash) {
-	log.Warnf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: starting from known-bad block %s", badBlock)
+	log.Debugf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: starting from known-bad block %s", badBlock)
 
 	ancestors := []*externalapi.DomainHash{badBlock}
 	extendTo := func(distance int) (*externalapi.DomainHash, bool) {
@@ -1493,7 +1493,7 @@ func (pm *pruningManager) bisectRestorePastUTXODivergence(stagingArea *model.Sta
 			}
 			parent := ghostdagData.SelectedParent()
 			if parent == nil {
-				log.Warnf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: reached genesis/end of chain at "+
+				log.Debugf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: reached genesis/end of chain at "+
 					"distance %d without finding a matching ancestor - the divergence may predate the "+
 					"available chain data, or every ancestor checked so far is also wrong.", len(ancestors)-1)
 				return nil, false
@@ -1528,7 +1528,7 @@ func (pm *pruningManager) bisectRestorePastUTXODivergence(stagingArea *model.Sta
 			ms.Add(serialized)
 		}
 		matches := ms.Hash().Equal(expectedCommitment)
-		log.Warnf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: checked %s - matches=%t "+
+		log.Debugf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: checked %s - matches=%t "+
 			"(restorePastUTXO=%s, header=%s)", hash, matches, ms.Hash(), expectedCommitment)
 		return matches, nil
 	}
@@ -1539,7 +1539,7 @@ func (pm *pruningManager) bisectRestorePastUTXODivergence(stagingArea *model.Sta
 	for {
 		ancestor, ok := extendTo(distance)
 		if !ok {
-			log.Warnf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: selected-parent chain exhausted before " +
+			log.Debugf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: selected-parent chain exhausted before " +
 				"finding a matching ancestor - falling back to checking recorded pruning points instead.")
 			pm.checkHistoricalPruningPoints(stagingArea)
 			return
@@ -1567,7 +1567,7 @@ func (pm *pruningManager) bisectRestorePastUTXODivergence(stagingArea *model.Sta
 		mid := (badDistance + goodDistance) / 2
 		ancestor, ok := extendTo(mid)
 		if !ok {
-			log.Warnf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: selected-parent chain exhausted during " +
+			log.Debugf("[UTXO-DEBUG] bisectRestorePastUTXODivergence: selected-parent chain exhausted during " +
 				"binary search - falling back to checking recorded pruning points instead.")
 			pm.checkHistoricalPruningPoints(stagingArea)
 			return
@@ -1656,7 +1656,7 @@ func (pm *pruningManager) repairPruningPointUTXOSet(stagingArea *model.StagingAr
 		pm.bisectRestorePastUTXODivergence(stagingArea, pruningPoint)
 		return
 	}
-	log.Warnf("[UTXO-DEBUG] repairPruningPointUTXOSet: RestorePastUTXOSetIterator's own output for %s "+
+	log.Debugf("[UTXO-DEBUG] repairPruningPointUTXOSet: RestorePastUTXOSetIterator's own output for %s "+
 		"independently matches the header commitment - proceeding with repair.", pruningPoint)
 
 	toRemove := make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry)
@@ -1666,7 +1666,7 @@ func (pm *pruningManager) repairPruningPointUTXOSet(stagingArea *model.StagingAr
 		}
 	}
 
-	log.Warnf("[UTXO-DEBUG] repairPruningPointUTXOSet for %s: %d entries to add/replace, %d entries to "+
+	log.Debugf("[UTXO-DEBUG] repairPruningPointUTXOSet for %s: %d entries to add/replace, %d entries to "+
 		"remove (correct set has %d entries, bucket previously had %d)",
 		pruningPoint, len(toAdd), len(toRemove), len(correctOutpoints), len(oldBucketEntries))
 
@@ -1710,7 +1710,7 @@ func (pm *pruningManager) repairPruningPointUTXOSet(stagingArea *model.StagingAr
 		verifyMultiset.Add(serialized)
 	}
 	if verifyMultiset.Hash().Equal(expectedCommitment) {
-		log.Warnf("[UTXO-DEBUG] repairPruningPointUTXOSet SUCCEEDED for %s: bucket now matches the header "+
+		log.Debugf("[UTXO-DEBUG] repairPruningPointUTXOSet SUCCEEDED for %s: bucket now matches the header "+
 			"commitment (%s).", pruningPoint, expectedCommitment)
 	} else {
 		log.Errorf("[UTXO-DEBUG] repairPruningPointUTXOSet FAILED for %s: bucket still does not match the "+
@@ -1898,20 +1898,20 @@ func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *m
 ) bool {
 	startingMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, previousPruningHash)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch starting multiset for %s: %s",
+		log.Debugf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch starting multiset for %s: %s",
 			methodUsed, previousPruningHash, err)
 		return false
 	}
 
 	resultingMultiset, err := applyDiffToMultiset(startingMultiset, utxoSetDiff)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): applying diff failed: %s", methodUsed, err)
+		log.Debugf("[UTXO-DEBUG] pruning point diff verification (%s): applying diff failed: %s", methodUsed, err)
 		return false
 	}
 
 	currentHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, currentPruningHash)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch header for %s: %s",
+		log.Debugf("[UTXO-DEBUG] pruning point diff verification (%s): could not fetch header for %s: %s",
 			methodUsed, currentPruningHash, err)
 		return false
 	}
@@ -1919,7 +1919,7 @@ func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *m
 	resultHash := resultingMultiset.Hash()
 	expectedCommitment := currentHeader.UTXOCommitment()
 	if resultHash.Equal(expectedCommitment) {
-		log.Warnf("[UTXO-DEBUG] pruning point diff verification (%s) PASSED: applying the computed diff to "+
+		log.Debugf("[UTXO-DEBUG] pruning point diff verification (%s) PASSED: applying the computed diff to "+
 			"%s's multiset produces %s, matching %s's own header UTXO commitment exactly.",
 			methodUsed, previousPruningHash, resultHash, currentPruningHash)
 		return true
@@ -2068,10 +2068,10 @@ func (pm *pruningManager) updatePruningPoint() error {
 						stagingArea, previousPruningHash, pruningPoint, utxoSetDiff, methodUsed)
 				}
 			} else {
-				log.Warnf("[UTXO-DEBUG] could not fetch previous pruning point for diff verification: %s", prevErr)
+				log.Debugf("[UTXO-DEBUG] could not fetch previous pruning point for diff verification: %s", prevErr)
 			}
 		} else if idxErr != nil {
-			log.Warnf("[UTXO-DEBUG] could not fetch pruning point index for diff verification: %s", idxErr)
+			log.Debugf("[UTXO-DEBUG] could not fetch pruning point index for diff verification: %s", idxErr)
 		}
 	}
 	log.Infof("Restored the pruning point UTXO set (diff method: %s)", methodUsed)

@@ -978,7 +978,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 				}
 
 				retryCount++
-				log.Warnf("[UTXO-DEBUG] Timeout (%s) waiting for blocks from %s after %s, re-requesting %d/%d "+
+				log.Debugf("[UTXO-DEBUG] Timeout (%s) waiting for blocks from %s after %s, re-requesting %d/%d "+
 					"missing blocks (retry #%d for this batch)", flow.Config().IBDDequeueTimeout, flow.peer,
 					time.Since(networkPhaseStart), len(missingHashes), len(hashesToRequest), retryCount)
 				if err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(missingHashes)); err != nil {
@@ -1060,7 +1060,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		// local processing" instead of continuing to guess between the two.
 		if processingPhaseElapsed := time.Since(processingPhaseStart); networkPhaseElapsed > 2*time.Second ||
 			processingPhaseElapsed > 2*time.Second {
-			log.Warnf("[UTXO-DEBUG] IBD batch of %d blocks (%d retries): network wait=%s, local "+
+			log.Debugf("[UTXO-DEBUG] IBD batch of %d blocks (%d retries): network wait=%s, local "+
 				"processing=%s (%d blocks processed)", len(hashesToRequest), retryCount,
 				networkPhaseElapsed, processingPhaseElapsed, processedInBatch)
 		}

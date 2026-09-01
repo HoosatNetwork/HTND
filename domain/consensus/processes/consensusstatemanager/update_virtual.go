@@ -138,7 +138,7 @@ func (csm *consensusStateManager) updateSelectedTipUTXODiff(
 		// new block (far more often than pruning-point advancement). That fallback is the confirmed
 		// source of the drift traced this session: it reached even consensusStateStore's live
 		// virtual UTXO table, not just pruning-point snapshots.
-		log.Warnf("[UTXO-DEBUG] DiffFrom failed in updateSelectedTipUTXODiff for selected tip %s (err: %v) - "+
+		log.Debugf("[UTXO-DEBUG] DiffFrom failed in updateSelectedTipUTXODiff for selected tip %s (err: %v) - "+
 			"reconciling against virtual's own reconstruction instead of masking it.", selectedTip, err)
 		reconciledSelectedTipUTXODiff, reconcileErr := reconcileWinningBranchUTXO(virtualUTXODiff, selectedTipUTXODiff)
 		if reconcileErr != nil {

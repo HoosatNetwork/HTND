@@ -216,13 +216,13 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 ) {
 	var expectedCommitment *externalapi.DomainHash
 	if header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, blockHash); err != nil {
-		log.Warnf("[UTXO-DEBUG] %s (%s): could not fetch header to get expected UTXOCommitment: %s", label, blockHash, err)
+		log.Debugf("[UTXO-DEBUG] %s (%s): could not fetch header to get expected UTXOCommitment: %s", label, blockHash, err)
 	} else {
 		expectedCommitment = header.UTXOCommitment()
 	}
 	virtualIterator, err := csm.consensusStateStore.VirtualUTXOSetIterator(csm.databaseContext, stagingArea)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] %s (%s): could not get virtual UTXO set iterator for self-consistency check: %s",
+		log.Debugf("[UTXO-DEBUG] %s (%s): could not get virtual UTXO set iterator for self-consistency check: %s",
 			label, blockHash, err)
 		return
 	}
@@ -230,7 +230,7 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 
 	iterator, err := utxo.IteratorWithDiff(virtualIterator, diff)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] %s (%s): could not build diff iterator for self-consistency check: %s",
+		log.Debugf("[UTXO-DEBUG] %s (%s): could not build diff iterator for self-consistency check: %s",
 			label, blockHash, err)
 		return
 	}
@@ -241,13 +241,13 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 	for ok := iterator.First(); ok; ok = iterator.Next() {
 		outpoint, entry, err := iterator.Get()
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] %s (%s): iterator.Get failed during self-consistency check: %s",
+			log.Debugf("[UTXO-DEBUG] %s (%s): iterator.Get failed during self-consistency check: %s",
 				label, blockHash, err)
 			return
 		}
 		serialized, err := utxo.SerializeUTXO(entry, outpoint)
 		if err != nil {
-			log.Warnf("[UTXO-DEBUG] %s (%s): SerializeUTXO failed during self-consistency check: %s",
+			log.Debugf("[UTXO-DEBUG] %s (%s): SerializeUTXO failed during self-consistency check: %s",
 				label, blockHash, err)
 			return
 		}
@@ -261,33 +261,33 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 	incrementalMatchesHeader := expectedCommitment != nil && incrementalHash.Equal(expectedCommitment)
 	freshMatchesHeader := expectedCommitment != nil && freshHash.Equal(expectedCommitment)
 
-	log.Warnf("[UTXO-DEBUG] %s (%s): entries=%d | header expects=%s | incremental=%s (matchesHeader=%t) | "+
+	log.Debugf("[UTXO-DEBUG] %s (%s): entries=%d | header expects=%s | incremental=%s (matchesHeader=%t) | "+
 		"freshFromActualSet=%s (matchesHeader=%t) | incrementalAgreesWithFresh=%t",
 		label, blockHash, entryCount, expectedCommitment, incrementalHash, incrementalMatchesHeader,
 		freshHash, freshMatchesHeader, agree)
 
 	switch {
 	case agree && incrementalMatchesHeader:
-		log.Warnf("[UTXO-DEBUG] %s (%s): incremental and fresh recomputation agree with each other AND "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): incremental and fresh recomputation agree with each other AND "+
 			"with the header - this block's own multiset is fully correct.", label, blockHash)
 	case agree && !incrementalMatchesHeader:
-		log.Warnf("[UTXO-DEBUG] %s (%s): incremental and fresh recomputation agree with EACH OTHER but "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): incremental and fresh recomputation agree with EACH OTHER but "+
 			"NEITHER matches the header - not an Add/Remove accounting bug; the accepted UTXO set itself "+
 			"(which transactions got accepted/rejected, or an ancestor's already-wrong stored multiset "+
 			"that both computations build on top of) differs from what the network agreed on.",
 			label, blockHash)
 	case !agree && freshMatchesHeader:
-		log.Warnf("[UTXO-DEBUG] %s (%s): fresh recomputation from the actual UTXO set MATCHES the header "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): fresh recomputation from the actual UTXO set MATCHES the header "+
 			"but the incrementally-maintained multiset does NOT - proves the incremental Add/Remove "+
 			"bookkeeping (calculateMultiset/addTransactionToMultiset) has drifted away from the actual, "+
 			"correct UTXO set. This is the Add/Remove accounting bug.", label, blockHash)
 	case !agree && incrementalMatchesHeader:
-		log.Warnf("[UTXO-DEBUG] %s (%s): incremental multiset MATCHES the header but the fresh "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): incremental multiset MATCHES the header but the fresh "+
 			"recomputation from the actual UTXO set does NOT - the virtual UTXO set/diff itself disagrees "+
 			"with the (correct) incremental multiset history; look at what diff/virtual actually contains "+
 			"for this block, not the multiset code.", label, blockHash)
 	default:
-		log.Warnf("[UTXO-DEBUG] %s (%s): incremental and fresh recomputation DISAGREE with each other, "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): incremental and fresh recomputation DISAGREE with each other, "+
 			"and NEITHER matches the header - drift in the bookkeeping AND the underlying set is wrong "+
 			"relative to the network.", label, blockHash)
 	}
@@ -318,7 +318,7 @@ func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, 
 				entry, ok := diff.ToAdd().Get(outpoint)
 				if !ok {
 					mismatches++
-					log.Warnf("[UTXO-DEBUG] %s (%s): accepted tx %s output %d is MISSING from diff.ToAdd() - "+
+					log.Debugf("[UTXO-DEBUG] %s (%s): accepted tx %s output %d is MISSING from diff.ToAdd() - "+
 						"the multiset would add it (amount=%d script=%x isCoinbase=%t daaScore=%d) but diff doesn't have it",
 						label, blockHash, transactionID, outIdx, output.Value, output.ScriptPublicKey.Script, isCoinbase, daaScore)
 					continue
@@ -326,7 +326,7 @@ func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, 
 				if entry.Amount() != output.Value || !entry.ScriptPublicKey().Equal(output.ScriptPublicKey) ||
 					entry.IsCoinbase() != isCoinbase || entry.BlockDAAScore() != daaScore {
 					mismatches++
-					log.Warnf("[UTXO-DEBUG] %s (%s): accepted tx %s output %d MISMATCH - diff.ToAdd() has "+
+					log.Debugf("[UTXO-DEBUG] %s (%s): accepted tx %s output %d MISMATCH - diff.ToAdd() has "+
 						"amount=%d script=%x isCoinbase=%t daaScore=%d, but the multiset would add "+
 						"amount=%d script=%x isCoinbase=%t daaScore=%d",
 						label, blockHash, transactionID, outIdx,
@@ -339,7 +339,7 @@ func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, 
 				if !diff.ToRemove().Contains(&input.PreviousOutpoint) {
 					if diff.ToAdd().Contains(&input.PreviousOutpoint) {
 						mismatches++
-						log.Warnf("[UTXO-DEBUG] %s (%s): accepted tx %s input %s:%d is MISSING from "+
+						log.Debugf("[UTXO-DEBUG] %s (%s): accepted tx %s input %s:%d is MISSING from "+
 							"diff.ToRemove() AND still present in diff.ToAdd() - the multiset would remove it "+
 							"but diff never actually removed it", label, blockHash, transactionID,
 							input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index)
@@ -358,11 +358,11 @@ func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, 
 	}
 
 	if mismatches == 0 {
-		log.Warnf("[UTXO-DEBUG] %s (%s): acceptanceData vs diff entry-level check PASSED - every accepted "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): acceptanceData vs diff entry-level check PASSED - every accepted "+
 			"transaction's effect matches exactly between diff.ToAdd()/ToRemove() and what the multiset "+
 			"would independently compute from the same acceptanceData.", label, blockHash)
 	} else {
-		log.Warnf("[UTXO-DEBUG] %s (%s): acceptanceData vs diff entry-level check found %d mismatch(es) - "+
+		log.Debugf("[UTXO-DEBUG] %s (%s): acceptanceData vs diff entry-level check found %d mismatch(es) - "+
 			"see the specific outpoints logged above.", label, blockHash, mismatches)
 	}
 }

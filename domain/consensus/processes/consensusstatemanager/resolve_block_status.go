@@ -264,7 +264,7 @@ func (csm *consensusStateManager) getUnverifiedChainBlocks(stagingArea *model.St
 // waiting for a brand new one to occur naturally.
 func (csm *consensusStateManager) ReproduceDisqualification(blockHash, selectedParentHash *externalapi.DomainHash) error {
 	stagingArea := model.NewStagingArea()
-	log.Warnf("[UTXO-DEBUG] ReproduceDisqualification: re-resolving %s against selected parent %s to "+
+	log.Debugf("[UTXO-DEBUG] ReproduceDisqualification: re-resolving %s against selected parent %s to "+
 		"reproduce the original verifyUTXO failure", blockHash, selectedParentHash)
 
 	selectedParentPastUTXOSet, err := csm.restorePastUTXO(stagingArea, selectedParentHash)
@@ -277,7 +277,7 @@ func (csm *consensusStateManager) ReproduceDisqualification(blockHash, selectedP
 	if err != nil {
 		return errors.Wrapf(err, "ReproduceDisqualification: resolveSingleBlockStatus failed for %s", blockHash)
 	}
-	log.Warnf("[UTXO-DEBUG] ReproduceDisqualification: %s re-resolved to status %s", blockHash, status)
+	log.Debugf("[UTXO-DEBUG] ReproduceDisqualification: %s re-resolved to status %s", blockHash, status)
 	return nil
 }
 
@@ -346,7 +346,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 					csm.verifyMultisetSelfConsistency(stagingArea, "selected parent", selectedParentHash,
 						selectedParentPastUTXOSet, storedSelectedParentMultiset)
 				} else {
-					log.Warnf("[UTXO-DEBUG] could not fetch stored multiset for selected parent %s: %s", selectedParentHash, msErr)
+					log.Debugf("[UTXO-DEBUG] could not fetch stored multiset for selected parent %s: %s", selectedParentHash, msErr)
 				}
 				csm.verifyMultisetSelfConsistency(stagingArea, "failing block", blockHash, pastUTXOSet, multiset)
 
@@ -357,7 +357,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 				csm.verifyAcceptanceDataAgainstDiff("failing block", blockHash, acceptanceData, pastUTXOSet, block.Header.DAAScore())
 
 				if csm.expensiveDiagnosticRunsRemaining == 0 {
-					log.Warnf("[UTXO-DEBUG] expensive self-consistency diagnostics have run their cap (3) times " +
+					log.Debugf("[UTXO-DEBUG] expensive self-consistency diagnostics have run their cap (3) times " +
 						"this process - skipping on further disqualified blocks to avoid piling multi-minute " +
 						"scans onto routine failures.")
 				}
@@ -375,7 +375,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			diffFromStart := time.Now()
 			utxoDiff, diffErr := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
 			if diffFromElapsed := time.Since(diffFromStart); diffFromElapsed > 500*time.Millisecond {
-				log.Warnf("[UTXO-DEBUG] resolveSingleBlockStatus: DiffFrom for disqualified block %s took %s",
+				log.Debugf("[UTXO-DEBUG] resolveSingleBlockStatus: DiffFrom for disqualified block %s took %s",
 					blockHash, diffFromElapsed)
 			}
 			if diffErr != nil {

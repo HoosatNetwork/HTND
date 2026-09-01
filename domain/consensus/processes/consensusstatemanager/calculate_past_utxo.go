@@ -184,7 +184,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 
 	walkElapsed := time.Since(walkStart)
 	if len(utxoDiffs) > 20 || walkElapsed > 500*time.Millisecond {
-		log.Warnf("[UTXO-DEBUG] restorePastUTXO for block %s: walked %d hops from block to virtual "+
+		log.Debugf("[UTXO-DEBUG] restorePastUTXO for block %s: walked %d hops from block to virtual "+
 			"collecting diffs in %s - this cost is paid on every call for this block, and every "+
 			"disqualified block during a cascade pays it fresh via its own restorePastUTXO call",
 			blockHash, len(utxoDiffs), walkElapsed)
@@ -203,7 +203,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 		}
 	}
 	if applyElapsed := time.Since(applyStart); len(utxoDiffs) > 20 || applyElapsed > 500*time.Millisecond {
-		log.Warnf("[UTXO-DEBUG] restorePastUTXO for block %s: merging %d collected diffs via "+
+		log.Debugf("[UTXO-DEBUG] restorePastUTXO for block %s: merging %d collected diffs via "+
 			"WithDiffInPlace took %s", blockHash, len(utxoDiffs), applyElapsed)
 	}
 	log.Tracef("The accumulated diff for block %s is: %s", blockHash, accumulatedDiff)
@@ -242,7 +242,7 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	for h, count := range seenMergeSetHashes {
 		if count > 1 {
 			hCopy := h
-			log.Warnf("[UTXO-DEBUG] applyMergeSetBlocks: block %s's own merge set contains %s %d times - "+
+			log.Debugf("[UTXO-DEBUG] applyMergeSetBlocks: block %s's own merge set contains %s %d times - "+
 				"its coinbase (or any of its transactions) would be processed multiple times in this call",
 				blockHash, &hCopy, count)
 		}
@@ -370,7 +370,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	log.Tracef("Adding transaction %s in block %s to the accumulated diff", transactionID, blockHash)
 	err = accumulatedUTXODiff.AddTransaction(transaction, blockDAAScore)
 	if err != nil {
-		log.Warnf("[UTXO-DEBUG] Failed to add transaction %s in block %s to accumulated diff: %s",
+		log.Debugf("[UTXO-DEBUG] Failed to add transaction %s in block %s to accumulated diff: %s",
 			transactionID, blockHash, err)
 		return false, 0, nil
 	}
@@ -394,7 +394,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 					// Not explained by the toRemove-collision mechanism at all - this output is
 					// missing from ToAdd() despite AddTransaction succeeding and no pre-existing
 					// toRemove entry for it. Worth investigating if this ever fires.
-					log.Warnf("[UTXO-DEBUG] coinbase tx %s output %d in block %s: MISSING from "+
+					log.Debugf("[UTXO-DEBUG] coinbase tx %s output %d in block %s: MISSING from "+
 						"accumulatedUTXODiff.ToAdd() after AddTransaction returned no error, and it was "+
 						"NOT already present in ToRemove before the call - not explained by the known "+
 						"toRemove-collision mechanism, daaScore=%d",

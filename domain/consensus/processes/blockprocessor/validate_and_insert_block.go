@@ -184,7 +184,7 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 	}
 
 	if totalElapsed := time.Since(blockProcessingStart); totalElapsed > 100*time.Millisecond {
-		log.Warnf("[UTXO-DEBUG] block %s processing took %s total: validateBlock=%s AddBlock=%s "+
+		log.Debugf("[UTXO-DEBUG] block %s processing took %s total: validateBlock=%s AddBlock=%s "+
 			"UpdatePruningPointByVirtual=%s CommitAllChanges=%s", blockHash, totalElapsed,
 			validateBlockElapsed, addBlockElapsed, updatePruningPointElapsed, commitElapsed)
 	}

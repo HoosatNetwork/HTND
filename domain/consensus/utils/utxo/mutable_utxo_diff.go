@@ -168,7 +168,7 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 				// coinbase's real, freshly minted reward from the diff with no error would be wrong
 				// regardless of the exact cause. Drop the stale toRemove entry and still record this
 				// output as newly added.
-				log.Warnf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) collided with "+
+				log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) collided with "+
 					"a DIFFERENT-valued pre-existing toRemove entry (amount=%d) - adding to toAdd instead of "+
 					"silently cancelling out", outpoint, entry.Amount(), entry.BlockDAAScore(), existing.Amount())
 				mud.toRemove.remove(outpoint)
@@ -213,7 +213,7 @@ func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, en
 		if entry.IsCoinbase() {
 			if existing, ok := mud.toAdd.Get(outpoint); ok && (existing.Amount() != entry.Amount() ||
 				!existing.ScriptPublicKey().Equal(entry.ScriptPublicKey())) {
-				log.Warnf("[UTXO-DEBUG] removeEntry: coinbase outpoint %s being spent (amount=%d daaScore=%d) "+
+				log.Debugf("[UTXO-DEBUG] removeEntry: coinbase outpoint %s being spent (amount=%d daaScore=%d) "+
 					"matches a DIFFERENT-valued entry already in toAdd (amount=%d) - removing that toAdd entry "+
 					"instead of the one actually being spent. Likely the same content-derived coinbase ID "+
 					"collision as addEntry, hitting the removal path instead.",
