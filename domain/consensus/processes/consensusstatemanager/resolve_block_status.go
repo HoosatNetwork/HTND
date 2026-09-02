@@ -354,7 +354,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 				// applyMergeSetBlocks (built pastUTXOSet/diff) and calculateMultiset (built multiset) are
 				// two separate implementations walking the same acceptanceData - this checks they agree
 				// on every single amount/script/isCoinbase/daaScore, not just that the aggregate matches.
-				csm.verifyAcceptanceDataAgainstDiff("failing block", blockHash, acceptanceData, pastUTXOSet, block.Header.DAAScore())
+				csm.verifyAcceptanceDataAgainstDiff(stagingArea, "failing block", blockHash, acceptanceData, pastUTXOSet)
 
 				if csm.expensiveDiagnosticRunsRemaining == 0 {
 					log.Debugf("[UTXO-DEBUG] expensive self-consistency diagnostics have run their cap (3) times " +

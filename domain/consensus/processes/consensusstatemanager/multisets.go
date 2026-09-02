@@ -15,7 +15,6 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	blockHash *externalapi.DomainHash,
 	acceptanceData externalapi.AcceptanceData,
 	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData,
-	daaScore uint64,
 ) (model.Multiset, error) {
 	log.Tracef("calculateMultiset start for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 	defer log.Tracef("calculateMultiset end for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
@@ -42,7 +41,27 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	}
 	log.Debugf("The multiset for the selected parent %s is: %s", selectedParent, ms.Hash())
 
+	// blockAcceptanceData holds one entry per merge-set block resolved by blockHash (see
+	// applyMergeSetBlocks), each carrying its OWN BlockHash. Before the fix in 96efc0d3d
+	// ("Fix address balance disagreement between nodes"), this loop and applyMergeSetBlocks'
+	// AddTransaction call both stamped every merge-set block's transactions with daaScore (blockHash's
+	// own DAA score) - wrong, but consistently wrong in both places, so the multiset computed here and
+	// the UTXODiff built by applyMergeSetBlocks still agreed with each other bit-for-bit, even though
+	// both disagreed with the network's true per-coin DAA scores.
+	//
+	// 96efc0d3d fixed ONLY applyMergeSetBlocks/AddTransaction to stamp each entry with its own creating
+	// block's DAA score (creatingBlockDAAScore) - but left this function using the single, uniform
+	// daaScore. That turned a globally-consistent-but-wrong value into a value that now DISAGREES with
+	// the diff on this node for every non-selected-parent merge-set block: the diff holds
+	// creatingBlockDAAScore, this multiset serializes with daaScore, so the exact same real UTXO
+	// serializes to different bytes in each - producing a UTXO commitment that doesn't match the
+	// node's own diff, i.e. exactly the class of failure golden-data tests and consensus validation
+	// would start hitting immediately after 96efc0d3d landed alone. Must be fixed together with it.
 	for _, blockAcceptanceData := range acceptanceData {
+		creatingBlockDAAScore, err := csm.blockOwnDAAScore(stagingArea, blockAcceptanceData.BlockHash)
+		if err != nil {
+			return nil, err
+		}
 		for i, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
 			transaction := transactionAcceptanceData.Transaction
 			transactionID := consensushashing.TransactionID(transaction)
@@ -54,7 +73,7 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 			isCoinbase := i == 0
 			log.Tracef("Is transaction %s a coinbase transaction: %t", transactionID, isCoinbase)
 
-			err := addTransactionToMultiset(ms, transaction, daaScore, isCoinbase)
+			err := addTransactionToMultiset(ms, transaction, creatingBlockDAAScore, isCoinbase)
 			if err != nil {
 				return nil, err
 			}
@@ -68,9 +87,12 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 // reverseMultiset applies the reverse of the given acceptance data to a multiset.
 // This undoes the effect of calculateMultiset / addTransactionToMultiset for the
 // provided acceptance data (remove outputs, re-add inputs).
-func (csm *consensusStateManager) reverseMultiset(ms model.Multiset,
+//
+// Currently unused (no live call sites), but fixed here to match calculateMultiset's per-merge-set-
+// block DAA score handling so it doesn't become a landmine if it's wired up later - see the comment
+// in calculateMultiset above.
+func (csm *consensusStateManager) reverseMultiset(stagingArea *model.StagingArea, ms model.Multiset,
 	acceptanceData externalapi.AcceptanceData,
-	daaScore uint64,
 ) error {
 	log.Tracef("reverseMultiset start")
 	defer log.Tracef("reverseMultiset end")
@@ -78,6 +100,10 @@ func (csm *consensusStateManager) reverseMultiset(ms model.Multiset,
 	// Process in reverse order of acceptance data so that the net effect is an exact inverse.
 	for i := len(acceptanceData) - 1; i >= 0; i-- {
 		blockAcceptanceData := acceptanceData[i]
+		creatingBlockDAAScore, err := csm.blockOwnDAAScore(stagingArea, blockAcceptanceData.BlockHash)
+		if err != nil {
+			return err
+		}
 		for j := len(blockAcceptanceData.TransactionAcceptanceData) - 1; j >= 0; j-- {
 			transactionAcceptanceData := blockAcceptanceData.TransactionAcceptanceData[j]
 			transaction := transactionAcceptanceData.Transaction
@@ -90,7 +116,7 @@ func (csm *consensusStateManager) reverseMultiset(ms model.Multiset,
 			isCoinbase := j == 0
 			log.Tracef("Is transaction %s a coinbase transaction: %t", transactionID, isCoinbase)
 
-			err := removeTransactionFromMultiset(ms, transaction, daaScore, isCoinbase)
+			err := removeTransactionFromMultiset(ms, transaction, creatingBlockDAAScore, isCoinbase)
 			if err != nil {
 				return err
 			}
@@ -300,11 +326,22 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 // addTransactionToMultiset - so this is the direct test of whether those two implementations still
 // agree, checking the actual amount/script/isCoinbase/daaScore values, not just aggregate hashes.
 // Prints every specific outpoint where they don't, which a hash comparison alone can't do.
-func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, blockHash *externalapi.DomainHash,
-	acceptanceData externalapi.AcceptanceData, diff externalapi.UTXODiff, daaScore uint64,
+//
+// Each entry must be checked against its OWN creating block's DAA score (blockAcceptanceData.BlockHash),
+// not a single caller-supplied value - both applyMergeSetBlocks and calculateMultiset stamp per-entry
+// now (see the fix in each), so comparing against one uniform score here would itself manufacture
+// false "MISMATCH" reports for every non-selected-parent merge-set block.
+func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(stagingArea *model.StagingArea, label string, blockHash *externalapi.DomainHash,
+	acceptanceData externalapi.AcceptanceData, diff externalapi.UTXODiff,
 ) {
 	mismatches := 0
 	for _, blockAcceptanceData := range acceptanceData {
+		daaScore, err := csm.blockOwnDAAScore(stagingArea, blockAcceptanceData.BlockHash)
+		if err != nil {
+			log.Debugf("[UTXO-DEBUG] %s (%s): could not fetch own DAA score for merge-set block %s: %s",
+				label, blockHash, blockAcceptanceData.BlockHash, err)
+			continue
+		}
 		for i, txAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
 			if !txAcceptance.IsAccepted {
 				continue
