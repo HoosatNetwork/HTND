@@ -44,10 +44,10 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
-	err = v.checkMergeSizeLimit(stagingArea, ghostdagData)
-	if err != nil {
-		return err
-	}
+	// err = v.checkMergeSizeLimit(stagingArea, ghostdagData)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// If needed - calculate reachability data right before calling CheckBoundedMergeDepth,
 	// since it's used to find a block's finality point.
