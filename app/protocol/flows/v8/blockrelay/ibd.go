@@ -1109,6 +1109,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 		// Process blocks in the order of expected hashes
 		for _, expectedHash := range hashesToRequest {
+			updateVirtual, err := flow.Domain().Consensus().IsNearlySynced()
+			if err != nil {
+				return err
+			}
 			block, exists := receivedBlocks[*expectedHash]
 			if !exists {
 				continue
