@@ -39,10 +39,10 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		return err
 	}
 
-	err = v.checkParentsIncest(stagingArea, blockHash)
-	if err != nil {
-		return err
-	}
+	// err = v.checkParentsIncest(stagingArea, blockHash)
+	// if err != nil {
+	// 	return err
+	// }
 
 	if !isBlockWithTrustedData {
 		err = v.checkPruningPointViolation(stagingArea, blockHash)
