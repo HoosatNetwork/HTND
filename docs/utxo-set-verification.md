@@ -198,6 +198,36 @@ NOTE: both peers served an IDENTICAL pruning-point snapshot (15679214 entries,
 
 That case exits non-zero, like a disagreement, because it has not answered the question.
 
+### Fingerprints and shared export lineage
+
+Every classification now prints the snapshot's fingerprint and appends it to
+`<workdir>/fingerprints.tsv`, which accumulates across invocations:
+
+```
+        fingerprint:
+          pruningPoint     f70e65ba9b4a84332efa1afdecde08ccc9eac497315d543f30f1f5ecb0ff99ec
+          entries          15679214
+          bucketMultiset   026c0ba996ba47337bf9ddfb8aee47034e8b15aa2c17aae786dbe1c8ce941af9
+          headerCommitment 5cb21ed4e4acbae5d86244b84ee75b8586f15cae0b4542e3405257c51a8d01b6
+```
+
+If those exact bytes were already recorded from a **different** peer, the run says so:
+
+```
+        SHARED_EXPORT: these exact bytes were already recorded from explorer-one.hoosat.fi:42421.
+                       This peer is another copy of that export, not new evidence.
+```
+
+Re-running the *same* peer is not flagged — the ledger excludes the peer being surveyed.
+
+`--require-independence` turns SHARED_EXPORT into exit code 3 in single-peer mode, so a
+scripted sweep stops when it starts finding copies. In `--compare`, independence is required
+by default and a shared snapshot exits non-zero; `--allow-shared-lineage` relaxes that when
+you deliberately want the comparison anyway.
+
+**Stop a survey run as soon as the fingerprint matches one you already have.** It is another
+copy of the same export and will only produce another FAIL.
+
 ### The monotonicity check
 
 Every `--compare` run prints its circulating supply and virtual DAA score. **Circulating
@@ -286,33 +316,135 @@ that justifies destroying it.
 
 ---
 
-## 6. If C5 comes back empty: C1, and what blocks it
+## 6. What GetCoinSupply actually is, and why the supply drop is not issuance
 
-C1 is a replay from genesis on a fresh datadir, cutting a new pruning-point bucket from the
-resulting virtual UTXO set. It is the fallback, not the plan, and it has two prerequisites that
-are **not** addressed by Stage A:
+`HandleGetCoinSupply` returns `UTXOIndex.GetCirculatingSompiSupply()`, which reads one stored
+counter (`utxo-index-circulating-supply`, `domain/utxoindex/store.go:827`). That counter is the
+running **sum of amounts in the UTXO index** — reset to 0 and re-accumulated over the virtual
+UTXO set by `UTXOIndex.Reset()`, then moved by `toAdd − toRemove` on every update.
 
-**`--archival` is mandatory and cannot be retrofitted.** `pruningManager.deleteBlock` stages
-`StatusHeaderOnly` and then, unless `isArchivalNode`, deletes `multiSetStore`,
-`acceptanceDataStore`, `blocksStore`, `utxoDiffStore` and `daaBlocksStore` for every block below
-the pruning point. A pruned node has no bodies to replay and the P2P protocol offers no way to
-re-fetch them below the pruning point. Check before planning anything:
+**It is not minted supply.** It is the current unspent total, so it is not monotonic by
+definition — only by argument: spending is value-preserving, and each accepted chain block adds
+its subsidy, so in the absence of value destruction the total only grows.
+
+There is exactly one value-destroying path in this fork, and it is not an explicit burn:
+`calcMergedBlockReward` (`coinbasemanager.go`) returns `0, nil` when the merged block is not in
+`mergingBlockDAAAddedBlocksSet`, so that block's subsidy *and the fees of its accepted
+transactions* are never paid to any coinbase. Fees leave the UTXO set when the transaction is
+accepted; if no coinbase re-mints them, they are gone. `grep -i burn` over `domain/` finds
+nothing else.
+
+### The bound
+
+Mainnet block version 9 uses `TargetTimePerBlock[8] = 200ms` (`dagconfig/params.go`), so
+`calcDeflationaryPeriodBlockSubsidy` gives `blocksPerYear = 31,557,600 / 0.2 = 157,788,000` and
+lands in deflationary year 2 at both DAA 221,433,570 and 221,482,353:
+`subsidyByDeflationaryYearTable[2] × 0.2 = 1,333,333,333 sompi` (13.3333 HTN) per block.
+
+Over the 48,783 DAA between the two measurements (~2.71 h at 5 BPS):
+
+| assumption | upper bound on new issuance | vs the observed 25,774,304,039,058,493 |
+|---|---:|---:|
+| 1 block per DAA, actual subsidy | 65,043,999,983,739 | 396× short |
+| 1 block per DAA, max subsidy ever (`table[0]`) | 97,566,000,000,000 | 264× short |
+| 5 blocks per DAA, actual subsidy | 325,219,999,918,695 | 79× short |
+| 5 blocks per DAA, max subsidy ever | 487,830,000,000,000 | **53× short** |
+
+DAA score increments by the count of DAA-added blocks, so "1 block per DAA" is the honest
+figure; the 5× rows exist only to show the conclusion survives a deliberately absurd
+over-count.
+
+**Verdict: issuance cannot explain the gap, and neither can burned fees** — that would require
+257.7 M HTN, 3.7% of supply, to be paid in fees and destroyed inside 2.71 hours. The old pair
+was inflated, the fresh pair dropped coins, or both. The `--compare` monotonicity line exists to
+make this check automatic.
+
+---
+
+## 7. Can any peer still export the old pruning point?
+
+**No.** `pruningStore.UpdatePruningPointUTXOSet` (`pruning_store.go:157`) applies the
+previous-to-current diff **in place** to the single `pruning-point-utxo-set` bucket: deletes for
+`ToRemove`, puts for `ToAdd`, one bucket, no per-pruning-point versioning. Once a node advances
+to a new pruning point, the previous set is gone from that node.
+
+Serving is pinned to the current one too. `consensus.GetPruningPointUTXOs`
+(`consensus.go:706`) reads the current pruning point and returns `ErrWrongPruningPointHash`
+unless the requested hash equals it:
+
+```go
+if !expectedPruningPointHash.Equal(pruningPointHash) {
+    return nil, errors.Wrapf(ruleerrors.ErrWrongPruningPointHash, ...)
+}
+```
+
+`--archival` does not change this — `deleteBlock` preserves *blocks*, not the bucket.
+
+**Implication.** Every seed that has advanced past `dad52459…` can only serve the current
+lineage. No survey, however many peers it covers, can ever produce an independent snapshot of
+`dad52459…`, so **C5 cannot validate the old production pair in place**. What C5 can still do is
+sort today's exporters into "another copy of `026c0ba9…`" versus "something else at the current
+pruning point" — worth knowing, but it cannot by itself establish that any set is correct.
+
+A header-matching set that is not simply another copy of `026c0ba9…` therefore has to be
+*derived*, not fetched. That is C1.
+
+---
+
+## 8. C1 readiness (documentation only — no C1 implementation)
+
+### `--archival` is mandatory and cannot be retrofitted
+
+`pruningManager.deleteBlock` (`pruningmanager.go:584`) stages `StatusHeaderOnly` and then,
+unless `pm.isArchivalNode`, deletes `multiSetStore`, `acceptanceDataStore`, `blocksStore`,
+`utxoDiffStore` and `daaBlocksStore` for every block below the pruning point. A pruned node has
+no bodies to replay, and the P2P protocol offers no way to re-fetch bodies below the pruning
+point. Check before planning anything:
 
 ```bash
 ps -o args= -p "$(pgrep -f 'HTND.*<your-port>')" | tr ' ' '\n' | grep -E 'archival|appdir'
 ```
 
-**The ambient block-version leak must be fixed first — filed here, deliberately not fixed in
-this PR.** `constants.GetBlockVersion()` is a process-global one-way ratchet, set from
-`ibd.go` and `handle_relay_invs.go` (whose own comment describes it as such). Several consensus
-paths read it instead of the block's own header version:
+### The ambient block-version leak — confirmed present at HEAD
 
-- `calculateAcceptedIDMerkleRoot` branches on `constants.GetBlockVersion() < 5` to decide
-  whether to sort accepted transactions;
-- `blockvalidator/block_body_in_isolation.go` indexes `maxBlockMass` by it;
-- `consensusstatemanager/pick_virtual_parents.go` indexes `maxBlockParents` by it.
+`constants.GetBlockVersion()` is a process-global one-way ratchet set from `ibd.go` and
+`handle_relay_invs.go`. Three consensus paths read it instead of the block's own header version,
+all still present:
 
-Replaying v1–v4 history in a process that has ratcheted to v9 therefore computes the wrong
-accepted-ID merkle root and the wrong limits. `coinbasemanager` has already been converted to
-take each block's own version (see its comments); these three call sites have not. **C1 is not
-safe until they are.**
+| site | code |
+|---|---|
+| `consensusstatemanager/verify_and_build_utxo.go:359` | `if constants.GetBlockVersion() < 5 { sort.Slice(acceptedTransactions, ...) }` |
+| `blockvalidator/block_body_in_isolation.go:231` | `mass > v.maxBlockMass[constants.GetBlockVersion()-1]` |
+| `consensusstatemanager/pick_virtual_parents.go:43,51,53,65` | `csm.maxBlockParents[constants.GetBlockVersion()-1]` |
+
+Replaying v1–v4 history in a process ratcheted to v9 computes the wrong accepted-ID merkle root
+and the wrong limits. `coinbasemanager` was already converted to take each block's own version
+(see its comments at `:104` and `:294`, and `payload.go:106/135/169`); these have not been.
+
+**Not fixed here, and not a one-liner.** The merkle-root site needs the version of the block
+whose acceptance data is being hashed, which `calculateAcceptedIDMerkleRoot` does not currently
+receive; `pick_virtual_parents` runs for the *virtual*, which has no header at all, so "use
+`header.Version()`" has no obvious answer there. Each needs its own decision, and changing them
+changes which blocks are accepted — that must not ride along with a UTXO-accounting fix.
+
+### What "header-matching" would mean for C1
+
+Walk block bodies from genesis using **each block's own header version** rather than the ambient
+ratchet; accumulate the MuHash with `utxo.SerializeUTXO` as blocks are applied; at each pruning
+point compare the accumulated value to that pruning point header's `UTXOCommitment()`; and only
+if it matches, persist the resulting set as the served bucket and mark the Stage A marker
+`verified`. The first pruning point where it does *not* match localises when the network's
+committed rule and the current code diverged — which is the actual question underneath all of
+this.
+
+### Is genesis→current archival replay an operator path today?
+
+**No — it would be new code.** Nothing in the tree replays from genesis. `RecoverUTXOIfRequired`
+resumes an interrupted pruning-point import; `repairPruningPointUTXOSet` rebuilds the bucket from
+`RestorePastUTXOSetIterator`, which is the diff-chain walk already observed to disagree with both
+the bucket and the header; `updatePruningPoint` derives one pruning-point-to-pruning-point diff.
+A node started on an empty archival datadir still performs headers-proof IBD and imports a
+pruning-point UTXO set from a peer — i.e. it inherits whatever lineage that peer has, which is
+exactly what C1 is meant to avoid. Making C1 real means a mode that declines the pruning-point
+import and applies bodies forward from genesis, plus the version-leak fixes above. That is a
+project, not a flag.

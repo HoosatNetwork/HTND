@@ -32,6 +32,10 @@
 #     --timeout SECONDS    per-peer wait for an import verdict (default 5400)
 #     --sync-timeout SEC   per-peer wait for full sync in --compare mode (default 21600)
 #     --base-port N        first port used; each node takes N+2i (rpc) and N+2i+1 (p2p)
+#     --require-independence   exit 3 if this peer serves a snapshot already recorded from
+#                              a different peer (single-peer mode; always on for --compare)
+#     --allow-shared-lineage   in --compare, accept agreement even when both peers served
+#                              the identical snapshot (default: refuse, it proves nothing)
 #
 # Exit codes:
 #   single-peer mode          0 PASS or PASS_DEDUP, 1 FAIL, 2 OTHER
@@ -53,6 +57,8 @@ WORKDIR="./c5-runs"
 TIMEOUT_SECONDS=5400
 SYNC_TIMEOUT_SECONDS=21600
 BASE_PORT=42620
+REQUIRE_INDEPENDENCE=0
+ALLOW_SHARED_LINEAGE=0
 
 usage() { sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -68,6 +74,8 @@ while [[ $# -gt 0 ]]; do
     --timeout)      TIMEOUT_SECONDS="${2:-}"; shift 2 ;;
     --sync-timeout) SYNC_TIMEOUT_SECONDS="${2:-}"; shift 2 ;;
     --base-port)    BASE_PORT="${2:-}"; shift 2 ;;
+    --require-independence) REQUIRE_INDEPENDENCE=1; shift ;;
+    --allow-shared-lineage) ALLOW_SHARED_LINEAGE=1; shift ;;
     -h|--help)      usage ;;
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
@@ -134,17 +142,70 @@ PASS_RE='UTXO set matches its own header commitment'
 PASS_DEDUP_RE='Repaired imported pruning point .* matches the header commitment'
 FAIL_RE='still does not match its header after recomputation'
 
-# The verdict line carries the snapshot's fingerprint: how many entries arrived and what
-# they hash to. Two peers reporting the SAME fingerprint did not independently arrive at
-# the same answer - they served the same bytes, which usually means a shared export
-# ancestor rather than independent agreement. That distinction decides how much the
-# --compare verdict is worth, so it is captured rather than left to the reader.
-fingerprint_of() {  # fingerprint_of <index> -> "<entries>/<multiset>" or ""
-  local line="${NODE_DETAIL[$1]}"
-  local entries multiset
-  entries="$(sed -n 's/.*over \([0-9]\{1,\}\) stored entries.*/\1/p' <<<"$line")"
-  multiset="$(sed -n 's/.*stored entries \([0-9a-f]\{64\}\).*/\1/p' <<<"$line")"
-  [[ -n "$entries" && -n "$multiset" ]] && printf '%s/%s' "$entries" "$multiset"
+# A snapshot's fingerprint is (pruning point, entry count, bucket multiset, header
+# commitment). Two peers reporting the SAME fingerprint did not independently arrive at the
+# same answer - they served the same bytes, which means a shared export ancestor rather
+# than independent agreement. Surveying more copies of one export produces more FAILs and
+# no new evidence, so the fingerprint is extracted, printed, and remembered across runs.
+#
+# Fields come from the verdict line plus the chunk-transfer line, all in
+# domain/consensus/processes/consensusstatemanager/import_pruning_utxo_set.go and ibd.go:
+#   FAIL       "... pruning point <PP> UTXO set still does not match its header after
+#               recomputation (header <HDR>, fresh multiset over <N> stored entries <MS>)"
+#   PASS       "... pruning point <PP> UTXO set matches its own header commitment <HDR>"
+#   PASS_DEDUP "Repaired imported pruning point <PP> ... over the <N> stored entries
+#               matches the header commitment <HDR>"
+# On PASS and PASS_DEDUP the bucket multiset equals the header commitment by definition.
+FP_PP=""; FP_ENTRIES=""; FP_MULTISET=""; FP_HEADER=""
+
+extract_fingerprint() {  # extract_fingerprint <index>
+  local index="$1" line="${NODE_DETAIL[$1]}"
+  FP_PP=""; FP_ENTRIES=""; FP_MULTISET=""; FP_HEADER=""
+
+  FP_PP="$(sed -n 's/.*pruning point \([0-9a-f]\{64\}\).*/\1/p' <<<"$line" | head -1)"
+
+  # Entry count: the transfer line is authoritative and present for every verdict.
+  FP_ENTRIES="$(match_first "$index" 'Finished receiving the UTXO set\. Total UTXOs: [0-9]' \
+                | sed -n 's/.*Total UTXOs: \([0-9]\{1,\}\).*/\1/p')"
+  [[ -n "$FP_ENTRIES" ]] || FP_ENTRIES="$(sed -n 's/.*over \(the \)\{0,1\}\([0-9]\{1,\}\) stored entries.*/\2/p' <<<"$line" | head -1)"
+
+  case "${NODE_VERDICT[$index]}" in
+    FAIL)
+      FP_HEADER="$(sed -n 's/.*(header \([0-9a-f]\{64\}\),.*/\1/p' <<<"$line" | head -1)"
+      FP_MULTISET="$(sed -n 's/.*stored entries \([0-9a-f]\{64\}\).*/\1/p' <<<"$line" | head -1)"
+      ;;
+    PASS|PASS_DEDUP)
+      FP_HEADER="$(sed -n 's/.*commitment \([0-9a-f]\{64\}\).*/\1/p' <<<"$line" | head -1)"
+      FP_MULTISET="$FP_HEADER"
+      ;;
+  esac
+}
+
+fingerprint_key() { printf '%s/%s/%s' "${FP_PP:-?}" "${FP_ENTRIES:-?}" "${FP_MULTISET:-?}"; }
+
+# The ledger lives beside the run directories so it accumulates across invocations - that is
+# the whole point, since the question is whether a NEW peer is another copy of one already
+# surveyed.
+LEDGER="$WORKDIR/fingerprints.tsv"
+
+record_fingerprint() {  # record_fingerprint <index>
+  local index="$1"
+  [[ -n "$FP_PP" ]] || return 0
+  if [[ ! -f "$LEDGER" ]]; then
+    printf 'timestamp\tpeer\tverdict\tpruningPoint\tentries\tbucketMultiset\theaderCommitment\n' > "$LEDGER"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${PEERS[$index]}" "${NODE_VERDICT[$index]}" \
+    "$FP_PP" "${FP_ENTRIES:-?}" "${FP_MULTISET:-?}" "${FP_HEADER:-?}" >> "$LEDGER"
+}
+
+# prior_peers_with_same_fingerprint <index> - other peers already recorded serving these
+# exact bytes. Excludes this peer, so re-running the same peer is not mistaken for lineage.
+prior_peers_with_same_fingerprint() {
+  local index="$1"
+  [[ -f "$LEDGER" && -n "$FP_PP" ]] || return 0
+  awk -F'\t' -v pp="$FP_PP" -v en="${FP_ENTRIES:-?}" -v ms="${FP_MULTISET:-?}" -v me="${PEERS[$index]}" \
+    'NR>1 && $4==pp && $5==en && $6==ms && $2!=me {print $2}' "$LEDGER" | sort -u
 }
 
 declare -a NODE_DIR NODE_LOG NODE_PID NODE_RPC NODE_VERDICT NODE_DETAIL
@@ -282,11 +343,29 @@ for i in "${!PEERS[@]}"; do
   start_node "$i" "${PEERS[$i]}" || { echo "could not start node$i" >&2; exit 2; }
 done
 echo
+declare -a NODE_FPKEY NODE_SHARED_WITH
 for i in "${!PEERS[@]}"; do
   await_verdict "$i"
   echo "node$i  peer=${PEERS[$i]}  VERDICT: ${NODE_VERDICT[$i]}"
   echo "        ${NODE_DETAIL[$i]}"
+
+  extract_fingerprint "$i"
+  NODE_SHARED_WITH[$i]="$(prior_peers_with_same_fingerprint "$i" | paste -sd, -)"
+  record_fingerprint "$i"
+  NODE_FPKEY[$i]="$(fingerprint_key)"
+
+  echo "        fingerprint:"
+  echo "          pruningPoint     ${FP_PP:-n/a}"
+  echo "          entries          ${FP_ENTRIES:-n/a}"
+  echo "          bucketMultiset   ${FP_MULTISET:-n/a}"
+  echo "          headerCommitment ${FP_HEADER:-n/a}"
+  if [[ -n "${NODE_SHARED_WITH[$i]}" ]]; then
+    echo "        SHARED_EXPORT: these exact bytes were already recorded from ${NODE_SHARED_WITH[$i]}."
+    echo "                       This peer is another copy of that export, not new evidence."
+  fi
 done
+echo
+echo "Fingerprint ledger: $LEDGER"
 echo
 
 if [[ $COMPARE -eq 0 ]]; then
@@ -295,6 +374,15 @@ if [[ $COMPARE -eq 0 ]]; then
   echo "C5 VERDICT: ${NODE_VERDICT[0]}   peer=${PEERS[0]}"
   echo "log kept at: ${NODE_LOG[0]}"
   echo "=================================================================="
+  if [[ -n "${NODE_SHARED_WITH[0]}" ]]; then
+    echo
+    echo "SHARED_EXPORT: identical to the snapshot already served by ${NODE_SHARED_WITH[0]}."
+    if [[ $REQUIRE_INDEPENDENCE -eq 1 ]]; then
+      echo "--require-independence was given, so this run did not add evidence. Exiting 3."
+      exit 3
+    fi
+    echo "Survey a peer with an unrelated history to learn anything new."
+  fi
   case "${NODE_VERDICT[0]}" in
     PASS|PASS_DEDUP)
       echo
@@ -336,15 +424,18 @@ for i in 0 1; do
 done
 echo
 
-FP0="$(fingerprint_of 0)"; FP1="$(fingerprint_of 1)"
 SHARED_SNAPSHOT=0
-if [[ -n "$FP0" && "$FP0" == "$FP1" ]]; then
+if [[ -n "${NODE_FPKEY[0]}" && "${NODE_FPKEY[0]}" == "${NODE_FPKEY[1]}" && "${NODE_FPKEY[0]}" != "?/?/?" ]]; then
   SHARED_SNAPSHOT=1
-  echo "NOTE: both peers served an IDENTICAL pruning-point snapshot (${FP0%%/*} entries,"
-  echo "      multiset ${FP1##*/})."
-  echo "      They did not independently arrive at the same state - they handed over the same"
-  echo "      bytes. Agreement below is therefore evidence of a shared export ancestor, NOT"
-  echo "      evidence that the state is correct."
+  echo "SHARED_EXPORT: both peers served an IDENTICAL pruning-point snapshot"
+  echo "               ${NODE_FPKEY[0]}"
+  echo "               They did not independently arrive at the same state - they handed over"
+  echo "               the same bytes. Agreement below is evidence of a shared export ancestor,"
+  echo "               NOT evidence that the state is correct."
+  if [[ $ALLOW_SHARED_LINEAGE -eq 1 ]]; then
+    echo "               --allow-shared-lineage given: continuing and reporting it as agreement."
+    SHARED_SNAPSHOT=0
+  fi
   echo
 fi
 
