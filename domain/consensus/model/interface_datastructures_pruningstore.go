@@ -48,6 +48,14 @@ type PruningStore interface {
 	SetLastUTXODebugReproducedRootHash(dbContext DBWriter, rootHash *externalapi.DomainHash) error
 	LastUTXODebugReproducedRootHash(dbContext DBReader) (*externalapi.DomainHash, error)
 
+	// SetPruningPointUTXOSetVerification/PruningPointUTXOSetVerification persist the result of
+	// comparing the SERVED pruning-point UTXO bucket against the pruning point's own header UTXO
+	// commitment. Observation only: nothing reads this marker to decide what to serve or import.
+	// Its purpose is that a boot which skips the expensive re-check still has real numbers to
+	// report. Not consensus-critical state - written directly, no staging area.
+	SetPruningPointUTXOSetVerification(dbContext DBWriter, verification *PruningPointUTXOSetVerification) error
+	PruningPointUTXOSetVerification(dbContext DBReader) (*PruningPointUTXOSetVerification, error)
+
 	CacheLen() int
 	UnstageAll(stagingArea *StagingArea)
 }

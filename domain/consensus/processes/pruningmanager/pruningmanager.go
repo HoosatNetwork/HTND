@@ -1200,8 +1200,21 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 		return
 	}
 	if lastChecked, lastCheckedErr := pm.pruningStore.LastUTXODebugCheckedPruningPoint(pm.databaseContext); lastCheckedErr == nil && lastChecked.Equal(pruningPoint) {
-		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: %s was already checked on a previous "+
-			"boot and hasn't changed - skipping.", pruningPoint)
+		// A cached skip is not a verdict. Print whatever the marker recorded when the check did run,
+		// so the operator gets numbers rather than a bare "skipping" line they might mistake for a
+		// pass - and say plainly that these are recalled, not freshly computed.
+		if marker := pm.currentPruningPointUTXOSetMarker(pruningPoint); marker != nil {
+			log.Infof("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: %s was already checked on a previous "+
+				"boot and hasn't changed - skipping the rescan. RECALLED verdict from that run (not "+
+				"recomputed now): header=%s bucket=%s perBlock=%s diffChain=%s marker=%s entries=%d",
+				pruningPoint, shortHash(marker.HeaderCommitment), shortHash(marker.BucketMultiset),
+				shortHash(marker.PerBlockMultiset), shortHash(marker.DiffChainMultiset),
+				marker.Status, marker.EntryCount)
+			return
+		}
+		log.Infof("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: %s was already checked on a previous "+
+			"boot and hasn't changed - skipping the rescan, and no verification marker was recorded for "+
+			"it, so there is no verdict to recall.", pruningPoint)
 		return
 	}
 	// Only persisted once a real verdict is actually reached (reachedVerdict set just before the
@@ -1270,6 +1283,29 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 		pruningPoint, entryCount, expectedCommitment, bucketHash, bucketMatchesHeader, perBlockHash, perBlockMatchesHeader)
 
 	reachedVerdict = true
+
+	// Persist the same verdict as the always-on marker, so a later boot that skips this scan (see
+	// the memoised early return above) still has real numbers to print. This path also fills in the
+	// diff-chain hash, which the cheap always-on check deliberately never computes.
+	markerStatus := model.PruningPointUTXOSetUnverified
+	if bucketMatchesHeader {
+		markerStatus = model.PruningPointUTXOSetVerified
+	}
+	marker := &model.PruningPointUTXOSetVerification{
+		PruningPoint:      pruningPoint,
+		HeaderCommitment:  expectedCommitment,
+		BucketMultiset:    bucketHash,
+		PerBlockMultiset:  perBlockHash,
+		DiffChainMultiset: pm.diffChainMultisetOrNil(stagingArea, pruningPoint),
+		Status:            markerStatus,
+		EntryCount:        uint64(entryCount),
+		CheckedAtDAAScore: pm.currentDAAScoreForMarker(stagingArea, header),
+	}
+	if markerErr := pm.pruningStore.SetPruningPointUTXOSetVerification(pm.databaseContext, marker); markerErr != nil {
+		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet: could not persist the verification "+
+			"marker for %s: %s", pruningPoint, markerErr)
+	}
+
 	switch {
 	case bucketMatchesHeader:
 		log.Debugf("[UTXO-DEBUG] VerifyCurrentPruningPointUTXOSet PASSED for %s: the served bucket matches "+
@@ -2097,13 +2133,26 @@ func (pm *pruningManager) updatePruningPoint() error {
 	if err != nil {
 		return err
 	}
-	log.Info("Validating the UTXO set fits commitment")
-	if pm.shouldSanityCheckPruningUTXOSet && !pruningPoint.Equal(pm.genesisHash) {
+	// This log line used to sit outside the guard below, so it appeared on every pruning-point
+	// advancement whether or not any validation ran - and on a default node the guard is false, so
+	// it never ran. A log must not claim a check that did not happen.
+	if pm.shouldRunStrictUTXOSetFitCheck(pruningPoint) {
+		log.Info("Validating the UTXO set fits commitment")
 		err = pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint)
 		if err != nil {
 			return err
 		}
+	} else {
+		log.Debugf("Skipping the strict UTXO-set-fits-commitment check for pruning point %s "+
+			"(--enable-sanity-check-pruning-utxo is %t). The non-fatal verification below records the "+
+			"same comparison as a marker instead.", pruningPoint, pm.shouldSanityCheckPruningUTXOSet)
 	}
+
+	// Unconditional, non-fatal counterpart to the guarded check above: hash the bucket we just
+	// built, compare it to the pruning point's header commitment, and persist the verdict. Runs in
+	// the background because this is reached from block processing and the scan is O(UTXO set).
+	// Nothing here changes what was built, stored, or is served.
+	pm.scheduleUTXOSetVerification()
 	var newPruningTime *time.Time
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
 		log.Infof("Pruning point advanced, but block deletion deferred (data retention/interval not met)")

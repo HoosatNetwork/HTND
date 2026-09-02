@@ -1,6 +1,7 @@
 package consensusstatemanager
 
 import (
+	"math"
 	"slices"
 	"time"
 
@@ -335,6 +336,34 @@ func (csm *consensusStateManager) blockOwnDAAScore(stagingArea *model.StagingAre
 	return header.DAAScore(), nil
 }
 
+// missingOutputsAfterAddTransaction returns the indexes of transaction's outputs that are absent
+// from diff.ToAdd() even though AddTransaction reported success.
+//
+// AddTransaction has branches that decline to record an output without returning an error - most
+// directly addEntry's toRemove-collision path, which cancels a staged removal instead of adding.
+// When that fires for a real, newly created output, the coin simply never reaches this node's
+// virtual UTXO set. Split out as a plain function so the detection can be tested directly rather
+// than only through a full consensus fixture.
+func missingOutputsAfterAddTransaction(diff externalapi.MutableUTXODiff,
+	transaction *externalapi.DomainTransaction, transactionID *externalapi.DomainTransactionID,
+) []int {
+	if diff == nil || transaction == nil || transactionID == nil {
+		return nil
+	}
+
+	var missing []int
+	for i := range transaction.Outputs {
+		if i < 0 || i > math.MaxUint32 {
+			continue
+		}
+		outpoint := externalapi.NewDomainOutpoint(transactionID, uint32(i))
+		if _, ok := diff.ToAdd().Get(outpoint); !ok {
+			missing = append(missing, i)
+		}
+	}
+	return missing
+}
+
 func (csm *consensusStateManager) maybeAcceptTransaction(
 	stagingArea *model.StagingArea,
 	transaction *externalapi.DomainTransaction,
@@ -409,6 +438,23 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		log.Debugf("[UTXO-DEBUG] Failed to add transaction %s in block %s to accumulated diff: %s",
 			transactionID, blockHash, err)
 		return false, 0, nil
+	}
+
+	// The same post-AddTransaction check as the coinbase branch below, for every other transaction.
+	// It used to run only for coinbases, which is exactly backwards for the failure it detects: a
+	// non-coinbase output that AddTransaction silently declined to record produces an address that
+	// is short by that amount, on this node only, with no error at any layer. Log-only for now -
+	// control flow is deliberately unchanged, so a node that hits this still behaves exactly as it
+	// does today and simply says so.
+	if !isCoinbase && transactionIDPtr != nil {
+		for _, missingIndex := range missingOutputsAfterAddTransaction(accumulatedUTXODiff, transaction, transactionIDPtr) {
+			log.Warnf("[UTXO-DEBUG] transaction %s output %d in block %s is MISSING from the accumulated "+
+				"UTXO diff after AddTransaction returned no error. This output will not enter the virtual "+
+				"UTXO set on this node, so any address it pays is short by %d sompi here while other nodes "+
+				"may have it. creatingBlockDAAScore=%d",
+				transactionID, missingIndex, blockHash,
+				transaction.Outputs[missingIndex].Value, creatingBlockDAAScore)
+		}
 	}
 
 	if isCoinbase && transactionIDPtr != nil {

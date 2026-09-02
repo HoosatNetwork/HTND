@@ -638,6 +638,13 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
+	// Always on, no flag: one line naming this node's pruning point and the hashes the three
+	// producers give for it (header commitment, served bucket, per-block multiset), plus whether
+	// the served bucket has ever been verified against the header. Reports the persisted marker
+	// rather than rescanning, so it costs a couple of lookups; if no current marker exists it
+	// starts the scan in the background and boot continues immediately.
+	pruningManager.LogPruningPointUTXOSetStatus()
+
 	// [UTXO-DEBUG] Gated behind --enable-utxo-debug-diagnostics: each of these can take 15-20+
 	// minutes on a mature chain (multiple full UTXO-set scans), and produce the same result on every
 	// boot until the underlying data actually changes - not something to run unconditionally on

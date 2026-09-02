@@ -17,4 +17,17 @@ type PruningManager interface {
 	TrustedBlockAssociatedGHOSTDAGDataBlockHashes(stagingArea *StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	VerifyCurrentPruningPointUTXOSet()
 	FindAndReproduceRootDisqualification(stagingArea *StagingArea)
+
+	// RecordPruningPointUTXOSetVerification hashes the served pruning-point UTXO bucket, compares
+	// it to the pruning point's header UTXO commitment, and persists the verdict as a marker. It
+	// never changes what is built, stored or served - on a mismatch it logs and records
+	// "unverified" and returns normally. The bucket scan is O(UTXO set), so callers on a hot path
+	// should not block on it.
+	RecordPruningPointUTXOSetVerification(stagingArea *StagingArea) (*PruningPointUTXOSetVerification, error)
+
+	// LogPruningPointUTXOSetStatus emits the one-line header/bucket/per-block/diff-chain summary
+	// for the current pruning point. Cheap by design: it reports the persisted marker rather than
+	// re-hashing the bucket, and kicks the expensive comparison off in the background when the
+	// marker is missing or belongs to an older pruning point.
+	LogPruningPointUTXOSetStatus()
 }

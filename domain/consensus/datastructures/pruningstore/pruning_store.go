@@ -52,6 +52,8 @@ type pruningStore struct {
 
 	lastUTXODebugCheckedPruningPointKey model.DBKey
 	lastUTXODebugReproducedRootHashKey  model.DBKey
+
+	pruningPointUTXOSetVerificationKey model.DBKey
 }
 
 // New instantiates a new PruningStore
@@ -70,6 +72,8 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.Pru
 
 		lastUTXODebugCheckedPruningPointKey: prefixBucket.Key(lastUTXODebugCheckedPruningPointKeyName),
 		lastUTXODebugReproducedRootHashKey:  prefixBucket.Key(lastUTXODebugReproducedRootHashKeyName),
+
+		pruningPointUTXOSetVerificationKey: prefixBucket.Key(pruningPointUTXOSetVerificationKeyName),
 	}
 }
 
