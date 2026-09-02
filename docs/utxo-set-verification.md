@@ -115,8 +115,22 @@ outpoint-keyed set itself was fine.
 ### Running it
 
 ```bash
-tools/c5survey/c5-survey.sh --peer 51.89.232.58:42421 --htnd ./htnd
+tools/c5survey/c5-survey.sh --peer 51.89.232.58:42421
 ```
+
+**The script builds `htnd` and `htnctl` from the working tree and uses those.** The verdict
+lines it greps for are the ones the current source emits; surveying with a stale binary from
+`PATH` is the classic way to get a confident, wrong answer. It prints the built version and the
+source commit — including whether the tree is dirty — before it starts:
+
+```
+Built from this tree:
+  htnd    : .../bin/htnd  version htnd version 2.16.0-7ffecb391-dirty
+  source  : 7ffecb391 (working tree has uncommitted changes)
+```
+
+Pass `--htnd PATH --htnctl PATH` to survey with prebuilt binaries instead; the output then says
+plainly that they were **not** built from this tree.
 
 Rules the script enforces, and why:
 
@@ -125,8 +139,9 @@ Rules the script enforces, and why:
   provably came from the peer being classified.
 - **One peer per datadir, never reused.** A second import starts from state the first one
   already installed, so the answer would be about the datadir, not the peer.
-- **`--utxoindex` is not enabled and not needed.** The pruning-point UTXO set is imported and
-  checked before any index is built; the verdict does not depend on it.
+- **`--utxoindex` is not enabled for classification and is not needed.** The pruning-point UTXO
+  set is imported and checked before any index is built, so the verdict does not depend on it.
+  `--compare` does enable it, because `GetCoinSupply` and `GetUtxosByAddresses` require it.
 - **`--archival` is not needed.** C5 classifies the exporter, nothing more.
 - **The datadir and log are always kept, especially on `FAIL`** — they are the evidence.
 
@@ -139,7 +154,51 @@ any node syncing from it into the offset regime — the exact mechanism observed
 where a public peer's set matched neither the accumulated multiset nor the header, the importing
 node rewrote its trust anchor, and four checks went quiet within sixty seconds.
 
-If **every** peer surveyed returns `FAIL`, C5 is empty and the fallback is C1 — see below.
+If **every** peer surveyed returns `FAIL`, C5 is empty — but that is *not yet* enough to
+commit to C1. See the next section first.
+
+---
+
+## 3a. `--compare`: do two peers agree with each other?
+
+A peer failing against its **own** pruning point header does not tell you whether two peers
+agree with **each other**. That second question is the fork in the road, and a run of all-`FAIL`
+classifications cannot answer it — the surveyed peers will generally be at different pruning
+points with different entry counts.
+
+```bash
+tools/c5survey/c5-survey.sh --compare \
+  --peer peer-a:42421 --peer peer-b:42421
+```
+
+This classifies both peers, then syncs both fully (`--utxoindex` is enabled in this mode, since
+`GetCoinSupply` and `GetUtxosByAddresses` need it) and diffs the UTXO state they produced:
+circulating supply, and the outpoint set for `--address` including `blockDaaScore` per entry.
+
+Reading the verdict:
+
+| result | meaning | what to do |
+|---|---|---|
+| **AGREE** | the network agrees on state; what diverged is the *commitment rule* | fix how multisets are computed. **An archival replay would reproduce the same disagreement — do not build C1.** |
+| **DISAGREE**, deep in history | state itself has diverged between peers | C1 is the only anchor, and the version leak in §6 becomes critical path |
+| **DISAGREE**, only near the tip | ordinary lag: the two nodes are a few blocks apart | not evidence of anything; re-run when both are settled |
+
+The report separates those last two for you: it counts how many differing outpoints sit more
+than 10,000 DAA below the tip, prints their DAA range, and splits them coinbase vs regular.
+Divergence deep in history is the signature that matters — in the incident that motivated this
+work it was 163 outpoints spanning ~254,000 DAA, none within ~29,700 DAA of the tip, all
+non-coinbase.
+
+### Why not just measure the offset directly?
+
+The obvious test is "is the offset a constant delta?" — which is exactly what
+`blockInheritsKnownUTXOCommitmentOffset`'s comment asserts ("because MuHash is homomorphic,
+that fixed offset propagates verbatim to every descendant") and never checks.
+
+**It is not computable.** Block headers carry only the MuHash *hash*, and hashes are not
+invertible, so one multiset cannot be subtracted from another. That assertion has been
+load-bearing for the entire toleration regime and cannot be verified as written. Comparing the
+sets two peers actually serve is the computable substitute, which is why `--compare` exists.
 
 ---
 

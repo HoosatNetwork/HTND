@@ -1,161 +1,438 @@
 #!/usr/bin/env bash
 #
-# c5-survey.sh - classify ONE peer by whether the pruning-point UTXO set it serves
-#                hashes to that pruning point's own header UTXO commitment.
+# c5-survey.sh - classify peers by whether the pruning-point UTXO set they serve hashes
+#                to that pruning point's own header UTXO commitment, and optionally diff
+#                the UTXO state two peers actually hand you.
 #
-# This is the acceptance test a future "refuse to export/import an unverified bucket"
-# change would enforce. htnd already runs it on every import, in
+# htnd already runs the classification test on every import, in
 # verifyAndRepairImportedPruningPointUTXOSet, and reports the outcome in three
-# distinguishable log lines. This script does nothing but drive one IBD against one
-# peer in an isolated datadir and read that verdict back.
+# distinguishable log lines. This script drives one IBD per peer in an isolated datadir
+# and reads those verdicts back. It changes no consensus code and touches no existing
+# datadir.
 #
-# It changes no consensus code and touches no existing datadir.
+# It BUILDS htnd and htnctl from the working tree by default, so the verdict lines it
+# greps for are the ones the current source actually emits. A stale binary on PATH is
+# the classic way to get a confident, wrong answer here.
 #
 # Usage:
-#   ./c5-survey.sh --peer 51.89.232.58:42421 [--htnd ./htnd] [--workdir ./c5-runs]
-#                  [--timeout 5400] [--p2p-port 42621] [--rpc-port 42620]
+#   Classify one peer:
+#     ./c5-survey.sh --peer explorer-two.hoosat.fi:42421
 #
-# Exit codes double as the verdict:
-#   0  PASS        served set matched the header commitment on the first try
-#   0  PASS_DEDUP  matched after de-duplicating re-delivered chunks; the set itself was fine
-#   1  FAIL        matched neither - this peer is a bad exporter
-#   2  OTHER       import never reached a verdict (timeout, connection refused, crash)
+#   Classify two peers, then diff the UTXO state they produced:
+#     ./c5-survey.sh --compare --peer peer-a:42421 --peer peer-b:42421
 #
-# The datadir and log are ALWAYS kept. On FAIL they are the evidence.
+#   Options:
+#     --peer HOST:PORT     peer to survey; repeat for --compare (exactly two)
+#     --compare            after classifying, sync both fully and diff their UTXO state
+#     --address ADDR       address whose outpoint set is diffed in --compare mode
+#     --htnd PATH          use this prebuilt htnd instead of building (also needs --htnctl)
+#     --htnctl PATH        use this prebuilt htnctl
+#     --no-build           alias for "I supplied --htnd/--htnctl, do not build"
+#     --workdir DIR        where run directories go (default ./c5-runs)
+#     --timeout SECONDS    per-peer wait for an import verdict (default 5400)
+#     --sync-timeout SEC   per-peer wait for full sync in --compare mode (default 21600)
+#     --base-port N        first port used; each node takes N+2i (rpc) and N+2i+1 (p2p)
+#
+# Exit codes:
+#   single-peer mode          0 PASS or PASS_DEDUP, 1 FAIL, 2 OTHER
+#   --compare mode            0 the two nodes' UTXO state agrees
+#                             1 it does not (or a peer FAILed classification)
+#                             2 the comparison could not be completed
+#
+# Datadirs and logs are ALWAYS kept. On FAIL they are the evidence.
 
 set -uo pipefail
 
-PEER=""
-HTND_BIN="htnd"
+PEERS=()
+COMPARE=0
+ADDRESS="hoosat:qz2mys3hdthqkgmpyel30xmfhvjhdej8h84yn2w7knvze38nfqs9s8k8z8n92"
+HTND_BIN=""
+HTNCTL_BIN=""
+NO_BUILD=0
 WORKDIR="./c5-runs"
 TIMEOUT_SECONDS=5400
-P2P_PORT=42621
-RPC_PORT=42620
+SYNC_TIMEOUT_SECONDS=21600
+BASE_PORT=42620
 
-usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --peer)     PEER="${2:-}"; shift 2 ;;
-    --htnd)     HTND_BIN="${2:-}"; shift 2 ;;
-    --workdir)  WORKDIR="${2:-}"; shift 2 ;;
-    --timeout)  TIMEOUT_SECONDS="${2:-}"; shift 2 ;;
-    --p2p-port) P2P_PORT="${2:-}"; shift 2 ;;
-    --rpc-port) RPC_PORT="${2:-}"; shift 2 ;;
-    -h|--help)  usage ;;
+    --peer)         PEERS+=("${2:-}"); shift 2 ;;
+    --compare)      COMPARE=1; shift ;;
+    --address)      ADDRESS="${2:-}"; shift 2 ;;
+    --htnd)         HTND_BIN="${2:-}"; NO_BUILD=1; shift 2 ;;
+    --htnctl)       HTNCTL_BIN="${2:-}"; NO_BUILD=1; shift 2 ;;
+    --no-build)     NO_BUILD=1; shift ;;
+    --workdir)      WORKDIR="${2:-}"; shift 2 ;;
+    --timeout)      TIMEOUT_SECONDS="${2:-}"; shift 2 ;;
+    --sync-timeout) SYNC_TIMEOUT_SECONDS="${2:-}"; shift 2 ;;
+    --base-port)    BASE_PORT="${2:-}"; shift 2 ;;
+    -h|--help)      usage ;;
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
 done
 
-[[ -n "$PEER" ]] || { echo "--peer is required" >&2; usage; }
+if [[ ${#PEERS[@]} -eq 0 ]]; then
+  echo "at least one --peer is required" >&2; usage
+fi
+if [[ $COMPARE -eq 1 && ${#PEERS[@]} -ne 2 ]]; then
+  echo "--compare needs exactly two --peer arguments, got ${#PEERS[@]}" >&2; exit 2
+fi
+if [[ $COMPARE -eq 0 && ${#PEERS[@]} -ne 1 ]]; then
+  echo "without --compare, pass exactly one --peer (one peer per datadir)" >&2; exit 2
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required (sompi totals exceed what awk's doubles can hold exactly)" >&2; exit 2
+fi
 
-# One peer per datadir. Surveying two peers into the same datadir tells you nothing,
-# because the second import starts from state the first one already installed.
-RUN_ID="$(printf '%s' "$PEER" | tr -c 'A-Za-z0-9' '_')-$(date -u +%Y%m%dT%H%M%SZ)"
-RUN_DIR="$WORKDIR/$RUN_ID"
-DATA_DIR="$RUN_DIR/datadir"
-LOG_FILE="$RUN_DIR/htnd.log"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
-mkdir -p "$DATA_DIR" || { echo "could not create $DATA_DIR" >&2; exit 2; }
+RUN_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_ROOT="$WORKDIR/survey-$RUN_STAMP"
+mkdir -p "$RUN_ROOT" || { echo "could not create $RUN_ROOT" >&2; exit 2; }
 
-echo "C5 survey"
-echo "  peer     : $PEER"
-echo "  datadir  : $DATA_DIR   (isolated, never reused, never deleted)"
-echo "  log      : $LOG_FILE"
-echo "  timeout  : ${TIMEOUT_SECONDS}s"
-echo
-echo "Note: --utxoindex is NOT enabled and is not needed. The pruning-point UTXO set is"
-echo "imported and checked before any index is built, so the verdict does not depend on it."
-echo "--archival is NOT needed either; C5 only classifies the exporter."
-echo
-
-# --connect pins us to exactly this peer: no DNS seeds, no peer discovery, so the
-# imported set provably came from the peer being classified.
-"$HTND_BIN" \
-  --appdir="$DATA_DIR" \
-  --connect="$PEER" \
-  --listen="0.0.0.0:$P2P_PORT" \
-  --rpclisten="0.0.0.0:$RPC_PORT" \
-  --loglevel=info \
-  >"$LOG_FILE" 2>&1 &
-HTND_PID=$!
-
-cleanup() {
-  if kill -0 "$HTND_PID" 2>/dev/null; then
-    kill "$HTND_PID" 2>/dev/null
-    for _ in $(seq 1 30); do
-      kill -0 "$HTND_PID" 2>/dev/null || break
-      sleep 1
-    done
-    kill -9 "$HTND_PID" 2>/dev/null
+# ---------------------------------------------------------------------------
+# Build from the working tree
+# ---------------------------------------------------------------------------
+BIN_DIR="$RUN_ROOT/bin"
+if [[ $NO_BUILD -eq 1 ]]; then
+  [[ -n "$HTND_BIN" ]]   || { echo "--no-build/--htnctl given without --htnd" >&2; exit 2; }
+  [[ -n "$HTNCTL_BIN" ]] || { echo "--no-build/--htnd given without --htnctl" >&2; exit 2; }
+  echo "Using prebuilt binaries (NOT built from this tree):"
+else
+  command -v go >/dev/null 2>&1 || { echo "go toolchain not found and --htnd not given" >&2; exit 2; }
+  mkdir -p "$BIN_DIR"
+  HTND_BIN="$BIN_DIR/htnd"
+  HTNCTL_BIN="$BIN_DIR/htnctl"
+  echo "Building from $REPO_ROOT ..."
+  if ! ( cd "$REPO_ROOT" && go build -o "$(realpath -m "$HTND_BIN")" . ); then
+    echo "htnd build failed" >&2; exit 2
   fi
-}
-trap cleanup EXIT INT TERM
+  if ! ( cd "$REPO_ROOT" && go build -o "$(realpath -m "$HTNCTL_BIN")" ./cmd/htnctl ); then
+    echo "htnctl build failed" >&2; exit 2
+  fi
+  echo "Built from this tree:"
+fi
 
+GIT_DESCRIBE="$( cd "$REPO_ROOT" && git rev-parse --short HEAD 2>/dev/null )"
+GIT_DIRTY=""
+if [[ -n "$GIT_DESCRIBE" ]] && ! ( cd "$REPO_ROOT" && git diff --quiet HEAD 2>/dev/null ); then
+  GIT_DIRTY=" (working tree has uncommitted changes)"
+fi
+echo "  htnd    : $HTND_BIN  version $("$HTND_BIN" --version 2>/dev/null | head -1)"
+echo "  htnctl  : $HTNCTL_BIN"
+echo "  source  : ${GIT_DESCRIBE:-unknown}${GIT_DIRTY}"
+echo
+
+# ---------------------------------------------------------------------------
 # The three verdict lines, verbatim from
 # domain/consensus/processes/consensusstatemanager/import_pruning_utxo_set.go
+# ---------------------------------------------------------------------------
 PASS_RE='UTXO set matches its own header commitment'
 PASS_DEDUP_RE='Repaired imported pruning point .* matches the header commitment'
 FAIL_RE='still does not match its header after recomputation'
 
-VERDICT="OTHER"
-DETAIL="import did not reach a verdict"
-ELAPSED=0
+declare -a NODE_DIR NODE_LOG NODE_PID NODE_RPC NODE_VERDICT NODE_DETAIL
 
-# htnd writes the same lines to its console (captured above) and to its own rotating
-# log under the appdir. Search both, so a change in either destination cannot make a
-# real verdict look like a timeout.
-APPDIR_LOG="$DATA_DIR/logs/htnd.log"
-match_first() {
-  grep -h -m1 -E "$1" "$LOG_FILE" "$APPDIR_LOG" 2>/dev/null | head -1
+cleanup_all() {
+  local i
+  for i in "${!NODE_PID[@]}"; do
+    local pid="${NODE_PID[$i]}"
+    [[ -n "$pid" ]] || continue
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null
+      local waited=0
+      while kill -0 "$pid" 2>/dev/null && (( waited < 60 )); do sleep 1; waited=$((waited+1)); done
+      kill -9 "$pid" 2>/dev/null
+    fi
+  done
+}
+trap cleanup_all EXIT INT TERM
+
+# start_node <index> <peer>
+start_node() {
+  local index="$1" peer="$2"
+  local safe_peer; safe_peer="$(printf '%s' "$peer" | tr -c 'A-Za-z0-9' '_')"
+  local dir="$RUN_ROOT/node${index}-${safe_peer}"
+  local data_dir="$dir/datadir"
+  local log_file="$dir/htnd.log"
+  local rpc_port=$(( BASE_PORT + index * 2 ))
+  local p2p_port=$(( BASE_PORT + index * 2 + 1 ))
+
+  mkdir -p "$data_dir" || return 1
+
+  # --utxoindex is only needed for --compare (GetCoinSupply / GetUtxosByAddresses). It is
+  # NOT needed to classify a peer: the pruning-point set is imported and checked before any
+  # index exists. Enabling it in compare mode costs sync time, so it is conditional.
+  local index_flag=()
+  [[ $COMPARE -eq 1 ]] && index_flag=(--utxoindex)
+
+  # --connect pins exactly this peer: no DNS seeds, no discovery, so whatever gets imported
+  # provably came from the peer being classified.
+  "$HTND_BIN" \
+    --appdir="$data_dir" \
+    --connect="$peer" \
+    --listen="0.0.0.0:$p2p_port" \
+    --rpclisten="0.0.0.0:$rpc_port" \
+    --loglevel=info \
+    "${index_flag[@]}" \
+    >"$log_file" 2>&1 &
+
+  NODE_DIR[$index]="$dir"
+  NODE_LOG[$index]="$log_file"
+  NODE_PID[$index]=$!
+  NODE_RPC[$index]=":$rpc_port"
+  NODE_VERDICT[$index]="OTHER"
+  NODE_DETAIL[$index]="import did not reach a verdict"
+
+  echo "node$index  peer=$peer  rpc=:$rpc_port  p2p=:$p2p_port"
+  echo "          datadir=$data_dir"
+  echo "          log=$log_file"
 }
 
-while (( ELAPSED < TIMEOUT_SECONDS )); do
-  if [[ -n "$(match_first "$PASS_RE")" ]]; then
-    VERDICT="PASS"; DETAIL="$(match_first "$PASS_RE")"; break
-  fi
-  if [[ -n "$(match_first "$PASS_DEDUP_RE")" ]]; then
-    VERDICT="PASS_DEDUP"; DETAIL="$(match_first "$PASS_DEDUP_RE")"; break
-  fi
-  if [[ -n "$(match_first "$FAIL_RE")" ]]; then
-    VERDICT="FAIL"; DETAIL="$(match_first "$FAIL_RE")"; break
-  fi
-  if ! kill -0 "$HTND_PID" 2>/dev/null; then
-    DETAIL="htnd exited before reaching a verdict; see $LOG_FILE"
-    break
-  fi
-  sleep 5
-  ELAPSED=$(( ELAPSED + 5 ))
-done
+# match_first <index> <regex> - searches both the captured console output and htnd's own
+# rotating log under the appdir, so a change in either destination cannot make a real
+# verdict look like a timeout.
+match_first() {
+  local index="$1" regex="$2"
+  grep -h -m1 -E "$regex" \
+    "${NODE_LOG[$index]}" "${NODE_DIR[$index]}/datadir/hoosat-mainnet/logs/htnd.log" \
+    2>/dev/null | head -1
+}
 
-if [[ "$VERDICT" == "OTHER" && $ELAPSED -ge $TIMEOUT_SECONDS ]]; then
-  DETAIL="timed out after ${TIMEOUT_SECONDS}s without an import verdict"
+# await_verdict <index>
+await_verdict() {
+  local index="$1" elapsed=0 hit=""
+  while (( elapsed < TIMEOUT_SECONDS )); do
+    if hit="$(match_first "$index" "$PASS_RE")" && [[ -n "$hit" ]]; then
+      NODE_VERDICT[$index]="PASS"; NODE_DETAIL[$index]="$hit"; return 0
+    fi
+    if hit="$(match_first "$index" "$PASS_DEDUP_RE")" && [[ -n "$hit" ]]; then
+      NODE_VERDICT[$index]="PASS_DEDUP"; NODE_DETAIL[$index]="$hit"; return 0
+    fi
+    if hit="$(match_first "$index" "$FAIL_RE")" && [[ -n "$hit" ]]; then
+      NODE_VERDICT[$index]="FAIL"; NODE_DETAIL[$index]="$hit"; return 0
+    fi
+    if ! kill -0 "${NODE_PID[$index]}" 2>/dev/null; then
+      NODE_DETAIL[$index]="htnd exited before reaching a verdict; see ${NODE_LOG[$index]}"
+      return 0
+    fi
+    sleep 5
+    elapsed=$(( elapsed + 5 ))
+  done
+  NODE_DETAIL[$index]="timed out after ${TIMEOUT_SECONDS}s without an import verdict"
+}
+
+rpc() {  # rpc <index> <htnctl args...>
+  local index="$1"; shift
+  "$HTNCTL_BIN" "$@" -a -s "${NODE_RPC[$index]}" 2>/dev/null
+}
+
+# await_sync <index> - GetInfo.isSynced is htnd's own answer to "am I caught up".
+await_sync() {
+  local index="$1" elapsed=0
+  while (( elapsed < SYNC_TIMEOUT_SECONDS )); do
+    if ! kill -0 "${NODE_PID[$index]}" 2>/dev/null; then
+      echo "node$index exited before finishing sync" >&2; return 1
+    fi
+    local synced
+    synced="$(rpc "$index" GetInfo | python3 -c \
+      'import json,sys
+try: print(str(json.load(sys.stdin)["getInfoResponse"].get("isSynced", False)).lower())
+except Exception: print("unknown")' 2>/dev/null)"
+    if [[ "$synced" == "true" ]]; then return 0; fi
+    sleep 30
+    elapsed=$(( elapsed + 30 ))
+  done
+  echo "node$index did not report isSynced within ${SYNC_TIMEOUT_SECONDS}s" >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Phase 1: classify every peer
+# ---------------------------------------------------------------------------
+if [[ $COMPARE -eq 1 ]]; then
+  echo "Mode: --compare. Both nodes run with --utxoindex (GetCoinSupply and"
+  echo "GetUtxosByAddresses need it) and must sync fully, which takes far longer than"
+  echo "classification alone. --archival is still not needed."
+else
+  echo "Mode: classify one peer. --utxoindex is NOT enabled and is not needed: the"
+  echo "pruning-point UTXO set is imported and checked before any index exists."
+  echo "--archival is not needed either."
+fi
+echo
+
+echo "=== classification ==="
+for i in "${!PEERS[@]}"; do
+  start_node "$i" "${PEERS[$i]}" || { echo "could not start node$i" >&2; exit 2; }
+done
+echo
+for i in "${!PEERS[@]}"; do
+  await_verdict "$i"
+  echo "node$i  peer=${PEERS[$i]}  VERDICT: ${NODE_VERDICT[$i]}"
+  echo "        ${NODE_DETAIL[$i]}"
+done
+echo
+
+if [[ $COMPARE -eq 0 ]]; then
+  cleanup_all; trap - EXIT INT TERM
+  echo "=================================================================="
+  echo "C5 VERDICT: ${NODE_VERDICT[0]}   peer=${PEERS[0]}"
+  echo "log kept at: ${NODE_LOG[0]}"
+  echo "=================================================================="
+  case "${NODE_VERDICT[0]}" in
+    PASS|PASS_DEDUP)
+      echo
+      echo "This peer serves a pruning-point UTXO set that reconciles with its own header"
+      echo "commitment. It is a candidate bootstrap source."
+      exit 0 ;;
+    FAIL)
+      echo
+      echo "This peer serves a set matching neither the accumulated multiset nor the header."
+      echo "A node syncing from it rewrites its own trust anchor and thereafter runs with"
+      echo "UTXO commitment, accepted-ID merkle root, coinbase and missing-input checks all"
+      echo "tolerated. Do not bootstrap from it. Keep this datadir and log."
+      exit 1 ;;
+    *) exit 2 ;;
+  esac
 fi
 
-cleanup
-trap - EXIT INT TERM
+# ---------------------------------------------------------------------------
+# Phase 2: --compare. Sync both fully, then diff the UTXO state they produced.
+#
+# This is the question two FAIL classifications cannot answer on their own: a peer failing
+# against its OWN pruning point header does not tell you whether two peers agree with EACH
+# OTHER. If their sets match, the network agrees on state and the commitment rule is what
+# diverged. If their sets differ, state itself has diverged.
+#
+# Note the delta test you would reach for first - "is the offset a constant?" - is not
+# computable: headers carry only the MuHash hash, and hashes are not invertible, so one
+# multiset cannot be subtracted from another. Comparing the sets is the computable
+# substitute.
+# ---------------------------------------------------------------------------
+echo "=== waiting for both nodes to finish syncing (up to ${SYNC_TIMEOUT_SECONDS}s each) ==="
+for i in 0 1; do
+  echo "node$i syncing from ${PEERS[$i]} ..."
+  if ! await_sync "$i"; then
+    echo "COMPARISON INCOMPLETE: node$i never reported isSynced. Datadirs kept." >&2
+    exit 2
+  fi
+  echo "node$i is synced."
+done
+echo
+
+for i in 0 1; do
+  rpc "$i" GetBlockDagInfo > "$RUN_ROOT/daginfo.$i.json"
+  rpc "$i" GetCoinSupply   > "$RUN_ROOT/coinsupply.$i.json"
+  rpc "$i" GetUtxosByAddresses "$ADDRESS" 0 > "$RUN_ROOT/utxos.$i.json"
+done
+
+python3 - "$RUN_ROOT" "${PEERS[0]}" "${PEERS[1]}" "$ADDRESS" <<'PYTHON'
+import json, sys
+
+run_root, peer0, peer1, address = sys.argv[1:5]
+
+def load(name, index):
+    with open(f"{run_root}/{name}.{index}.json") as handle:
+        return json.load(handle)
+
+def entries(index):
+    payload = load("utxos", index).get("getUtxosByAddressesResponse", {})
+    result = {}
+    for entry in payload.get("entries") or []:
+        outpoint = entry["outpoint"]
+        key = f"{outpoint['transactionId']}:{outpoint.get('index', 0)}"
+        utxo = entry["utxoEntry"]
+        result[key] = (int(utxo["amount"]), int(utxo["blockDaaScore"]),
+                       bool(utxo.get("isCoinbase", False)))
+    return result
+
+dag = [load("daginfo", i).get("getBlockDagInfoResponse", {}) for i in (0, 1)]
+supply = [int(load("coinsupply", i)["getCoinSupplyResponse"]["circulatingSompi"]) for i in (0, 1)]
+sets = [entries(0), entries(1)]
+virtual_daa = [int(dag[i].get("virtualDaaScore", 0)) for i in (0, 1)]
+
+print("=" * 74)
+print("C5 COMPARE")
+print(f"  node0 peer={peer0}")
+print(f"  node1 peer={peer1}")
+print(f"  address={address}")
+print("=" * 74)
+
+print("\n-- chain position --")
+for i in (0, 1):
+    print(f"  node{i}: pruningPoint={dag[i].get('pruningPointHash','?')}")
+    print(f"         virtualDaaScore={virtual_daa[i]}  blockCount={dag[i].get('blockCount','?')}")
+same_pp = dag[0].get("pruningPointHash") == dag[1].get("pruningPointHash")
+daa_gap = abs(virtual_daa[0] - virtual_daa[1])
+print(f"  same pruning point: {same_pp}   virtual DAA gap: {daa_gap}")
+
+print("\n-- circulating supply --")
+for i in (0, 1):
+    print(f"  node{i}: {supply[i]:,}")
+supply_delta = supply[0] - supply[1]
+print(f"  delta : {supply_delta:,} sompi ({supply_delta / 1e8:,.8f} HTN)")
+
+print(f"\n-- outpoint set for {address} --")
+only0 = {k: v for k, v in sets[0].items() if k not in sets[1]}
+only1 = {k: v for k, v in sets[1].items() if k not in sets[0]}
+shared_differ = {k: (sets[0][k], sets[1][k])
+                 for k in sets[0].keys() & sets[1].keys() if sets[0][k] != sets[1][k]}
+
+for i in (0, 1):
+    print(f"  node{i}: {len(sets[i])} outpoints, sum {sum(a for a, _, _ in sets[i].values()):,}")
+print(f"  only on node0 : {len(only0)} outpoints, sum {sum(a for a, _, _ in only0.values()):,}")
+print(f"  only on node1 : {len(only1)} outpoints, sum {sum(a for a, _, _ in only1.values()):,}")
+print(f"  shared outpoints whose entry differs: {len(shared_differ)}")
+for key, (a, b) in list(shared_differ.items())[:5]:
+    print(f"    {key}  node0 amount={a[0]} daa={a[1]}  node1 amount={b[0]} daa={b[1]}")
+
+# Divergence close to the tip is ordinary - the two nodes are simply a few blocks apart.
+# Divergence deep in history is not, and it is the signature that matters.
+tip = max(virtual_daa) if max(virtual_daa) else 0
+TIP_WINDOW = 10000
+deep = [(k, v) for k, v in list(only0.items()) + list(only1.items()) if tip - v[1] > TIP_WINDOW]
+if deep:
+    daas = [v[1] for _, v in deep]
+    print(f"\n  {len(deep)} of the differing outpoints are more than {TIP_WINDOW} DAA below the tip")
+    print(f"  (DAA range {min(daas)} .. {max(daas)}, tip {tip}) - not explainable by tip lag.")
+    coinbase_count = sum(1 for _, v in deep if v[2])
+    print(f"  of those, coinbase: {coinbase_count}, regular: {len(deep) - coinbase_count}")
+
+agree = (not only0 and not only1 and not shared_differ and supply_delta == 0)
+print("\n" + "=" * 74)
+if agree:
+    print("VERDICT: the two nodes AGREE on UTXO state.")
+    print("  The network agrees on state; what diverged is the commitment rule, not the")
+    print("  coins. Look at how multisets are computed, not at rebuilding node state.")
+    print("  An archival replay (C1) would reproduce the same disagreement and is not the fix.")
+else:
+    print("VERDICT: the two nodes DISAGREE on UTXO state.")
+    if deep:
+        print("  The disagreement reaches deep into history, so it is not tip lag.")
+    print("  State itself has diverged between peers. An archival replay from genesis (C1)")
+    print("  is the only anchor, and the ambient constants.GetBlockVersion() leak documented")
+    print("  in docs/utxo-set-verification.md section 6 becomes critical path.")
+print("=" * 74)
+
+sys.exit(0 if agree else 1)
+PYTHON
+COMPARE_STATUS=$?
+
+cleanup_all; trap - EXIT INT TERM
 
 echo
-echo "=================================================================="
-echo "C5 VERDICT: $VERDICT   peer=$PEER"
-echo "$DETAIL"
-echo "log kept at: $LOG_FILE"
-echo "=================================================================="
+echo "Datadirs and logs kept under: $RUN_ROOT"
+for i in 0 1; do
+  echo "  node$i (${PEERS[$i]}): classification=${NODE_VERDICT[$i]}  ${NODE_DIR[$i]}"
+done
 
-case "$VERDICT" in
-  PASS|PASS_DEDUP)
-    echo
-    echo "This peer serves a pruning-point UTXO set that reconciles with its own header"
-    echo "commitment. It is a candidate bootstrap source: a node synced from it does not"
-    echo "enter the offset regime, and it would pass a future export check."
-    exit 0 ;;
-  FAIL)
-    echo
-    echo "This peer serves a set matching neither the accumulated multiset nor the header."
-    echo "A node syncing from it rewrites its own trust anchor and thereafter runs with"
-    echo "UTXO commitment, accepted-ID merkle root, coinbase and missing-input checks all"
-    echo "tolerated. Do not bootstrap from it. Keep this datadir and log."
-    exit 1 ;;
-  *)
-    exit 2 ;;
-esac
+if [[ "${NODE_VERDICT[0]}" == "FAIL" || "${NODE_VERDICT[1]}" == "FAIL" ]]; then
+  echo
+  echo "At least one peer FAILed classification, so neither node is a bootstrap source"
+  echo "regardless of whether they agree with each other."
+  exit 1
+fi
+exit $COMPARE_STATUS
