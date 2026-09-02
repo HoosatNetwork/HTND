@@ -134,6 +134,19 @@ PASS_RE='UTXO set matches its own header commitment'
 PASS_DEDUP_RE='Repaired imported pruning point .* matches the header commitment'
 FAIL_RE='still does not match its header after recomputation'
 
+# The verdict line carries the snapshot's fingerprint: how many entries arrived and what
+# they hash to. Two peers reporting the SAME fingerprint did not independently arrive at
+# the same answer - they served the same bytes, which usually means a shared export
+# ancestor rather than independent agreement. That distinction decides how much the
+# --compare verdict is worth, so it is captured rather than left to the reader.
+fingerprint_of() {  # fingerprint_of <index> -> "<entries>/<multiset>" or ""
+  local line="${NODE_DETAIL[$1]}"
+  local entries multiset
+  entries="$(sed -n 's/.*over \([0-9]\{1,\}\) stored entries.*/\1/p' <<<"$line")"
+  multiset="$(sed -n 's/.*stored entries \([0-9a-f]\{64\}\).*/\1/p' <<<"$line")"
+  [[ -n "$entries" && -n "$multiset" ]] && printf '%s/%s' "$entries" "$multiset"
+}
+
 declare -a NODE_DIR NODE_LOG NODE_PID NODE_RPC NODE_VERDICT NODE_DETAIL
 
 cleanup_all() {
@@ -323,16 +336,29 @@ for i in 0 1; do
 done
 echo
 
+FP0="$(fingerprint_of 0)"; FP1="$(fingerprint_of 1)"
+SHARED_SNAPSHOT=0
+if [[ -n "$FP0" && "$FP0" == "$FP1" ]]; then
+  SHARED_SNAPSHOT=1
+  echo "NOTE: both peers served an IDENTICAL pruning-point snapshot (${FP0%%/*} entries,"
+  echo "      multiset ${FP1##*/})."
+  echo "      They did not independently arrive at the same state - they handed over the same"
+  echo "      bytes. Agreement below is therefore evidence of a shared export ancestor, NOT"
+  echo "      evidence that the state is correct."
+  echo
+fi
+
 for i in 0 1; do
   rpc "$i" GetBlockDagInfo > "$RUN_ROOT/daginfo.$i.json"
   rpc "$i" GetCoinSupply   > "$RUN_ROOT/coinsupply.$i.json"
   rpc "$i" GetUtxosByAddresses "$ADDRESS" 0 > "$RUN_ROOT/utxos.$i.json"
 done
 
-python3 - "$RUN_ROOT" "${PEERS[0]}" "${PEERS[1]}" "$ADDRESS" <<'PYTHON'
+python3 - "$RUN_ROOT" "${PEERS[0]}" "${PEERS[1]}" "$ADDRESS" "$SHARED_SNAPSHOT" <<'PYTHON'
 import json, sys
 
 run_root, peer0, peer1, address = sys.argv[1:5]
+shared_snapshot = sys.argv[5] == "1"
 
 def load(name, index):
     with open(f"{run_root}/{name}.{index}.json") as handle:
@@ -403,11 +429,17 @@ if deep:
 
 agree = (not only0 and not only1 and not shared_differ and supply_delta == 0)
 print("\n" + "=" * 74)
-if agree:
-    print("VERDICT: the two nodes AGREE on UTXO state.")
-    print("  The network agrees on state; what diverged is the commitment rule, not the")
-    print("  coins. Look at how multisets are computed, not at rebuilding node state.")
-    print("  An archival replay (C1) would reproduce the same disagreement and is not the fix.")
+if agree and shared_snapshot:
+    print("VERDICT: the two nodes agree - but they were handed the SAME snapshot.")
+    print("  Both peers served byte-identical pruning-point sets, so this is agreement by")
+    print("  shared lineage, not two independent derivations landing on the same answer.")
+    print("  It does NOT establish that the state is correct, and it does NOT rule out C1.")
+    print("  Survey peers with unrelated histories before drawing a conclusion.")
+elif agree:
+    print("VERDICT: the two nodes AGREE on UTXO state, from different snapshots.")
+    print("  Two independent derivations landed on the same set, which is real evidence that")
+    print("  the network agrees on state and that what diverged is the commitment rule.")
+    print("  Confirm with the supply check below before acting on it.")
 else:
     print("VERDICT: the two nodes DISAGREE on UTXO state.")
     if deep:
@@ -415,9 +447,19 @@ else:
     print("  State itself has diverged between peers. An archival replay from genesis (C1)")
     print("  is the only anchor, and the ambient constants.GetBlockVersion() leak documented")
     print("  in docs/utxo-set-verification.md section 6 becomes critical path.")
+
+# Circulating supply is coinbase-only, so it never decreases. Comparing this run against an
+# earlier measurement at a LOWER virtual DAA score is the one cheap check that can prove a
+# set is wrong without knowing which set is right - and nobody was running it.
+print("\n-- monotonicity check --")
+print(f"  This run: {max(supply):,} sompi at virtual DAA {max(virtual_daa)}.")
+print("  Circulating supply only ever grows. If you have an EARLIER measurement (lower")
+print("  virtual DAA) reporting MORE supply than this, then one of the two is wrong -")
+print("  regardless of how well any two peers agree with each other. Record this pair and")
+print("  compare it against your next run.")
 print("=" * 74)
 
-sys.exit(0 if agree else 1)
+sys.exit(0 if (agree and not shared_snapshot) else 1)
 PYTHON
 COMPARE_STATUS=$?
 

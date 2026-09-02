@@ -179,9 +179,33 @@ Reading the verdict:
 
 | result | meaning | what to do |
 |---|---|---|
-| **AGREE** | the network agrees on state; what diverged is the *commitment rule* | fix how multisets are computed. **An archival replay would reproduce the same disagreement — do not build C1.** |
+| **AGREE, different snapshots** | two independent derivations landed on the same set — real evidence the network agrees on state and the *commitment rule* is what diverged | look at how multisets are computed. An archival replay would reproduce the same disagreement |
+| **AGREE, identical snapshots** | the peers handed over the same bytes — agreement by shared lineage, not independent confirmation | **proves nothing about correctness.** Survey peers with unrelated histories |
 | **DISAGREE**, deep in history | state itself has diverged between peers | C1 is the only anchor, and the version leak in §6 becomes critical path |
 | **DISAGREE**, only near the tip | ordinary lag: the two nodes are a few blocks apart | not evidence of anything; re-run when both are settled |
+
+The script tells those first two apart for you. The classification line carries the snapshot's
+fingerprint — how many entries arrived and what they hash to — and if both peers report the
+same fingerprint, the run says so and refuses to treat the agreement as confirmation:
+
+```
+NOTE: both peers served an IDENTICAL pruning-point snapshot (15679214 entries,
+      multiset 026c0ba9...).
+      They did not independently arrive at the same state - they handed over the same
+      bytes. Agreement below is therefore evidence of a shared export ancestor, NOT
+      evidence that the state is correct.
+```
+
+That case exits non-zero, like a disagreement, because it has not answered the question.
+
+### The monotonicity check
+
+Every `--compare` run prints its circulating supply and virtual DAA score. **Circulating
+supply is coinbase-only and never decreases**, so a later measurement reporting *less* supply
+than an earlier one proves one of the two is wrong — without needing to know which set is
+right, and regardless of how well any two peers agree with each other.
+
+Record the pair from every run. It is the cheapest check available and nothing was running it.
 
 The report separates those last two for you: it counts how many differing outpoints sit more
 than 10,000 DAA below the tip, prints their DAA range, and splits them coinbase vs regular.

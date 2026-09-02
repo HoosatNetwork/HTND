@@ -67,3 +67,5 @@ coverage.tmp
 /htnwallet
 esscapes_summary.txt
 .release-notes
+# c5-survey.sh run directories (isolated datadirs + built binaries, many GB)
+/c5-runs/
