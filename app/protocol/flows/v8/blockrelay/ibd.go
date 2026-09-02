@@ -859,20 +859,20 @@ func (flow *handleIBDFlow) processHeader(consensus externalapi.Consensus, msgBlo
 		Transactions: nil,
 		PoWHash:      "",
 	}
-	blockHash := consensushashing.BlockHash(block)
-	blockInfo, err := consensus.GetBlockInfo(blockHash)
-	if err != nil {
-		return err
-	}
-	if blockInfo.Exists {
-		log.Debugf("Block header %s is already in the DAG. Skipping...", blockHash)
-		return nil
-	}
-	err = consensus.ValidateAndInsertBlock(block, false, true)
+	// blockInfo, err := consensus.GetBlockInfo(blockHash)
+	// if err != nil {
+	// 	return err
+	// }
+	// if blockInfo.Exists {
+	// 	log.Debugf("Block header %s is already in the DAG. Skipping...", blockHash)
+	// 	return nil
+	// }
+	err := consensus.ValidateAndInsertBlock(block, false, true)
 	if err != nil {
 		if errors.Is(err, ruleerrors.ErrDuplicateBlock) {
 			return nil
 		}
+		blockHash := consensushashing.BlockHash(block)
 		log.Errorf("Rejected block header %s from %s during IBD: %+v", blockHash, flow.peer, errors.WithStack(err))
 		return err
 	}
