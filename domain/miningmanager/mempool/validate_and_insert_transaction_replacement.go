@@ -31,7 +31,7 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 
 	conflicts := mp.mempoolConflicts(transaction)
 	if len(conflicts) == 0 {
-		acceptedTransactions, err := mp.validateAndInsertTransaction(transaction, isHighPriority, false)
+		acceptedTransactions, err := mp.validateAndInsertTransaction(transaction, isHighPriority, false, true)
 		return acceptedTransactions, nil, err
 	}
 
@@ -45,7 +45,7 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 		return nil, nil, transactionRuleError(RejectBadOrphan, str)
 	}
 
-	err = mp.validateTransactionInContext(transaction)
+	err = mp.validateTransactionInContext(transaction, true)
 	if err != nil {
 		return nil, nil, err
 	}

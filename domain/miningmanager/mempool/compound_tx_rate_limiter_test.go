@@ -8,6 +8,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 )
 
@@ -122,7 +123,7 @@ func TestCompoundTxRateLimiterExtractSenderAddresses_FallbackToScriptHash(t *tes
 		},
 	}
 
-	ids := rtl.extractSenderAddresses(tx)
+	ids, _ := rtl.extractSenderAddresses(tx)
 	if len(ids) != 1 {
 		t.Fatalf("expected exactly 1 sender identifier, got %d (%v)", len(ids), ids)
 	}
@@ -181,11 +182,116 @@ func TestCompoundTxRateLimiterExtractSenderAddresses_P2SHCanonicalizesToRedeemSc
 		},
 	}
 
-	ids := rtl.extractSenderAddresses(tx)
+	ids, _ := rtl.extractSenderAddresses(tx)
 	if len(ids) != 1 {
 		t.Fatalf("expected exactly 1 sender identifier, got %d (%v)", len(ids), ids)
 	}
 	if ids[0] != innerAddr.EncodeAddress() {
 		t.Fatalf("expected canonical sender %q, got %q", innerAddr.EncodeAddress(), ids[0])
+	}
+}
+
+// TestCompoundTxRateLimiter_CleanupWithOutOfOrderTimestamps pins the fix for the pruning bug that
+// made the limiter permanently sticky. cleanupOldSubmissions used to scan for the first entry newer
+// than the cutoff and drop everything before it, which is only correct when submissions is sorted
+// ascending. recordTransactionAt appends promoted orphans with their ORIGINAL arrival time, so an
+// expired entry can land after fresh ones - and the old scan then stopped at index 0 and pruned
+// nothing, leaving the address rate-limited long after its window had passed.
+func TestCompoundTxRateLimiter_CleanupWithOutOfOrderTimestamps(t *testing.T) {
+	cfg := DefaultConfig(&dagconfig.TestnetParams)
+	cfg.CompoundTxRateLimitEnabled = true
+	cfg.MaxCompoundTxPerAddressPerMinute = 2
+	cfg.CompoundTxRateLimitWindowMinutes = 1
+
+	rtl := newCompoundTxRateLimiter(cfg)
+	addr := "hoosat:qpoutofordertestxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	tracker := rtl.getOrCreateTracker(addr)
+
+	base := time.Now()
+	// A fresh entry first, then an expired one appended after it - the order recordTransactionAt
+	// produces when an orphan submitted minutes ago is finally promoted.
+	tracker.mutex.Lock()
+	tracker.submissions = append(tracker.submissions,
+		compoundTxSubmission{timestamp: base.Add(-5 * time.Second), txID: "fresh"},
+		compoundTxSubmission{timestamp: base.Add(-10 * time.Minute), txID: "expired"},
+	)
+	tracker.mutex.Unlock()
+
+	rtl.cleanupOldSubmissions(tracker)
+
+	tracker.mutex.RLock()
+	remaining := make([]string, 0, len(tracker.submissions))
+	for _, submission := range tracker.submissions {
+		remaining = append(remaining, submission.txID)
+	}
+	tracker.mutex.RUnlock()
+
+	if len(remaining) != 1 || remaining[0] != "fresh" {
+		t.Fatalf("expected only the in-window submission to survive cleanup, got %v", remaining)
+	}
+	if !rtl.checkRateLimit(addr) {
+		t.Fatalf("address should be allowed again once the expired submission is pruned")
+	}
+}
+
+// TestCompoundTxRateLimiter_UnattributableInputsFailClosed pins that a compound transaction whose
+// inputs carry no UTXO entries is rejected rather than waved through. extractSenderAddresses used
+// to skip such inputs silently; with every input skipped it returned an empty address set, so
+// isRateLimited found nothing over its limit and reported "not limited" - the limiter switching
+// itself off for exactly the transactions it could not understand, with no log line.
+func TestCompoundTxRateLimiter_UnattributableInputsFailClosed(t *testing.T) {
+	cfg := DefaultConfig(&dagconfig.TestnetParams)
+	cfg.CompoundTxRateLimitEnabled = true
+	cfg.CompoundTxMinInputsThreshold = 2
+
+	rtl := newCompoundTxRateLimiter(cfg)
+
+	tx := &externalapi.DomainTransaction{
+		Inputs: []*externalapi.DomainTransactionInput{
+			{UTXOEntry: nil},
+			{UTXOEntry: nil},
+			{UTXOEntry: nil},
+		},
+	}
+
+	addresses, unattributed := rtl.extractSenderAddresses(tx)
+	if len(addresses) != 0 {
+		t.Fatalf("expected no attributable addresses, got %v", addresses)
+	}
+	if unattributed != 3 {
+		t.Fatalf("expected all 3 inputs reported as unattributable, got %d", unattributed)
+	}
+
+	isLimited, limitedAddresses := rtl.isRateLimited(tx)
+	if !isLimited {
+		t.Fatalf("a compound transaction with no attributable sender must fail closed, not bypass the limiter")
+	}
+	if len(limitedAddresses) == 0 {
+		t.Fatalf("expected a reason to be reported alongside the rejection")
+	}
+}
+
+// TestCompoundTxRateLimiter_ExtractSenderAddressesIsDeterministic pins that the bucket set does not
+// depend on Go's randomized map iteration order.
+func TestCompoundTxRateLimiter_ExtractSenderAddressesIsDeterministic(t *testing.T) {
+	cfg := DefaultConfig(&dagconfig.TestnetParams)
+	cfg.CompoundTxRateLimitEnabled = true
+	rtl := newCompoundTxRateLimiter(cfg)
+
+	inputs := make([]*externalapi.DomainTransactionInput, 0, 8)
+	for i := range 8 {
+		script := []byte{0xaa, 0x20, byte(i)}
+		inputs = append(inputs, &externalapi.DomainTransactionInput{
+			UTXOEntry: utxo.NewUTXOEntry(1000, &externalapi.ScriptPublicKey{Script: script, Version: 0}, false, 1),
+		})
+	}
+	tx := &externalapi.DomainTransaction{Inputs: inputs}
+
+	first, _ := rtl.extractSenderAddresses(tx)
+	for range 20 {
+		next, _ := rtl.extractSenderAddresses(tx)
+		if strings.Join(first, ",") != strings.Join(next, ",") {
+			t.Fatalf("extractSenderAddresses is not deterministic:\nfirst: %v\nnext:  %v", first, next)
+		}
 	}
 }

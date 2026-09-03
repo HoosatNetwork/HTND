@@ -9,24 +9,37 @@ import (
 
 // OrphanTransaction represents a transaction in the OrphanPool
 type OrphanTransaction struct {
-	transaction     *externalapi.DomainTransaction
-	isHighPriority  bool
-	addedAtDAAScore uint64
-	addedAtTime     time.Time
+	transaction    *externalapi.DomainTransaction
+	isHighPriority bool
+	// isLocalSubmission records whether this orphan arrived through this node's own RPC rather than
+	// from a peer. Node-local submission policy (the compound-transaction rate limiter) must only ever
+	// apply to what this node's own users submit - applying it to relayed transactions makes each node
+	// silently drop a different subset and stops propagation dead.
+	isLocalSubmission bool
+	addedAtDAAScore   uint64
+	addedAtTime       time.Time
 }
 
 // NewOrphanTransaction constructs a new OrphanTransaction
 func NewOrphanTransaction(
 	transaction *externalapi.DomainTransaction,
 	isHighPriority bool,
+	isLocalSubmission bool,
 	addedAtDAAScore uint64,
 ) *OrphanTransaction {
 	return &OrphanTransaction{
-		transaction:     transaction,
-		isHighPriority:  isHighPriority,
-		addedAtDAAScore: addedAtDAAScore,
-		addedAtTime:     time.Now(),
+		transaction:       transaction,
+		isHighPriority:    isHighPriority,
+		isLocalSubmission: isLocalSubmission,
+		addedAtDAAScore:   addedAtDAAScore,
+		addedAtTime:       time.Now(),
 	}
+}
+
+// IsLocalSubmission returns whether this orphan was submitted through this node's own RPC rather
+// than relayed by a peer.
+func (ot *OrphanTransaction) IsLocalSubmission() bool {
+	return ot.isLocalSubmission
 }
 
 // TransactionID returns the ID of this OrphanTransaction

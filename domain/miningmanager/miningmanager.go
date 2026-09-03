@@ -43,7 +43,8 @@ type MiningManager interface {
 		orphanPoolTransactions []*externalapi.DomainTransaction)
 	TransactionCount(includeTransactionPool bool, includeOrphanPool bool) int
 	HandleNewBlockTransactions(txs []*externalapi.DomainTransaction) ([]*externalapi.DomainTransaction, error)
-	ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool) (
+	ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool,
+		isLocalSubmission bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, err error)
 	ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error)
@@ -111,9 +112,9 @@ func (mm *miningManager) HandleNewBlockTransactions(txs []*externalapi.DomainTra
 // adds it to the set of known transactions that have not yet been
 // added to any block
 func (mm *miningManager) ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction,
-	isHighPriority bool, allowOrphan bool,
+	isHighPriority bool, allowOrphan bool, isLocalSubmission bool,
 ) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
-	return mm.mempool.ValidateAndInsertTransaction(transaction, isHighPriority, allowOrphan)
+	return mm.mempool.ValidateAndInsertTransaction(transaction, isHighPriority, allowOrphan, isLocalSubmission)
 }
 
 // ValidateAndInsertTransactionReplacement validates the given transaction and attempts to insert it as a replacement (RBF)

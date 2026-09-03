@@ -37,7 +37,9 @@ func newOrphansPool(mp *mempool) *orphansPool {
 	}
 }
 
-func (op *orphansPool) maybeAddOrphan(transaction *externalapi.DomainTransaction, isHighPriority bool) error {
+func (op *orphansPool) maybeAddOrphan(transaction *externalapi.DomainTransaction, isHighPriority bool,
+	isLocalSubmission bool,
+) error {
 	if op.mempool.config.MaximumOrphanTransactionCount == 0 {
 		return nil
 	}
@@ -56,7 +58,7 @@ func (op *orphansPool) maybeAddOrphan(transaction *externalapi.DomainTransaction
 		return err
 	}
 
-	err = op.addOrphan(transaction, isHighPriority)
+	err = op.addOrphan(transaction, isHighPriority, isLocalSubmission)
 	if err != nil {
 		return err
 	}
@@ -121,12 +123,14 @@ func (op *orphansPool) checkOrphanDoubleSpend(transaction *externalapi.DomainTra
 	return nil
 }
 
-func (op *orphansPool) addOrphan(transaction *externalapi.DomainTransaction, isHighPriority bool) error {
+func (op *orphansPool) addOrphan(transaction *externalapi.DomainTransaction, isHighPriority bool,
+	isLocalSubmission bool,
+) error {
 	virtualDAAScore, err := op.mempool.consensusReference.Consensus().GetVirtualDAAScore()
 	if err != nil {
 		return err
 	}
-	orphanTransaction := model.NewOrphanTransaction(transaction, isHighPriority, virtualDAAScore)
+	orphanTransaction := model.NewOrphanTransaction(transaction, isHighPriority, isLocalSubmission, virtualDAAScore)
 
 	op.allOrphans[*orphanTransaction.TransactionID()] = orphanTransaction
 	for _, input := range transaction.Inputs {
@@ -206,7 +210,7 @@ func (op *orphansPool) unorphanTransaction(transaction *model.OrphanTransaction)
 		return err
 	}
 
-	err = op.mempool.validateTransactionInContext(transaction.Transaction())
+	err = op.mempool.validateTransactionInContext(transaction.Transaction(), transaction.IsLocalSubmission())
 	if err != nil {
 		return err
 	}
@@ -226,9 +230,13 @@ func (op *orphansPool) unorphanTransaction(transaction *model.OrphanTransaction)
 		return err
 	}
 
-	// Record this transaction for compound rate limiting using the original orphan arrival time
-	txID := consensushashing.TransactionID(transaction.Transaction())
-	op.mempool.compoundTxRateLimiter.recordTransactionAt(transaction.Transaction(), txID.String(), transaction.AddedAtTime())
+	// Record this transaction for compound rate limiting using the original orphan arrival time.
+	// Only for orphans this node's own RPC submitted - a relayed orphan must not consume the local
+	// submission budget, or every node ends up throttling the network's traffic against its own quota.
+	if transaction.IsLocalSubmission() {
+		txID := consensushashing.TransactionID(transaction.Transaction())
+		op.mempool.compoundTxRateLimiter.recordTransactionAt(transaction.Transaction(), txID.String(), transaction.AddedAtTime())
+	}
 
 	return nil
 }

@@ -51,7 +51,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateTransaction(conflictTx): %+v", err)
 			}
-			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false); err != nil {
+			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(conflictTx): %+v", err)
 			}
 
@@ -59,7 +59,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateTransaction(descendantTx): %+v", err)
 			}
-			if _, err := mp.ValidateAndInsertTransaction(descendantTx, true, false); err != nil {
+			if _, err := mp.ValidateAndInsertTransaction(descendantTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(descendantTx): %+v", err)
 			}
 
@@ -113,7 +113,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateTransaction(conflictTx): %+v", err)
 			}
-			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false); err != nil {
+			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(conflictTx): %+v", err)
 			}
 
@@ -121,7 +121,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateTransaction(descendantTx): %+v", err)
 			}
-			if _, err := mp.ValidateAndInsertTransaction(descendantTx, true, false); err != nil {
+			if _, err := mp.ValidateAndInsertTransaction(descendantTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(descendantTx): %+v", err)
 			}
 
@@ -168,7 +168,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateTransaction(conflictTx): %+v", err)
 			}
-			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false); err != nil {
+			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(conflictTx): %+v", err)
 			}
 
@@ -176,7 +176,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateTransaction(descendantTx): %+v", err)
 			}
-			if _, err := mp.ValidateAndInsertTransaction(descendantTx, true, false); err != nil {
+			if _, err := mp.ValidateAndInsertTransaction(descendantTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(descendantTx): %+v", err)
 			}
 

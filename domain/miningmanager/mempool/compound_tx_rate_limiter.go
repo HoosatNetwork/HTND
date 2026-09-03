@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -80,20 +81,33 @@ func (rtl *compoundTxRateLimiter) isCompoundTransaction(transaction *externalapi
 	return false
 }
 
-// extractSenderAddresses extracts sender addresses from transaction inputs
-func (rtl *compoundTxRateLimiter) extractSenderAddresses(transaction *externalapi.DomainTransaction) []string {
+// extractSenderAddresses extracts sender addresses from transaction inputs. It also returns the
+// number of inputs it could NOT attribute to any sender.
+//
+// Attribution depends on input.UTXOEntry, which both call sites populate before the limiter runs -
+// validateAndInsertTransaction via fillInputsAndGetMissingParents, unorphanTransaction via
+// ValidateTransactionAndPopulateWithConsensusData. An unattributable input therefore means that
+// invariant is broken, and silently skipping it (what this used to do) is the worst response: with
+// every input skipped the function returned an empty set, isRateLimited found no address over its
+// limit, and the transaction bypassed the limiter entirely while recordTransaction charged nothing.
+// Callers get the count so they can fail closed and say so, instead of failing open in silence.
+func (rtl *compoundTxRateLimiter) extractSenderAddresses(transaction *externalapi.DomainTransaction) (
+	addressList []string, unattributedInputs int,
+) {
 	addresses := make(map[string]bool) // Use map to avoid duplicates
 	if transaction == nil {
-		return nil
+		return nil, 0
 	}
 
 	for _, input := range transaction.Inputs {
 		if input == nil || input.UTXOEntry == nil {
+			unattributedInputs++
 			continue
 		}
 
 		scriptPublicKey := input.UTXOEntry.ScriptPublicKey()
 		if scriptPublicKey == nil {
+			unattributedInputs++
 			continue
 		}
 
@@ -133,15 +147,19 @@ func (rtl *compoundTxRateLimiter) extractSenderAddresses(transaction *externalap
 		fallbackID := scriptPublicKeyIdentifier(scriptPublicKey)
 		if fallbackID != "" {
 			addresses[fallbackID] = true
+		} else {
+			unattributedInputs++
 		}
 	}
 
-	// Convert map keys to slice
+	// Sorted, so the bucket set and every log line derived from it are deterministic rather than
+	// dependent on Go's randomized map iteration order.
 	result := make([]string, 0, len(addresses))
 	for addr := range addresses {
 		result = append(result, addr)
 	}
-	return result
+	sort.Strings(result)
+	return result, unattributedInputs
 }
 
 func scriptPublicKeyIdentifier(scriptPublicKey *externalapi.ScriptPublicKey) string {
@@ -197,18 +215,19 @@ func (rtl *compoundTxRateLimiter) cleanupOldSubmissions(tracker *addressTxTracke
 	}
 	cutoff := time.Now().Add(-windowDuration)
 
-	validIndex := 0
-	for i, submission := range tracker.submissions {
+	// Filter rather than slice off a prefix. The previous version scanned for the first entry newer
+	// than the cutoff and dropped everything before it, which is only correct if submissions is
+	// sorted ascending by timestamp - and recordTransactionAt appends promoted orphans with their
+	// ORIGINAL arrival time, which can be older than entries already in the slice. A single
+	// out-of-order entry made the scan stop at index 0 and prune nothing, so expired submissions kept
+	// counting against the address and a busy sender stayed rate-limited indefinitely.
+	kept := tracker.submissions[:0]
+	for _, submission := range tracker.submissions {
 		if submission.timestamp.After(cutoff) {
-			validIndex = i
-			break
+			kept = append(kept, submission)
 		}
-		validIndex = i + 1
 	}
-
-	if validIndex > 0 {
-		tracker.submissions = tracker.submissions[validIndex:]
-	}
+	tracker.submissions = kept
 }
 
 // cleanupEmptyTrackers removes trackers that have been empty for a long time.
@@ -257,36 +276,11 @@ func (rtl *compoundTxRateLimiter) checkRateLimit(address string) bool {
 
 // recordTransaction records a compound transaction submission for rate limiting
 func (rtl *compoundTxRateLimiter) recordTransaction(transaction *externalapi.DomainTransaction, txID string) {
-	if !rtl.config.CompoundTxRateLimitEnabled || !rtl.isCompoundTransaction(transaction) {
-		return
-	}
-
-	rtl.cleanupEmptyTrackers()
-
-	addresses := rtl.extractSenderAddresses(transaction)
-
-	for _, address := range addresses {
-		tracker := rtl.getOrCreateTracker(address)
-		rtl.cleanupOldSubmissions(tracker)
-
-		tracker.mutex.Lock()
-		// Deduplicate by txID for this address within the window
-		for _, s := range tracker.submissions {
-			if s.txID == txID {
-				tracker.mutex.Unlock()
-				goto nextAddress
-			}
-		}
-		tracker.submissions = append(tracker.submissions, compoundTxSubmission{
-			timestamp: time.Now(),
-			txID:      txID,
-		})
-		tracker.mutex.Unlock()
-	nextAddress:
-	}
+	rtl.recordTransactionAt(transaction, txID, time.Now())
 }
 
-// recordTransactionAt records a compound transaction with a specific timestamp (used for accepted orphans)
+// recordTransactionAt records a compound transaction with a specific timestamp (used for accepted
+// orphans, which are charged at their original arrival time rather than at promotion time).
 func (rtl *compoundTxRateLimiter) recordTransactionAt(transaction *externalapi.DomainTransaction, txID string, ts time.Time) {
 	if !rtl.config.CompoundTxRateLimitEnabled || !rtl.isCompoundTransaction(transaction) {
 		return
@@ -294,25 +288,34 @@ func (rtl *compoundTxRateLimiter) recordTransactionAt(transaction *externalapi.D
 
 	rtl.cleanupEmptyTrackers()
 
-	addresses := rtl.extractSenderAddresses(transaction)
+	addresses, unattributedInputs := rtl.extractSenderAddresses(transaction)
+	if unattributedInputs > 0 {
+		log.Warnf("Compound transaction %s: %d of %d inputs could not be attributed to a sender, so "+
+			"this submission is only charged against %d address(es). Inputs are expected to be "+
+			"populated before the rate limiter runs - this indicates they were not.",
+			txID, unattributedInputs, len(transaction.Inputs), len(addresses))
+	}
 
 	for _, address := range addresses {
 		tracker := rtl.getOrCreateTracker(address)
 		rtl.cleanupOldSubmissions(tracker)
 
 		tracker.mutex.Lock()
-		for _, s := range tracker.submissions {
-			if s.txID == txID {
-				tracker.mutex.Unlock()
-				goto nextAddress
+		// Deduplicate by txID for this address within the window
+		alreadyRecorded := false
+		for _, submission := range tracker.submissions {
+			if submission.txID == txID {
+				alreadyRecorded = true
+				break
 			}
 		}
-		tracker.submissions = append(tracker.submissions, compoundTxSubmission{
-			timestamp: ts,
-			txID:      txID,
-		})
+		if !alreadyRecorded {
+			tracker.submissions = append(tracker.submissions, compoundTxSubmission{
+				timestamp: ts,
+				txID:      txID,
+			})
+		}
 		tracker.mutex.Unlock()
-	nextAddress:
 	}
 }
 
@@ -324,9 +327,23 @@ func (rtl *compoundTxRateLimiter) isRateLimited(transaction *externalapi.DomainT
 
 	rtl.cleanupEmptyTrackers()
 
-	addresses := rtl.extractSenderAddresses(transaction)
-	rateLimitedAddresses := make([]string, 0)
+	addresses, unattributedInputs := rtl.extractSenderAddresses(transaction)
 
+	// No attributable sender at all: fail closed. Returning "not limited" here is how an
+	// unattributable compound transaction used to skip the limiter completely - a limiter that
+	// silently switches itself off for exactly the inputs it cannot understand is worse than no
+	// limiter, because nothing reports it.
+	if len(addresses) == 0 {
+		if unattributedInputs == 0 {
+			return false, nil // no inputs at all - nothing to limit
+		}
+		log.Warnf("Compound transaction: none of its %d inputs could be attributed to a sender, so "+
+			"the per-address rate limit cannot be evaluated. Rejecting rather than letting it bypass "+
+			"the limiter.", unattributedInputs)
+		return true, []string{"<unattributable>"}
+	}
+
+	rateLimitedAddresses := make([]string, 0)
 	for _, address := range addresses {
 		if !rtl.checkRateLimit(address) {
 			rateLimitedAddresses = append(rateLimitedAddresses, address)

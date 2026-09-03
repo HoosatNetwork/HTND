@@ -18,7 +18,9 @@ func (f *FlowContext) AddTransaction(tx *externalapi.DomainTransaction, allowOrp
 
 // AddTransactionWithPriority adds transaction to the mempool and propagates it.
 func (f *FlowContext) AddTransactionWithPriority(tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority bool) error {
-	acceptedTransactions, err := f.Domain().MiningManager().ValidateAndInsertTransaction(tx, isHighPriority, allowOrphan)
+	// AddTransaction* is the local submission path (RPC); relayed transactions go straight to
+	// MiningManager().ValidateAndInsertTransaction from the relay flow with isLocalSubmission=false.
+	acceptedTransactions, err := f.Domain().MiningManager().ValidateAndInsertTransaction(tx, isHighPriority, allowOrphan, true)
 	if err != nil {
 		return err
 	}

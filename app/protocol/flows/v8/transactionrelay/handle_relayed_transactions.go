@@ -184,7 +184,9 @@ func (flow *handleRelayedTransactionsFlow) receiveTransactions(requestedTransact
 				expectedID, txID)
 		}
 
-		acceptedTransactions, err := flow.Domain().MiningManager().ValidateAndInsertTransaction(tx, false, true)
+		// isLocalSubmission=false: this came from a peer, so node-local submission policy (the
+		// compound-transaction rate limiter) must not apply to it.
+		acceptedTransactions, err := flow.Domain().MiningManager().ValidateAndInsertTransaction(tx, false, true, false)
 		if err != nil {
 			ruleErr := &mempool.RuleError{}
 			if !errors.As(err, ruleErr) {

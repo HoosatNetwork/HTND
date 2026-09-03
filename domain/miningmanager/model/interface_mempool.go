@@ -10,7 +10,8 @@ import (
 type Mempool interface {
 	HandleNewBlockTransactions(txs []*externalapi.DomainTransaction) ([]*externalapi.DomainTransaction, error)
 	BlockCandidateTransactions() []*externalapi.DomainTransaction
-	ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool) (
+	ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool,
+		isLocalSubmission bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, err error)
 	ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error)

@@ -48,7 +48,7 @@ func TestValidateAndInsertTransaction(t *testing.T) {
 		transactionsToInsert := make([]*externalapi.DomainTransaction, 10)
 		for i := range transactionsToInsert {
 			transactionsToInsert[i] = createTransactionWithUTXOEntry(t, i, 0)
-			_, err = miningManager.ValidateAndInsertTransaction(transactionsToInsert[i], false, true)
+			_, err = miningManager.ValidateAndInsertTransaction(transactionsToInsert[i], false, true, true)
 			if err != nil {
 				t.Fatalf("ValidateAndInsertTransaction: %v", err)
 			}
@@ -71,7 +71,7 @@ func TestValidateAndInsertTransaction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error in createParentAndChildrenTransaction: %v", err)
 		}
-		_, err = miningManager.ValidateAndInsertTransaction(transactionNotAnOrphan, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(transactionNotAnOrphan, false, true, true)
 		if err != nil {
 			t.Fatalf("ValidateAndInsertTransaction: %v", err)
 		}
@@ -97,7 +97,7 @@ func TestImmatureSpend(t *testing.T) {
 		consensusReference := consensusreference.NewConsensusReference(&tcAsConsensusPointer)
 		miningManager := miningFactory.NewMiningManager(consensusReference, &consensusConfig.Params, mempool.DefaultConfig(&consensusConfig.Params))
 		tx := createTransactionWithUTXOEntry(t, 0, consensusConfig.GenesisBlock.Header.DAAScore())
-		_, err = miningManager.ValidateAndInsertTransaction(tx, false, false)
+		_, err = miningManager.ValidateAndInsertTransaction(tx, false, false, true)
 		txRuleError := &mempool.TxRuleError{}
 		if !errors.As(err, txRuleError) || txRuleError.RejectCode != mempool.RejectImmatureSpend {
 			t.Fatalf("Unexpected error %+v", err)
@@ -127,11 +127,11 @@ func TestInsertDoubleTransactionsToMempool(t *testing.T) {
 		consensusReference := consensusreference.NewConsensusReference(&tcAsConsensusPointer)
 		miningManager := miningFactory.NewMiningManager(consensusReference, &consensusConfig.Params, mempool.DefaultConfig(&consensusConfig.Params))
 		transaction := createTransactionWithUTXOEntry(t, 0, 0)
-		_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true, true)
 		if err != nil {
 			t.Fatalf("ValidateAndInsertTransaction: %v", err)
 		}
-		_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true, true)
 		if err == nil || !strings.Contains(err.Error(), "is already in the mempool") {
 			t.Fatalf("ValidateAndInsertTransaction: %v", err)
 		}
@@ -159,7 +159,7 @@ func TestDoubleSpendInMempool(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error creating transaction: %+v", err)
 		}
-		_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true, true)
 		if err != nil {
 			t.Fatalf("ValidateAndInsertTransaction: %v", err)
 		}
@@ -168,7 +168,7 @@ func TestDoubleSpendInMempool(t *testing.T) {
 		doubleSpendingTransaction.ID = nil
 		doubleSpendingTransaction.Outputs[0].Value-- // do some minor change so that txID is different
 
-		_, err = miningManager.ValidateAndInsertTransaction(doubleSpendingTransaction, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(doubleSpendingTransaction, false, true, true)
 		if err == nil || !strings.Contains(err.Error(), "already spent by transaction") {
 			t.Fatalf("ValidateAndInsertTransaction: %v", err)
 		}
@@ -195,7 +195,7 @@ func TestHandleNewBlockTransactions(t *testing.T) {
 		for i := range transactionsToInsert {
 			transaction := createTransactionWithUTXOEntry(t, i, 0)
 			transactionsToInsert[i] = transaction
-			_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true)
+			_, err = miningManager.ValidateAndInsertTransaction(transaction, false, true, true)
 			if err != nil {
 				t.Fatalf("ValidateAndInsertTransaction: %v", err)
 			}
@@ -262,7 +262,7 @@ func TestDoubleSpendWithBlock(t *testing.T) {
 		consensusReference := consensusreference.NewConsensusReference(&tcAsConsensusPointer)
 		miningManager := miningFactory.NewMiningManager(consensusReference, &consensusConfig.Params, mempool.DefaultConfig(&consensusConfig.Params))
 		transactionInTheMempool := createTransactionWithUTXOEntry(t, 0, 0)
-		_, err = miningManager.ValidateAndInsertTransaction(transactionInTheMempool, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(transactionInTheMempool, false, true, true)
 		if err != nil {
 			t.Fatalf("ValidateAndInsertTransaction: %v", err)
 		}
@@ -303,7 +303,7 @@ func TestOrphanTransactions(t *testing.T) {
 			t.Fatalf("Error in createArraysOfParentAndChildrenTransactions: %v", err)
 		}
 		for _, orphanTransaction := range childTransactions {
-			_, err = miningManager.ValidateAndInsertTransaction(orphanTransaction, false, true)
+			_, err = miningManager.ValidateAndInsertTransaction(orphanTransaction, false, true, true)
 			if err != nil {
 				t.Fatalf("ValidateAndInsertTransaction: %v", err)
 			}
@@ -418,15 +418,15 @@ func TestHighPriorityTransactions(t *testing.T) {
 		}
 
 		// Submit all the children, make sure the 2 highPriority ones remain in the orphan pool
-		_, err = miningManager.ValidateAndInsertTransaction(lowPriorityChildTransaction, false, true)
+		_, err = miningManager.ValidateAndInsertTransaction(lowPriorityChildTransaction, false, true, true)
 		if err != nil {
 			t.Fatalf("error submitting low-priority transaction: %+v", err)
 		}
-		_, err = miningManager.ValidateAndInsertTransaction(firstHighPriorityChildTransaction, true, true)
+		_, err = miningManager.ValidateAndInsertTransaction(firstHighPriorityChildTransaction, true, true, true)
 		if err != nil {
 			t.Fatalf("error submitting first high-priority transaction: %+v", err)
 		}
-		_, err = miningManager.ValidateAndInsertTransaction(secondHighPriorityChildTransaction, true, true)
+		_, err = miningManager.ValidateAndInsertTransaction(secondHighPriorityChildTransaction, true, true, true)
 		if err != nil {
 			t.Fatalf("error submitting second high-priority transaction: %+v", err)
 		}
@@ -434,7 +434,7 @@ func TestHighPriorityTransactions(t *testing.T) {
 
 		// Submit all the parents.
 		// Low priority transaction will only accept the parent, since the child was evicted from orphanPool
-		lowPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(lowPriorityParentTransaction, false, true)
+		lowPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(lowPriorityParentTransaction, false, true, true)
 		if err != nil {
 			t.Fatalf("error submitting low-priority transaction: %+v", err)
 		}
@@ -451,7 +451,7 @@ func TestHighPriorityTransactions(t *testing.T) {
 		// Both high priority transactions should accept parent and child
 
 		// Insert firstHighPriorityParentTransaction
-		firstHighPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(firstHighPriorityParentTransaction, true, true)
+		firstHighPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(firstHighPriorityParentTransaction, true, true, true)
 		if err != nil {
 			t.Fatalf("error submitting first high-priority transaction: %+v", err)
 		}
@@ -466,7 +466,7 @@ func TestHighPriorityTransactions(t *testing.T) {
 				consensushashing.TransactionIDs(firstHighPriorityAcceptedTransactions))
 		}
 		// Insert secondHighPriorityParentTransaction
-		secondHighPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(secondHighPriorityParentTransaction, true, true)
+		secondHighPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(secondHighPriorityParentTransaction, true, true, true)
 		if err != nil {
 			t.Fatalf("error submitting second high-priority transaction: %+v", err)
 		}
@@ -549,7 +549,7 @@ func TestRevalidateHighPriorityTransactions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error creating spendingTransaction: %+v", err)
 		}
-		_, err = miningManager.ValidateAndInsertTransaction(spendingTransaction, true, false)
+		_, err = miningManager.ValidateAndInsertTransaction(spendingTransaction, true, false, true)
 		if err != nil {
 			t.Fatalf("Error inserting spendingTransaction: %+v", err)
 		}
@@ -618,7 +618,7 @@ func TestRevalidateHighPriorityTransactionsWithChain(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err = miningManager.ValidateAndInsertTransaction(chain[0], true, false)
+		_, err = miningManager.ValidateAndInsertTransaction(chain[0], true, false, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -639,7 +639,7 @@ func TestRevalidateHighPriorityTransactionsWithChain(t *testing.T) {
 		}
 
 		for _, transaction := range chain[1:] {
-			_, err = miningManager.ValidateAndInsertTransaction(transaction, true, false)
+			_, err = miningManager.ValidateAndInsertTransaction(transaction, true, false, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -686,7 +686,7 @@ func TestModifyBlockTemplate(t *testing.T) {
 			t.Fatalf("Error in createArraysOfParentAndChildrenTransactions: %v", err)
 		}
 		for _, orphanTransaction := range childTransactions {
-			_, err = miningManager.ValidateAndInsertTransaction(orphanTransaction, false, true)
+			_, err = miningManager.ValidateAndInsertTransaction(orphanTransaction, false, true, true)
 			if err != nil {
 				t.Fatalf("ValidateAndInsertTransaction: %v", err)
 			}

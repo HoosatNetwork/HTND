@@ -10,7 +10,7 @@ import (
 )
 
 func (mp *mempool) validateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool,
-	allowOrphan bool,
+	allowOrphan bool, isLocalSubmission bool,
 ) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log,
 		fmt.Sprintf("validateAndInsertTransaction %s", consensushashing.TransactionID(transaction)))
@@ -36,10 +36,10 @@ func (mp *mempool) validateAndInsertTransaction(transaction *externalapi.DomainT
 			return nil, transactionRuleError(RejectBadOrphan, str)
 		}
 
-		return nil, mp.orphansPool.maybeAddOrphan(transaction, isHighPriority)
+		return nil, mp.orphansPool.maybeAddOrphan(transaction, isHighPriority, isLocalSubmission)
 	}
 
-	err = mp.validateTransactionInContext(transaction)
+	err = mp.validateTransactionInContext(transaction, isLocalSubmission)
 	if err != nil {
 		return nil, err
 	}
@@ -49,9 +49,13 @@ func (mp *mempool) validateAndInsertTransaction(transaction *externalapi.DomainT
 		return nil, err
 	}
 
-	// Record the transaction for compound transaction rate limiting
-	txID := consensushashing.TransactionID(transaction)
-	mp.compoundTxRateLimiter.recordTransaction(transaction, txID.String())
+	// Record the transaction against the compound rate limit - only when this node's own RPC
+	// submitted it. Counting relayed traffic here is what let one busy address exhaust every node's
+	// budget at once; see validateTransactionInContext.
+	if isLocalSubmission {
+		txID := consensushashing.TransactionID(transaction)
+		mp.compoundTxRateLimiter.recordTransaction(transaction, txID.String())
+	}
 
 	acceptedOrphans, err := mp.orphansPool.processOrphansAfterAcceptedTransaction(mempoolTransaction.Transaction())
 	if err != nil {

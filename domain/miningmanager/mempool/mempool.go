@@ -52,13 +52,13 @@ func New(config *Config, consensusReference consensusreference.ConsensusReferenc
 	return mp
 }
 
-func (mp *mempool) ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool, allowOrphan bool) (
-	acceptedTransactions []*externalapi.DomainTransaction, err error,
-) {
+func (mp *mempool) ValidateAndInsertTransaction(transaction *externalapi.DomainTransaction, isHighPriority bool,
+	allowOrphan bool, isLocalSubmission bool,
+) (acceptedTransactions []*externalapi.DomainTransaction, err error) {
 	mp.mtx.Lock()
 	defer mp.mtx.Unlock()
 
-	return mp.validateAndInsertTransaction(transaction, isHighPriority, allowOrphan)
+	return mp.validateAndInsertTransaction(transaction, isHighPriority, allowOrphan, isLocalSubmission)
 }
 
 func (mp *mempool) ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
