@@ -38,13 +38,17 @@ func main() {
 	logger.SetLogLevels(logger.LevelInfo)
 
 	var (
-		src            = flag.String("src", "", "source datadir (must be archival and not in use)")
-		dst            = flag.String("dst", "", "destination datadir for the derived result")
-		networkName    = flag.String("network", "hoosat-mainnet", "network params to use")
-		probeDepth     = flag.Int("probe-depth", utxoderive.DefaultProbeDepth, "how far below the pruning point preflight looks for a real body")
-		stopOnMismatch = flag.Bool("stop-on-mismatch", true, "stop at the first commitment mismatch (the corruption horizon)")
-		cacheSizeMiB   = flag.Int("cache", 256, "LevelDB cache size in MiB")
-		skipCopy       = flag.Bool("skip-copy", false, "dst is already a copy of src; only wipe derived stores")
+		src              = flag.String("src", "", "source datadir (must be archival and not in use)")
+		dst              = flag.String("dst", "", "destination datadir for the derived result")
+		networkName      = flag.String("network", "hoosat-mainnet", "network params to use")
+		probeDepth       = flag.Int("probe-depth", utxoderive.DefaultProbeDepth, "how far below the pruning point preflight looks for a real body")
+		stopOnMismatch   = flag.Bool("stop-on-mismatch", true, "stop at the first commitment mismatch (the corruption horizon)")
+		cacheSizeMiB     = flag.Int("cache", 256, "LevelDB cache size in MiB")
+		skipCopy         = flag.Bool("skip-copy", false, "dst is already a copy of src; only wipe derived stores")
+		fromPruningPoint = flag.Bool("from-pruning-point", false,
+			"pruned-datadir mode: seed from this node's own served pruning-point UTXO set and replay "+
+				"forward instead of from genesis. Diagnostic only - it cannot establish correctness and "+
+				"never persists anything.")
 	)
 	flag.Parse()
 
@@ -60,7 +64,7 @@ func main() {
 		os.Exit(exitPreflight)
 	}
 
-	if err := run(*src, *dst, params, *probeDepth, *stopOnMismatch, *cacheSizeMiB, *skipCopy); err != nil {
+	if err := run(*src, *dst, params, *probeDepth, *stopOnMismatch, *cacheSizeMiB, *skipCopy, *fromPruningPoint); err != nil {
 		fmt.Fprintf(os.Stderr, "\nderiveutxo: %s\n", err)
 		os.Exit(exitFailed)
 	}
@@ -80,7 +84,7 @@ func paramsByName(name string) (*dagconfig.Params, error) {
 }
 
 func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
-	stopOnMismatch bool, cacheSizeMiB int, skipCopy bool,
+	stopOnMismatch bool, cacheSizeMiB int, skipCopy, fromPruningPoint bool,
 ) error {
 	// --- Preflight against the source, before anything is copied. ---
 	fmt.Printf("Preflight against %s\n", srcPath)
@@ -103,13 +107,26 @@ func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 		srcDB.Close()
 		return err
 	}
-	if err := srcDeriver.Preflight(probeDepth); err != nil {
+	if fromPruningPoint {
+		if _, err := srcDeriver.PreflightFromPruningPoint(); err != nil {
+			srcDB.Close()
+			fmt.Fprintln(os.Stderr, "\nPreflight FAILED. Nothing was copied and nothing was written.")
+			return err
+		}
 		srcDB.Close()
-		fmt.Fprintln(os.Stderr, "\nPreflight FAILED. Nothing was copied and nothing was written.")
-		return err
+		fmt.Println("Preflight passed for a PRUNING-POINT-ANCHORED replay.")
+		printSeededModeWarning()
+	} else {
+		if err := srcDeriver.Preflight(probeDepth); err != nil {
+			srcDB.Close()
+			fmt.Fprintln(os.Stderr, "\nPreflight FAILED. Nothing was copied and nothing was written.")
+			fmt.Fprintln(os.Stderr, "If this datadir is pruned, --from-pruning-point runs the weaker,")
+			fmt.Fprintln(os.Stderr, "diagnostic replay instead. It cannot mint a header-matching node.")
+			return err
+		}
+		srcDB.Close()
+		fmt.Println("Preflight passed: bodies and GHOSTDAG data are present below the pruning point.")
 	}
-	srcDB.Close()
-	fmt.Println("Preflight passed: bodies and GHOSTDAG data are present below the pruning point.")
 
 	// --- Prepare the destination. ---
 	if !skipCopy {
@@ -153,6 +170,28 @@ func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 	if err != nil {
 		return err
 	}
+
+	if fromPruningPoint {
+		// Seeded, diagnostic mode. Nothing is persisted, so no hooks are registered at all - the
+		// persist path is not merely skipped, it is not reachable.
+		if err := deriver.SeedFromPruningPointUTXOSet(); err != nil {
+			return err
+		}
+		target, err := deriver.HighestChainBlockWithBody(pruningPoint)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Replaying forward from pruning point %s to %s\n", pruningPoint, target)
+
+		walkErr := deriver.WalkRange(pruningPoint, target, nil)
+		printReport(deriver.Report())
+		if walkErr != nil {
+			return walkErr
+		}
+		printSeededModeConclusion(deriver.Report())
+		return nil
+	}
+
 	fmt.Printf("Replaying from genesis to pruning point %s\n", pruningPoint)
 
 	persisted := false
@@ -188,6 +227,59 @@ func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 	fmt.Println("This destination is a CANDIDATE first header-matching node.")
 	fmt.Println("Do not enable Stage B on the strength of it - see docs/utxo-set-verification.md.")
 	return nil
+}
+
+func printSeededModeWarning() {
+	fmt.Println()
+	fmt.Println("MODE: pruning-point-anchored replay (--from-pruning-point).")
+	fmt.Println("  The bodies below the pruning point are gone from this datadir and no peer will serve")
+	fmt.Println("  them, so the replay cannot start from genesis. It starts from this node's OWN served")
+	fmt.Println("  pruning-point UTXO set, which is the artifact under suspicion.")
+	fmt.Println()
+	fmt.Println("  This CANNOT establish that any set is correct, and it will not persist anything.")
+	fmt.Println("  What it can establish:")
+	fmt.Println("    - whether acceptance still matches the network (AcceptedIDMerkleRoot per block)")
+	fmt.Println("    - which outpoints the served set is missing, named individually")
+	fmt.Println()
+}
+
+func printSeededModeConclusion(report *utxoderive.Report) {
+	fmt.Println()
+	fmt.Println("==================================================================")
+	if report.SeedMatchesHeader {
+		fmt.Println("The seed MATCHED its pruning point header commitment.")
+		fmt.Println("That is unexpected given every peer surveyed so far and worth re-checking, but it")
+		fmt.Println("means the UTXO commitments above are meaningful rather than relative.")
+	} else {
+		fmt.Printf("The seed did NOT match its header: served=%s header=%s (%d entries).\n",
+			report.SeedMultiset, report.SeedHeaderCommitment, report.SeedEntries)
+		fmt.Println("Every derived UTXO commitment above is therefore offset by the same amount and")
+		fmt.Println("their mismatches carry no information. The two results that DO carry information:")
+	}
+
+	acceptanceBroke := "no"
+	if report.AcceptanceDiverged {
+		acceptanceBroke = "YES"
+	}
+	fmt.Printf("  acceptance diverged from the network : %s\n", acceptanceBroke)
+	fmt.Printf("  outpoints the served set was missing : %d\n", len(report.MissingInputs))
+
+	if len(report.MissingInputs) > 0 {
+		fmt.Println("\nmissing outpoints (the coins this node's pruning-point export lacks):")
+		for i, missing := range report.MissingInputs {
+			if i >= 50 {
+				fmt.Printf("  ... and %d more\n", len(report.MissingInputs)-50)
+				break
+			}
+			fmt.Printf("  %s:%d spentBy=%s inBlock=%s\n",
+				missing.Outpoint.TransactionID, missing.Outpoint.Index,
+				missing.TransactionID, missing.InBlock)
+		}
+	}
+
+	fmt.Println("\nNothing was persisted. This datadir is NOT a candidate header-matching node, and")
+	fmt.Println("this run is not grounds for enabling Stage B.")
+	fmt.Println("==================================================================")
 }
 
 func printReport(report *utxoderive.Report) {

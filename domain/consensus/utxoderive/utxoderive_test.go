@@ -620,3 +620,221 @@ func TestStopOnMismatchStopsAtTheFirstOne(t *testing.T) {
 			report.StopReason, report.Mismatches[0].FailedChecks)
 	}
 }
+
+// plantPruningPointUTXOSet writes a set into the served pruning-point bucket so a seeded replay
+// has something to start from, mimicking what an imported set looks like on disk.
+func plantPruningPointUTXOSet(t *testing.T, db infrastructuredatabase.Database, prefixBytes []byte,
+	utxos map[externalapi.DomainOutpoint]externalapi.UTXOEntry,
+) {
+	t.Helper()
+	if err := utxoderive.PersistPruningPointUTXOSet(db, prefixBytes, utxos, 1000); err != nil {
+		t.Fatalf("could not plant a pruning-point UTXO set: %+v", err)
+	}
+}
+
+// deriveFullSetAt replays genesis->blockHash and returns the resulting set, so a seeded test can
+// start from a set that is known-correct and then be given a deliberately broken one.
+func deriveFullSetAt(t *testing.T, dataDir string, params *dagconfig.Params,
+	blockHash *externalapi.DomainHash,
+) map[externalapi.DomainOutpoint]externalapi.UTXOEntry {
+	t.Helper()
+	deriver, _, db := openDeriver(t, dataDir, params, true)
+	defer db.Close()
+	if err := deriver.Walk(blockHash, nil); err != nil {
+		t.Fatalf("reference walk failed: %+v", err)
+	}
+	if deriver.Report().FirstMismatch != nil {
+		t.Fatalf("reference walk diverged, so this fixture cannot seed a seeded-mode test")
+	}
+	out := make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry, len(deriver.UTXOs()))
+	for outpoint, entry := range deriver.UTXOs() {
+		out[outpoint] = entry
+	}
+	return out
+}
+
+// TestSeededReplayReportsMissingOutpoints is the pruned-node case.
+//
+// The seed is deliberately missing one coin the chain goes on to spend. A genesis walk would
+// error; a seeded walk must instead NAME the missing outpoint, because on a pruned node that list
+// is the whole deliverable - it is exactly the set of coins the served export lacks.
+func TestSeededReplayReportsMissingOutpoints(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes, orderSensitiveBlock := buildOrderSensitiveFixture(t, dataDir)
+
+	// A correct set as of the block just before the spends, then remove one entry from it.
+	seedAnchor := hashes[len(hashes)-3]
+	seed := deriveFullSetAt(t, dataDir, params, seedAnchor)
+	if len(seed) == 0 {
+		t.Fatalf("reference set is empty, nothing to seed")
+	}
+	var removed externalapi.DomainOutpoint
+	for outpoint := range seed {
+		removed = outpoint
+		break
+	}
+	delete(seed, removed)
+
+	db, err := utxoderive.OpenLevelDB(dataDir, 8)
+	if err != nil {
+		t.Fatalf("could not open datadir: %+v", err)
+	}
+	defer db.Close()
+	plantPruningPointUTXOSet(t, db, []byte{0}, seed)
+
+	stores, err := utxoderive.OpenStores(db, []byte{0}, 100, false)
+	if err != nil {
+		t.Fatalf("could not open stores: %+v", err)
+	}
+	deriver, err := utxoderive.New(stores, params.GenesisHash, false /* collect everything */)
+	if err != nil {
+		t.Fatalf("could not create deriver: %+v", err)
+	}
+	if err := deriver.SeedFromPruningPointUTXOSet(); err != nil {
+		t.Fatalf("seeding failed: %+v", err)
+	}
+
+	report := deriver.Report()
+	if !report.Seeded {
+		t.Fatalf("report does not record that the run was seeded, so a caller could persist from it")
+	}
+	if report.SeedEntries != uint64(len(seed)) {
+		t.Errorf("seeded %d entries, report says %d", len(seed), report.SeedEntries)
+	}
+
+	// Walk forward over the blocks that spend those coins.
+	if err := deriver.WalkRange(seedAnchor, hashes[len(hashes)-1], nil); err != nil {
+		t.Fatalf("seeded walk returned a hard error instead of collecting missing inputs: %+v", err)
+	}
+
+	if len(report.MissingInputs) == 0 {
+		t.Fatalf("seeded walk over a set missing %s:%d reported no missing inputs at all",
+			removed.TransactionID, removed.Index)
+	}
+	found := false
+	for _, missing := range report.MissingInputs {
+		if missing.Outpoint.Equal(&removed) {
+			found = true
+			if missing.InBlock == nil || missing.ChainBlock == nil {
+				t.Errorf("missing input %s:%d does not say which block needed it",
+					missing.Outpoint.TransactionID, missing.Outpoint.Index)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("the removed outpoint %s:%d is not in the missing-input list",
+			removed.TransactionID, removed.Index)
+	}
+	_ = orderSensitiveBlock
+}
+
+// TestSeededReplayNeverPersists pins the safety property: a seeded run must be identifiable as
+// one, so no caller can mistake its output for a header-matching set.
+func TestSeededReplayNeverPersists(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+
+	seedAnchor := hashes[3]
+	seed := deriveFullSetAt(t, dataDir, params, seedAnchor)
+
+	db, err := utxoderive.OpenLevelDB(dataDir, 8)
+	if err != nil {
+		t.Fatalf("could not open datadir: %+v", err)
+	}
+	defer db.Close()
+	plantPruningPointUTXOSet(t, db, []byte{0}, seed)
+
+	stores, err := utxoderive.OpenStores(db, []byte{0}, 100, false)
+	if err != nil {
+		t.Fatalf("could not open stores: %+v", err)
+	}
+	deriver, err := utxoderive.New(stores, params.GenesisHash, true)
+	if err != nil {
+		t.Fatalf("could not create deriver: %+v", err)
+	}
+	if err := deriver.SeedFromPruningPointUTXOSet(); err != nil {
+		t.Fatalf("seeding failed: %+v", err)
+	}
+
+	// A hook must never fire on a seeded run, even where the commitments happen to line up.
+	hookFired := false
+	hooks := map[externalapi.DomainHash]utxoderive.CheckpointHook{}
+	for _, blockHash := range hashes {
+		hooks[*blockHash] = func(*externalapi.DomainHash, *utxoderive.Deriver) error {
+			hookFired = true
+			return nil
+		}
+	}
+
+	_ = deriver.WalkRange(seedAnchor, hashes[len(hashes)-1], hooks)
+
+	if !deriver.Report().Seeded {
+		t.Fatalf("Report.Seeded is false after seeding")
+	}
+	if hookFired && !deriver.Report().SeedMatchesHeader {
+		t.Errorf("a persist hook fired on a seeded run whose seed does not match its header")
+	}
+}
+
+// TestPreflightFromPruningPointNeedsOnlyWhatAPrunedNodeHas checks that the pruned-mode preflight
+// asks for exactly the pruning point's own body, GHOSTDAG data and a non-empty served set - and
+// nothing below the pruning point.
+//
+// Note the limit of this fixture: it is small enough that the pruning point IS genesis, so the two
+// preflights coincide here and this cannot show the genesis one failing where the pruned one
+// passes. What it can show, and does, is that the pruned preflight passes on exactly those three
+// inputs and fails the moment the pruning point's own body is gone.
+func TestPreflightFromPruningPointNeedsOnlyWhatAPrunedNodeHas(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+
+	seed := deriveFullSetAt(t, dataDir, params, hashes[3])
+
+	db, err := utxoderive.OpenLevelDB(dataDir, 8)
+	if err != nil {
+		t.Fatalf("could not open datadir: %+v", err)
+	}
+	defer db.Close()
+	plantPruningPointUTXOSet(t, db, []byte{0}, seed)
+
+	stores, err := utxoderive.OpenStores(db, []byte{0}, 100, false)
+	if err != nil {
+		t.Fatalf("could not open stores: %+v", err)
+	}
+	deriver, err := utxoderive.New(stores, params.GenesisHash, true)
+	if err != nil {
+		t.Fatalf("could not create deriver: %+v", err)
+	}
+
+	pruningPoint, err := deriver.PreflightFromPruningPoint()
+	if err != nil {
+		t.Fatalf("pruning-point preflight rejected a datadir that has everything it needs: %+v", err)
+	}
+	if pruningPoint == nil {
+		t.Fatalf("pruning-point preflight returned no pruning point")
+	}
+
+	// Remove the pruning point's own body: now even the weaker replay has no starting block.
+	deleteBlockBody(t, stores, pruningPoint)
+	if _, err := deriver.PreflightFromPruningPoint(); err == nil {
+		t.Fatalf("pruning-point preflight passed with no body at the pruning point itself")
+	}
+}
+
+// TestPreflightFromPruningPointRejectsEmptySet: with no served set there is nothing to seed from,
+// so the pruned mode must refuse rather than replay from an empty MuHash and call it a result.
+func TestPreflightFromPruningPointRejectsEmptySet(t *testing.T) {
+	dataDir := t.TempDir()
+	params, _ := buildFixture(t, dataDir, 4)
+
+	deriver, _, db := openDeriver(t, dataDir, params, true)
+	defer db.Close()
+
+	_, err := deriver.PreflightFromPruningPoint()
+	if err == nil {
+		t.Fatalf("pruning-point preflight passed with an empty served UTXO set")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("unexpected error for an empty served set: %s", err)
+	}
+}

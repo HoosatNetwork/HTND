@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/daablocksstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/ghostdagdatastore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/headersselectedtipstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/pruningstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
@@ -78,6 +79,8 @@ func OpenStores(db infrastructuredatabase.Database, prefixBytes []byte, cacheSiz
 		GHOSTDAGDataStore: ghostdagDataStore,
 		DAABlocksStore:    daablocksstore.New(prefixBucket, cacheSize, cacheSize, preallocate),
 		PruningStore:      pruningstore.New(prefixBucket, 2, preallocate),
+
+		HeadersSelectedTipStore: headersselectedtipstore.New(prefixBucket),
 	}, nil
 }
 

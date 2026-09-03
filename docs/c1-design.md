@@ -386,3 +386,60 @@ minutes for an ordinary sync. It will not fetch history from the network under a
 
 After a MATCH at the current pruning point, the destination is a **candidate** first
 header-matching node. That is not permission to enable Stage B - see the footer above.
+
+
+---
+
+## Appendix B: `--from-pruning-point`, the pruned-datadir mode
+
+Added because no archival node from genesis exists. **Read this before quoting its output.**
+
+### What it is not
+
+It is **not** C1 and it cannot fix the balance mismatch. C1's claim comes from starting at an
+empty MuHash at genesis and reproducing published commitments from published bodies. On a pruned
+datadir those bodies are gone, no peer will serve them (H2's requester does not exist, H3 returns
+header-only blocks silently), so that claim is unavailable — not because of a tool limitation but
+because the data does not exist anywhere.
+
+This mode instead seeds from **the node's own served pruning-point UTXO set**, which is the
+artifact under suspicion, and replays forward. It never persists anything, and a persist hook
+cannot fire unless the seed proved equal to its own pruning point header.
+
+```
+./deriveutxo --src /path/to/pruned/datadir --dst /path/to/work --from-pruning-point
+```
+
+### What it can still establish
+
+Two things survive an unverified seed, and both are worth having:
+
+- **Whether acceptance still matches the network.** `AcceptedIDMerkleRoot` depends on *which*
+  transactions were accepted, not on what coins are worth, so it stays meaningful even when every
+  UTXO commitment is offset. A divergence names the exact block where local acceptance departs
+  from the network.
+- **Which outpoints the served set is missing.** A transaction spending something the seed does
+  not contain names a coin that should be there and is not — logged individually as
+  `[C1-MISSING-INPUT] outpoint=… spentBy=… inBlock=… chainBlock=…` and collected in the report.
+  This is the direct, per-coin form of the fault `tolerateMissingTxOut` hides.
+
+Run it with `--stop-on-mismatch=false` to collect the whole list rather than stopping at the
+first.
+
+### What it cannot establish
+
+Derived UTXO commitments are **relative to the seed**. If the seed is offset — and on every node
+surveyed so far it is — then every subsequent derived commitment is offset by the same amount and
+their mismatches carry no information. The run says so explicitly, up front, and only lets
+acceptance drive the stop condition for that reason.
+
+A seeded run is therefore never grounds for enabling Stage B, and a MATCH inside one is not the
+same claim as a MATCH on a genesis walk. See "What a MATCH does and does not claim" above.
+
+### If no archival datadir exists anywhere
+
+Then the header-matching set cannot be *derived* either, and that is an information-theoretic
+limit rather than a missing feature: verifying a pruning-point set requires the transactions that
+created its entries, and those bodies are gone. The remaining options are outside this codebase —
+recover history from a third-party archive if one exists, or take a coordinated decision to
+re-anchor the network at an agreed pruning point. Both are governance calls, not patches.

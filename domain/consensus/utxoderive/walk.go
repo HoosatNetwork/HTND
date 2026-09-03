@@ -91,7 +91,19 @@ type CheckpointHook func(blockHash *externalapi.DomainHash, d *Deriver) error
 // hooks fire after their block is applied, which is where a caller persists a bucket at the
 // current pruning point and a virtual set at the tip.
 func (d *Deriver) Walk(highHash *externalapi.DomainHash, hooks map[externalapi.DomainHash]CheckpointHook) error {
-	chain, err := d.selectedParentChain(highHash)
+	return d.WalkRange(nil, highHash, hooks)
+}
+
+// WalkRange replays from lowHash (exclusive of its own merge set, since a seeded run starts with
+// that block's state already applied) up to highHash.
+//
+// lowHash nil means start at genesis with an empty MuHash, which is the only mode that can
+// establish anything about correctness. A non-nil lowHash is the pruned-node mode: the state at
+// lowHash came from SeedFromPruningPointUTXOSet and is unverified.
+func (d *Deriver) WalkRange(lowHash, highHash *externalapi.DomainHash,
+	hooks map[externalapi.DomainHash]CheckpointHook,
+) error {
+	chain, err := d.selectedParentChain(highHash, lowHash)
 	if err != nil {
 		return err
 	}
@@ -103,6 +115,12 @@ func (d *Deriver) Walk(highHash *externalapi.DomainHash, hooks map[externalapi.D
 
 	stagingArea := model.NewStagingArea()
 	for _, chainBlockHash := range chain {
+		// The seed already represents the pruning point's own state, so re-applying that block's
+		// merge set would double-count it.
+		if lowHash != nil && chainBlockHash.Equal(lowHash) {
+			continue
+		}
+
 		header, err := d.stores.BlockHeaderStore.BlockHeader(d.stores.DatabaseContext, stagingArea, chainBlockHash)
 		if err != nil {
 			return errors.Wrapf(err, "utxoderive: no header for chain block %s", chainBlockHash)
@@ -138,7 +156,14 @@ func (d *Deriver) Walk(highHash *externalapi.DomainHash, hooks map[externalapi.D
 
 		if !match {
 			d.recordMismatch(checkpoint, !acceptedIDMatch)
-			if d.stopOnMismatch {
+			// On a seeded run an offset seed makes EVERY subsequent UTXO commitment mismatch, so
+			// stopping on the first one would halt at the first block and say nothing. Acceptance
+			// is the signal that stays meaningful there, so only that drives the stop.
+			stopWorthy := !match
+			if d.seeded && !d.report.SeedMatchesHeader {
+				stopWorthy = !acceptedIDMatch
+			}
+			if d.stopOnMismatch && stopWorthy {
 				d.report.StoppedAt = chainBlockHash
 				d.report.StopReason = "first commitment mismatch (" + checkpoint.FailedChecks + ")"
 				d.finishReport()
@@ -146,7 +171,14 @@ func (d *Deriver) Walk(highHash *externalapi.DomainHash, hooks map[externalapi.D
 			}
 		}
 
-		if hook, ok := hooks[*chainBlockHash]; ok && match && !d.report.AcceptanceDiverged {
+		// A hook is how a caller persists. It may fire only when this block's own commitments both
+		// matched, acceptance never diverged, AND the walk is standing on ground it can vouch for:
+		// either it started from an empty MuHash at genesis, or the seed it started from proved
+		// equal to its own pruning point header. A seeded run over an unverified export reproduces
+		// later commitments happily while still being offset from the network, so "this block
+		// matched" is not, on its own, permission to write anything.
+		persistAllowed := !d.seeded || d.report.SeedMatchesHeader
+		if hook, ok := hooks[*chainBlockHash]; ok && match && !d.report.AcceptanceDiverged && persistAllowed {
 			if err := hook(chainBlockHash, d); err != nil {
 				return err
 			}
@@ -256,15 +288,47 @@ func (d *Deriver) isAccepted(transaction *externalapi.DomainTransaction, isSelec
 		return isSelectedParent, nil
 	}
 	for _, input := range transaction.Inputs {
-		if _, ok := d.utxos[input.PreviousOutpoint]; !ok {
+		if _, ok := d.utxos[input.PreviousOutpoint]; ok {
+			continue
+		}
+
+		// On a genesis walk the derived set is authoritative, so a missing input means the replay
+		// and the chain disagree about history and there is nothing useful past that point.
+		if !d.seeded {
 			return false, errors.Errorf("utxoderive: transaction %s in merge-set block %s of chain block "+
 				"%s spends %s:%d, which is not in the derived UTXO set. Stopping rather than skipping the "+
 				"transaction - skipping is what the live path does, and it is how outputs vanish silently",
 				consensushashing.TransactionID(transaction), mergeSetBlockHash, chainBlockHash,
 				input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index)
 		}
+
+		// On a seeded walk the set came from an unverified pruning-point export, so a missing input
+		// is not a contradiction - it is the finding. Record which coin the chain needed and the
+		// export did not have, mark the transaction unaccepted, and let the accepted-ID check for
+		// this block register the divergence. Nothing is persisted from a seeded run, so collecting
+		// the list is not the same thing as the live path quietly dropping the transaction and
+		// keeping the block.
+		d.recordMissingInput(transaction, input, chainBlockHash, mergeSetBlockHash)
+		return false, nil
 	}
 	return true, nil
+}
+
+// recordMissingInput logs and stores one coin the seeded set was missing.
+func (d *Deriver) recordMissingInput(transaction *externalapi.DomainTransaction,
+	input *externalapi.DomainTransactionInput, chainBlockHash, mergeSetBlockHash *externalapi.DomainHash,
+) {
+	transactionID := consensushashing.TransactionID(transaction)
+	d.report.MissingInputs = append(d.report.MissingInputs, MissingInput{
+		Outpoint:      input.PreviousOutpoint,
+		TransactionID: *transactionID,
+		InBlock:       mergeSetBlockHash,
+		ChainBlock:    chainBlockHash,
+	})
+	log.Errorf("[C1-MISSING-INPUT] outpoint=%s:%d spentBy=%s inBlock=%s chainBlock=%s - the served "+
+		"pruning-point set does not contain a coin the chain spends here",
+		input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index,
+		transactionID, mergeSetBlockHash, chainBlockHash)
 }
 
 // failedChecks names which of a block's two commitments the replay could not reproduce, so the
@@ -327,4 +391,89 @@ func (d *Deriver) pruningPointSet() (map[externalapi.DomainHash]struct{}, error)
 		result[*pruningPoint] = struct{}{}
 	}
 	return result, nil
+}
+
+// PreflightFromPruningPoint is the pruned-datadir counterpart of Preflight.
+//
+// It does NOT require bodies below the pruning point, because on a pruned node they are gone and
+// no peer will serve them. It requires only what a PP->tip replay actually reads: the pruning
+// point's own body, a non-empty served UTXO set to seed from, and GHOSTDAG data plus bodies above
+// the pruning point.
+//
+// Passing this check does not mean the datadir can establish correctness. It means the weaker,
+// diagnostic replay can run. See SeedFromPruningPointUTXOSet for what that replay can and cannot
+// show.
+func (d *Deriver) PreflightFromPruningPoint() (*externalapi.DomainHash, error) {
+	stagingArea := model.NewStagingArea()
+
+	hasPruningPoint, err := d.stores.PruningStore.HasPruningPoint(d.stores.DatabaseContext, stagingArea)
+	if err != nil {
+		return nil, errors.Wrap(err, "utxoderive preflight: could not read the pruning point")
+	}
+	if !hasPruningPoint {
+		return nil, errors.Errorf("utxoderive preflight: source datadir has no pruning point")
+	}
+	pruningPoint, err := d.stores.PruningStore.PruningPoint(d.stores.DatabaseContext, stagingArea)
+	if err != nil {
+		return nil, errors.Wrap(err, "utxoderive preflight: could not read the pruning point")
+	}
+
+	if _, err := d.loadBodyStrict(pruningPoint); err != nil {
+		return nil, errors.Wrapf(err, "utxoderive preflight: the pruning point %s has no usable body, so "+
+			"even a pruning-point-anchored replay cannot start", pruningPoint)
+	}
+	if _, err := d.stores.GHOSTDAGDataStore.Get(d.stores.DatabaseContext, stagingArea, pruningPoint, false); err != nil {
+		return nil, errors.Wrapf(err, "utxoderive preflight: no stored GHOSTDAG data for pruning point %s",
+			pruningPoint)
+	}
+
+	iterator, err := d.stores.PruningStore.PruningPointUTXOIterator(d.stores.DatabaseContext)
+	if err != nil {
+		return nil, errors.Wrap(err, "utxoderive preflight: could not open the served pruning-point UTXO set")
+	}
+	hasAny := iterator.First()
+	iterator.Close()
+	if !hasAny {
+		return nil, errors.Errorf("utxoderive preflight: the served pruning-point UTXO set at %s is empty, "+
+			"so there is nothing to seed a pruning-point-anchored replay from", pruningPoint)
+	}
+
+	return pruningPoint, nil
+}
+
+// HighestChainBlockWithBody finds where a pruned-node replay has to stop: the deepest block on the
+// headers-selected chain that still has a body.
+//
+// A pruned node keeps headers far above the blocks it kept bodies for, and the headers-selected
+// tip is routinely header-only. Walking down from it until a body appears is what makes the
+// replay terminate at real data instead of failing on the first header-only block.
+func (d *Deriver) HighestChainBlockWithBody(pruningPoint *externalapi.DomainHash) (*externalapi.DomainHash, error) {
+	if d.stores.HeadersSelectedTipStore == nil {
+		return nil, errors.Errorf("utxoderive: no headers-selected-tip store, cannot find a walk target")
+	}
+	stagingArea := model.NewStagingArea()
+	current, err := d.stores.HeadersSelectedTipStore.HeadersSelectedTip(d.stores.DatabaseContext, stagingArea)
+	if err != nil {
+		return nil, errors.Wrap(err, "utxoderive: could not read the headers-selected tip")
+	}
+
+	for {
+		if _, err := d.loadBodyStrict(current); err == nil {
+			return current, nil
+		}
+		if current.Equal(pruningPoint) || current.Equal(d.genesisHash) {
+			return nil, errors.Errorf("utxoderive: no block between the pruning point and the "+
+				"headers-selected tip has a body, so there is nothing above %s to replay", pruningPoint)
+		}
+		ghostdagData, err := d.stores.GHOSTDAGDataStore.Get(d.stores.DatabaseContext, stagingArea, current, false)
+		if err != nil {
+			return nil, errors.Wrapf(err, "utxoderive: no GHOSTDAG data for %s while looking for a "+
+				"walk target", current)
+		}
+		selectedParent := ghostdagData.SelectedParent()
+		if selectedParent == nil || selectedParent.Equal(model.VirtualGenesisBlockHash) {
+			return nil, errors.Errorf("utxoderive: ran out of chain looking for a block with a body")
+		}
+		current = selectedParent
+	}
 }

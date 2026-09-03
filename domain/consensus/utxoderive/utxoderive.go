@@ -45,6 +45,10 @@ type Stores struct {
 	GHOSTDAGDataStore model.GHOSTDAGDataStore
 	DAABlocksStore    model.DAABlocksStore
 	PruningStore      model.PruningStore
+
+	// HeadersSelectedTipStore is only used to find where a pruned-node replay should stop. It
+	// holds a hash, not UTXO state, so reading it cannot bias the derivation.
+	HeadersSelectedTipStore model.HeaderSelectedTipStore
 }
 
 // Deriver performs one replay over one source datadir.
@@ -60,6 +64,12 @@ type Deriver struct {
 
 	stopOnMismatch bool
 	report         *Report
+
+	// seeded records that the walk did NOT start from an empty MuHash at genesis, but from a
+	// pruning-point UTXO set this node happened to have. Everything downstream is then relative
+	// to a starting point nobody has verified, which changes what the results mean - see
+	// SeedFromPruningPointUTXOSet.
+	seeded bool
 }
 
 // New creates a Deriver over the given source stores.
@@ -105,6 +115,33 @@ type Report struct {
 	// meaningless - so nothing may be persisted from this run even if later blocks appear to
 	// match again.
 	AcceptanceDiverged bool
+
+	// Seeded reports that this run started from an unverified pruning-point UTXO set rather
+	// than from an empty MuHash at genesis. When set, no result from the run may be persisted
+	// or served, and UTXO commitment comparisons are relative to that unverified starting point.
+	Seeded bool
+
+	// SeedMultiset and SeedHeaderCommitment are the seed's own hash and what the pruning point
+	// header committed to. They are almost always different - that is the condition this whole
+	// investigation is about - and stating both up front stops a reader mistaking a later
+	// mismatch for a newly-introduced fault.
+	SeedMultiset         *externalapi.DomainHash
+	SeedHeaderCommitment *externalapi.DomainHash
+	SeedEntries          uint64
+	SeedMatchesHeader    bool
+
+	// MissingInputs names outpoints a transaction tried to spend that the seed did not contain.
+	// On a pruned-node run this is the highest-value output: it is the list of coins the served
+	// pruning-point set is missing, in the order the chain needed them.
+	MissingInputs []MissingInput
+}
+
+// MissingInput is one outpoint the replay needed and the seeded set did not have.
+type MissingInput struct {
+	Outpoint      externalapi.DomainOutpoint
+	TransactionID externalapi.DomainTransactionID
+	InBlock       *externalapi.DomainHash
+	ChainBlock    *externalapi.DomainHash
 }
 
 // Checkpoint is one block's comparison: what the header committed to versus what replaying every
@@ -129,6 +166,83 @@ type Checkpoint struct {
 	Match        bool
 }
 
+// SeedFromPruningPointUTXOSet loads this node's own served pruning-point UTXO set as the
+// starting state, for replays on a pruned datadir where the bodies below the pruning point no
+// longer exist anywhere.
+//
+// This is a fundamentally weaker starting point than genesis and the results must be read
+// differently. A genesis walk proves that replaying published bodies reproduces published
+// commitments. A seeded walk can prove no such thing: if the seed is wrong, every derived UTXO
+// commitment after it is wrong by the same amount, and no amount of walking fixes that.
+//
+// What a seeded walk CAN establish, and what it is for:
+//
+//   - Whether acceptance still matches the network. AcceptedIDMerkleRoot depends on which
+//     transactions were accepted, not on what the coins are worth, so it stays meaningful.
+//   - Which outpoints the served set is missing. A transaction that spends something the seed
+//     does not contain names a coin that should be there and is not - directly the fault the
+//     live code hides by skipping such transactions.
+//
+// A seeded run may never persist anything. Report.Seeded is set so callers cannot forget.
+func (d *Deriver) SeedFromPruningPointUTXOSet() error {
+	stagingArea := model.NewStagingArea()
+
+	pruningPoint, err := d.stores.PruningStore.PruningPoint(d.stores.DatabaseContext, stagingArea)
+	if err != nil {
+		return errors.Wrap(err, "utxoderive: could not read the pruning point to seed from")
+	}
+
+	iterator, err := d.stores.PruningStore.PruningPointUTXOIterator(d.stores.DatabaseContext)
+	if err != nil {
+		return errors.Wrap(err, "utxoderive: could not open the served pruning-point UTXO set")
+	}
+	defer iterator.Close()
+
+	entries := uint64(0)
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		outpoint, entry, err := iterator.Get()
+		if err != nil {
+			return err
+		}
+		serialized, err := utxo.SerializeUTXO(entry, outpoint)
+		if err != nil {
+			return err
+		}
+		d.ms.Add(serialized)
+		d.utxos[*outpoint] = entry
+		entries++
+	}
+
+	if entries == 0 {
+		return errors.Errorf("utxoderive: the served pruning-point UTXO set is empty, so there is "+
+			"nothing to seed from. This datadir cannot support either a genesis replay (no bodies) or "+
+			"a seeded one (no set) at pruning point %s", pruningPoint)
+	}
+
+	d.seeded = true
+	d.report.Seeded = true
+	d.report.SeedMultiset = d.ms.Hash()
+	d.report.SeedEntries = entries
+
+	if header, err := d.stores.BlockHeaderStore.BlockHeader(d.stores.DatabaseContext, stagingArea, pruningPoint); err == nil {
+		d.report.SeedHeaderCommitment = header.UTXOCommitment()
+		d.report.SeedMatchesHeader = d.report.SeedMultiset.Equal(header.UTXOCommitment())
+	}
+
+	if d.report.SeedMatchesHeader {
+		log.Infof("[C1-SEED] pruning point %s: the served set (%d entries) hashes to %s, which MATCHES "+
+			"its header commitment. Every UTXO commitment below is therefore meaningful, not relative.",
+			pruningPoint, entries, d.report.SeedMultiset)
+	} else {
+		log.Warnf("[C1-SEED] pruning point %s: the served set (%d entries) hashes to %s but the header "+
+			"commits to %s. The seed is UNVERIFIED, so derived UTXO commitments below are relative to it "+
+			"and are expected to mismatch. AcceptedIDMerkleRoot comparisons and missing-input reports "+
+			"remain meaningful. Nothing from this run may be persisted or served.",
+			pruningPoint, entries, d.report.SeedMultiset, d.report.SeedHeaderCommitment)
+	}
+	return nil
+}
+
 // Multiset returns the derived MuHash at the current point of the walk.
 func (d *Deriver) Multiset() model.Multiset { return d.ms }
 
@@ -139,18 +253,18 @@ func (d *Deriver) Report() *Report { return d.report }
 // a matching commitment - a set derived past an unresolved mismatch must never be served.
 func (d *Deriver) UTXOs() map[externalapi.DomainOutpoint]externalapi.UTXOEntry { return d.utxos }
 
-// selectedParentChain returns the selected-parent chain from genesis (inclusive) up to
-// highHash (inclusive), walking down via stored GHOSTDAG data and reversing.
+// selectedParentChain returns the selected-parent chain from lowHash (or genesis when lowHash is
+// nil) up to highHash, both inclusive, walking down via stored GHOSTDAG data and reversing.
 //
 // Walking down rather than up is deliberate: it needs only ghostdagDataStore, so a datadir
 // whose selected-chain index is absent or stale cannot silently steer the replay.
-func (d *Deriver) selectedParentChain(highHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+func (d *Deriver) selectedParentChain(highHash, lowHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
 	stagingArea := model.NewStagingArea()
 	var reversed []*externalapi.DomainHash
 	current := highHash
 	for {
 		reversed = append(reversed, current)
-		if current.Equal(d.genesisHash) {
+		if current.Equal(d.genesisHash) || (lowHash != nil && current.Equal(lowHash)) {
 			break
 		}
 		ghostdagData, err := d.stores.GHOSTDAGDataStore.Get(d.stores.DatabaseContext, stagingArea, current, false)
