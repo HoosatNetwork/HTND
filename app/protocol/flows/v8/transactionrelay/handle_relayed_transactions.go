@@ -60,7 +60,7 @@ const pendingRetryInterval = 1 * time.Second
 // A long IBD can outlast a great many relayed transactions, and they are held as full transactions
 // rather than as ids, so this cannot be unbounded. On overflow the OLDEST held transaction is
 // dropped: the newest are the likeliest to still be valid by the time the node catches up.
-const maxPendingRelayedTransactions = 10_000
+const maxPendingRelayedTransactions = 2_000_000
 
 func (flow *handleRelayedTransactionsFlow) start() error {
 	for {
