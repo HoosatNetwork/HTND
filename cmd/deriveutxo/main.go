@@ -38,13 +38,17 @@ func main() {
 	logger.SetLogLevels(logger.LevelInfo)
 
 	var (
-		src              = flag.String("src", "", "source datadir (must be archival and not in use)")
-		dst              = flag.String("dst", "", "destination datadir for the derived result")
-		networkName      = flag.String("network", "hoosat-mainnet", "network params to use")
-		probeDepth       = flag.Int("probe-depth", utxoderive.DefaultProbeDepth, "how far below the pruning point preflight looks for a real body")
-		stopOnMismatch   = flag.Bool("stop-on-mismatch", true, "stop at the first commitment mismatch (the corruption horizon)")
-		cacheSizeMiB     = flag.Int("cache", 256, "LevelDB cache size in MiB")
-		skipCopy         = flag.Bool("skip-copy", false, "dst is already a copy of src; only wipe derived stores")
+		src            = flag.String("src", "", "source datadir (must be archival and not in use)")
+		dst            = flag.String("dst", "", "destination datadir for the derived result")
+		networkName    = flag.String("network", "hoosat-mainnet", "network params to use")
+		probeDepth     = flag.Int("probe-depth", utxoderive.DefaultProbeDepth, "how far below the pruning point preflight looks for a real body")
+		stopOnMismatch = flag.Bool("stop-on-mismatch", true, "stop at the first commitment mismatch (the corruption horizon)")
+		cacheSizeMiB   = flag.Int("cache", 256, "LevelDB cache size in MiB")
+		skipCopy       = flag.Bool("skip-copy", false, "dst is already a copy of src; only wipe derived stores")
+		exportSnapshot = flag.String("export-snapshot", "",
+			"write --src's served pruning-point UTXO set to this file and exit (read-only)")
+		importSnapshot = flag.String("import-snapshot", "",
+			"replace --src's served pruning-point UTXO set, and its multiset anchor, with this file")
 		fromPruningPoint = flag.Bool("from-pruning-point", false,
 			"pruned-datadir mode: seed from this node's own served pruning-point UTXO set and replay "+
 				"forward instead of from genesis. Diagnostic only - it cannot establish correctness and "+
@@ -57,16 +61,26 @@ func main() {
 		flag.Usage()
 		os.Exit(exitPreflight)
 	}
+	params, err := paramsByName(*networkName)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(exitPreflight)
+	}
+
+	// Snapshot moves are their own operation: they neither walk nor derive, so they run before
+	// the walk-specific argument checks and exit.
+	if *exportSnapshot != "" || *importSnapshot != "" {
+		if err := runSnapshot(*src, *exportSnapshot, *importSnapshot, params, *cacheSizeMiB); err != nil {
+			fmt.Fprintf(os.Stderr, "\nderiveutxo: %s\n", err)
+			os.Exit(exitFailed)
+		}
+		os.Exit(exitOK)
+	}
+
 	if *dst == "" && !*fromPruningPoint {
 		fmt.Fprintln(os.Stderr, "--dst is required for a genesis walk (it is where the derived set is "+
 			"written). --from-pruning-point writes nothing and may omit it.")
 		flag.Usage()
-		os.Exit(exitPreflight)
-	}
-
-	params, err := paramsByName(*networkName)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitPreflight)
 	}
 
@@ -100,6 +114,64 @@ func resolveDataDir(path, networkName string) (string, error) {
 	return "", fmt.Errorf("%s is not a consensus database directory and does not contain one at "+
 		"%s/%s or %s/%s/%s - point --src at the directory holding the MANIFEST/CURRENT files",
 		path, path, consensusDBDirname, path, networkName, consensusDBDirname)
+}
+
+// runSnapshot moves a pruning-point UTXO set between datadirs as a file.
+//
+// This is the operation that makes two nodes agree. htnd's forward path was audited against an
+// independent replay over 61,044 consecutive blocks from the same anchor and matched on every
+// one, so nodes given the same pruning-point set stay in agreement; today they differ only
+// because they imported different sets from different peers. Moving one set by hand removes that
+// variable, which distributing it over P2P cannot, since the P2P export path is what diverged.
+func runSnapshot(srcPath, exportPath, importPath string, params *dagconfig.Params, cacheSizeMiB int) error {
+	if exportPath != "" && importPath != "" {
+		return fmt.Errorf("choose either --export-snapshot or --import-snapshot, not both")
+	}
+
+	srcPath, err := resolveDataDir(srcPath, params.Name)
+	if err != nil {
+		return err
+	}
+	db, err := utxoderive.OpenDataDir(srcPath, cacheSizeMiB)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	prefixBytes, err := activePrefix(db)
+	if err != nil {
+		return err
+	}
+
+	if exportPath != "" {
+		stores, err := utxoderive.OpenStores(db, prefixBytes, 10_000, false)
+		if err != nil {
+			return err
+		}
+		header, err := utxoderive.ExportSnapshot(stores, exportPath)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Exported %d entries to %s\n", header.EntryCount, exportPath)
+		fmt.Printf("  pruning point : %s\n", header.PruningPoint)
+		fmt.Printf("  multiset      : %s\n", header.Multiset)
+		fmt.Println()
+		fmt.Println("Every node that imports this file at the same pruning point will hold the same")
+		fmt.Println("UTXO set and therefore report the same balances. It is NOT a claim that the set")
+		fmt.Println("is correct - no set on this network currently matches its own header commitment.")
+		return nil
+	}
+
+	header, err := utxoderive.ImportSnapshot(db, prefixBytes, importPath, 10_000)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Imported %d entries from %s\n", header.EntryCount, importPath)
+	fmt.Printf("  pruning point : %s\n", header.PruningPoint)
+	fmt.Printf("  multiset      : %s\n", header.Multiset)
+	fmt.Println()
+	fmt.Println("The served set and the node's multiset anchor now both match the snapshot.")
+	fmt.Println("Restart the node and let it resolve forward.")
+	return nil
 }
 
 func paramsByName(name string) (*dagconfig.Params, error) {
@@ -318,6 +390,23 @@ func printSeededModeConclusion(report *utxoderive.Report) {
 		fmt.Println("Every derived UTXO commitment above is therefore offset by the same amount and")
 		fmt.Println("their mismatches carry no information. The two results that DO carry information:")
 	}
+
+	fmt.Println()
+	fmt.Println("  audit against the node's OWN per-block multiset chain (same anchor, same blocks):")
+	fmt.Printf("    seed equals the node's stored anchor : %t (node anchor %s)\n",
+		report.SeedMatchesNodeAnchor, report.NodeAnchorMultiset)
+	fmt.Printf("    blocks compared                      : %d\n", report.NodeMultisetChecked)
+	fmt.Printf("    blocks where they AGREE              : %d\n", report.NodeMultisetAgreed)
+	if report.FirstNodeMultisetDivergence != nil {
+		fmt.Printf("    FIRST DIVERGENCE                     : block %s daa %d\n",
+			report.FirstNodeMultisetDivergence.PruningPoint, report.FirstNodeMultisetDivergence.DAAScore)
+		fmt.Printf("      node   : %s\n", report.FirstNodeMultisetDivergence.HeaderCommitment)
+		fmt.Printf("      replay : %s\n", report.FirstNodeMultisetDivergence.DerivedMultiset)
+		fmt.Println("      Both started from the same anchor, so this is the forward path, not the snapshot.")
+	} else if report.NodeMultisetChecked > 0 {
+		fmt.Println("    no divergence: the node's forward path matches an independent replay exactly.")
+	}
+	fmt.Println()
 
 	acceptanceBroke := "no"
 	if report.AcceptanceDiverged {

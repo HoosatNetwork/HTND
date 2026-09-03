@@ -49,6 +49,14 @@ type Stores struct {
 	// HeadersSelectedTipStore is only used to find where a pruned-node replay should stop. It
 	// holds a hash, not UTXO state, so reading it cannot bias the derivation.
 	HeadersSelectedTipStore model.HeaderSelectedTipStore
+
+	// MultisetStore is read for AUDIT only, never to seed or steer the walk. It holds the node's
+	// own per-block multiset chain - the running value htnd itself computed, and the value it
+	// commits to in blocks it mines. Comparing the replay against it, block by block, is what
+	// isolates a fault in the node's forward path from a fault in the set it started from: both
+	// begin at the same import anchor, so if they were computing the same thing they could not
+	// disagree.
+	MultisetStore model.MultisetStore
 }
 
 // Deriver performs one replay over one source datadir.
@@ -135,6 +143,16 @@ type Report struct {
 	// meaningless - so nothing may be persisted from this run even if later blocks appear to
 	// match again.
 	AcceptanceDiverged bool
+
+	// NodeMultisetChecked and NodeMultisetAgreed count the per-block audit against the node's own
+	// multiset chain. FirstNodeMultisetDivergence is the first block where the node's forward path
+	// and this replay parted company despite starting from the same anchor - which is a fault in
+	// the node, not in the snapshot.
+	NodeMultisetChecked         uint64
+	NodeMultisetAgreed          uint64
+	FirstNodeMultisetDivergence *Checkpoint
+	SeedMatchesNodeAnchor       bool
+	NodeAnchorMultiset          *externalapi.DomainHash
 
 	// Seeded reports that this run started from an unverified pruning-point UTXO set rather
 	// than from an empty MuHash at genesis. When set, no result from the run may be persisted
@@ -289,6 +307,19 @@ func (d *Deriver) SeedFromPruningPointUTXOSet() error {
 	if header, err := d.stores.BlockHeaderStore.BlockHeader(d.stores.DatabaseContext, stagingArea, pruningPoint); err == nil {
 		d.report.SeedHeaderCommitment = header.UTXOCommitment()
 		d.report.SeedMatchesHeader = d.report.SeedMultiset.Equal(header.UTXOCommitment())
+	}
+
+	if d.stores.MultisetStore != nil {
+		if anchor, err := d.stores.MultisetStore.Get(d.stores.DatabaseContext, stagingArea, pruningPoint); err == nil {
+			d.report.NodeAnchorMultiset = anchor.Hash()
+			d.report.SeedMatchesNodeAnchor = anchor.Hash().Equal(d.report.SeedMultiset)
+			if !d.report.SeedMatchesNodeAnchor {
+				log.Warnf("[C1-SEED] the seed hashes to %s but the node's own stored multiset for the same "+
+					"pruning point is %s. The two chains do NOT share a starting point, so a later "+
+					"per-block divergence cannot be attributed to the forward path.",
+					d.report.SeedMultiset, anchor.Hash())
+			}
+		}
 	}
 
 	if d.report.SeedMatchesHeader {

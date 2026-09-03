@@ -151,6 +151,8 @@ func (d *Deriver) WalkRange(lowHash, highHash *externalapi.DomainHash,
 			Match:                       match,
 		}
 
+		d.auditAgainstNodeMultiset(chainBlockHash, header, derivedMultiset)
+
 		if _, isPruningPoint := pruningPoints[*chainBlockHash]; isPruningPoint {
 			d.report.Checkpoints = append(d.report.Checkpoints, checkpoint)
 		}
@@ -546,5 +548,46 @@ func (d *Deriver) HighestChainBlockWithBody(pruningPoint *externalapi.DomainHash
 			return nil, errors.Errorf("utxoderive: ran out of chain looking for a block with a body")
 		}
 		current = selectedParent
+	}
+}
+
+// auditAgainstNodeMultiset compares this replay's running MuHash with the node's own stored
+// multiset for the same block.
+//
+// Both chains start at the same import anchor, and both are supposed to be the same function of
+// the same blocks. So a divergence here cannot be blamed on the pruning-point snapshot being
+// wrong - the snapshot is the shared starting point. It means htnd's forward path produced a
+// different set than an independent replay of the same bodies, which is the fault that makes two
+// nodes drift apart even when they start from identical state.
+//
+// Read-only, and never used to seed or steer the walk.
+func (d *Deriver) auditAgainstNodeMultiset(blockHash *externalapi.DomainHash,
+	header externalapi.BlockHeader, derivedMultiset *externalapi.DomainHash,
+) {
+	if d.stores.MultisetStore == nil {
+		return
+	}
+	stored, err := d.stores.MultisetStore.Get(d.stores.DatabaseContext, model.NewStagingArea(), blockHash)
+	if err != nil {
+		return // Not every block has one - a pruned node keeps them only where it resolved.
+	}
+
+	d.report.NodeMultisetChecked++
+	if stored.Hash().Equal(derivedMultiset) {
+		d.report.NodeMultisetAgreed++
+		return
+	}
+	if d.report.FirstNodeMultisetDivergence == nil {
+		d.report.FirstNodeMultisetDivergence = &Checkpoint{
+			PruningPoint:     blockHash,
+			DAAScore:         header.DAAScore(),
+			DerivedMultiset:  derivedMultiset,
+			HeaderCommitment: stored.Hash(),
+			FailedChecks:     "node-multiset",
+		}
+		log.Errorf("[C1-NODE-DIVERGENCE] block=%s daa=%d nodeMultiset=%s replayMultiset=%s - the node's "+
+			"own forward path and an independent replay of the same bodies, from the same anchor, "+
+			"disagree here. This is not the snapshot: it is the accounting.",
+			blockHash, header.DAAScore(), stored.Hash(), derivedMultiset)
 	}
 }

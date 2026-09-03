@@ -838,3 +838,127 @@ func TestPreflightFromPruningPointRejectsEmptySet(t *testing.T) {
 		t.Fatalf("unexpected error for an empty served set: %s", err)
 	}
 }
+
+// TestSnapshotRoundTrip is the property the whole snapshot mechanism rests on: what one node
+// exports is byte-for-byte what another node imports, verified by multiset rather than trusted.
+func TestSnapshotRoundTrip(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+	set := deriveFullSetAt(t, dataDir, params, hashes[3])
+
+	db, err := utxoderive.OpenDataDir(dataDir, 8)
+	if err != nil {
+		t.Fatalf("could not open datadir: %+v", err)
+	}
+	defer db.Close()
+	plantPruningPointUTXOSet(t, db, []byte{0}, set)
+
+	stores, err := utxoderive.OpenStores(db, []byte{0}, 100, false)
+	if err != nil {
+		t.Fatalf("could not open stores: %+v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "snapshot.bin")
+	exported, err := utxoderive.ExportSnapshot(stores, path)
+	if err != nil {
+		t.Fatalf("export failed: %+v", err)
+	}
+	if exported.EntryCount != uint64(len(set)) {
+		t.Fatalf("exported %d entries, set has %d", exported.EntryCount, len(set))
+	}
+
+	readBack, err := utxoderive.ReadSnapshotHeader(path)
+	if err != nil {
+		t.Fatalf("could not read the header back: %+v", err)
+	}
+	if !readBack.Multiset.Equal(exported.Multiset) || !readBack.PruningPoint.Equal(exported.PruningPoint) {
+		t.Fatalf("header did not survive the round trip")
+	}
+
+	imported, err := utxoderive.ImportSnapshot(db, []byte{0}, path, 1000)
+	if err != nil {
+		t.Fatalf("import failed: %+v", err)
+	}
+	if !imported.Multiset.Equal(exported.Multiset) {
+		t.Errorf("imported multiset %s does not match exported %s", imported.Multiset, exported.Multiset)
+	}
+}
+
+// TestSnapshotRejectsWrongPruningPoint: installing a set that belongs to a different height is
+// worse than any problem it could solve, so it must be refused rather than merely warned about.
+func TestSnapshotRejectsWrongPruningPoint(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+	set := deriveFullSetAt(t, dataDir, params, hashes[3])
+
+	db, err := utxoderive.OpenDataDir(dataDir, 8)
+	if err != nil {
+		t.Fatalf("could not open datadir: %+v", err)
+	}
+	defer db.Close()
+	plantPruningPointUTXOSet(t, db, []byte{0}, set)
+	stores, err := utxoderive.OpenStores(db, []byte{0}, 100, false)
+	if err != nil {
+		t.Fatalf("could not open stores: %+v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "snapshot.bin")
+	if _, err := utxoderive.ExportSnapshot(stores, path); err != nil {
+		t.Fatalf("export failed: %+v", err)
+	}
+
+	// Rewrite the header's pruning point to some other block.
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("could not read snapshot: %+v", err)
+	}
+	copy(raw[8:8+externalapi.DomainHashSize], hashes[4].ByteSlice())
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("could not rewrite snapshot: %+v", err)
+	}
+
+	if _, err := utxoderive.ImportSnapshot(db, []byte{0}, path, 1000); err == nil {
+		t.Fatalf("import accepted a snapshot for a different pruning point")
+	} else if !strings.Contains(err.Error(), "wrong height") {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+// TestSnapshotRejectsCorruptContent: a truncated or altered transfer is exactly how an import
+// goes wrong silently, so the content must be verified against the header before promotion.
+func TestSnapshotRejectsCorruptContent(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+	set := deriveFullSetAt(t, dataDir, params, hashes[3])
+
+	db, err := utxoderive.OpenDataDir(dataDir, 8)
+	if err != nil {
+		t.Fatalf("could not open datadir: %+v", err)
+	}
+	defer db.Close()
+	plantPruningPointUTXOSet(t, db, []byte{0}, set)
+	stores, err := utxoderive.OpenStores(db, []byte{0}, 100, false)
+	if err != nil {
+		t.Fatalf("could not open stores: %+v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "snapshot.bin")
+	if _, err := utxoderive.ExportSnapshot(stores, path); err != nil {
+		t.Fatalf("export failed: %+v", err)
+	}
+
+	// Flip a byte inside the first entry's payload, leaving the header intact.
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("could not read snapshot: %+v", err)
+	}
+	payloadStart := 8 + 2*externalapi.DomainHashSize + 8 + 4
+	raw[payloadStart] ^= 0xff
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("could not rewrite snapshot: %+v", err)
+	}
+
+	if _, err := utxoderive.ImportSnapshot(db, []byte{0}, path, 1000); err == nil {
+		t.Fatalf("import accepted a snapshot whose content does not match its header")
+	}
+}
