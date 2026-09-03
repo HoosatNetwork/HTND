@@ -52,8 +52,14 @@ func main() {
 	)
 	flag.Parse()
 
-	if *src == "" || *dst == "" {
-		fmt.Fprintln(os.Stderr, "both --src and --dst are required")
+	if *src == "" {
+		fmt.Fprintln(os.Stderr, "--src is required")
+		flag.Usage()
+		os.Exit(exitPreflight)
+	}
+	if *dst == "" && !*fromPruningPoint {
+		fmt.Fprintln(os.Stderr, "--dst is required for a genesis walk (it is where the derived set is "+
+			"written). --from-pruning-point writes nothing and may omit it.")
 		flag.Usage()
 		os.Exit(exitPreflight)
 	}
@@ -71,6 +77,31 @@ func main() {
 	os.Exit(exitOK)
 }
 
+// consensusDBDirname is the directory htnd actually keeps the consensus LevelDB in, under
+// <appdir>/<network>/. Operators reach for the appdir, so resolve it for them rather than
+// failing with "no active prefix".
+const consensusDBDirname = "datadir2"
+
+// resolveDataDir accepts either the consensus database directory itself or an appdir /
+// appdir-network directory above it, and returns the database directory.
+func resolveDataDir(path, networkName string) (string, error) {
+	if utxoderive.LooksLikeDataDir(path) {
+		return path, nil
+	}
+	for _, candidate := range []string{
+		filepath.Join(path, consensusDBDirname),
+		filepath.Join(path, networkName, consensusDBDirname),
+	} {
+		if utxoderive.LooksLikeDataDir(candidate) {
+			fmt.Printf("Resolved %s -> %s\n", path, candidate)
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("%s is not a consensus database directory and does not contain one at "+
+		"%s/%s or %s/%s/%s - point --src at the directory holding the MANIFEST/CURRENT files",
+		path, path, consensusDBDirname, path, networkName, consensusDBDirname)
+}
+
 func paramsByName(name string) (*dagconfig.Params, error) {
 	for _, params := range []*dagconfig.Params{
 		&dagconfig.MainnetParams, &dagconfig.TestnetParams,
@@ -86,9 +117,19 @@ func paramsByName(name string) (*dagconfig.Params, error) {
 func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 	stopOnMismatch bool, cacheSizeMiB int, skipCopy, fromPruningPoint bool,
 ) error {
+	srcPath, err := resolveDataDir(srcPath, params.Name)
+	if err != nil {
+		return err
+	}
+
+	backend := "leveldb"
+	if utxoderive.IsPebbleDataDir(srcPath) {
+		backend = "pebble"
+	}
+
 	// --- Preflight against the source, before anything is copied. ---
-	fmt.Printf("Preflight against %s\n", srcPath)
-	srcDB, err := utxoderive.OpenLevelDB(srcPath, cacheSizeMiB)
+	fmt.Printf("Preflight against %s (%s)\n", srcPath, backend)
+	srcDB, err := utxoderive.OpenDataDir(srcPath, cacheSizeMiB)
 	if err != nil {
 		return err
 	}
@@ -128,15 +169,34 @@ func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 		fmt.Println("Preflight passed: bodies and GHOSTDAG data are present below the pruning point.")
 	}
 
-	// --- Prepare the destination. ---
-	if !skipCopy {
+	// --- Prepare the working directory. ---
+	//
+	// The genesis walk derives everything from bodies, so its destination must have every derived
+	// store wiped or it could inherit the exported lineage. The seeded walk is the opposite: the
+	// served pruning-point bucket IS its input, so wiping would destroy the thing it reads. It
+	// therefore never copies and never wipes, and writes nothing at all.
+	workPath := dstPath
+	if fromPruningPoint {
+		if dstPath == "" {
+			workPath = srcPath
+			fmt.Println("Seeded mode writes nothing, so it reads the source directly (no copy).")
+		} else {
+			if !skipCopy {
+				fmt.Printf("Copying %s -> %s\n", srcPath, dstPath)
+				if err := copyDir(srcPath, dstPath); err != nil {
+					return err
+				}
+			}
+			fmt.Println("Seeded mode: NOT wiping derived stores - the served pruning-point set is the input.")
+		}
+	} else if !skipCopy {
 		fmt.Printf("Copying %s -> %s\n", srcPath, dstPath)
 		if err := copyDir(srcPath, dstPath); err != nil {
 			return err
 		}
 	}
 
-	dstDB, err := utxoderive.OpenLevelDB(dstPath, cacheSizeMiB)
+	dstDB, err := utxoderive.OpenDataDir(workPath, cacheSizeMiB)
 	if err != nil {
 		return err
 	}
@@ -147,14 +207,16 @@ func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 		return err
 	}
 
-	fmt.Println("Wiping derived stores from the destination")
-	if err := utxoderive.WipeDerivedStores(dstDB, dstPrefix); err != nil {
-		return err
+	if !fromPruningPoint {
+		fmt.Println("Wiping derived stores from the destination")
+		if err := utxoderive.WipeDerivedStores(dstDB, dstPrefix); err != nil {
+			return err
+		}
+		if err := utxoderive.VerifyDerivedStoresAbsent(dstDB, dstPrefix); err != nil {
+			return err
+		}
+		fmt.Println("Destination carries blocks, headers, GHOSTDAG and DAA only.")
 	}
-	if err := utxoderive.VerifyDerivedStoresAbsent(dstDB, dstPrefix); err != nil {
-		return err
-	}
-	fmt.Println("Destination carries blocks, headers, GHOSTDAG and DAA only.")
 
 	// --- Replay. ---
 	dstStores, err := utxoderive.OpenStores(dstDB, dstPrefix, 10_000, false)

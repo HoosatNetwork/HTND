@@ -1,6 +1,10 @@
 package utxoderive
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	consensusdatabase "github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockheaderstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstore"
@@ -11,6 +15,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
 	"github.com/pkg/errors"
 )
 
@@ -42,14 +47,63 @@ var derivedStoreBuckets = [][]byte{
 	[]byte("utxo-index-counts-initialized"),
 }
 
-// OpenLevelDB opens a datadir for a replay. cacheSizeMiB follows the node's own sizing.
+// OpenLevelDB opens a LevelDB datadir for a replay. Prefer OpenDataDir, which detects the
+// backend; a real node defaults to Pebble, so this is the minority case.
 func OpenLevelDB(path string, cacheSizeMiB int) (infrastructuredatabase.Database, error) {
 	db, err := ldb.NewLevelDB(path, cacheSizeMiB)
 	if err != nil {
-		return nil, errors.Wrapf(err, "utxoderive: could not open %s. A datadir in use by a running node "+
-			"cannot be opened a second time - stop the node, or copy the directory first", path)
+		return nil, errors.Wrapf(err, "utxoderive: could not open %s as LevelDB. A datadir in use by a "+
+			"running node cannot be opened a second time - stop the node, or copy the directory first", path)
 	}
 	return db, nil
+}
+
+// OpenPebbleDB opens a Pebble datadir for a replay.
+func OpenPebbleDB(path string, cacheSizeMiB int) (infrastructuredatabase.Database, error) {
+	db, err := pebble.NewPebbleDB(path, cacheSizeMiB)
+	if err != nil {
+		return nil, errors.Wrapf(err, "utxoderive: could not open %s as Pebble. A datadir in use by a "+
+			"running node cannot be opened a second time - stop the node, or copy the directory first", path)
+	}
+	return db, nil
+}
+
+// IsPebbleDataDir reports whether a directory holds a Pebble database rather than a LevelDB one.
+//
+// htnd only uses LevelDB when --dbtype=leveldb is passed explicitly; everything else, including
+// the default, is Pebble. A tool that assumed LevelDB would fail on essentially every real node,
+// so the backend is detected from the directory rather than assumed. Pebble writes a CURRENT-less
+// layout with MANIFEST-* and a marker file; LevelDB writes CURRENT.
+func IsPebbleDataDir(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, "CURRENT")); err == nil {
+		return false
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "MANIFEST-") || strings.HasPrefix(entry.Name(), "marker.") {
+			return true
+		}
+	}
+	return false
+}
+
+// OpenDataDir opens a consensus database, detecting whether it is Pebble or LevelDB.
+func OpenDataDir(path string, cacheSizeMiB int) (infrastructuredatabase.Database, error) {
+	if IsPebbleDataDir(path) {
+		return OpenPebbleDB(path, cacheSizeMiB)
+	}
+	return OpenLevelDB(path, cacheSizeMiB)
+}
+
+// LooksLikeDataDir reports whether a directory holds a consensus database of either backend.
+func LooksLikeDataDir(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, "CURRENT")); err == nil {
+		return true
+	}
+	return IsPebbleDataDir(path)
 }
 
 // OpenStores constructs exactly the read-side stores a replay needs, over the given consensus
