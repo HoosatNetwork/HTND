@@ -1,6 +1,8 @@
 package transactionrelay
 
 import (
+	"time"
+
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/protocol/common"
 	"github.com/HoosatNetwork/HTND/app/protocol/flowcontext"
@@ -23,6 +25,7 @@ type TransactionsRelayContext interface {
 	OnTransactionAddedToMempool()
 	EnqueueTransactionIDsForPropagation(transactionIDs []*externalapi.DomainTransactionID) error
 	IsNearlySynced() (bool, error)
+	IsIBDRunning() bool
 }
 
 type handleRelayedTransactionsFlow struct {
@@ -43,20 +46,22 @@ func HandleRelayedTransactions(context TransactionsRelayContext, incomingRoute *
 	return flow.start()
 }
 
+// relayReadinessPollInterval is how often the flow re-checks whether the node has become able to
+// process relayed transactions while it is holding off. It only runs while relay is suspended, so
+// the cost is negligible; it is deliberately not sub-second, which is what made the previous
+// attempt at holding invs (the since-removed 250ms sleep in blockrelay) show up as IBD overhead.
+const relayReadinessPollInterval = 1 * time.Second
+
 func (flow *handleRelayedTransactionsFlow) start() error {
 	for {
-		inv, err := flow.readInv()
-		if err != nil {
+		// Hold, rather than discard, while this node cannot process relayed transactions.
+		if err := flow.waitUntilReadyToRelay(); err != nil {
 			return err
 		}
 
-		isNearlySynced, err := flow.IsNearlySynced()
+		inv, err := flow.readInv()
 		if err != nil {
 			return err
-		}
-		// Transaction relay is disabled if the node is out of sync and thus not mining
-		if !isNearlySynced {
-			continue
 		}
 
 		requestedIDs, err := flow.requestInvTransactions(inv)
@@ -69,6 +74,64 @@ func (flow *handleRelayedTransactionsFlow) start() error {
 			return err
 		}
 	}
+}
+
+// waitUntilReadyToRelay blocks while this node is performing IBD and is not yet nearly synced.
+//
+// Relayed transactions cannot be usefully handled in that state: the UTXO set is far behind, so
+// fillInputsAndGetMissingParents fails to resolve almost every input, the stream would land in the
+// bounded orphan pool and churn it, and the node is not mining so nothing consumes the mempool.
+//
+// What it must NOT do is throw the invs away, which is what this used to do. A transaction inv is
+// advertised once per peer; unlike a block inv - which AddOrphanRootsToQueue recovers later, when a
+// descendant arrives and the missing ancestors are walked back - a discarded transaction inv is
+// never re-sent, so the transaction simply never reaches this node. Those transactions are still
+// wanted once the node catches up, so the flow waits instead and picks them up from the incoming
+// route afterwards. The route is bounded (DefaultMaxMessages), and the netadapter already drops
+// CmdInvTransaction on a full route with a debug log rather than disconnecting the peer, so a long
+// IBD degrades to the old behaviour instead of building an unbounded backlog.
+//
+// The IsIBDRunning() condition matters as much as the sync one. IsNearlySynced() only asks whether
+// the selected tip's timestamp falls inside the DAA window - it says nothing about IBD - so on its
+// own it also suspended relay for a node that finished IBD long ago, holds a complete UTXO set, and
+// can validate transactions perfectly well, but whose virtual stalled momentarily (a
+// disqualification cascade, a slow restorePastUTXO walk, clock skew, a brief loss of peers). That
+// node has no reason to hold anything back.
+func (flow *handleRelayedTransactionsFlow) waitUntilReadyToRelay() error {
+	waiting := false
+	for {
+		if !flow.IsIBDRunning() {
+			break
+		}
+		isNearlySynced, err := flow.IsNearlySynced()
+		if err != nil {
+			return err
+		}
+		if isNearlySynced {
+			break
+		}
+
+		if !waiting {
+			waiting = true
+			log.Infof("Transaction relay is on hold while IBD is in progress - incoming transaction " +
+				"invs are being held until this node is nearly synced, not discarded.")
+		}
+
+		select {
+		case <-flow.incomingRoute.Closed():
+			// The peer went away while we were holding off. Return rather than loop forever on the
+			// timer: nothing will ever arrive on this route again.
+			return errors.Wrapf(router.ErrRouteClosed, "route '%s' was closed while transaction relay "+
+				"was waiting for the node to become nearly synced", flow.incomingRoute.Name())
+		case <-time.After(relayReadinessPollInterval):
+		}
+	}
+
+	if waiting {
+		log.Infof("Transaction relay resumed - the node is nearly synced; processing the transaction " +
+			"invs that were held.")
+	}
+	return nil
 }
 
 func (flow *handleRelayedTransactionsFlow) requestInvTransactions(
