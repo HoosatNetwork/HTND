@@ -92,12 +92,26 @@ func compoundOnce(
 		return nil
 	}
 
-	unsignedTx := resp.UnsignedTransactions[0]
-
-	// 2. Sign
-	signedTx, err := libhtnwallet.Sign(conf.NetParams(), mnemonics, unsignedTx, ecdsa)
-	if err != nil {
-		return errors.Wrap(err, "signing failed")
+	// 2. Sign every transaction the daemon produced, not just the first.
+	//
+	// createUnsignedCompoundTransaction can return more than one. When the compound exceeds
+	// MaximumStandardTransactionMass it is split, and maybeSplitAndMergeTransaction returns
+	// [split_1 ... split_N, mergeTx]: every split pays the CHANGE address, and only mergeTx pays the
+	// address the user asked for. Taking UnsignedTransactions[0] and dropping the rest therefore
+	// broadcast a transaction that moved the coins to the change address, reported its txid as
+	// success, and left the destination with nothing - which is exactly what a P2PKH or P2SH wallet
+	// saw, because their larger signature scripts are what pushed the compound over the mass limit
+	// and into splitting in the first place.
+	//
+	// Order is preserved: the daemon's broadcast submits sequentially, so each split is in the
+	// mempool before mergeTx - which spends their outputs - is submitted.
+	signedTxs := make([][]byte, len(resp.UnsignedTransactions))
+	for i, unsignedTx := range resp.UnsignedTransactions {
+		signedTx, err := libhtnwallet.Sign(conf.NetParams(), mnemonics, unsignedTx, ecdsa)
+		if err != nil {
+			return errors.Wrapf(err, "signing failed for transaction %d of %d", i+1, len(resp.UnsignedTransactions))
+		}
+		signedTxs[i] = signedTx
 	}
 
 	// 3. Broadcast
@@ -106,7 +120,7 @@ func compoundOnce(
 	isHighPriority := false
 
 	bresp, err := client.Broadcast(bctx, &pb.BroadcastRequest{
-		Transactions:   [][]byte{signedTx},
+		Transactions:   signedTxs,
 		AllowOrphan:    false,
 		IsHighPriority: &isHighPriority,
 	})

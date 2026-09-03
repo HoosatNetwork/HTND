@@ -8,7 +8,10 @@ import (
 
 	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
 	"github.com/HoosatNetwork/HTND/util"
 	"github.com/pkg/errors"
 )
@@ -96,18 +99,13 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	selectedUTXOs, _, changeSompi, err := s.selectUTXOsForCompounding(feePerInput, fromAddresses)
+	selectedUTXOs, _, _, err := s.selectUTXOsForCompounding(feePerInput, fromAddresses)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(selectedUTXOs) < 2 {
 		return nil, errors.Errorf("nothing to compound")
-	}
-
-	// Mark the selected UTXOs as used to prevent respending in case of submission failure
-	for _, utxo := range selectedUTXOs {
-		s.usedOutpoints[*utxo.Outpoint] = time.Now()
 	}
 
 	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
@@ -119,15 +117,17 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	// Send the net amount (after fees) to the requested address and avoid creating
 	// an additional change output to keep base mass low and prevent dust.
 	// Note: changeAddress is still used by maybeAutoCompoundTransaction for split/merge flows.
-	payments := []*libhtnwallet.Payment{{
-		Address: toAddress,
-		Amount:  changeSompi,
-	}}
-	unsignedTransaction, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
-		s.keysFile.MinimumSignatures,
-		payments, selectedUTXOs, nil)
+	unsignedTransaction, spentUTXOs, err := s.buildCompoundTransactionWithinStandardMass(selectedUTXOs, toAddress)
 	if err != nil {
 		return nil, err
+	}
+
+	// Mark the spent UTXOs as used to prevent respending in case of submission failure. Only the ones
+	// the transaction actually spends: buildCompoundTransactionWithinStandardMass may have dropped
+	// some to fit the mass limit, and marking those would sideline them until the used-outpoint
+	// expiry even though nothing ever spent them.
+	for _, spentUTXO := range spentUTXOs {
+		s.usedOutpoints[*spentUTXO.Outpoint] = time.Now()
 	}
 
 	unsignedTransactions, err := s.maybeAutoCompoundTransaction(unsignedTransaction, toAddress, changeAddress, changeWalletAddress)
@@ -139,6 +139,93 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 
 // Add this constant next to your others
 var targetCompoundInputs = 88
+
+// buildCompoundTransactionWithinStandardMass builds the compound transaction, dropping inputs until
+// its signed mass fits MaximumStandardTransactionMass.
+//
+// targetCompoundInputs is a fixed count, and it was tuned against the P2PK signature script (a bare
+// 66-byte push of the signature). Other input types are bigger - a P2PKH input also carries its
+// public key (99 bytes), a P2SH input carries the public key and the redeem script (137) - so the
+// same 88 inputs that measure 98890 mass from a P2PK wallet measure 101794 from a P2PKH one and
+// 105138 from a P2SH one, against a 100000 limit. Going over is what pushed those wallets into
+// maybeSplitAndMergeTransaction, whose split transactions pay the change address rather than the
+// requested destination.
+//
+// Sizing by measured mass instead of by count keeps a compound a single transaction paying the
+// destination directly, whatever the inputs look like, rather than depending on a constant that only
+// happens to hold for one address type.
+func (s *server) buildCompoundTransactionWithinStandardMass(selectedUTXOs []*libhtnwallet.UTXO,
+	toAddress util.Address,
+) ([]byte, []*libhtnwallet.UTXO, error) {
+	for {
+		if len(selectedUTXOs) < 2 {
+			return nil, nil, errors.Errorf("not enough inputs fit within the standard transaction mass to compound")
+		}
+
+		selectedCount, err := checkedUint64FromInt(len(selectedUTXOs))
+		if err != nil {
+			return nil, nil, err
+		}
+		totalValue := uint64(0)
+		for _, selectedUTXO := range selectedUTXOs {
+			totalValue += selectedUTXO.UTXOEntry.Amount()
+		}
+		fee := selectedCount * feePerInput
+		if totalValue <= fee {
+			return nil, nil, errors.Errorf("not enough funds: total %d sompi < fee %d sompi", totalValue, fee)
+		}
+
+		unsignedTransaction, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
+			s.keysFile.MinimumSignatures,
+			[]*libhtnwallet.Payment{{Address: toAddress, Amount: totalValue - fee}}, selectedUTXOs, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		partiallySignedTransaction, err := serialization.DeserializePartiallySignedTransaction(unsignedTransaction)
+		if err != nil {
+			return nil, nil, err
+		}
+		mass, err := s.estimateMassAfterSignatures(partiallySignedTransaction)
+		if err != nil {
+			return nil, nil, err
+		}
+		if mass <= mempool.MaximumStandardTransactionMass {
+			return unsignedTransaction, selectedUTXOs, nil
+		}
+
+		// Work out how many of these inputs actually fit, from this transaction's own measured mass
+		// rather than from an assumed per-input size, and retry with that many.
+		transactionWithoutInputs := partiallySignedTransaction.Tx.Clone()
+		transactionWithoutInputs.Inputs = []*externalapi.DomainTransactionInput{}
+		massWithoutInputs := s.txMassCalculator.CalculateTransactionMass(transactionWithoutInputs)
+		if massWithoutInputs >= mempool.MaximumStandardTransactionMass {
+			return nil, nil, errors.Errorf("a compound transaction's outputs alone exceed the standard mass limit")
+		}
+
+		massOfAllInputs := mass - massWithoutInputs
+		massPerInput := massOfAllInputs / selectedCount
+		if massOfAllInputs%selectedCount > 0 {
+			massPerInput++
+		}
+		if massPerInput == 0 {
+			return nil, nil, errors.Errorf("could not determine the mass of a compound transaction's inputs")
+		}
+
+		fittingCount, err := checkedIntFromUint64((mempool.MaximumStandardTransactionMass - massWithoutInputs) / massPerInput)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Always make progress, even if the estimate above is optimistic.
+		if fittingCount >= len(selectedUTXOs) {
+			fittingCount = len(selectedUTXOs) - 1
+		}
+		if fittingCount < 0 {
+			fittingCount = 0
+		}
+		selectedUTXOs = selectedUTXOs[:fittingCount]
+	}
+}
 
 func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*walletAddress) (
 	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error,
