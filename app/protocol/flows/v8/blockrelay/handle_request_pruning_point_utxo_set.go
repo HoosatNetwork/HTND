@@ -4,6 +4,8 @@ import (
 	"errors"
 	"slices"
 
+	pkgerrors "github.com/pkg/errors"
+
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/protocol/common"
 	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
@@ -98,6 +100,23 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 			if errors.Is(err, ruleerrors.ErrWrongPruningPointHash) {
 				return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
 			}
+			// Any other error must abort the transfer.
+			//
+			// This used to fall through. err was non-nil, pruningPointUTXOs was nil, so an empty
+			// chunk went out, `finished` computed 0 < step = true, and the peer was sent
+			// DonePruningPointUTXOSetChunks - told the transfer had completed successfully while
+			// holding a truncated UTXO set. Neither side logged anything. The receiving node then
+			// found its imported set did not match the pruning point header, "repaired" its own
+			// trust anchor to whatever had arrived, and carried on with a permanently incomplete
+			// set. That is silent, and it is how two nodes end up disagreeing about balances.
+			//
+			// The read can genuinely fail mid-transfer: consensus is only locked per chunk and a
+			// fresh cursor is opened for each one, so a pruning-point advance that rewrites the
+			// bucket underneath the transfer leaves the outpoint being resumed from gone - which
+			// LevelDB's Seek reports as ErrNotFound. Failing here makes the syncing peer retry,
+			// which is recoverable; truncating silently is not.
+			return pkgerrors.Wrapf(err, "failed to read the pruning point UTXO set for %s at outpoint %v",
+				msgRequestPruningPointUTXOSet.PruningPointHash, fromOutpoint)
 		}
 
 		log.Debugf("Retrieved %d UTXOs for pruning block %s",
