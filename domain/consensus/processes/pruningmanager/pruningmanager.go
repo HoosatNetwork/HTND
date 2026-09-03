@@ -2149,10 +2149,17 @@ func (pm *pruningManager) updatePruningPoint() error {
 	}
 
 	// Unconditional, non-fatal counterpart to the guarded check above: hash the bucket we just
-	// built, compare it to the pruning point's header commitment, and persist the verdict. Runs in
-	// the background because this is reached from block processing and the scan is O(UTXO set).
-	// Nothing here changes what was built, stored, or is served.
-	pm.scheduleUTXOSetVerification()
+	// built, compare it to the pruning point's header commitment, and persist the verdict.
+	//
+	// Synchronous on purpose. It is O(UTXO set), but this runs only when the pruning point actually
+	// advances - hours apart - and it must not move to another goroutine: the consensus stores keep
+	// unsynchronised LRU caches and are only safe under the consensus lock, so a concurrent reader
+	// crashes the process with "concurrent map writes". Nothing here changes what was built,
+	// stored, or served.
+	if _, verifyErr := pm.RecordPruningPointUTXOSetVerification(stagingArea); verifyErr != nil {
+		log.Warnf("Could not verify the pruning point UTXO set against its header commitment: %s. "+
+			"Nothing else is affected - this check is observation only.", verifyErr)
+	}
 	var newPruningTime *time.Time
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
 		log.Infof("Pruning point advanced, but block deletion deferred (data retention/interval not met)")

@@ -1,8 +1,6 @@
 package pruningmanager
 
 import (
-	"sync/atomic"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
@@ -36,11 +34,6 @@ func shortHash(hash *externalapi.DomainHash) string {
 func (pm *pruningManager) shouldRunStrictUTXOSetFitCheck(pruningPoint *externalapi.DomainHash) bool {
 	return pm.shouldSanityCheckPruningUTXOSet && !pruningPoint.Equal(pm.genesisHash)
 }
-
-// utxoSetVerificationRunning guards the background bucket scan so that a burst of triggers - a
-// startup and a pruning-point advancement landing close together - cannot start two full scans
-// over the same data at once.
-var utxoSetVerificationRunning atomic.Bool
 
 // RecordPruningPointUTXOSetVerification hashes the served pruning-point UTXO bucket, compares it to
 // the pruning point's own header UTXO commitment, and persists the verdict.
@@ -243,10 +236,12 @@ func (pm *pruningManager) LogPruningPointUTXOSetStatus() {
 		pruningPoint, headerText, bucketText, perBlockText, diffChainText, status, ageText)
 
 	if marker == nil {
-		log.Infof("No current pruning point UTXO set verification on record - hashing the served bucket " +
-			"in the background. The verdict will be logged when it completes and printed directly on the " +
-			"next boot.")
-		pm.scheduleUTXOSetVerification()
+		log.Infof("No current pruning point UTXO set verification on record for this pruning point. One " +
+			"is taken the next time the pruning point advances, or immediately with " +
+			"--enable-utxo-debug-diagnostics. It is deliberately not computed here: hashing the whole " +
+			"served bucket takes minutes on a mature chain, and doing it on another goroutine is not an " +
+			"option because the consensus stores' caches are unsynchronised and only safe under the " +
+			"consensus lock.")
 	}
 }
 
@@ -267,23 +262,6 @@ func (pm *pruningManager) currentPruningPointUTXOSetMarker(pruningPoint *externa
 		return nil
 	}
 	return marker
-}
-
-// scheduleUTXOSetVerification runs RecordPruningPointUTXOSetVerification off the caller's
-// goroutine. Used from boot and from pruning-point advancement, neither of which should stall for
-// a full UTXO-set scan.
-func (pm *pruningManager) scheduleUTXOSetVerification() {
-	if !utxoSetVerificationRunning.CompareAndSwap(false, true) {
-		log.Debugf("A pruning point UTXO set verification is already running - not starting another")
-		return
-	}
-	go func() {
-		defer utxoSetVerificationRunning.Store(false)
-		if _, err := pm.RecordPruningPointUTXOSetVerification(model.NewStagingArea()); err != nil {
-			log.Warnf("Could not verify the pruning point UTXO set against its header commitment: %s. "+
-				"Nothing else is affected - this check is observation only.", err)
-		}
-	}()
 }
 
 // uint64ToString avoids pulling strconv into the status line for two numbers.
