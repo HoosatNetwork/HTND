@@ -173,6 +173,10 @@ func run(srcPath, dstPath string, params *dagconfig.Params, probeDepth int,
 		return walkErr
 	}
 
+	if report := deriver.Report(); report.AcceptanceDiverged && persisted {
+		return fmt.Errorf("internal error: a set was persisted despite acceptance divergence")
+	}
+
 	if !persisted {
 		fmt.Println("\nNothing was persisted: the derived commitment did not match the pruning point header.")
 		fmt.Println("The destination holds inputs and a report only - it must not be served.")
@@ -205,12 +209,30 @@ func printReport(report *utxoderive.Report) {
 		}
 	}
 
+	if len(report.Mismatches) > 1 {
+		fmt.Printf("\nall %d mismatching blocks (--stop-on-mismatch was disabled):\n", len(report.Mismatches))
+		for _, mismatch := range report.Mismatches {
+			fmt.Printf("  block=%s daa=%d failed=%s\n", mismatch.PruningPoint, mismatch.DAAScore,
+				mismatch.FailedChecks)
+		}
+	}
+
 	if report.FirstMismatch != nil {
-		fmt.Println("\nCORRUPTION HORIZON - first block whose header commitment the replay could not reproduce:")
-		fmt.Printf("  block   : %s\n", report.FirstMismatch.PruningPoint)
-		fmt.Printf("  daa     : %d\n", report.FirstMismatch.DAAScore)
-		fmt.Printf("  header  : %s\n", report.FirstMismatch.HeaderCommitment)
-		fmt.Printf("  derived : %s\n", report.FirstMismatch.DerivedMultiset)
+		mismatch := report.FirstMismatch
+		fmt.Println("\nCORRUPTION HORIZON - first block whose commitments the replay could not reproduce:")
+		fmt.Printf("  block             : %s\n", mismatch.PruningPoint)
+		fmt.Printf("  daa               : %d\n", mismatch.DAAScore)
+		fmt.Printf("  failed            : %s\n", mismatch.FailedChecks)
+		fmt.Printf("  utxoHeader        : %s\n", mismatch.HeaderCommitment)
+		fmt.Printf("  utxoDerived       : %s\n", mismatch.DerivedMultiset)
+		fmt.Printf("  acceptedIDHeader  : %s\n", mismatch.HeaderAcceptedIDMerkleRoot)
+		fmt.Printf("  acceptedIDDerived : %s\n", mismatch.DerivedAcceptedIDMerkleRoot)
+	}
+
+	if report.AcceptanceDiverged {
+		fmt.Println("\nACCEPTANCE DIVERGED: the replay and the network disagree about which transactions")
+		fmt.Println("were accepted. Everything derived after that block is meaningless rather than merely")
+		fmt.Println("wrong, and nothing from this run may be persisted or served.")
 	}
 
 	if report.StopReason != "" {

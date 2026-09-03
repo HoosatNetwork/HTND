@@ -315,14 +315,69 @@ Useful flags: `--probe-depth` (how far below the pruning point preflight looks f
 
 Every chain block, not only pruning points:
 
-- derived MuHash vs that block's own `UTXOCommitment` - the first block that fails is the
-  corruption horizon, printed with its DAA score and both commitments;
-- re-derived acceptance vs that block's own `AcceptedIDMerkleRoot`, hashed with **the block's own
-  header version** rather than the ambient process-global one. This is the guard that makes
-  re-deriving acceptance safe: if the acceptance rule here differs from the network's, it shows
-  up at the first block where it matters instead of producing a plausible-looking wrong set.
+- derived MuHash vs that block's own `UTXOCommitment`;
+- re-derived acceptance vs that block's own `AcceptedIDMerkleRoot`.
+
+Both are hashed and stamped from **the block's own header**, never from the ambient
+process-global state:
+
+| value | source | why it matters |
+|---|---|---|
+| accepted-ID merkle root | the **chain block's** `header.Version()` | versions ≤4 sort accepted transactions by ID and ≥5 do not, so replaying old history in a process ratcheted to 9 hashes the wrong ordering |
+| UTXO entry `blockDAAScore` | the **merge-set block's** own `header.DAAScore()` | the same rule `applyMergeSetBlocks` and `calculateMultiset` use; a wrong score is a silent MuHash miss, not an error |
+
+Both are covered by mutation-verified tests — `TestDeriveUsesHeaderVersionNotAmbient` runs the
+walk with the ambient version forced to 9 against a version-1/2 fixture whose accepted
+transactions are deliberately not in sorted order, and
+`TestFixtureDAAScoresDifferFromSelectedParent` pins the property that gives the commitment test
+its DAA coverage.
 
 Pruning points are additionally recorded as a running `ppHash daa derived header status` table.
+
+### Mismatch records
+
+Every failed block is logged on one greppable line, whether or not the walk stops:
+
+```
+[C1-MISMATCH] block=<hash> daa=<n> failed=<utxo|accepted-id|both> \
+  utxoHeader=<hash> utxoDerived=<hash> \
+  acceptedIDHeader=<hash> acceptedIDDerived=<hash>
+```
+
+`failed=` distinguishes two different faults. `utxo` alone means the replay agreed on *which*
+transactions were accepted but not on the resulting set — a UTXO accounting fault, which is the
+one this whole exercise is chasing. `accepted-id` means the replay disagreed about acceptance
+itself; from that point the derived set is **meaningless rather than merely wrong**, a second
+line says so, and nothing from that run may be persisted even if later blocks appear to match
+again.
+
+`--stop-on-mismatch` defaults to **true**. Disabling it fills in the full mismatch list rather
+than just the first, which is the only reason to walk past a break.
+
+### Scope of `isAccepted` in this slice
+
+Acceptance is decided by exactly two rules: a coinbase is accepted only from the selected parent,
+and every input must resolve against the derived set. **Script, mass, sequence-lock and
+coinbase-maturity validation are not implemented here.** Those are block-body properties that
+were already checked when these blocks were first accepted, and any disagreement they would cause
+surfaces as a commitment mismatch — which is this walk's mandatory output regardless.
+
+A missing input is a hard error in every mode, including `--stop-on-mismatch=false`. Live code
+turns it into "not accepted" and, when the offset flag is latched, skips the transaction and
+keeps the block; that is how outputs vanish silently, and the replay must not inherit it.
+
+### What a MATCH does and does not claim
+
+A MATCH on an archival **genesis→pruning-point** walk says: replaying every body from an empty
+MuHash reproduces the commitments the network published. That is the claim C1 exists to
+establish.
+
+It is **not** the same claim as a MATCH observed on a datadir that reached its state by IBD
+through the inherited pruning-point MuHash offset path. There, the pruning point's stored
+multiset was rewritten at import to whatever arrived, every descendant inherits that same fixed
+offset, and a per-block commitment check can agree with itself while disagreeing with the
+network. Do not conflate the two, and do not quote a MATCH from an IBD'd node as evidence that a
+set is correct.
 
 ### Cost and expectations
 

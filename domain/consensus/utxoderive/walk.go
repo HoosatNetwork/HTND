@@ -103,49 +103,50 @@ func (d *Deriver) Walk(highHash *externalapi.DomainHash, hooks map[externalapi.D
 
 	stagingArea := model.NewStagingArea()
 	for _, chainBlockHash := range chain {
-		if err := d.applyChainBlock(chainBlockHash); err != nil {
+		header, err := d.stores.BlockHeaderStore.BlockHeader(d.stores.DatabaseContext, stagingArea, chainBlockHash)
+		if err != nil {
+			return errors.Wrapf(err, "utxoderive: no header for chain block %s", chainBlockHash)
+		}
+
+		derivedAcceptedIDMerkleRoot, err := d.applyChainBlock(chainBlockHash, header.Version())
+		if err != nil {
 			d.report.StoppedAt = chainBlockHash
 			d.report.StopReason = err.Error()
 			return err
 		}
 		d.report.ChainBlocks++
 
-		header, err := d.stores.BlockHeaderStore.BlockHeader(d.stores.DatabaseContext, stagingArea, chainBlockHash)
-		if err != nil {
-			return errors.Wrapf(err, "utxoderive: no header for chain block %s", chainBlockHash)
+		derivedMultiset := d.ms.Hash()
+		utxoMatch := derivedMultiset.Equal(header.UTXOCommitment())
+		acceptedIDMatch := derivedAcceptedIDMerkleRoot.Equal(header.AcceptedIDMerkleRoot())
+		match := utxoMatch && acceptedIDMatch
+
+		checkpoint := Checkpoint{
+			PruningPoint:                chainBlockHash,
+			DAAScore:                    header.DAAScore(),
+			DerivedMultiset:             derivedMultiset,
+			HeaderCommitment:            header.UTXOCommitment(),
+			DerivedAcceptedIDMerkleRoot: derivedAcceptedIDMerkleRoot,
+			HeaderAcceptedIDMerkleRoot:  header.AcceptedIDMerkleRoot(),
+			FailedChecks:                failedChecks(utxoMatch, acceptedIDMatch),
+			Match:                       match,
 		}
 
-		derived := d.ms.Hash()
-		match := derived.Equal(header.UTXOCommitment())
-		_, isPruningPoint := pruningPoints[*chainBlockHash]
-
-		if isPruningPoint {
-			d.report.Checkpoints = append(d.report.Checkpoints, Checkpoint{
-				PruningPoint:     chainBlockHash,
-				DAAScore:         header.DAAScore(),
-				DerivedMultiset:  derived,
-				HeaderCommitment: header.UTXOCommitment(),
-				Match:            match,
-			})
+		if _, isPruningPoint := pruningPoints[*chainBlockHash]; isPruningPoint {
+			d.report.Checkpoints = append(d.report.Checkpoints, checkpoint)
 		}
 
-		if !match && d.report.FirstMismatch == nil {
-			d.report.FirstMismatch = &Checkpoint{
-				PruningPoint:     chainBlockHash,
-				DAAScore:         header.DAAScore(),
-				DerivedMultiset:  derived,
-				HeaderCommitment: header.UTXOCommitment(),
-				Match:            false,
-			}
+		if !match {
+			d.recordMismatch(checkpoint, !acceptedIDMatch)
 			if d.stopOnMismatch {
 				d.report.StoppedAt = chainBlockHash
-				d.report.StopReason = "first commitment mismatch"
+				d.report.StopReason = "first commitment mismatch (" + checkpoint.FailedChecks + ")"
 				d.finishReport()
 				return nil
 			}
 		}
 
-		if hook, ok := hooks[*chainBlockHash]; ok && match {
+		if hook, ok := hooks[*chainBlockHash]; ok && match && !d.report.AcceptanceDiverged {
 			if err := hook(chainBlockHash, d); err != nil {
 				return err
 			}
@@ -170,10 +171,12 @@ func (d *Deriver) finishReport() {
 // This mirrors applyMergeSetBlocks: the chain block's own transactions are not applied here
 // (its coinbase is accepted by whichever chain block later merges it as selected parent),
 // and a merge-set block's coinbase is accepted only when that block is the selected parent.
-func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash) error {
+func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash, blockVersion uint16) (
+	*externalapi.DomainHash, error,
+) {
 	mergeSet, err := d.sortedMergeSet(chainBlockHash)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	acceptanceData := make(externalapi.AcceptanceData, 0, len(mergeSet))
@@ -186,11 +189,11 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash) error 
 
 		creatingBlockDAAScore, err := d.blockOwnDAAScore(mergeSetBlockHash)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		mergeSetBlock, err := d.loadBodyStrict(mergeSetBlockHash)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		blockAcceptanceData := &externalapi.BlockAcceptanceData{
@@ -201,7 +204,7 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash) error 
 		for j, transaction := range mergeSetBlock.Transactions {
 			accepted, err := d.isAccepted(transaction, isSelectedParent, chainBlockHash, mergeSetBlockHash)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			blockAcceptanceData.TransactionAcceptanceData[j] = &externalapi.TransactionAcceptanceData{
 				Transaction: transaction,
@@ -211,7 +214,7 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash) error 
 				continue
 			}
 			if err := d.applyTransaction(transaction, creatingBlockDAAScore); err != nil {
-				return errors.Wrapf(err, "utxoderive: applying transaction from merge-set block %s of "+
+				return nil, errors.Wrapf(err, "utxoderive: applying transaction from merge-set block %s of "+
 					"chain block %s", mergeSetBlockHash, chainBlockHash)
 			}
 		}
@@ -220,58 +223,32 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash) error 
 		d.report.BlocksApplied++
 	}
 
-	return d.verifyAcceptedIDMerkleRoot(chainBlockHash, acceptanceData)
-}
-
-// verifyAcceptedIDMerkleRoot checks this replay's re-derived acceptance against what the chain
-// block actually committed to.
-//
-// This is the guard that makes re-deriving acceptance safe. If the acceptance rule implemented
-// here differs from the one the network used, that shows up immediately, at the first block
-// where it matters, naming the block - rather than silently producing a plausible-looking UTXO
-// set whose commitment happens not to match for reasons nobody can localise.
-//
-// The block's OWN header version is passed, never the ambient process global: versions 4 and
-// below sort accepted transactions by ID and 5 and above do not, so replaying old history in a
-// process ratcheted to 9 would hash the wrong ordering.
-func (d *Deriver) verifyAcceptedIDMerkleRoot(chainBlockHash *externalapi.DomainHash,
-	acceptanceData externalapi.AcceptanceData,
-) error {
-	stagingArea := model.NewStagingArea()
-	header, err := d.stores.BlockHeaderStore.BlockHeader(d.stores.DatabaseContext, stagingArea, chainBlockHash)
-	if err != nil {
-		return errors.Wrapf(err, "utxoderive: no header for chain block %s", chainBlockHash)
-	}
-
-	derived := consensusstatemanager.CalculateAcceptedIDMerkleRoot(acceptanceData, header.Version())
-	if derived.Equal(header.AcceptedIDMerkleRoot()) {
-		return nil
-	}
-
-	return errors.Errorf("utxoderive: chain block %s committed to acceptedIDMerkleRoot %s but replaying "+
-		"its merge set produces %s. This replay's acceptance differs from the network's for this block, "+
-		"so any UTXO set derived past it would be wrong for reasons that could not be localised later",
-		chainBlockHash, header.AcceptedIDMerkleRoot(), derived)
+	// The block's OWN header version, never the ambient process global: versions 4 and below sort
+	// accepted transactions by ID and 5 and above do not, so replaying old history in a process
+	// ratcheted to a newer version would hash the wrong ordering. The caller compares the result
+	// to the header rather than this function erroring, so that a run with stop-on-mismatch
+	// disabled can record the failure and continue.
+	return consensusstatemanager.CalculateAcceptedIDMerkleRoot(acceptanceData, blockVersion), nil
 }
 
 // isAccepted decides whether a merge-set transaction contributes to the UTXO set.
 //
 // Two rules, matching maybeAcceptTransaction:
 //
-//  1. A coinbase is accepted only from the selected parent. Merged blocks' rewards are paid
-//     by the merging chain block's own coinbase, not by their own.
+//  1. A coinbase is accepted only from the selected parent. Merged blocks' rewards are paid by
+//     the merging chain block's own coinbase, not by their own.
 //  2. Every input must resolve against the derived set.
 //
-// Rule 2 is where this replay deliberately parts company with the live path. Live code turns
-// a missing input into "not accepted" and, when the offset flag is latched, skips the
-// transaction and keeps the block - which is how outputs go missing with no error anywhere.
-// Here a missing input is a hard error: it is the horizon we are trying to find, and
-// tolerating it would reproduce the bug we are replaying to escape.
+// Rule 2 is where this replay deliberately parts company with the live path. Live code turns a
+// missing input into "not accepted" and, when the offset flag is latched, skips the transaction
+// and keeps the block - which is how outputs go missing with no error anywhere. Here a missing
+// input is a hard error regardless of --stop-on-mismatch: it is the horizon we are trying to
+// find, and tolerating it would reproduce the bug we are replaying to escape.
 //
-// Not yet implemented in this slice: script, mass, sequence-lock and coinbase-maturity
-// validation. Those are block-body properties that were already checked when these blocks
-// were first accepted, and any disagreement they would cause surfaces as a commitment
-// mismatch - which is this walk's mandatory output regardless.
+// Not implemented in this slice: script, mass, sequence-lock and coinbase-maturity validation.
+// Those are block-body properties that were already checked when these blocks were first
+// accepted, and any disagreement they would cause surfaces as a commitment mismatch - which is
+// this walk's mandatory output regardless.
 func (d *Deriver) isAccepted(transaction *externalapi.DomainTransaction, isSelectedParent bool,
 	chainBlockHash, mergeSetBlockHash *externalapi.DomainHash,
 ) (bool, error) {
@@ -288,6 +265,49 @@ func (d *Deriver) isAccepted(transaction *externalapi.DomainTransaction, isSelec
 		}
 	}
 	return true, nil
+}
+
+// failedChecks names which of a block's two commitments the replay could not reproduce, so the
+// log and the report say what actually broke rather than just that something did.
+func failedChecks(utxoMatch, acceptedIDMatch bool) string {
+	switch {
+	case utxoMatch && acceptedIDMatch:
+		return ""
+	case !utxoMatch && !acceptedIDMatch:
+		return "both"
+	case !utxoMatch:
+		return "utxo"
+	default:
+		return "accepted-id"
+	}
+}
+
+// recordMismatch logs and stores one failed block.
+//
+// Continuing past a break is only useful if there is a record of it, so every mismatch is logged
+// in full on one greppable line whether or not the walk stops. An accepted-ID failure
+// additionally latches AcceptanceDiverged: from that point the replay and the network disagree
+// about which transactions were accepted, so the derived set is meaningless rather than merely
+// wrong, and no hook may persist anything even if later blocks appear to match again.
+func (d *Deriver) recordMismatch(checkpoint Checkpoint, acceptanceDiverged bool) {
+	if d.report.FirstMismatch == nil {
+		first := checkpoint
+		d.report.FirstMismatch = &first
+	}
+	d.report.Mismatches = append(d.report.Mismatches, checkpoint)
+
+	log.Errorf("[C1-MISMATCH] block=%s daa=%d failed=%s utxoHeader=%s utxoDerived=%s "+
+		"acceptedIDHeader=%s acceptedIDDerived=%s",
+		checkpoint.PruningPoint, checkpoint.DAAScore, checkpoint.FailedChecks,
+		checkpoint.HeaderCommitment, checkpoint.DerivedMultiset,
+		checkpoint.HeaderAcceptedIDMerkleRoot, checkpoint.DerivedAcceptedIDMerkleRoot)
+
+	if acceptanceDiverged && !d.report.AcceptanceDiverged {
+		d.report.AcceptanceDiverged = true
+		log.Errorf("[C1-MISMATCH] block=%s acceptance diverged from the network. Every result after "+
+			"this block is meaningless, not merely wrong, and nothing from this run may be persisted.",
+			checkpoint.PruningPoint)
+	}
 }
 
 // pruningPointSet returns every pruning point this datadir recorded, by index.

@@ -3,13 +3,17 @@ package utxoderive_test
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/consensusstatemanager"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utxoderive"
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
@@ -334,5 +338,285 @@ func TestFixtureDataDirIsPopulated(t *testing.T) {
 	}
 	if len(entries) == 0 {
 		t.Fatalf("fixture datadir %s is empty", filepath.Base(dataDir))
+	}
+}
+
+// buildOrderSensitiveFixture builds a chain whose last chain block accepts several transactions
+// in an order that is NOT sorted by transaction ID.
+//
+// That property is what makes the accepted-ID merkle root sensitive to the block version: version
+// 4 and below sort accepted transactions by ID before hashing, 5 and above do not. A fixture whose
+// natural order already happens to be sorted would hash identically either way and could not
+// detect a replay that threaded the wrong version.
+//
+// Returns the chain hashes and the hash of the block whose acceptance is order-sensitive.
+func buildOrderSensitiveFixture(t *testing.T, dataDir string) (
+	*dagconfig.Params, []*externalapi.DomainHash, *externalapi.DomainHash,
+) {
+	t.Helper()
+
+	consensusConfig := consensus.Config{Params: dagconfig.SimnetParams}
+	consensusConfig.SkipProofOfWork = true
+	consensusConfig.BlockCoinbaseMaturity = 0
+	windowSizes := make([]int, len(consensusConfig.DifficultyAdjustmentWindowSize))
+	for i := range windowSizes {
+		windowSizes[i] = 1
+	}
+	consensusConfig.DifficultyAdjustmentWindowSize = windowSizes
+
+	previousBlockVersion := constants.GetBlockVersion()
+	constants.ForceSetBlockVersion(1)
+	t.Cleanup(func() { constants.ForceSetBlockVersion(uint(previousBlockVersion)) })
+
+	factory := consensus.NewFactory()
+	factory.SetTestDataDir(dataDir)
+	tc, teardown, err := factory.NewTestConsensus(&consensusConfig, "utxoderive-order")
+	if err != nil {
+		t.Fatalf("could not create test consensus: %+v", err)
+	}
+	keepDataDir := false
+	defer func() { teardown(keepDataDir) }()
+
+	scriptPublicKey, _ := testutils.OpTrueScript()
+	coinbaseData := &externalapi.DomainCoinbaseData{ScriptPublicKey: scriptPublicKey}
+
+	hashes := []*externalapi.DomainHash{consensusConfig.GenesisHash}
+	parent := consensusConfig.GenesisHash
+	addBlock := func(transactions []*externalapi.DomainTransaction) *externalapi.DomainHash {
+		t.Helper()
+		blockHash, _, err := tc.AddBlock([]*externalapi.DomainHash{parent}, coinbaseData, transactions)
+		if err != nil {
+			t.Fatalf("AddBlock: %+v", err)
+		}
+		hashes = append(hashes, blockHash)
+		parent = blockHash
+		return blockHash
+	}
+
+	// The first block after genesis merges only genesis, whose coinbase carries no reward, so its
+	// own coinbase has no outputs and nothing to spend. Skip it and fund from the next three.
+	addBlock(nil)
+	fundingHashes := []*externalapi.DomainHash{addBlock(nil), addBlock(nil), addBlock(nil)}
+	addBlock(nil) // accepts the third funding coinbase, making all three spendable
+
+	spends := make([]*externalapi.DomainTransaction, 0, len(fundingHashes))
+	for _, fundingHash := range fundingHashes {
+		fundingBlock, _, err := tc.GetBlock(fundingHash)
+		if err != nil {
+			t.Fatalf("could not read funding block: %+v", err)
+		}
+		spend, err := testutils.CreateTransaction(fundingBlock.Transactions[0], 1)
+		if err != nil {
+			t.Fatalf("could not create spending transaction: %+v", err)
+		}
+		spends = append(spends, spend)
+	}
+
+	// Hand them over in DESCENDING transaction-ID order. Sorting ascending therefore cannot be a
+	// no-op, so the two block-version behaviours must produce different merkle roots.
+	sort.Slice(spends, func(i, j int) bool {
+		return consensushashing.TransactionID(spends[j]).Less(consensushashing.TransactionID(spends[i]))
+	})
+
+	orderSensitiveBlock := addBlock(spends)
+	addBlock(nil) // this block is the one that ACCEPTS the multi-transaction block above
+
+	keepDataDir = true
+	return &consensusConfig.Params, hashes, orderSensitiveBlock
+}
+
+// acceptanceDataOf reconstructs the acceptance data a chain block's child would build for it:
+// one entry, every transaction accepted. Only valid for a linear chain where the block is its
+// child's selected parent, which is how the fixture is built.
+func acceptanceDataOf(t *testing.T, stores utxoderive.Stores,
+	blockHash *externalapi.DomainHash,
+) externalapi.AcceptanceData {
+	t.Helper()
+	block, err := stores.BlockStore.Block(stores.DatabaseContext, model.NewStagingArea(), blockHash)
+	if err != nil {
+		t.Fatalf("could not read block %s: %+v", blockHash, err)
+	}
+	transactionAcceptanceData := make([]*externalapi.TransactionAcceptanceData, len(block.Transactions))
+	for i, transaction := range block.Transactions {
+		transactionAcceptanceData[i] = &externalapi.TransactionAcceptanceData{
+			Transaction: transaction,
+			IsAccepted:  true,
+		}
+	}
+	return externalapi.AcceptanceData{
+		{BlockHash: blockHash, TransactionAcceptanceData: transactionAcceptanceData},
+	}
+}
+
+// TestDeriveUsesHeaderVersionNotAmbient is the guard for the ambient-version leak.
+//
+// The fixture's blocks are version 1, which sorts accepted transactions by ID. The walk then runs
+// with the process-global block version forced to 9, which does not sort. If the walk threaded
+// constants.GetBlockVersion() instead of each block's own header version, it would hash the
+// accepted transactions in the wrong order and the accepted-ID merkle check would fail.
+func TestDeriveUsesHeaderVersionNotAmbient(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes, orderSensitiveBlock := buildOrderSensitiveFixture(t, dataDir)
+
+	deriver, stores, db := openDeriver(t, dataDir, params, true)
+	defer db.Close()
+
+	// Precondition: this fixture really is order-sensitive. Without it the test could pass
+	// while threading the ambient version, which is exactly the bug it exists to catch.
+	acceptanceData := acceptanceDataOf(t, stores, orderSensitiveBlock)
+	sorted := consensusstatemanager.CalculateAcceptedIDMerkleRoot(acceptanceData, 1)
+	unsorted := consensusstatemanager.CalculateAcceptedIDMerkleRoot(acceptanceData, 9)
+	if sorted.Equal(unsorted) {
+		t.Fatalf("fixture is not order-sensitive: version 1 and version 9 hash %s identically, so this "+
+			"test cannot detect a walk that threads the ambient version", orderSensitiveBlock)
+	}
+
+	// Now make the ambient version disagree with every header in the fixture.
+	constants.ForceSetBlockVersion(9)
+	if got := constants.GetBlockVersion(); got != 9 {
+		t.Fatalf("could not raise the ambient block version, got %d", got)
+	}
+
+	if err := deriver.Walk(hashes[len(hashes)-1], nil); err != nil {
+		t.Fatalf("walk failed with the ambient block version at 9 while the fixture is version 1. "+
+			"The walk is threading the ambient version somewhere instead of each block's own "+
+			"header version: %+v", err)
+	}
+	if report := deriver.Report(); report.FirstMismatch != nil {
+		t.Fatalf("commitment mismatch at %s with the ambient version raised: header %s, derived %s",
+			report.FirstMismatch.PruningPoint, report.FirstMismatch.HeaderCommitment,
+			report.FirstMismatch.DerivedMultiset)
+	}
+}
+
+// TestFixtureDAAScoresDifferFromSelectedParent is what gives TestDeriveMatchesFixtureCommitments
+// its coverage of DAA threading.
+//
+// The walk stamps UTXO entries with the MERGE-SET block's own DAA score, not the chain block's.
+// On a linear chain the merge set is exactly the selected parent, so if those two DAA scores
+// differ, a walk that stamped the wrong one would serialize entries differently and the MuHash
+// would miss. Genesis and the block directly above it both sit at DAA 0, so that one pair cannot
+// discriminate; every pair above it must.
+func TestFixtureDAAScoresDifferFromSelectedParent(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+
+	_, stores, db := openDeriver(t, dataDir, params, true)
+	defer db.Close()
+
+	stagingArea := model.NewStagingArea()
+	daaScoreOf := func(blockHash *externalapi.DomainHash) uint64 {
+		t.Helper()
+		header, err := stores.BlockHeaderStore.BlockHeader(stores.DatabaseContext, stagingArea, blockHash)
+		if err != nil {
+			t.Fatalf("could not read header for %s: %+v", blockHash, err)
+		}
+		return header.DAAScore()
+	}
+
+	discriminating := 0
+	// hashes[0] is genesis and hashes[1] shares its DAA score of 0; start the comparison above it.
+	for i := 2; i < len(hashes); i++ {
+		childDAAScore := daaScoreOf(hashes[i])
+		parentDAAScore := daaScoreOf(hashes[i-1])
+		if childDAAScore == parentDAAScore {
+			t.Errorf("chain block %s and its selected parent %s share DAA score %d, so a walk that "+
+				"stamped the chain block's score instead of the merge-set block's would still match here",
+				hashes[i], hashes[i-1], childDAAScore)
+			continue
+		}
+		discriminating++
+	}
+
+	if discriminating == 0 {
+		t.Fatalf("no chain block in the fixture has a DAA score distinct from its selected parent, so " +
+			"the commitment test cannot detect wrong DAA threading at all")
+	}
+}
+
+// TestMismatchesAreRecordedWhenContinuing covers --stop-on-mismatch=false.
+//
+// Walking past the first break is only useful if every break is recorded, so each mismatch must
+// carry both commitment pairs and say which check failed. Without that the operator gets a longer
+// walk and no more information than stopping would have given.
+func TestMismatchesAreRecordedWhenContinuing(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+
+	deriver, stores, db := openDeriver(t, dataDir, params, false /* keep walking */)
+	defer db.Close()
+
+	tamperBlock(t, stores, hashes[2], func(block *externalapi.DomainBlock) {
+		block.Transactions[0].Outputs[0].Value += 1
+	})
+
+	// A tampered body may or may not still resolve every later input; either outcome is fine, the
+	// point is what the report holds.
+	_ = deriver.Walk(hashes[len(hashes)-1], nil)
+	report := deriver.Report()
+
+	if len(report.Mismatches) == 0 {
+		t.Fatalf("walking with stop-on-mismatch disabled recorded no mismatches at all")
+	}
+	if report.FirstMismatch == nil {
+		t.Fatalf("FirstMismatch is nil even though %d mismatches were recorded", len(report.Mismatches))
+	}
+
+	for i, mismatch := range report.Mismatches {
+		if mismatch.Match {
+			t.Errorf("mismatch %d is flagged as a match", i)
+		}
+		if mismatch.FailedChecks == "" {
+			t.Errorf("mismatch %d does not say which check failed", i)
+		}
+		switch mismatch.FailedChecks {
+		case "utxo", "accepted-id", "both":
+		default:
+			t.Errorf("mismatch %d has an unknown FailedChecks value %q", i, mismatch.FailedChecks)
+		}
+		for name, hash := range map[string]*externalapi.DomainHash{
+			"DerivedMultiset":             mismatch.DerivedMultiset,
+			"HeaderCommitment":            mismatch.HeaderCommitment,
+			"DerivedAcceptedIDMerkleRoot": mismatch.DerivedAcceptedIDMerkleRoot,
+			"HeaderAcceptedIDMerkleRoot":  mismatch.HeaderAcceptedIDMerkleRoot,
+		} {
+			if hash == nil {
+				t.Errorf("mismatch %d is missing %s, so the record cannot be acted on", i, name)
+			}
+		}
+	}
+
+	// The first recorded mismatch must be the one FirstMismatch points at.
+	if report.FirstMismatch.PruningPoint == nil ||
+		!report.FirstMismatch.PruningPoint.Equal(report.Mismatches[0].PruningPoint) {
+		t.Errorf("FirstMismatch (%s) is not the first recorded mismatch (%s)",
+			report.FirstMismatch.PruningPoint, report.Mismatches[0].PruningPoint)
+	}
+}
+
+// TestStopOnMismatchStopsAtTheFirstOne pins the default: one record, and the walk ends there.
+func TestStopOnMismatchStopsAtTheFirstOne(t *testing.T) {
+	dataDir := t.TempDir()
+	params, hashes := buildFixture(t, dataDir, 6)
+
+	deriver, stores, db := openDeriver(t, dataDir, params, true /* default */)
+	defer db.Close()
+
+	tamperBlock(t, stores, hashes[2], func(block *externalapi.DomainBlock) {
+		block.Transactions[0].Outputs[0].Value += 1
+	})
+
+	_ = deriver.Walk(hashes[len(hashes)-1], nil)
+	report := deriver.Report()
+
+	if len(report.Mismatches) != 1 {
+		t.Fatalf("stop-on-mismatch recorded %d mismatches, want exactly 1", len(report.Mismatches))
+	}
+	if report.StopReason == "" {
+		t.Errorf("report does not say why the walk stopped")
+	}
+	if !strings.Contains(report.StopReason, report.Mismatches[0].FailedChecks) {
+		t.Errorf("StopReason %q does not name the failed check %q",
+			report.StopReason, report.Mismatches[0].FailedChecks)
 	}
 }

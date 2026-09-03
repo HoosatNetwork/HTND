@@ -94,16 +94,39 @@ type Report struct {
 	DerivedEntries uint64
 	StoppedAt      *externalapi.DomainHash
 	StopReason     string
+
+	// Mismatches holds every block that failed either check, in walk order. With
+	// stop-on-mismatch enabled it has at most one entry; the point of disabling that flag is to
+	// fill this in.
+	Mismatches []Checkpoint
+
+	// AcceptanceDiverged is set once the replay and the network disagree about which
+	// transactions a block accepted. Past that point the derived set is not merely wrong, it is
+	// meaningless - so nothing may be persisted from this run even if later blocks appear to
+	// match again.
+	AcceptanceDiverged bool
 }
 
-// Checkpoint is one pruning-point comparison: what the header committed to versus what
-// replaying every body from genesis actually produces.
+// Checkpoint is one block's comparison: what the header committed to versus what replaying every
+// body from genesis actually produces, for both commitments the block carries.
+//
+// Both are recorded because they fail for different reasons and the difference matters. A UTXO
+// commitment miss with a matching accepted-ID merkle root means the replay agreed on WHICH
+// transactions were accepted but not on the resulting set - a UTXO accounting fault. An
+// accepted-ID miss means the replay disagreed about acceptance itself, and everything derived
+// after it is meaningless rather than merely wrong.
 type Checkpoint struct {
 	PruningPoint     *externalapi.DomainHash
 	DAAScore         uint64
 	DerivedMultiset  *externalapi.DomainHash
 	HeaderCommitment *externalapi.DomainHash
-	Match            bool
+
+	DerivedAcceptedIDMerkleRoot *externalapi.DomainHash
+	HeaderAcceptedIDMerkleRoot  *externalapi.DomainHash
+
+	// FailedChecks is "utxo", "accepted-id", "both", or "" when the block matched.
+	FailedChecks string
+	Match        bool
 }
 
 // Multiset returns the derived MuHash at the current point of the walk.
