@@ -272,3 +272,62 @@ the offset latch) **remain blocked until a successful C1 node exists.** Until th
   currently fails the check; refusing to export today partitions IBD entirely.
 - The Stage A marker stays observation-only. It becomes meaningful the moment one node can set it
   to `verified` from a derived set rather than a copied one.
+
+---
+
+## Appendix: slice 1 as implemented (`cmd/deriveutxo`)
+
+Slice 1 is the replay itself: preflight, prepare a destination, walk, report, and persist only
+on a match. It is a standalone command and touches no live consensus path.
+
+```
+go build -o deriveutxo ./cmd/deriveutxo
+
+./deriveutxo \
+    --src /mnt/archival/.htnd/hoosat-mainnet \
+    --dst /mnt/c1/work \
+    --network hoosat-mainnet
+```
+
+The source datadir **must not be in use** - LevelDB will refuse a second open, which is the
+intended guard against replaying a directory a node is still writing.
+
+Useful flags: `--probe-depth` (how far below the pruning point preflight looks for a real body),
+`--stop-on-mismatch=false` (walk past the horizon to survey later checkpoints too),
+`--skip-copy` (the destination is already a copy; only wipe), `--cache` (LevelDB cache MiB).
+
+### What it will refuse to do
+
+- **Start on a pruned datadir.** Preflight loads genesis and the deepest block it can reach
+  below the pruning point; a missing body or missing GHOSTDAG data aborts before anything is
+  copied, naming H3. A pruned datadir failing here is the design, not a bug.
+- **Trust a body-less block.** Every non-genesis block must carry transactions. This is the same
+  guard, applied again inside the walk, because a header-only block is what a pruned peer
+  returns over the wire *without an error*.
+- **Skip a missing input.** Live code turns a missing input into "not accepted" and, when the
+  offset flag is latched, drops the transaction and keeps the block. The replay stops and names
+  the transaction instead.
+- **Persist anything after a mismatch.** If the derived commitment does not match the current
+  pruning point header, the destination keeps inputs and a report, and nothing servable is
+  written.
+
+### What it checks per block
+
+Every chain block, not only pruning points:
+
+- derived MuHash vs that block's own `UTXOCommitment` - the first block that fails is the
+  corruption horizon, printed with its DAA score and both commitments;
+- re-derived acceptance vs that block's own `AcceptedIDMerkleRoot`, hashed with **the block's own
+  header version** rather than the ambient process-global one. This is the guard that makes
+  re-deriving acceptance safe: if the acceptance rule here differs from the network's, it shows
+  up at the first block where it matters instead of producing a plausible-looking wrong set.
+
+Pruning points are additionally recorded as a running `ppHash daa derived header status` table.
+
+### Cost and expectations
+
+Section 5's estimates apply: order **days** and **~3 TB** for a full mainnet chain, against 66
+minutes for an ordinary sync. It will not fetch history from the network under any circumstance.
+
+After a MATCH at the current pruning point, the destination is a **candidate** first
+header-matching node. That is not permission to enable Stage B - see the footer above.

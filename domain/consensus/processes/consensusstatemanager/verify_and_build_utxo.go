@@ -341,7 +341,24 @@ func (csm *consensusStateManager) pruningPointBaselineIsOffset(stagingArea *mode
 	return offset
 }
 
+// calculateAcceptedIDMerkleRoot preserves the live behaviour exactly: it reads the ambient
+// process-global block version. That global is a one-way ratchet, which is wrong for anything
+// replaying historical blocks - see CalculateAcceptedIDMerkleRoot, which takes the version
+// explicitly and is what the derive path uses. Live callers are deliberately unchanged here.
 func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.AcceptanceData) *externalapi.DomainHash {
+	return CalculateAcceptedIDMerkleRoot(multiblockAcceptanceData, constants.GetBlockVersion())
+}
+
+// CalculateAcceptedIDMerkleRoot computes a block's accepted-ID merkle root from its acceptance
+// data, using the supplied block version rather than the ambient one.
+//
+// blockVersion must be the version of the block whose acceptance data is being hashed. Version
+// 4 and below sort accepted transactions by ID; 5 and above do not, so replaying old history in
+// a process whose ambient version has ratcheted to 9 would hash the wrong ordering and produce
+// a merkle root that never matches the header.
+func CalculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.AcceptanceData,
+	blockVersion uint16,
+) *externalapi.DomainHash {
 	log.Tracef("calculateAcceptedIDMerkleRoot start")
 	defer log.Tracef("calculateAcceptedIDMerkleRoot end")
 
@@ -356,7 +373,7 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 		}
 	}
 	// In block version 4 and below, the accepted transactions are sorted by their IDs, in Block Version 5 and above, the order is not important
-	if constants.GetBlockVersion() < 5 {
+	if blockVersion < 5 {
 		sort.Slice(acceptedTransactions, func(i, j int) bool {
 			return consensushashing.TransactionID(acceptedTransactions[i]).Less(
 				consensushashing.TransactionID(acceptedTransactions[j]))
