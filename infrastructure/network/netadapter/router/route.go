@@ -183,16 +183,6 @@ func (r *Route) Close() {
 	close(r.closedChan)
 }
 
-// Closed returns a channel that is closed when the route is closed. It lets a flow that is parked
-// on something other than a Dequeue - waiting on a timer, for instance - notice that its peer went
-// away, instead of looping until the process exits.
-func (r *Route) Closed() <-chan struct{} {
-	r.closeLock.Lock()
-	defer r.closeLock.Unlock()
-
-	return r.closedChan
-}
-
 // Name returns the route name.
 func (r *Route) Name() string {
 	return r.name

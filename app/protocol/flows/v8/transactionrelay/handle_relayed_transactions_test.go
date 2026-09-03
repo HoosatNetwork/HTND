@@ -207,33 +207,31 @@ func TestOnClosedIncomingRoute(t *testing.T) {
 	})
 }
 
-// TestHandleRelayedTransactionsSyncGating pins when transaction relay is suspended, and that
-// suspension HOLDS invs rather than discarding them.
+// TestHandleRelayedTransactionsAlwaysFetches pins that the transaction is REQUESTED from the peer
+// regardless of this node's sync state.
 //
-// The guard used to be `if !isNearlySynced { continue }` - no IBD check, and the inv thrown away.
-// Both halves were wrong. IsNearlySynced() only asks whether the selected tip's timestamp is inside
-// the DAA window, so it also fired for a node that finished IBD long ago and can validate fine but
-// whose virtual stalled briefly. And discarding is unrecoverable: unlike block invs, which
-// AddOrphanRootsToQueue walks back when a descendant arrives, a transaction inv is advertised once
-// per peer and never re-sent.
-func TestHandleRelayedTransactionsSyncGating(t *testing.T) {
+// The inv is the scarce thing: a transaction inv is advertised once per peer and never re-sent, and
+// the peer only serves the transaction while it is still in its own mempool. So deferring the
+// request - which is what both the original `if !isNearlySynced { continue }` and the later
+// hold-the-inv version did - loses the transaction outright. Fetching is always safe; it is only
+// handing the transaction to the mempool that has to wait for the node to be able to validate it.
+func TestHandleRelayedTransactionsAlwaysFetches(t *testing.T) {
 	tests := []struct {
 		name            string
 		notNearlySynced bool
 		ibdRunning      bool
-		wantRequest     bool
 	}{
-		{name: "synced, no IBD - relays", notNearlySynced: false, ibdRunning: false, wantRequest: true},
-		{name: "lagging, no IBD - still relays", notNearlySynced: true, ibdRunning: false, wantRequest: true},
-		{name: "lagging, IBD running - held", notNearlySynced: true, ibdRunning: true, wantRequest: false},
-		{name: "nearly synced during IBD - relays", notNearlySynced: false, ibdRunning: true, wantRequest: true},
+		{name: "synced, no IBD", notNearlySynced: false, ibdRunning: false},
+		{name: "lagging, no IBD", notNearlySynced: true, ibdRunning: false},
+		{name: "lagging, IBD running", notNearlySynced: true, ibdRunning: true},
+		{name: "nearly synced during IBD", notNearlySynced: false, ibdRunning: true},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			consensusConfig := &consensus.Config{Params: dagconfig.SimnetParams}
 			factory := consensus.NewFactory()
-			tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestHandleRelayedTransactionsSyncGating")
+			tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestHandleRelayedTransactionsAlwaysFetches")
 			if err != nil {
 				t.Fatalf("Error setting up test consensus: %+v", err)
 			}
@@ -271,10 +269,6 @@ func TestHandleRelayedTransactionsSyncGating(t *testing.T) {
 				[]*externalapi.DomainTransactionID{txID})); err != nil {
 				t.Fatalf("Unexpected error from incomingRoute.Enqueue: %v", err)
 			}
-			// Terminates the flow's loop once the inv above has been handled.
-			if err := incomingRoute.Enqueue(&appmessage.MsgAddresses{}); err != nil {
-				t.Fatalf("Unexpected error from incomingRoute.Enqueue: %v", err)
-			}
 
 			done := make(chan struct{})
 			go func() {
@@ -282,24 +276,20 @@ func TestHandleRelayedTransactionsSyncGating(t *testing.T) {
 				_ = transactionrelay.HandleRelayedTransactions(context, incomingRoute, outgoingRoute)
 			}()
 
-			_, err = outgoingRoute.DequeueWithTimeout(2 * time.Second)
-			gotRequest := err == nil
-
-			if gotRequest != test.wantRequest {
-				t.Fatalf("notNearlySynced=%t ibdRunning=%t: requested transactions = %t, want %t",
-					test.notNearlySynced, test.ibdRunning, gotRequest, test.wantRequest)
+			msg, err := outgoingRoute.DequeueWithTimeout(5 * time.Second)
+			if err != nil {
+				t.Fatalf("notNearlySynced=%t ibdRunning=%t: expected the transaction to be requested "+
+					"from the peer, but nothing was sent: %v", test.notNearlySynced, test.ibdRunning, err)
+			}
+			request, ok := msg.(*appmessage.MsgRequestTransactions)
+			if !ok {
+				t.Fatalf("expected a MsgRequestTransactions, got %s", msg.Command())
+			}
+			if len(request.IDs) != 1 || !request.IDs[0].Equal(txID) {
+				t.Fatalf("expected a request for %s, got %v", txID, request.IDs)
 			}
 
-			if !test.wantRequest {
-				// The flow is parked waiting for the node to become ready, still holding the inv rather
-				// than having discarded it. Closing the route is what releases it - which also pins that
-				// a peer going away while relay is suspended does not leak the flow goroutine.
-				if length := incomingRoute.Length(); length == 0 {
-					t.Fatalf("expected the held inv to still be queued on the incoming route, got an empty route")
-				}
-				incomingRoute.Close()
-			}
-
+			incomingRoute.Close()
 			select {
 			case <-done:
 			case <-time.After(10 * time.Second):
