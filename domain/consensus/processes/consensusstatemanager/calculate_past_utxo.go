@@ -406,9 +406,18 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	// UTXOEntries this transaction creates - see the comment at the call site in applyMergeSetBlocks.
 	err = accumulatedUTXODiff.AddTransaction(transaction, creatingBlockDAAScore)
 	if err != nil {
-		log.Debugf("[UTXO-DEBUG] Failed to add transaction %s in block %s to accumulated diff: %s",
-			transactionID, blockHash, err)
-		return false, 0, nil
+		// Do NOT swallow this into isAccepted=false: transaction was already validated above (or is
+		// the selected parent's coinbase), so a failure here is not a legitimate rejection - it's
+		// AddTransaction/addEntry/removeEntry finding an outpoint collision that shouldn't exist for a
+		// correctly-accepted transaction (e.g. the DAA-score-stamping inconsistency fixed in 96efc0d3d/
+		// 19fb5b15a, or unknown corruption). Worse, AddTransaction mutates accumulatedUTXODiff
+		// input-by-input and output-by-output with no rollback on a mid-way failure, so by the time it
+		// returns an error accumulatedUTXODiff may already hold a partial application of this
+		// transaction - continuing and merely marking it "not accepted" would silently persist that
+		// partial, inconsistent diff as this block's official acceptance data. Abort instead of writing
+		// corrupted acceptance data to disk.
+		return false, 0, errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
+			transactionID, blockHash)
 	}
 
 	if isCoinbase && transactionIDPtr != nil {

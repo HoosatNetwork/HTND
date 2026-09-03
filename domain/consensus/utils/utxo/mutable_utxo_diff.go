@@ -122,12 +122,59 @@ func utxoCollectionsEqual(a, b externalapi.UTXOCollection) bool {
 	return true
 }
 
+// utxoDiffUndoEntry captures a single outpoint's toAdd/toRemove state from immediately before a
+// mutation, so AddTransaction can restore it if a later step in the same call fails.
+type utxoDiffUndoEntry struct {
+	outpoint      externalapi.DomainOutpoint
+	hadToAdd      bool
+	toAddEntry    externalapi.UTXOEntry
+	hadToRemove   bool
+	toRemoveEntry externalapi.UTXOEntry
+}
+
+func (mud *mutableUTXODiff) snapshot(outpoint *externalapi.DomainOutpoint) utxoDiffUndoEntry {
+	u := utxoDiffUndoEntry{outpoint: *outpoint}
+	u.toAddEntry, u.hadToAdd = mud.toAdd.Get(outpoint)
+	u.toRemoveEntry, u.hadToRemove = mud.toRemove.Get(outpoint)
+	return u
+}
+
+func (mud *mutableUTXODiff) restore(u *utxoDiffUndoEntry) {
+	if u.hadToAdd {
+		mud.toAdd.add(&u.outpoint, u.toAddEntry)
+	} else {
+		mud.toAdd.remove(&u.outpoint)
+	}
+	if u.hadToRemove {
+		mud.toRemove.add(&u.outpoint, u.toRemoveEntry)
+	} else {
+		mud.toRemove.remove(&u.outpoint)
+	}
+}
+
+// AddTransaction applies transaction's inputs and outputs to the diff. It is atomic: addEntry and
+// removeEntry mutate toAdd/toRemove directly and have no rollback of their own, so without this,
+// a failure on e.g. the transaction's third output would leave its first two outputs (and all of
+// its already-removed inputs) applied to the diff while the transaction as a whole is treated as
+// not accepted by the caller - silently persisting a partial application under an "unaccepted"
+// label. Every outpoint is snapshotted immediately before it's touched, in call order, and on any
+// error every snapshot taken so far is restored in reverse (LIFO) order, undoing exactly the
+// mutations this call made and leaving the diff exactly as it was found.
 func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransaction, blockDAAScore uint64) error {
 	mud.invalidateImmutableReferences()
 
+	var undoLog []utxoDiffUndoEntry
+	rollback := func() {
+		for i := len(undoLog) - 1; i >= 0; i-- {
+			mud.restore(&undoLog[i])
+		}
+	}
+
 	for _, input := range transaction.Inputs {
+		undoLog = append(undoLog, mud.snapshot(&input.PreviousOutpoint))
 		err := mud.removeEntry(&input.PreviousOutpoint, input.UTXOEntry)
 		if err != nil {
+			rollback()
 			return err
 		}
 	}
@@ -136,6 +183,7 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 	transactionID := *consensushashing.TransactionID(transaction)
 	for i, output := range transaction.Outputs {
 		if i < 0 || i > math.MaxUint32 {
+			rollback()
 			return errors.Errorf("output index %d cannot be represented as uint32", i)
 		}
 		outpoint := &externalapi.DomainOutpoint{
@@ -144,8 +192,10 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 		}
 		entry := NewUTXOEntry(output.Value, output.ScriptPublicKey, isCoinbase, blockDAAScore)
 
+		undoLog = append(undoLog, mud.snapshot(outpoint))
 		err := mud.addEntry(outpoint, entry)
 		if err != nil {
+			rollback()
 			return err
 		}
 	}
