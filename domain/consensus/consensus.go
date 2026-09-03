@@ -15,6 +15,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/pkg/errors"
@@ -27,7 +28,11 @@ type consensus struct {
 	genesisBlock *externalapi.DomainBlock
 	genesisHash  *externalapi.DomainHash
 
-	expectedDAAWindowDurationInMilliseconds int64
+	// targetTimePerBlock and difficultyAdjustmentWindowSize are kept as the raw per-block-version
+	// tables rather than a single precomputed window, because the active block version is not known
+	// when the consensus is constructed - see expectedDAAWindowDurationInMilliseconds.
+	targetTimePerBlock             []time.Duration
+	difficultyAdjustmentWindowSize []int
 
 	blockProcessor        model.BlockProcessor
 	blockBuilder          model.BlockBuilder
@@ -1395,6 +1400,44 @@ func (s *consensus) IsNearlySynced() (bool, error) {
 	return s.isNearlySyncedNoLock()
 }
 
+// expectedDAAWindowDurationInMilliseconds returns how far behind the wall clock this node's selected
+// tip may fall before it stops considering itself nearly synced.
+//
+// This is computed per call, from the block version that is active NOW. It used to be computed once
+// in the factory, from constants.GetBlockVersion() at construction time - but blockVersion is a
+// process-global atomic that starts at 1 and is only raised later, at runtime, as blocks arrive
+// (blockrelay's ibd.go and handle_relay_invs.go). Nothing ever recomputed it.
+//
+// The result was that the window depended on when the consensus object happened to be built. A
+// consensus constructed at startup (domain.New) saw version 1 and got the v1 table's
+// 1s x 2641 = ~44 minutes; a staging consensus constructed mid-run during a pruning-point IBD
+// (domain.InitStagingConsensus) saw version 6 and got 200ms x 2640 = ~8.8 minutes. Two nodes on the
+// same binary and the same chain therefore used different thresholds, and since transaction relay is
+// switched off entirely while a node is not nearly synced, the node with the shorter window silently
+// stopped relaying transactions whenever its virtual lagged by more than that - while its peers
+// carried on. Same input, different answer per node, which is the worst property this predicate can
+// have.
+func (s *consensus) expectedDAAWindowDurationInMilliseconds() int64 {
+	index := int(constants.GetBlockVersion()) - 1
+	if index < 0 {
+		index = 0
+	}
+	// Clamp rather than panic: SetBlockVersion is a one-way ratchet driven by relayed blocks, so a
+	// version beyond the tables is reachable from the network, and an index panic here would take
+	// down a node over a peer-supplied value.
+	if index >= len(s.targetTimePerBlock) {
+		index = len(s.targetTimePerBlock) - 1
+	}
+	windowIndex := index
+	if windowIndex >= len(s.difficultyAdjustmentWindowSize) {
+		windowIndex = len(s.difficultyAdjustmentWindowSize) - 1
+	}
+	if index < 0 || windowIndex < 0 {
+		return 0
+	}
+	return s.targetTimePerBlock[index].Milliseconds() * int64(s.difficultyAdjustmentWindowSize[windowIndex])
+}
+
 func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 	stagingArea := model.NewStagingArea()
 	virtualGHOSTDAGData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, model.VirtualBlockHash, false)
@@ -1412,16 +1455,17 @@ func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 	}
 
 	now := mstime.Now().UnixMilliseconds()
+	expectedDAAWindowDurationInMilliseconds := s.expectedDAAWindowDurationInMilliseconds()
 	// As a heuristic, we allow the node to mine if he is likely to be within the current DAA window of fully synced nodes.
 	// Such blocks contribute to security by maintaining the current difficulty despite possibly being slightly out of sync.
-	if now-virtualSelectedParentHeader.TimeInMilliseconds() < s.expectedDAAWindowDurationInMilliseconds {
+	if now-virtualSelectedParentHeader.TimeInMilliseconds() < expectedDAAWindowDurationInMilliseconds {
 		log.Debugf("The selected tip timestamp is recent (%d), current (%d), as limit (%d) so IsNearlySynced returns true",
-			virtualSelectedParentHeader.TimeInMilliseconds(), now, s.expectedDAAWindowDurationInMilliseconds)
+			virtualSelectedParentHeader.TimeInMilliseconds(), now, expectedDAAWindowDurationInMilliseconds)
 		return true, nil
 	}
 
 	log.Debugf("The selected tip timestamp is old (%d), current (%d), as limit (%d) so IsNearlySynced returns false",
-		virtualSelectedParentHeader.TimeInMilliseconds(), now, s.expectedDAAWindowDurationInMilliseconds)
+		virtualSelectedParentHeader.TimeInMilliseconds(), now, expectedDAAWindowDurationInMilliseconds)
 	return false, nil
 }
 

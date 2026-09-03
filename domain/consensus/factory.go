@@ -544,7 +544,12 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		genesisBlock:    config.GenesisBlock,
 		genesisHash:     config.GenesisHash,
 
-		expectedDAAWindowDurationInMilliseconds: config.TargetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds() * int64(config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]),
+		// Kept as the raw per-version tables. Do NOT precompute a single window here: the active block
+		// version is not yet known at construction time (constants.GetBlockVersion() is still 1 for a
+		// consensus built at startup, and already 6 for a staging consensus built mid-IBD), and nothing
+		// would ever recompute it. See consensus.expectedDAAWindowDurationInMilliseconds.
+		targetTimePerBlock:             config.TargetTimePerBlock,
+		difficultyAdjustmentWindowSize: config.DifficultyAdjustmentWindowSize,
 
 		blockProcessor:        blockProcessor,
 		blockBuilder:          blockBuilder,
