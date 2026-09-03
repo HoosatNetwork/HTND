@@ -126,6 +126,7 @@ func (d *Deriver) WalkRange(lowHash, highHash *externalapi.DomainHash,
 			return errors.Wrapf(err, "utxoderive: no header for chain block %s", chainBlockHash)
 		}
 
+		d.currentChainIndex = d.report.ChainBlocks
 		derivedAcceptedIDMerkleRoot, err := d.applyChainBlock(chainBlockHash, header.Version())
 		if err != nil {
 			d.report.StoppedAt = chainBlockHash
@@ -198,6 +199,26 @@ func (d *Deriver) classifyMissingInputs() {
 		failedSpenders[missing.TransactionID] = struct{}{}
 	}
 
+	// A transaction can legitimately be read from more than one merge-set block. The first
+	// occurrence spends its inputs; every later one then finds them already gone, and consensus
+	// simply marks it unaccepted. Those are not missing coins, and counting them as such
+	// over-reported this by roughly half on real data - so they are removed before anything else
+	// is computed, not merely noted afterwards.
+	realMissing := make([]MissingInput, 0, len(d.report.MissingInputs))
+	for _, missing := range d.report.MissingInputs {
+		if d.seenCount[missing.TransactionID] > 1 {
+			d.report.DuplicateSpendOccurrences++
+			continue
+		}
+		realMissing = append(realMissing, missing)
+	}
+	d.report.MissingInputs = realMissing
+
+	failedSpenders = make(map[externalapi.DomainTransactionID]struct{}, len(realMissing))
+	for _, missing := range realMissing {
+		failedSpenders[missing.TransactionID] = struct{}{}
+	}
+
 	seenRoot := make(map[externalapi.DomainOutpoint]struct{})
 	for _, missing := range d.report.MissingInputs {
 		if _, isCascade := failedSpenders[missing.Outpoint.TransactionID]; isCascade {
@@ -209,8 +230,21 @@ func (d *Deriver) classifyMissingInputs() {
 		seenRoot[missing.Outpoint] = struct{}{}
 		d.report.RootMissingInputs = append(d.report.RootMissingInputs, missing)
 
-		if _, created := d.seenTransactionIDs[missing.Outpoint.TransactionID]; created {
+		if createdAt, created := d.seenTransactionIDs[missing.Outpoint.TransactionID]; created {
 			d.report.RootsCreatedInReplayedRange++
+			if createdAt > missing.ChainBlockIndex {
+				d.report.RootsCreatedAfterSpend++
+			} else {
+				d.report.RootsCreatedBeforeSpend++
+				creator := missing.Outpoint.TransactionID
+				if _, accepted := d.acceptedTransactionIDs[creator]; !accepted {
+					d.report.RootsCreatorNeverAccepted++
+				} else if d.seenCount[creator] > 1 {
+					d.report.RootsCreatorSeenTwice++
+				} else {
+					d.report.RootsCreatorAcceptedOnce++
+				}
+			}
 		} else {
 			d.report.RootsPredatingPruningPoint++
 		}
@@ -263,7 +297,11 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash, blockV
 		}
 
 		for j, transaction := range mergeSetBlock.Transactions {
-			d.seenTransactionIDs[*consensushashing.TransactionID(transaction)] = struct{}{}
+			transactionID := *consensushashing.TransactionID(transaction)
+			if _, already := d.seenTransactionIDs[transactionID]; !already {
+				d.seenTransactionIDs[transactionID] = d.currentChainIndex
+			}
+			d.seenCount[transactionID]++
 
 			accepted, err := d.isAccepted(transaction, isSelectedParent, chainBlockHash, mergeSetBlockHash)
 			if err != nil {
@@ -276,6 +314,7 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash, blockV
 			if !accepted {
 				continue
 			}
+			d.acceptedTransactionIDs[transactionID] = struct{}{}
 			if err := d.applyTransaction(transaction, creatingBlockDAAScore); err != nil {
 				return nil, errors.Wrapf(err, "utxoderive: applying transaction from merge-set block %s of "+
 					"chain block %s", mergeSetBlockHash, chainBlockHash)
@@ -351,10 +390,11 @@ func (d *Deriver) recordMissingInput(transaction *externalapi.DomainTransaction,
 ) {
 	transactionID := consensushashing.TransactionID(transaction)
 	d.report.MissingInputs = append(d.report.MissingInputs, MissingInput{
-		Outpoint:      input.PreviousOutpoint,
-		TransactionID: *transactionID,
-		InBlock:       mergeSetBlockHash,
-		ChainBlock:    chainBlockHash,
+		Outpoint:        input.PreviousOutpoint,
+		TransactionID:   *transactionID,
+		InBlock:         mergeSetBlockHash,
+		ChainBlock:      chainBlockHash,
+		ChainBlockIndex: d.currentChainIndex,
 	})
 	log.Errorf("[C1-MISSING-INPUT] outpoint=%s:%d spentBy=%s inBlock=%s chainBlock=%s - the served "+
 		"pruning-point set does not contain a coin the chain spends here",

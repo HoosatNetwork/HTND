@@ -324,8 +324,9 @@ func printSeededModeConclusion(report *utxoderive.Report) {
 		acceptanceBroke = "YES"
 	}
 	fmt.Printf("  acceptance diverged from the network : %s\n", acceptanceBroke)
-	fmt.Printf("  outpoints the served set was missing : %d occurrences, %d roots\n",
-		len(report.MissingInputs), len(report.RootMissingInputs))
+	fmt.Printf("  benign duplicate-transaction re-spends, discarded : %d\n", report.DuplicateSpendOccurrences)
+	fmt.Printf("  real missing-input occurrences                    : %d\n", len(report.MissingInputs))
+	fmt.Printf("  root missing coins (cascade removed)              : %d\n", len(report.RootMissingInputs))
 	fmt.Println()
 	fmt.Println("  where the root missing coins came from:")
 	fmt.Printf("    created BELOW the pruning point (the export should have carried them) : %d\n",
@@ -333,8 +334,16 @@ func printSeededModeConclusion(report *utxoderive.Report) {
 	fmt.Printf("    created INSIDE the replayed range (the export is not to blame)        : %d\n",
 		report.RootsCreatedInReplayedRange)
 	if report.RootsCreatedInReplayedRange > 0 {
-		fmt.Println("    ^ these were produced by blocks this walk replayed, so a snapshot cannot")
-		fmt.Println("      explain them - either acceptance or this replay failed to create them.")
+		fmt.Printf("      of those, creating tx seen AFTER the spend (walk-ordering fault) : %d\n",
+			report.RootsCreatedAfterSpend)
+		fmt.Printf("      of those, creating tx seen BEFORE the spend                      : %d\n",
+			report.RootsCreatedBeforeSpend)
+		fmt.Printf("        creating tx was never accepted, so the coin never existed here : %d\n",
+			report.RootsCreatorNeverAccepted)
+		fmt.Printf("        creating tx ID appeared more than once (duplicate transaction)  : %d\n",
+			report.RootsCreatorSeenTwice)
+		fmt.Printf("        creating tx accepted exactly once, coin genuinely lost          : %d\n",
+			report.RootsCreatorAcceptedOnce)
 	}
 
 	if len(report.MissingInputs) > 0 {

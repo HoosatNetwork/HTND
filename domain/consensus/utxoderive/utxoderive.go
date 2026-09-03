@@ -65,10 +65,22 @@ type Deriver struct {
 	stopOnMismatch bool
 	report         *Report
 
-	// seenTransactionIDs is every transaction this walk read out of a block body, accepted or
-	// not. It is what lets a missing coin be attributed either to the export or to the replayed
-	// range, which is the difference between a snapshot problem and a code problem.
-	seenTransactionIDs map[externalapi.DomainTransactionID]struct{}
+	// seenTransactionIDs maps every transaction this walk read out of a block body, accepted or
+	// not, to the index of the chain block it was read under. The index is what separates "the
+	// coin was created after the spend that needed it", which is a walk-ordering fault, from
+	// "the coin was created before and then lost", which is an accounting fault.
+	seenTransactionIDs map[externalapi.DomainTransactionID]uint64
+
+	// currentChainIndex is the position of the chain block being applied, used to stamp the two
+	// indexes above.
+	currentChainIndex uint64
+
+	// seenCount and acceptedTransactionIDs answer the question "seen" alone cannot: a transaction
+	// can be read out of a block body and never accepted, and a transaction ID can legitimately
+	// appear more than once (this chain has byte-identical coinbases - see isTolerableConflict in
+	// the diff algebra). Both change what a missing coin means.
+	seenCount              map[externalapi.DomainTransactionID]uint64
+	acceptedTransactionIDs map[externalapi.DomainTransactionID]struct{}
 
 	// seeded records that the walk did NOT start from an empty MuHash at genesis, but from a
 	// pruning-point UTXO set this node happened to have. Everything downstream is then relative
@@ -87,13 +99,15 @@ func New(stores Stores, genesisHash *externalapi.DomainHash, stopOnMismatch bool
 		return nil, errors.Errorf("utxoderive: genesis hash is required")
 	}
 	return &Deriver{
-		stores:             stores,
-		genesisHash:        genesisHash,
-		utxos:              make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry),
-		seenTransactionIDs: make(map[externalapi.DomainTransactionID]struct{}),
-		ms:                 multiset.New(),
-		stopOnMismatch:     stopOnMismatch,
-		report:             &Report{},
+		stores:                 stores,
+		genesisHash:            genesisHash,
+		utxos:                  make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry),
+		seenTransactionIDs:     make(map[externalapi.DomainTransactionID]uint64),
+		seenCount:              make(map[externalapi.DomainTransactionID]uint64),
+		acceptedTransactionIDs: make(map[externalapi.DomainTransactionID]struct{}),
+		ms:                     multiset.New(),
+		stopOnMismatch:         stopOnMismatch,
+		report:                 &Report{},
 	}, nil
 }
 
@@ -153,6 +167,27 @@ type Report struct {
 	RootsCreatedInReplayedRange uint64
 	RootsPredatingPruningPoint  uint64
 
+	// Of the roots created inside the replayed range, these split the two possible causes.
+	// CreatedAfterSpend means the walk processed the creating transaction only after the spend
+	// that needed it - an ordering fault in the walk itself, not in the node under examination.
+	// CreatedBeforeSpend means the coin was produced and then lost, which is an accounting fault.
+	RootsCreatedAfterSpend  uint64
+	RootsCreatedBeforeSpend uint64
+
+	// Further breakdown of RootsCreatedBeforeSpend, which is where the remaining unexplained
+	// losses sit. A creating transaction that was never accepted cannot have produced the coin at
+	// all; a transaction ID seen more than once means two blocks carried the same transaction, so
+	// one outpoint-keyed entry stands for two creations and the first spend removes both.
+	RootsCreatorNeverAccepted uint64
+	RootsCreatorSeenTwice     uint64
+	RootsCreatorAcceptedOnce  uint64
+
+	// DuplicateSpendOccurrences counts missing-input reports whose SPENDING transaction was read
+	// from more than one merge-set block. The second occurrence of a duplicated transaction
+	// legitimately finds its inputs already spent by the first, and consensus simply marks it
+	// unaccepted - so these are not lost coins and must not be counted as such.
+	DuplicateSpendOccurrences uint64
+
 	// MissingInputs names outpoints a transaction tried to spend that the seed did not contain.
 	// On a pruned-node run this is the highest-value output: it is the list of coins the served
 	// pruning-point set is missing, in the order the chain needed them.
@@ -165,6 +200,10 @@ type MissingInput struct {
 	TransactionID externalapi.DomainTransactionID
 	InBlock       *externalapi.DomainHash
 	ChainBlock    *externalapi.DomainHash
+
+	// ChainBlockIndex is where in the walk the spend happened, so it can be compared with where
+	// the missing coin's creating transaction was seen.
+	ChainBlockIndex uint64
 }
 
 // Checkpoint is one block's comparison: what the header committed to versus what replaying every
