@@ -189,7 +189,36 @@ func (d *Deriver) WalkRange(lowHash, highHash *externalapi.DomainHash,
 	return nil
 }
 
+// classifyMissingInputs splits the raw missing-input list into roots and cascade, then
+// attributes each root either to the export or to the replayed range. See the field comments on
+// Report for why the raw count is misleading on its own.
+func (d *Deriver) classifyMissingInputs() {
+	failedSpenders := make(map[externalapi.DomainTransactionID]struct{}, len(d.report.MissingInputs))
+	for _, missing := range d.report.MissingInputs {
+		failedSpenders[missing.TransactionID] = struct{}{}
+	}
+
+	seenRoot := make(map[externalapi.DomainOutpoint]struct{})
+	for _, missing := range d.report.MissingInputs {
+		if _, isCascade := failedSpenders[missing.Outpoint.TransactionID]; isCascade {
+			continue
+		}
+		if _, already := seenRoot[missing.Outpoint]; already {
+			continue
+		}
+		seenRoot[missing.Outpoint] = struct{}{}
+		d.report.RootMissingInputs = append(d.report.RootMissingInputs, missing)
+
+		if _, created := d.seenTransactionIDs[missing.Outpoint.TransactionID]; created {
+			d.report.RootsCreatedInReplayedRange++
+		} else {
+			d.report.RootsPredatingPruningPoint++
+		}
+	}
+}
+
 func (d *Deriver) finishReport() {
+	d.classifyMissingInputs()
 	var sum uint64
 	for _, entry := range d.utxos {
 		sum += entry.Amount()
@@ -234,6 +263,8 @@ func (d *Deriver) applyChainBlock(chainBlockHash *externalapi.DomainHash, blockV
 		}
 
 		for j, transaction := range mergeSetBlock.Transactions {
+			d.seenTransactionIDs[*consensushashing.TransactionID(transaction)] = struct{}{}
+
 			accepted, err := d.isAccepted(transaction, isSelectedParent, chainBlockHash, mergeSetBlockHash)
 			if err != nil {
 				return nil, err

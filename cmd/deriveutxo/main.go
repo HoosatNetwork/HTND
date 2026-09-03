@@ -324,13 +324,24 @@ func printSeededModeConclusion(report *utxoderive.Report) {
 		acceptanceBroke = "YES"
 	}
 	fmt.Printf("  acceptance diverged from the network : %s\n", acceptanceBroke)
-	fmt.Printf("  outpoints the served set was missing : %d\n", len(report.MissingInputs))
+	fmt.Printf("  outpoints the served set was missing : %d occurrences, %d roots\n",
+		len(report.MissingInputs), len(report.RootMissingInputs))
+	fmt.Println()
+	fmt.Println("  where the root missing coins came from:")
+	fmt.Printf("    created BELOW the pruning point (the export should have carried them) : %d\n",
+		report.RootsPredatingPruningPoint)
+	fmt.Printf("    created INSIDE the replayed range (the export is not to blame)        : %d\n",
+		report.RootsCreatedInReplayedRange)
+	if report.RootsCreatedInReplayedRange > 0 {
+		fmt.Println("    ^ these were produced by blocks this walk replayed, so a snapshot cannot")
+		fmt.Println("      explain them - either acceptance or this replay failed to create them.")
+	}
 
 	if len(report.MissingInputs) > 0 {
-		fmt.Println("\nmissing outpoints (the coins this node's pruning-point export lacks):")
-		for i, missing := range report.MissingInputs {
+		fmt.Println("\nroot missing outpoints (cascade removed):")
+		for i, missing := range report.RootMissingInputs {
 			if i >= 50 {
-				fmt.Printf("  ... and %d more\n", len(report.MissingInputs)-50)
+				fmt.Printf("  ... and %d more\n", len(report.RootMissingInputs)-50)
 				break
 			}
 			fmt.Printf("  %s:%d spentBy=%s inBlock=%s\n",

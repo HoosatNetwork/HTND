@@ -65,6 +65,11 @@ type Deriver struct {
 	stopOnMismatch bool
 	report         *Report
 
+	// seenTransactionIDs is every transaction this walk read out of a block body, accepted or
+	// not. It is what lets a missing coin be attributed either to the export or to the replayed
+	// range, which is the difference between a snapshot problem and a code problem.
+	seenTransactionIDs map[externalapi.DomainTransactionID]struct{}
+
 	// seeded records that the walk did NOT start from an empty MuHash at genesis, but from a
 	// pruning-point UTXO set this node happened to have. Everything downstream is then relative
 	// to a starting point nobody has verified, which changes what the results mean - see
@@ -82,12 +87,13 @@ func New(stores Stores, genesisHash *externalapi.DomainHash, stopOnMismatch bool
 		return nil, errors.Errorf("utxoderive: genesis hash is required")
 	}
 	return &Deriver{
-		stores:         stores,
-		genesisHash:    genesisHash,
-		utxos:          make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry),
-		ms:             multiset.New(),
-		stopOnMismatch: stopOnMismatch,
-		report:         &Report{},
+		stores:             stores,
+		genesisHash:        genesisHash,
+		utxos:              make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry),
+		seenTransactionIDs: make(map[externalapi.DomainTransactionID]struct{}),
+		ms:                 multiset.New(),
+		stopOnMismatch:     stopOnMismatch,
+		report:             &Report{},
 	}, nil
 }
 
@@ -129,6 +135,23 @@ type Report struct {
 	SeedHeaderCommitment *externalapi.DomainHash
 	SeedEntries          uint64
 	SeedMatchesHeader    bool
+
+	// RootMissingInputs is MissingInputs with the cascade removed: a coin only counts as a root
+	// if the transaction that would have created it is not itself a transaction this replay
+	// failed to accept. A spend of a missing coin creates nothing, so the next spend down the
+	// chain also comes up empty - counting those as separate losses roughly doubles the number
+	// and points at the wrong place.
+	RootMissingInputs []MissingInput
+
+	// RootsCreatedInReplayedRange counts root missing coins whose creating transaction WAS seen
+	// in a block this walk replayed. Those cannot be blamed on the export: the coin should have
+	// been produced by a block above the pruning point and was not, which is a fault in
+	// acceptance or in this replay, not in the snapshot.
+	//
+	// The complement - roots whose creating transaction was never seen - are coins created below
+	// the pruning point, which the export was supposed to carry and did not.
+	RootsCreatedInReplayedRange uint64
+	RootsPredatingPruningPoint  uint64
 
 	// MissingInputs names outpoints a transaction tried to spend that the seed did not contain.
 	// On a pruned-node run this is the highest-value output: it is the list of coins the served
