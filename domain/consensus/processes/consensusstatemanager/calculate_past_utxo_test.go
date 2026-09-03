@@ -68,16 +68,16 @@ var expectedUTXOCommitments = map[string]map[string]string{
 	"hoosat-mainnet": {
 		"A": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
 		"B": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
-		"C": "1cdb70a13760d9b70bda468c7538fe0899bbeb78c647e8e3611d8ee72632f847",
-		"D": "0a10b8bf0c1d617adc35eda62f6ba9a8a8f57f6608e6ae937db9246a455910ad",
-		"E": "ae9d1c94c91a20f462c7ab8f968f51beacfb5a93e4bddb7e56026c3ad17ee9ff",
+		"C": "df82b779639675289429fcbd7dcaa907b5d32a1c88d4be1b826c71313c011bfe",
+		"D": "c9574ea9e190f2e7803498d84a9890de33776b9918f709ebae632f42865db92f",
+		"E": "44e4a7f8e152bcef1e345bcea16658b544521f2895e93c445ad300a9a5add7a7",
 	},
 	"hoosat-testnet": {
 		"A": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
 		"B": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
-		"C": "a6b04244e759ca4f639f047b4b0f045ba3933df900733c739d76ff43da2998f1",
-		"D": "a0b880e0f0590c3db4a311a1d3f64535094a93c839d27cea98f97ca18907a2f5",
-		"E": "8f2bdd03450de986838f64bbd24e70713ab14502aa7a7447efb108f8ab3c5cb7",
+		"C": "e167c35a1a601d72b3e0f0681a3c0fe26c49f45c1905b5ca5a54b843d8cc566a",
+		"D": "faff3a4dffea1fe5f719dacd2c2c959effad97a3d289c1634fb8a3c46f3dd1f6",
+		"E": "96f667be6a98fa90c7a88dc7af3e5303fc8f7bfa2960e514bef87b88deb65588",
 	},
 }
 

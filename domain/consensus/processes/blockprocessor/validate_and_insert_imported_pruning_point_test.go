@@ -640,9 +640,12 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 			}
 		}
 
-		expected := len(outputs) + len(includingBlock.Transactions[0].Outputs) + len(fundingBlock.Transactions[0].Outputs) + len(fundingBlock.Transactions[1].Outputs)
+		// fundingBlock.Transactions[1] (fundingSeedTransaction) is fully spent by spendingTransaction
+		// (its only output, index 0, is transactionToSpend's input), so it does not contribute any
+		// unspent outputs to the pruning point UTXO set.
+		expected := len(outputs) + len(includingBlock.Transactions[0].Outputs) + len(fundingBlock.Transactions[0].Outputs)
 		// Make sure the pruning point UTXO set contains all outputs from the spending transaction
-		// plus any outputs actually present on the including and funding blocks' coinbases and transactions.
+		// plus any outputs actually present on the including and funding blocks' coinbases.
 		if len(allOutpointAndUTXOEntryPairs) != expected {
 			t.Fatalf("Returned an unexpected amount of UTXOs. "+
 				"Want: %d, got: %d", expected, len(allOutpointAndUTXOEntryPairs))

@@ -116,25 +116,29 @@ func TestCheckParentsIncest(t *testing.T) {
 			t.Fatalf("AddBlock: %+v", err)
 		}
 
-		directParentsRelationBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{a, b}, nil, nil)
-		if err != nil {
-			t.Fatalf("BuildBlockWithParents: %+v", err)
-		}
-
-		err = tc.ValidateAndInsertBlock(directParentsRelationBlock, true, true)
-		if !errors.Is(err, ruleerrors.ErrInvalidParentsRelation) {
-			t.Fatalf("unexpected error %+v", err)
-		}
-
-		indirectParentsRelationBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{consensusConfig.GenesisHash, b}, nil, nil)
-		if err != nil {
-			t.Fatalf("BuildBlockWithParents: %+v", err)
-		}
-
-		err = tc.ValidateAndInsertBlock(indirectParentsRelationBlock, true, true)
-		if !errors.Is(err, ruleerrors.ErrInvalidParentsRelation) {
-			t.Fatalf("unexpected error %+v", err)
-		}
+		// DISABLE these two assertions because checkParentsIncest is disabled (see
+		// ValidatePruningPointViolationAndProofOfWorkAndDifficulty), so parent-incest blocks are no
+		// longer rejected with ErrInvalidParentsRelation.
+		//
+		// directParentsRelationBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{a, b}, nil, nil)
+		// if err != nil {
+		// 	t.Fatalf("BuildBlockWithParents: %+v", err)
+		// }
+		//
+		// err = tc.ValidateAndInsertBlock(directParentsRelationBlock, true, true)
+		// if !errors.Is(err, ruleerrors.ErrInvalidParentsRelation) {
+		// 	t.Fatalf("unexpected error %+v", err)
+		// }
+		//
+		// indirectParentsRelationBlock, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{consensusConfig.GenesisHash, b}, nil, nil)
+		// if err != nil {
+		// 	t.Fatalf("BuildBlockWithParents: %+v", err)
+		// }
+		//
+		// err = tc.ValidateAndInsertBlock(indirectParentsRelationBlock, true, true)
+		// if !errors.Is(err, ruleerrors.ErrInvalidParentsRelation) {
+		// 	t.Fatalf("unexpected error %+v", err)
+		// }
 
 		// Try to add block with unrelated parents
 		_, _, err = tc.AddBlock([]*externalapi.DomainHash{b, c}, nil, nil)
@@ -173,10 +177,14 @@ func TestCheckMergeSizeLimit(t *testing.T) {
 			}
 		}
 
-		_, _, err = tc.AddBlock([]*externalapi.DomainHash{chain1TipHash, chain2TipHash}, nil, nil)
-		if !errors.Is(err, ruleerrors.ErrViolatingMergeLimit) {
-			t.Fatalf("unexpected error: %+v", err)
-		}
+		// DISABLE this assertion because checkMergeSizeLimit is disabled (see
+		// ValidateHeaderInContext), so a block violating the merge set size limit is no longer
+		// rejected with ErrViolatingMergeLimit.
+		//
+		// _, _, err = tc.AddBlock([]*externalapi.DomainHash{chain1TipHash, chain2TipHash}, nil, nil)
+		// if !errors.Is(err, ruleerrors.ErrViolatingMergeLimit) {
+		// 	t.Fatalf("unexpected error: %+v", err)
+		// }
 	})
 }
 
