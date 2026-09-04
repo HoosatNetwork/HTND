@@ -16,6 +16,10 @@ type ConsensusStateManager interface {
 	RecoverUTXOIfRequired() error
 	ReverseUTXODiffs(tipHash *externalapi.DomainHash, reversalData *UTXODiffReversalData) error
 	ResolveVirtual(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error)
+	// RecomputeVirtual re-picks virtual's parents from the current tips and re-colors virtual from
+	// scratch. Used to repair a virtual whose stored GHOSTDAG data is unusable - see
+	// consensus.repairCollapsedVirtualIfRequired.
+	RecomputeVirtual() error
 	ValidateUTXODiffChildChains() error
 	ResolveBlockStatus(stagingArea *StagingArea, blockHash *externalapi.DomainHash, useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, *UTXODiffReversalData, error)
 	// ResolveBlockStatusCacheLen returns the number of entries in the ResolveBlockStatus cache

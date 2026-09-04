@@ -185,6 +185,44 @@ func (csm *consensusStateManager) getGHOSTDAGLowerTips(stagingArea *model.Stagin
 	return lowerTips, nil
 }
 
+// RecomputeVirtual re-picks virtual's parents from the current tips and re-colors virtual from
+// scratch, then commits.
+//
+// Virtual is only ever re-colored as a side effect of a block arriving (AddBlock -> updateVirtual) or
+// of an IBD run finishing (resolveVirtual). A node whose DAG has stopped moving therefore keeps
+// whatever GHOSTDAG data virtual was last stored with, forever - which is exactly the situation where
+// that data is most likely to be the thing that is wrong, and where nothing will ever fix it on its
+// own. This gives that repair an explicit trigger.
+//
+// It deliberately goes through pickVirtualParents rather than reusing virtual's existing parents:
+// re-coloring alone would leave a parent set that was chosen under the bad coloring in place, and
+// boundedMergeBreakingParents is precisely the filter that needs to run again over the corrected one.
+func (csm *consensusStateManager) RecomputeVirtual() error {
+	onEnd := logger.LogAndMeasureExecutionTime(log, "csm.RecomputeVirtual")
+	defer onEnd()
+
+	readStagingArea := model.NewStagingArea()
+	tips, err := csm.consensusStateStore.Tips(readStagingArea, csm.databaseContext)
+	if err != nil {
+		return err
+	}
+	log.Infof("Recomputing virtual from %d tips", len(tips))
+
+	virtualParents, err := csm.pickVirtualParents(readStagingArea, tips)
+	if err != nil {
+		return err
+	}
+	log.Infof("Recomputed virtual parents: %d of %d tips selected", len(virtualParents), len(tips))
+
+	updateVirtualStagingArea := model.NewStagingArea()
+	_, err = csm.updateVirtualWithParents(updateVirtualStagingArea, virtualParents)
+	if err != nil {
+		return err
+	}
+
+	return staging.CommitAllChanges(csm.databaseContext, updateVirtualStagingArea)
+}
+
 func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*externalapi.VirtualChangeSet, bool, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "csm.ResolveVirtual")
 	defer onEnd()

@@ -171,6 +171,16 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 		}
 	}
 
+	// Deliberately not fatal. This is a recovery path for an already-damaged database, and it also
+	// runs for the staging consensus built mid-IBD; a node that is merely stuck must never be turned
+	// into a node that refuses to start.
+	err = s.repairCollapsedVirtualIfRequired()
+	if err != nil {
+		log.Errorf("Failed to repair a virtual colored with dynamicK=0: %+v. The node will start, but "+
+			"until virtual is recolored it may build block templates whose merge depth root disagrees "+
+			"with the one validators apply, and have its own blocks rejected.", err)
+	}
+
 	// Start goroutine to display cache sizes every minute
 	if os.Getenv("HTND_PROFILER") != "" {
 		go s.displayCacheSizes()
@@ -184,6 +194,68 @@ func (s *consensus) Init(skipAddingGenesis bool) error {
 
 	// go s.periodicFreeOSMemory()
 
+	return nil
+}
+
+// repairCollapsedVirtualIfRequired re-colors virtual at startup when its stored GHOSTDAG data was
+// written with a K of zero.
+//
+// A stored dynamicK of 0 is not a K anything computed - it is the zero value that GHOSTDAG used to
+// leave behind on its cached-K path, and virtual, being re-colored on every update while always
+// having stored data, was the one block that reliably hit it. Reading that 0 back as K makes
+// checkBlueCandidate's `len(mergeSetBlues) == k+1` fire on the first candidate, so only the selected
+// parent stays blue and virtual's blue score advances by exactly 1 per update however wide the DAG
+// is.
+//
+// The damage that surfaces is not the coloring but the merge depth root derived from it. A block
+// built on virtual's parents is colored independently by every validator (a fresh hash always misses
+// the cache, so it always gets a real K), so it has virtual's blue score plus the blues virtual
+// failed to count. Its requiredBlueScore is correspondingly higher, and its merge depth root can
+// therefore be one chain block NEWER than the root boundedMergeBreakingParents used when it approved
+// those same parents. Any branch that forked in the gap between the two roots passes the filter and
+// fails the validator: the node keeps mining blocks that it rejects itself, with no way out, because
+// virtual is only re-colored when a block arrives and no block can be accepted.
+//
+// So the repair cannot wait for the next block. Guarded on the poison marker so a healthy node does
+// no startup work.
+func (s *consensus) repairCollapsedVirtualIfRequired() error {
+	stagingArea := model.NewStagingArea()
+
+	virtualGHOSTDAGData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, model.VirtualBlockHash, false)
+	if err != nil {
+		if database.IsNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	if virtualGHOSTDAGData.DynamicK() != 0 {
+		return nil
+	}
+
+	virtualParents, err := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
+	if err != nil {
+		if database.IsNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	// With a single parent the collapse has no observable effect: there is nothing to merge, so the
+	// blue score is right either way and the parent set cannot be over-permissive.
+	if len(virtualParents) < 2 {
+		return nil
+	}
+
+	log.Warnf("Virtual's stored GHOSTDAG data has dynamicK=0 across %d parents, which means it was "+
+		"colored with a K that lets nothing but the selected parent be blue. Recomputing virtual so "+
+		"its blue score, and the merge depth root derived from it, agree with what a block built on "+
+		"these parents will be validated against.", len(virtualParents))
+
+	err = s.consensusStateManager.RecomputeVirtual()
+	if err != nil {
+		return errors.Wrap(err, "failed to recompute a virtual that was colored with dynamicK=0")
+	}
+
+	log.Infof("Virtual recomputed successfully")
 	return nil
 }
 

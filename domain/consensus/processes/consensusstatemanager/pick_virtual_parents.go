@@ -101,8 +101,15 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	if err != nil {
 		return nil, err
 	}
-	log.Tracef("The following parents are omitted for "+
-		"breaking the bounded merge set: %s", boundedMergeBreakingParents)
+	// At Info, not Trace: dropping a parent here is the node quietly declining to merge a branch that
+	// bounded merge depth would reject, which permanently orphans every block on it. That is the right
+	// call, but it is not a detail - when it fires repeatedly it is the only in-log evidence that a
+	// branch has been abandoned, and when it fails to fire the node mines blocks it then rejects
+	// itself with ErrViolatingBoundedMergeDepth and nothing says why.
+	if len(boundedMergeBreakingParents) > 0 {
+		log.Debugf("Omitting %d of %d candidate virtual parents for breaking the bounded merge set: %s",
+			len(boundedMergeBreakingParents), len(selectedVirtualParents), boundedMergeBreakingParents)
+	}
 
 	// Remove all boundedMergeBreakingParents from selectedVirtualParents
 	for _, breakingParent := range boundedMergeBreakingParents {

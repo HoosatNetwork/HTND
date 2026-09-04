@@ -117,3 +117,23 @@ const (
 	// KColouring is recursive and expensive, so limiting its input size is critical.
 	MaxKColouringSize = 100
 )
+
+// BlockVersionForDAAScore returns the block version that a block with the given DAA score is
+// expected to have, per powScores.
+//
+// Prefer this over the ambient GetBlockVersion() wherever a value is being derived FOR A SPECIFIC
+// BLOCK - a consensus parameter, a validation bound, a coloring input. blockVersion is a
+// process-global one-way ratchet that starts at 1 on every restart and only rises as blocks arrive,
+// so it reflects how long this process has been running and what it happened to see, not the
+// version that governs the block at hand. Indexing a per-version parameter table with it therefore
+// yields a different answer on a freshly restarted node than on one that has been up for a while,
+// for the very same block.
+func BlockVersionForDAAScore(powScores []uint64, daaScore uint64) uint16 {
+	var version uint16 = 1
+	for _, powScore := range powScores {
+		if daaScore >= powScore {
+			version++
+		}
+	}
+	return version
+}

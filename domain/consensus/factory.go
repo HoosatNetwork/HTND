@@ -312,6 +312,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		finalityManager,
 		genesisHash,
 		config.MergeDepth,
+		config.POWScores,
 		ghostdagDataStore,
 		mergeDepthRootStore,
 		daaBlocksStore,

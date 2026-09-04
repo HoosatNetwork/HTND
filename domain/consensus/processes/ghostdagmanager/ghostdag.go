@@ -66,21 +66,40 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 			// Genesis block uses default K
 			k = gm.k[constants.GetBlockVersion()-1]
 		} else {
-			blockGhostDagData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, blockHash, false)
+			k, err = gm.dynamicKForBlock(stagingArea, blockHash, blockParents)
 			if err != nil {
-				rank, err := gm.CalculateRank(stagingArea, blockParents, blockParents)
-				if err != nil {
-					return err
-				}
-				k = externalapi.KType(rank)
-				newBlockData.dynamicK = k
-			} else { // this skips about 50% of k being recalculated.
-				k = blockGhostDagData.DynamicK()
+				return err
 			}
 		}
 	} else {
 		k = gm.k[constants.GetBlockVersion()-1]
 	}
+
+	// Record the K this coloring actually used, on EVERY path.
+	//
+	// This assignment used to live inside the CalculateRank branch alone, so the three other paths
+	// (cached K, static K below block version 6, and genesis) each colored the block with a perfectly
+	// good k and then wrote the zero value back to the store. For a real block that is merely lossy:
+	// its parents are fixed at creation, so nothing recolors it. For virtual it is fatal. Virtual is
+	// recolored on every update and always has stored data by then, so it took the cached-K path,
+	// wrote dynamicK=0 over the correct value, and every call afterwards read that 0 back as its K.
+	// checkBlueCandidate returns early on `len(mergeSetBlues) == k+1`, so with k=0 it rejects the
+	// first candidate and nothing but the selected parent stays blue.
+	//
+	// The damage that surfaces is not the coloring itself but the merge depth root derived from it,
+	// and it is an off-by-one, which is why it stayed invisible for so long. Virtual's blue score is
+	// understated by exactly the blues it failed to count. A block built on virtual's parents is
+	// colored independently by every validator - a fresh hash always misses the cache, so it always
+	// gets a real K - and therefore carries the full blue score. Its requiredBlueScore is higher by
+	// that same difference, so its merge depth root can be one chain block NEWER than the root
+	// boundedMergeBreakingParents used when it approved those parents. A branch that forked in the gap
+	// between the two roots passes the filter and fails the validator, and the node mines blocks that
+	// it rejects itself with ErrViolatingBoundedMergeDepth.
+	//
+	// Observed on mainnet: virtual 1 blue -> blueScore 210687165 -> root at blue score 210683560,
+	// while the block it produced had 5 blues -> blueScore 210687169 -> root at 210683565. Every one
+	// of the 175 reds sat in that five-blue-score gap.
+	newBlockData.dynamicK = k
 
 	isGenesis := len(blockParents) == 0
 	if !isGenesis {
@@ -157,6 +176,39 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 	gm.ghostdagDataStore.Stage(stagingArea, blockHash, newBlockData.toModel(), false)
 
 	return nil
+}
+
+// dynamicKForBlock returns the DAGKnight K to color blockHash with.
+//
+// A stored K may only be reused for a real block, whose parent set is fixed the moment the block is
+// created. Virtual's parents are re-picked on every single update (pickVirtualParents, and again
+// inside boundedMergeBreakingParents, which sets them itself before running GHOSTDAG), so a K cached
+// under virtual's hash describes some earlier DAG, not the one being colored now - it is never
+// reusable and is always recomputed here.
+//
+// A stored K of 0 is likewise not reusable. It is not a K anyone computed: it is the zero value left
+// behind by the paths that used to skip assigning dynamicK, and adopting it collapses the coloring
+// so that only the selected parent can ever be blue. Treating it as absent lets a database that was
+// already poisoned repair itself on the next call, rather than requiring every node to resync.
+func (gm *ghostdagManager) dynamicKForBlock(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+	blockParents []*externalapi.DomainHash,
+) (externalapi.KType, error) {
+	if !blockHash.Equal(model.VirtualBlockHash) {
+		blockGHOSTDAGData, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, blockHash, false)
+		if err == nil && blockGHOSTDAGData.DynamicK() != 0 {
+			// this skips about 50% of k being recalculated.
+			return blockGHOSTDAGData.DynamicK(), nil
+		}
+		if err != nil && !database.IsNotFoundError(err) {
+			return 0, err
+		}
+	}
+
+	rank, err := gm.CalculateRank(stagingArea, blockParents, blockParents)
+	if err != nil {
+		return 0, err
+	}
+	return externalapi.KType(rank), nil
 }
 
 type chainBlockData struct {
