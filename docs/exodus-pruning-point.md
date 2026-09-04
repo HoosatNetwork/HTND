@@ -87,8 +87,8 @@ By block hash:
   --note "operator: alice, rationale: last known-good DAA score before the August stall"
 ```
 
-By DAA score (resolved by walking the selected parent chain from the tip; the node must have
-already synced past this DAA score):
+By DAA score (resolved by walking the selected parent chain from the tip; the requested score
+must fall between the node's local pruning point and its current tip):
 
 ```sh
 ./htnexodus create \
@@ -97,6 +97,12 @@ already synced past this DAA score):
   --daa-score 123456789 \
   --out ./candidate-2025-09
 ```
+
+If the requested DAA score is older than the node's local pruning point, `create` fails fast with
+a clear error naming the pruning point's own DAA score and hash, rather than walking all the way
+back and failing with a confusing low-level "block header does not exist" error once it reaches
+the pruning boundary (that history has been discarded locally and is simply not retrievable from
+this node - pick a more recent DAA score, or sync a node with a deeper retention window).
 
 This prints the computed UTXO set commitment and compares it against the target block's own
 header commitment as a sanity check (a mismatch is expected precisely in the cases this tooling

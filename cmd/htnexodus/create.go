@@ -115,16 +115,56 @@ func runCreate(args []string) error {
 // parent until it finds a block with the requested DAA score. DAA score is monotonically
 // non-decreasing along the selected parent chain, so this always terminates - either at the
 // requested score, or with a definitive "not found" once scores go below the target.
+//
+// Before walking, the requested score is bounds-checked against the node's own pruning point:
+// anything older than the pruning point is guaranteed not to be retained locally (its full block
+// data, and therefore its GHOSTDAG selected-parent chain, has been discarded). Without this check
+// the walk would instead run all the way down to the pruning point/its anticone - which, once
+// imported via the trusted pruning-point-proof IBD path, has its GHOSTDAG selected parent recorded
+// as a synthetic "virtual genesis" marker rather than a real, fetchable block header - and fail
+// with a confusing low-level "block header ...fefefe...fe does not exist" error instead of a clear
+// one.
 func resolveBlockByDAAScore(cs externalapi.Consensus, targetDAAScore uint64) (*externalapi.DomainHash, error) {
 	hash, err := cs.GetVirtualSelectedParent()
 	if err != nil {
 		return nil, err
 	}
 
+	tipHeader, err := cs.GetBlockHeader(hash)
+	if err != nil {
+		return nil, err
+	}
+	tipDAAScore := tipHeader.DAAScore()
+
+	pruningPointHash, err := cs.PruningPoint()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to fetch the local pruning point")
+	}
+	pruningPointHeader, err := cs.GetBlockHeader(pruningPointHash)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to fetch the local pruning point's header")
+	}
+	pruningPointDAAScore := pruningPointHeader.DAAScore()
+
+	if targetDAAScore > tipDAAScore {
+		return nil, errors.Errorf(
+			"requested DAA score %d is beyond the node's current tip (DAA score %d); the node has not "+
+				"synced that far yet", targetDAAScore, tipDAAScore)
+	}
+	if targetDAAScore < pruningPointDAAScore {
+		return nil, errors.Errorf(
+			"requested DAA score %d is older than the node's local pruning point (DAA score %d, hash %s); "+
+				"this history has been pruned and is no longer retained locally. Choose a DAA score between "+
+				"%d and %d (comfortably above the pruning point, to leave margin against it advancing before "+
+				"you can re-run this tool)", targetDAAScore, pruningPointDAAScore, pruningPointHash,
+			pruningPointDAAScore, tipDAAScore)
+	}
+
 	for {
 		header, err := cs.GetBlockHeader(hash)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to fetch header for %s while walking back from the tip "+
+				"toward DAA score %d", hash, targetDAAScore)
 		}
 		daaScore := header.DAAScore()
 		if daaScore == targetDAAScore {
@@ -143,6 +183,16 @@ func resolveBlockByDAAScore(cs externalapi.Consensus, targetDAAScore uint64) (*e
 		}
 		if info.SelectedParent == nil {
 			return nil, errors.Errorf("reached the start of the chain without finding DAA score %d", targetDAAScore)
+		}
+		if hash.Equal(pruningPointHash) {
+			// We already bounds-checked targetDAAScore against the pruning point above, so if we
+			// end up walking as far back as the pruning point itself without a match, the requested
+			// score falls in a gap the local selected chain skips right at the pruning boundary.
+			// Stop here with a clear message instead of following SelectedParent into the synthetic
+			// "virtual genesis" marker used for trusted, pruning-point-proof-imported GHOSTDAG data.
+			return nil, errors.Errorf(
+				"reached the local pruning point (%s, DAA score %d) without finding an exact match for "+
+					"DAA score %d; try a slightly different DAA score", hash, daaScore, targetDAAScore)
 		}
 		hash = info.SelectedParent
 	}
