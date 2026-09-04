@@ -1,8 +1,9 @@
-// Command htnexodus generates, verifies, and diffs candidate "exodus pruning point" bundles:
-// manually authored, community-vetted UTXO set checkpoints intended to serve as a trusted
-// floor for HTND nodes whose own pruning-point UTXO set calculation cannot be trusted (see
-// HoosatNetwork/HTND#21). It does not implement any consensus behavior change, signing, or
-// import/rebaseline logic (see HoosatNetwork/HTND#20 for that).
+// Command htnexodus generates, verifies, diffs and imports candidate "exodus pruning point"
+// bundles: manually authored, community-vetted UTXO set checkpoints intended to serve as a
+// trusted floor for HTND nodes whose own pruning-point UTXO set calculation cannot be trusted
+// (see HoosatNetwork/HTND#21). It does not implement any consensus rule change, signing, or
+// checkpoint shipping/embedding (see HoosatNetwork/HTND#20 for the rebaseline mechanics this
+// tool's `import` command implements).
 //
 // Usage:
 //
@@ -10,11 +11,19 @@
 //	htnexodus verify  --bundle <dir>
 //	htnexodus diff    --bundle-a <dir> --bundle-b <dir>
 //	htnexodus diff    --bundle-a <dir> --live --db-path <path> [--network mainnet]
+//	htnexodus import  --bundle <dir> --db-path <path> [--network mainnet] --force
 //
-// `create` opens the node's own on-disk database directly (the node must not be running at
-// the same time, since both processes would otherwise contend for the same database files)
-// and walks the UTXO set as of the requested block, exactly like the node's own pruning point
-// UTXO set calculation, but generalized to an arbitrary historical block.
+// `create`, `verify` and `diff` are read-only: `create` opens the node's own on-disk database
+// directly (the node must not be running at the same time, since both processes would
+// otherwise contend for the same database files) and walks the UTXO set as of the requested
+// block, exactly like the node's own pruning point UTXO set calculation, but generalized to an
+// arbitrary historical block.
+//
+// `import` is the one command that mutates the node's own consensus state: it forces virtual's
+// selected parent to the bundle's block and replaces the virtual UTXO set with the bundle's
+// contents, using the same consensus machinery real headers-proof IBD already uses to bootstrap
+// a node's initial pruning point. It requires --force and, like `create`, requires the node
+// process to be stopped first.
 package main
 
 import (
@@ -29,6 +38,7 @@ func usage() {
   htnexodus verify --bundle <dir>
   htnexodus diff --bundle-a <dir> --bundle-b <dir> [--max-print N]
   htnexodus diff --bundle-a <dir> --live --db-path <path> [--network mainnet] [--max-print N]
+  htnexodus import --bundle <dir> --db-path <path> [--network mainnet] [--db-type pebble] [--batch-size N] --force
 
 Options:
   --db-path string     Path to the node's database directory (e.g. ~/.htnd/hoosat-mainnet/datadir2).
@@ -43,12 +53,15 @@ Options:
                         previous, unfinished attempt at the same block is resumed automatically)
   --note string         Free-text operator note/identity to embed in the bundle (no signature)
   --chunk-size int      UTXO entries per chunk file (default 500000)
-  --bundle string       Bundle directory to verify
+  --bundle string       Bundle directory to verify or import
   --bundle-a string     First bundle directory to diff
   --bundle-b string     Second bundle directory to diff
   --live                Diff --bundle-a against a live recomputation from --db-path/--network at
                         the bundle's own recorded block, instead of a second bundle
   --max-print int       Maximum number of differing/unique outpoints to print per category (default 20)
+  --batch-size int      UTXO entries staged per import batch (default 500000)
+  --force               Required by 'import': confirms you understand this overwrites the node's
+                        virtual chain state and UTXO baseline
 `)
 }
 
@@ -66,6 +79,8 @@ func main() {
 		err = runVerify(os.Args[2:])
 	case "diff":
 		err = runDiff(os.Args[2:])
+	case "import":
+		err = runImport(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 		return

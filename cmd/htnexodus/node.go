@@ -45,11 +45,11 @@ func openDatabase(dbPath string, dbType string) (infrastructuredatabase.Database
 	return pebble.NewPebbleDB(dbPath, pebbledbCacheSizeMiB)
 }
 
-// openConsensus opens the node's own on-disk database directly (read/write from the storage
-// engine's point of view, but this tool never inserts blocks or otherwise mutates consensus
-// state - it only calls read APIs). The node process must not be running against the same
-// database directory at the same time, since the two would contend for the same underlying
-// database files/locks.
+// openConsensus opens the node's own on-disk database directly. `create`, `verify` and `diff
+// --live` only call read APIs against it; `import` is the one command that mutates consensus
+// state (see import.go). The node process must not be running against the same database
+// directory at the same time, since the two would contend for the same underlying database
+// files/locks.
 func openConsensus(dbPath, dbType, network string) (externalapi.Consensus, infrastructuredatabase.Database, error) {
 	params, err := netParamsByName(network)
 	if err != nil {
