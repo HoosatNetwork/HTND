@@ -534,6 +534,19 @@ func (flow *handleIBDFlow) fetchMissingUTXOSet(consensus externalapi.Consensus, 
 			log.Infof("Pruning point UTXO set hash mismatch. This is likely due to missing UTXO diffs from disqualified blocks. Will try another node.")
 			return false, protocolerrors.New(false, "pruning point UTXO set hash mismatch: "+err.Error())
 		}
+		// ErrMissingTxOut here means the served set does not hold an output that the pruning point block
+		// itself spends. That is a property of the chain's UTXO state, not of the peer: the peer served
+		// what its own pruning point UTXO set holds, and every other peer holds the same state. Banning
+		// for it worked through the peer list one expensive full-UTXO-set download at a time and never
+		// synced. The import tolerates this case now, so reaching here means it came from somewhere else
+		// in the import - still not the peer's fault, so disconnect without banning and try another node.
+		if errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+			log.Infof("The pruning point UTXO set from %s is missing outputs spent by the pruning point "+
+				"block itself. This is chain state rather than peer misbehaviour. Will try another node. (%s)",
+				flow.peer, err)
+			return false, protocolerrors.New(false, "pruning point UTXO set is missing outputs spent by "+
+				"the pruning point block: "+err.Error())
+		}
 		return false, protocolerrors.ConvertToBanningProtocolErrorIfRuleError(err, "error with pruning point UTXO set")
 	}
 

@@ -46,7 +46,7 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 	// the trust anchor csm.multisetStore.Get(newPruningPoint) hands to every block resolved for the
 	// rest of this sync; if it disagrees with the stored UTXO entries the node's own state is
 	// inconsistent and later blocks fail with unrelated-looking ErrBadUTXOCommitment.
-	importedPruningPointMultiset, err = csm.verifyAndRepairImportedPruningPointUTXOSet(
+	importedPruningPointMultiset, utxoSetMatchesHeader, err := csm.verifyAndRepairImportedPruningPointUTXOSet(
 		stagingArea, newPruningPoint, importedPruningPointMultiset)
 	if err != nil {
 		return err
@@ -81,9 +81,41 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 		return err
 	}
 
+	// The pruning point UTXO set is the pruning point's PAST state - the block's own transactions are
+	// accepted by its children (here, by the updateVirtual call at the end of the import), not by
+	// itself - so every input of every transaction in the block is expected to still be unspent in the
+	// imported set. On this chain that expectation does not always hold, and until now a single such
+	// input aborted the whole import with ErrMissingTxOut, which the IBD flow then turned into a
+	// banning protocol error: the peer was banned, the staging consensus deleted, and the next peer -
+	// carrying the exact same UTXO state - failed on the exact same outpoint. The node could never
+	// finish IBD.
+	//
+	// There is nothing better this node can do than skip such a transaction, in either of the two ways
+	// it arises (see importedPruningPointMissingInputReason):
+	//
+	//   - The imported set matches the pruning point's header commitment. It is then provably the UTXO
+	//     set the network committed to, and the transaction is simply unspendable against it; no peer
+	//     can supply the outpoint. updateVirtual below reaches the same verdict on its own -
+	//     maybeAcceptTransaction marks it unaccepted - so skipping it here changes no state.
+	//
+	//   - The imported set does not match the header. Then verifyAndRepairImportedPruningPointUTXOSet
+	//     has already decided to proceed on an unverifiable set (the known incomplete-snapshot
+	//     condition every peer shares), and every other consumer of a missing input in that regime
+	//     already tolerates it - validateBlockTransactionsAgainstPastUTXO skips the transaction,
+	//     validateUTXOCommitment tolerates the inherited multiset offset. This was the last strict
+	//     check left, and failing here only prevented sync.
+	//
+	// Inputs the set did supply are still populated; only the transactions with a genuinely absent
+	// input are left unvalidated, and they are skipped in the validation loop below.
 	err = csm.populateTransactionWithUTXOEntriesFromUTXOSet(newPruningPointBlock, importedPruningPointUTXOIterator)
 	if err != nil {
-		return err
+		if !errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+			return err
+		}
+		log.Warnf("Imported pruning point %s spends outputs that are not in its own UTXO set (%s). %s "+
+			"Those transactions are skipped and left unvalidated so the import can complete; they are "+
+			"not accepted into the UTXO set either way.",
+			newPruningPoint, err, importedPruningPointMissingInputReason(utxoSetMatchesHeader))
 	}
 
 	// Before we manually mark the new pruning point as valid, we validate that all of its transactions are valid
@@ -104,11 +136,23 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 			log.Tracef("Skipping transaction %s because it is the coinbase", transactionID)
 			continue
 		}
+		// Only true when the population above tolerated an ErrMissingTxOut for this transaction. That
+		// warning already named every missing outpoint, so these are per-transaction detail.
+		if transactionHasUnpopulatedInput(transaction) {
+			log.Debugf("Skipping transaction %s in pruning block %s: the imported UTXO set does not hold "+
+				"all of its inputs", transactionID, newPruningPoint)
+			continue
+		}
 		log.Tracef("Validating transaction %s and populating it with mass and fee", transactionID)
 		err = csm.transactionValidator.ValidateTransactionInContextAndPopulateFee(
 			stagingArea, transaction, newPruningPoint, newPruningPointBlock.Header.DAAScore())
 		if err != nil {
-			return err
+			if !errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+				return err
+			}
+			csm.logToleratedIssue("imported-pruning-point-missing-input", newPruningPoint,
+				errors.Wrapf(err, "transaction %s skipped", transactionID))
+			continue
 		}
 		log.Tracef("Validation against the pruning point's past UTXO "+
 			"passed for transaction %s", transactionID)
@@ -156,22 +200,28 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 //
 // A truly empty bucket (a truncated transfer, not a "messed up" pruning point) is still a hard
 // ErrBadPruningPointUTXOSet so the IBD flow retries another peer.
+//
+// The second return value reports whether the set that was accepted provably matches the pruning
+// point's header commitment. It is false both when the set could not be made to match and when
+// there was no header to check it against - i.e. it is only true when the imported set is known to
+// be the UTXO set the network committed to. importPruningPointUTXOSet uses it to explain, rather
+// than to decide, how it tolerates a pruning-point transaction whose input the set does not hold.
 func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(stagingArea *model.StagingArea,
 	newPruningPoint *externalapi.DomainHash, accumulatedMultiset model.Multiset,
-) (model.Multiset, error) {
+) (resolvedMultiset model.Multiset, matchesHeader bool, err error) {
 	header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
 	if err != nil {
 		// Without the header there is nothing to check against; proceed with whatever the peer supplied.
 		log.Warnf("Could not fetch pruning point %s header to validate the imported UTXO set (%s) - "+
 			"proceeding with the accumulated multiset", newPruningPoint, err)
-		return accumulatedMultiset, nil
+		return accumulatedMultiset, false, nil
 	}
 	expectedCommitment := header.UTXOCommitment()
 
 	if expectedCommitment.Equal(accumulatedMultiset.Hash()) {
 		log.Infof("Imported pruning point %s UTXO set matches its own header commitment %s",
 			newPruningPoint, expectedCommitment)
-		return accumulatedMultiset, nil
+		return accumulatedMultiset, true, nil
 	}
 
 	log.Warnf("Imported pruning point %s UTXO set does not match its own header: header expects "+
@@ -181,10 +231,10 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 
 	recomputedMultiset, entryCount, err := csm.recomputeImportedPruningPointMultisetFromBucket()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if entryCount == 0 {
-		return nil, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
 			"imported pruning point %s UTXO set is empty - the transfer was truncated or the peer sent "+
 				"nothing usable; another peer must supply it", newPruningPoint)
 	}
@@ -194,7 +244,7 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 			"entries matches the header commitment %s. The accumulated multiset (%s) had double-counted "+
 			"one or more re-delivered chunks; using the recomputed multiset as the trust anchor.",
 			newPruningPoint, entryCount, expectedCommitment, accumulatedMultiset.Hash())
-		return recomputedMultiset, nil
+		return recomputedMultiset, true, nil
 	}
 
 	log.Warnf("Imported pruning point %s UTXO set still does not match its header after recomputation "+
@@ -205,7 +255,33 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 		"mismatch their own commitments until the upstream disqualifications are fixed.",
 		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 
-	return recomputedMultiset, nil
+	return recomputedMultiset, false, nil
+}
+
+// importedPruningPointMissingInputReason explains, for the operator, why an input of a transaction
+// in the pruning point block is not in the pruning point's own imported UTXO set - which of the two
+// cases described at the tolerating call site in importPruningPointUTXOSet applies.
+func importedPruningPointMissingInputReason(utxoSetMatchesHeader bool) string {
+	if utxoSetMatchesHeader {
+		return "The imported set matches the pruning point's header commitment, so it is the UTXO set " +
+			"the network committed to and no peer can supply the missing outputs: the pruning point " +
+			"block itself spends outputs that were already spent in its own past."
+	}
+	return "The imported set does not match the pruning point's header commitment (see the warning " +
+		"above), so this node is on the known incomplete-snapshot baseline and the missing outputs are " +
+		"part of that same gap, which every peer shares."
+}
+
+// transactionHasUnpopulatedInput reports whether any of the transaction's inputs was left without a
+// UTXO entry - which, at the point it is called, means the imported pruning point UTXO set did not
+// hold that outpoint and the resulting ErrMissingTxOut was tolerated.
+func transactionHasUnpopulatedInput(transaction *externalapi.DomainTransaction) bool {
+	for _, input := range transaction.Inputs {
+		if input.UTXOEntry == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // recomputeImportedPruningPointMultisetFromBucket builds a fresh multiset by walking every entry
