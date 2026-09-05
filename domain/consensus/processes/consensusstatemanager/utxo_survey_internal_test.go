@@ -197,9 +197,9 @@ func TestClassifySurveyRecord(t *testing.T) {
 		},
 		expected: utxosurvey.ClassificationOriginalMissing,
 	}, {
-		name: "an outpoint this block's own past already spent is not a finding",
+		name: "an outpoint absent only from this block's past view is not, by itself, a finding",
 		record: utxosurvey.Record{
-			MissingOutpoints: []utxosurvey.MissingOutpoint{{AlreadySpentInThisPast: true}},
+			MissingOutpoints: []utxosurvey.MissingOutpoint{{AbsentFromBlocksPastView: true}},
 		},
 		expected: utxosurvey.ClassificationUnknown,
 	}, {

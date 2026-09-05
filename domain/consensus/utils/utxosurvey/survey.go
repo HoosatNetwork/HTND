@@ -107,10 +107,18 @@ type MissingOutpoint struct {
 	FoundUnderDifferentDAAScore       bool `json:"foundUnderDifferentDAAScore"`
 	FoundUnderDifferentAmountOrScript bool `json:"foundUnderDifferentAmountOrScript"`
 
-	// AlreadySpentInThisPast records the benign case: the outpoint is absent because this block's
-	// own past UTXO diff already removed it (a double spend, or a spend of something spent by an
-	// ancestor), not because anything lost it. Distinguishes a real gap from correct behaviour.
-	AlreadySpentInThisPast bool `json:"alreadySpentInThisPast"`
+	// AbsentFromBlocksPastView records that the outpoint is in virtual's UTXO table but not in this
+	// block's past view - the block's past UTXO diff lists it under toRemove, and a past is
+	// (virtual union toAdd) minus toRemove, so the block cannot spend it.
+	//
+	// It states the observation and deliberately not a reason, because the mechanism does not
+	// determine one: the coin may have been spent in this block's past, or may not have been created
+	// yet at this point on the chain, or may belong to a branch this block is not on. An earlier
+	// version of this field was called AlreadySpentInThisPast and asserted the first of those, which
+	// made every occurrence look benign and excluded it from the missing-coin verdict. Whether it is
+	// benign is a run-scope question - see Summary's created-then-absent analysis - not one a single
+	// block's record can answer.
+	AbsentFromBlocksPastView bool `json:"absentFromBlocksPastView"`
 
 	AlternateMatches []AlternateMatch `json:"alternateMatches"`
 }
@@ -170,6 +178,17 @@ type Record struct {
 	RejectedOrRedTxIDsTruncated int `json:"rejectedOrRedTxIdsTruncated"`
 
 	CoinbaseTxID string `json:"coinbaseTxId"`
+
+	// AcceptedSpends are the outpoints this block's accepted transactions spend, in "txid:index"
+	// form. Cross-referenced across a whole run, they are what turns "this coin was created earlier
+	// and is now absent" from a lead into a verdict: a coin created, never spent, and then absent was
+	// lost, while one that was spent in between is an ordinary double-spend rejection. Capped like
+	// the transaction-ID lists.
+	AcceptedSpends []string `json:"acceptedSpends"`
+
+	// AcceptedSpendsTruncated says how many were dropped by the cap, so a run-scope analysis can tell
+	// "not spent" from "not recorded".
+	AcceptedSpendsTruncated int `json:"acceptedSpendsTruncated"`
 
 	MissingOutpoints []MissingOutpoint `json:"missingOutpoints"`
 

@@ -28,7 +28,7 @@ HTND_UTXO_SURVEY=/var/log/htnd/utxo-survey.jsonl htnd --...
 | --- | --- | --- |
 | `HTND_UTXO_SURVEY` | unset (off) | File to append JSONL records to. |
 | `HTND_UTXO_SURVEY_MAX` | `5000` | Stop after this many records. `0` means unlimited. |
-| `HTND_UTXO_SURVEY_MAX_TXIDS` | `128` | Cap on each per-record transaction-ID and diff-element list. `0` means unlimited. |
+| `HTND_UTXO_SURVEY_MAX_TXIDS` | `128` | Cap on each per-record transaction-ID, accepted-spend, and diff-element list. `0` means unlimited. |
 | `HTND_UTXO_SURVEY_DEEP` | `0` | How many records may pay for an O(UTXO-set) recomputation of the selected parent's multiset. **Leave it at 0 for a first run.** |
 
 Records are flushed on every write, so a killed node keeps everything it surveyed.
@@ -96,7 +96,7 @@ disagreement is an element the commitment will be wrong by. Read the `reason` on
 
 | `classification` | What it means | Where to look |
 | --- | --- | --- |
-| `ORIGINAL_MISSING` | The coin is in neither the selected parent's UTXO view nor anything this block accepts. It should have arrived with the pruning point. | Pruning-point snapshot, IBD chunk transfer, deserialization, the imported multiset. |
+| `ORIGINAL_MISSING` | The coin is in neither the selected parent's UTXO view nor anything **this block** accepts. Per-block only — check the run-scope section before believing it. | Pruning-point snapshot, IBD chunk transfer, deserialization, the imported multiset. |
 | `NEW_MISSING` | This block's own acceptance data creates the coin, and it is not there. | Acceptance apply, coinbase collisions, `AddTransaction`, the selected-tip diff. |
 | `HANDLING_MISMATCH` | The coin is present with a different `SerializeUTXO` preimage. **Nothing was destroyed.** | DAA stamping, script version, `isCoinbase`, serialization on both producer and validator. |
 | `COMMITMENT_ONLY` | No spend failed; only the commitments disagree. The notes say whether the parent was already off. | The parent's multiset, or this block's own arithmetic if the parent was clean. |
@@ -118,6 +118,16 @@ pruning-point import was already offset, which block the offset *enters* the cha
 selected parent still agrees with its own header — on a run with an offset import there is normally
 none, and a block appearing here is the one worth chasing), which outpoints block more than one
 block, and which of those are held under disagreeing `SerializeUTXO` preimages.
+
+It also runs the check no single record can: **coins created earlier in the same run and then
+unresolvable.** A record's `foundInMergesetAdds` covers only the failing block's own mergeset, so a
+coin this node created fifty blocks earlier and then dropped is filed `ORIGINAL_MISSING` — an
+inherited snapshot gap — and points the investigation at the import when the loss happened here,
+during the sync. Only the run as a whole shows the creation and the absence together. `acceptedSpends`
+is what makes the answer trustworthy: a coin created, *spent*, and only then reported absent is an
+ordinary double-spend rejection, not a loss. If a survey carries no spend data at all the tool says
+so and refuses to call anything lost, because absent evidence and "nothing was spent" look
+identical and only one of them supports a finding.
 
 It refuses to read a malformed line rather than skipping it: every conclusion below is a count, and
 a survey that quietly undercounts is worse than one that will not open.
@@ -174,7 +184,14 @@ two databases' sets directly; the survey tells you which outpoints to compare.
 ## What not to conclude
 
 - A `missing-input` error does **not** mean the coin was spent or deleted. Check
-  `alreadySpentInThisPast` and `alternateMatches` first.
+  `absentFromBlocksPastView` and `alternateMatches` first.
+- `absentFromBlocksPastView` states an observation, not a reason: the coin is in virtual's table but
+  not in the failing block's past view. That can be a spend in that past, a coin not yet created at
+  that point on the chain, or a branch the block is not on. It is not by itself benign and not by
+  itself a finding.
+- A per-block `ORIGINAL_MISSING` verdict is scoped to that block. The run-scope section is what
+  distinguishes a coin the snapshot never had from one this sync created and lost, and those two
+  point at completely different code.
 - A run of `COMMITMENT_ONLY` records whose parents are all already off is one offset counted many
   times, not many bugs.
 - Do not change a golden hash to make a commitment match until the survey shows which preimage is

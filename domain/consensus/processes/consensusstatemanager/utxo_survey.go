@@ -338,6 +338,12 @@ func summarizeAcceptance(record *utxosurvey.Record,
 				outpoint := externalapi.DomainOutpoint{TransactionID: *transactionID, Index: uint32(outputIndex)}
 				created[outpoint] = acceptedOutput{output: output, isCoinbase: isCoinbase}
 			}
+			// What this block's accepted transactions consume. A run-scope pass needs these to tell a
+			// coin that was lost from one that was simply spent before the block that tripped over it.
+			for _, input := range transactionAcceptance.Transaction.Inputs {
+				record.AcceptedSpends = appendCapped(record.AcceptedSpends, &record.AcceptedSpendsTruncated,
+					fmt.Sprintf("%s:%d", input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index))
+			}
 		}
 	}
 	return created
@@ -387,9 +393,10 @@ func (csm *consensusStateManager) surveyMissingOutpoints(stagingArea *model.Stag
 					utxosurvey.SourcePastDiffToAdd, &outpoint, entry)
 			}
 			if entry, ok := pastUTXODiff.ToRemove().Get(&outpoint); ok {
-				// The outpoint is absent because this block's own past already spent it. That is
-				// correct behaviour for a double spend, not a lost coin, and must not be counted as one.
-				result.AlreadySpentInThisPast = true
+				// The coin is in virtual's table but not in this block's past view. Recorded as the
+				// observation it is - see MissingOutpoint.AbsentFromBlocksPastView for why no reason is
+				// asserted here.
+				result.AbsentFromBlocksPastView = true
 				result.AlternateMatches = appendAlternateMatch(result.AlternateMatches,
 					utxosurvey.SourcePastDiffToRemove, &outpoint, entry)
 			}
@@ -620,18 +627,21 @@ func surveyBlockDelta(selectedParentPastUTXO, pastUTXODiff externalapi.UTXODiff,
 // that should have arrived with the pruning point (ORIGINAL_MISSING), so the newly-created case is
 // checked first.
 func classifySurveyRecord(record *utxosurvey.Record, notes []string) (classification, joinedNotes string) {
-	var handlingMismatch, newMissing, originalMissing, onlyAlreadySpent bool
-	onlyAlreadySpent = len(record.MissingOutpoints) > 0
+	var handlingMismatch, newMissing, originalMissing, onlyAbsentFromPastView bool
+	onlyAbsentFromPastView = len(record.MissingOutpoints) > 0
 
 	for _, missing := range record.MissingOutpoints {
-		if !missing.AlreadySpentInThisPast {
-			onlyAlreadySpent = false
+		if !missing.AbsentFromBlocksPastView {
+			onlyAbsentFromPastView = false
 		}
 		if missing.FoundUnderDifferentDAAScore || missing.FoundUnderDifferentAmountOrScript {
 			handlingMismatch = true
 			continue
 		}
-		if missing.AlreadySpentInThisPast {
+		if missing.AbsentFromBlocksPastView {
+			// Not counted as a missing coin here, and not called benign either: this block alone
+			// cannot tell a spend in its past from a coin that was lost after being created. The
+			// run-scope pass in utxosurvey.Summarize is what settles it.
 			continue
 		}
 		if missing.FoundInMergesetAdds {
@@ -664,10 +674,11 @@ func classifySurveyRecord(record *utxosurvey.Record, notes []string) (classifica
 		classification = utxosurvey.ClassificationOriginalMissing
 		notes = append(notes, "at least one absent outpoint is in neither the selected parent's UTXO view "+
 			"nor anything this block accepts - it should have arrived with the pruning point UTXO set")
-	case onlyAlreadySpent:
+	case onlyAbsentFromPastView:
 		classification = utxosurvey.ClassificationUnknown
-		notes = append(notes, "every absent outpoint was already spent in this block's own past - correct "+
-			"behaviour for a double spend, not a lost coin")
+		notes = append(notes, "every absent outpoint is in virtual's UTXO table but not in this block's "+
+			"past view; whether that is an ordinary double-spend rejection or a coin lost after being "+
+			"created cannot be told from this block alone - see the run-scope created-then-absent analysis")
 	case len(record.MissingOutpoints) == 0 && record.HeaderUTXOCommitment != record.CalculatedUTXOCommitment:
 		classification = utxosurvey.ClassificationCommitmentOnly
 		if len(record.ExtraAddsNotInHeaderView) > 0 || len(record.ExtraRemovesNotInHeaderView) > 0 {
