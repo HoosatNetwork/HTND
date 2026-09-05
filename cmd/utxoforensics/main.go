@@ -76,6 +76,16 @@ var (
 	ppHistory = flag.Bool("pphistory", false, "list every pruning point by index with its header commitment and "+
 		"stored multiset, and test whether the served bucket hash equals any of them (i.e. whether the bucket "+
 		"is simply stale by one or more pruning point advancements)")
+	recover_ = flag.Bool("recover", false, "with -replaycheck: try every combination of the disagreements found "+
+		"between the materialised table and the acceptance replay as corrections to the pruning point set, "+
+		"looking for one that reproduces the pruning point's header commitment")
+	replayCheck = flag.Bool("replaycheck", false, "replay every chain block's stored acceptance data from the "+
+		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
+		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
+		"starting point's own errors cancel and what remains is the materialised table's drift")
+	virtualCheck = flag.Bool("virtualcheck", false, "hash virtual's materialised UTXO table and compare it to "+
+		"virtual's own stored multiset - the same quantity maintained by two different mechanisms, so a "+
+		"mismatch localises the drift to the materialised table rather than to the multiset chain")
 	baseTest = flag.Bool("basecheck", false, "hash the stored pruning point UTXO set, compare it to the pruning "+
 		"point's header commitment, and - if it matches - use it as a network-sourced base to discriminate the "+
 		"two DAA-stamp rules on the next selected-chain blocks")
@@ -141,6 +151,14 @@ func main() {
 			os.Exit(1)
 		}
 		diffPruningPointSets(s, s2, sa)
+	}
+
+	if *replayCheck {
+		replayForwardCheck(s, sa)
+	}
+
+	if *virtualCheck {
+		virtualTableCheck(s, sa)
 	}
 
 	if *reconstruct {
@@ -916,4 +934,370 @@ func utxoSetIterator(s *stores, src string) (externalapi.ReadOnlyUTXOSetIterator
 	default:
 		return nil, errors.Errorf("unknown UTXO set source %q (want \"bucket\" or \"imported\")", src)
 	}
+}
+
+// virtualTableCheck compares virtual's materialised UTXO table (consensusStateStore - the real
+// key/value table that RPC balances and the served pruning point set are both built from) against
+// virtual's own stored multiset (multisetStore, maintained incrementally from acceptance data, and
+// the value a miner puts in a block header via newBlockUTXOCommitment).
+//
+// They are two representations of one UTXO set kept by entirely separate code. When a node's
+// per-block multiset chain reproduces mainnet header commitments but its materialised sets do not,
+// this is the check that says so directly, without needing a correct reference set from anywhere.
+func virtualTableCheck(s *stores, sa *model.StagingArea) {
+	fmt.Printf("\n=== virtual UTXO table vs virtual's stored multiset\n")
+
+	storedMultiset, err := s.ms.Get(s.db, sa, model.VirtualBlockHash)
+	if err != nil {
+		fmt.Printf("  virtual has no stored multiset (%v)\n", err)
+		return
+	}
+
+	iterator, err := s.state.VirtualUTXOSetIterator(s.db, sa)
+	if err != nil {
+		fmt.Printf("  virtual UTXO set iterator: %v\n", err)
+		return
+	}
+	defer iterator.Close()
+
+	table := multiset.New()
+	count := 0
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		outpoint, entry, err := iterator.Get()
+		if err != nil {
+			fmt.Printf("  virtual iterator.Get: %v\n", err)
+			return
+		}
+		serialized, err := utxo.SerializeUTXO(entry, outpoint)
+		if err != nil {
+			fmt.Printf("  SerializeUTXO: %v\n", err)
+			return
+		}
+		table.Add(serialized)
+		count++
+	}
+
+	tableHash := table.Hash()
+	storedHash := storedMultiset.Hash()
+	fmt.Printf("  virtual UTXO table : %d entries, hash %s\n  virtual stored multiset: %s\n  => %s\n",
+		count, tableHash, storedHash,
+		map[bool]string{
+			true: "AGREE - the materialised table and the incremental multiset are the same set; any " +
+				"disagreement with the network is in what was accepted, not in the bookkeeping",
+			false: "DISAGREE - virtual's materialised UTXO table has drifted from the multiset the node " +
+				"itself commits to. RPC balances are served from the table; block templates commit to " +
+				"the multiset. This is a local bug, independent of anything a peer supplied.",
+		}[tableHash.Equal(storedHash)])
+}
+
+// replayForwardCheck rebuilds the UTXO set implied by this node's own acceptance data - the same
+// data the per-block multiset chain is computed from, and the representation proven to reproduce
+// mainnet header commitments - and diffs it entry-by-entry against virtual's materialised UTXO
+// table, which is maintained separately by applying virtual UTXO diffs.
+//
+// Both start from the pruning point bucket, so whatever is wrong with that bucket cancels out. What
+// is left is exactly how far the materialised table has drifted from the acceptance history, which
+// is what decides whether the drift is a handful of repairable entries or wholesale divergence.
+func replayForwardCheck(s *stores, sa *model.StagingArea) {
+	pp, err := s.pruning.PruningPoint(s.db, sa)
+	if err != nil {
+		fmt.Printf("pruning point: %v\n", err)
+		return
+	}
+	virtualGHOSTDAG, err := s.gd.Get(s.db, sa, model.VirtualBlockHash, false)
+	if err != nil {
+		fmt.Printf("virtual ghostdag data: %v\n", err)
+		return
+	}
+	tip := virtualGHOSTDAG.SelectedParent()
+	fmt.Printf("\n=== acceptance-data replay vs virtual's materialised UTXO table\n"+
+		"  pruning point: %s\n  selected tip : %s\n", pp, tip)
+
+	// Collect the selected chain from the tip down to the pruning point, then apply it forwards.
+	var chain []*externalapi.DomainHash
+	for current := tip; !current.Equal(pp); {
+		chain = append(chain, current)
+		gd, err := s.gd.Get(s.db, sa, current, false)
+		if err != nil {
+			fmt.Printf("  ghostdag data for %s: %v\n", current, err)
+			return
+		}
+		current = gd.SelectedParent()
+		if current == nil {
+			fmt.Printf("  walked off the end of the selected chain without reaching the pruning point\n")
+			return
+		}
+		if len(chain) > 5_000_000 {
+			fmt.Printf("  selected chain walk did not terminate\n")
+			return
+		}
+	}
+	fmt.Printf("  chain blocks from pruning point to tip: %d\n", len(chain))
+
+	set := make(map[externalapi.DomainOutpoint]entryFingerprint)
+	bucketIterator, err := s.pruning.PruningPointUTXOIterator(s.db)
+	if err != nil {
+		fmt.Printf("  bucket iterator: %v\n", err)
+		return
+	}
+	for ok := bucketIterator.First(); ok; ok = bucketIterator.Next() {
+		outpoint, entry, err := bucketIterator.Get()
+		if err != nil {
+			fmt.Printf("  bucket iterator.Get: %v\n", err)
+			bucketIterator.Close()
+			return
+		}
+		set[*outpoint] = fingerprint(entry)
+	}
+	bucketIterator.Close()
+	fmt.Printf("  starting from the pruning point bucket: %d entries\n", len(set))
+
+	apply := func(blockHash *externalapi.DomainHash, mergingDAAScore uint64) bool {
+		acceptanceData, err := s.accept.Get(s.db, sa, blockHash)
+		if err != nil {
+			fmt.Printf("  no acceptance data for %s: %v\n", blockHash, err)
+			return false
+		}
+		for _, bad := range acceptanceData {
+			for i, tad := range bad.TransactionAcceptanceData {
+				if !tad.IsAccepted {
+					continue
+				}
+				transaction := tad.Transaction
+				transactionID := consensushashing.TransactionID(transaction)
+				for _, input := range transaction.Inputs {
+					delete(set, input.PreviousOutpoint)
+				}
+				for outIdx, output := range transaction.Outputs {
+					outpoint := externalapi.DomainOutpoint{TransactionID: *transactionID, Index: uint32(outIdx)}
+					set[outpoint] = fingerprint(utxo.NewUTXOEntry(
+						output.Value, output.ScriptPublicKey, i == 0, mergingDAAScore))
+				}
+			}
+		}
+		return true
+	}
+
+	for i := len(chain) - 1; i >= 0; i-- {
+		blockHash := chain[i]
+		daaScore, err := s.ownDAAScore(sa, blockHash)
+		if err != nil {
+			fmt.Printf("  no DAA score for %s: %v\n", blockHash, err)
+			return
+		}
+		if !apply(blockHash, daaScore) {
+			return
+		}
+	}
+	fmt.Printf("  after replaying the chain to the tip: %d entries\n", len(set))
+
+	// Virtual's own merge set sits on top of the tip.
+	virtualDAAScore, err := s.daa.DAAScore(s.db, sa, model.VirtualBlockHash)
+	if err != nil {
+		fmt.Printf("  virtual DAA score: %v\n", err)
+		return
+	}
+	if !apply(model.VirtualBlockHash, virtualDAAScore) {
+		return
+	}
+	fmt.Printf("  after applying virtual's own acceptance data (daaScore %d): %d entries\n",
+		virtualDAAScore, len(set))
+
+	tableIterator, err := s.state.VirtualUTXOSetIterator(s.db, sa)
+	if err != nil {
+		fmt.Printf("  virtual UTXO table iterator: %v\n", err)
+		return
+	}
+	defer tableIterator.Close()
+
+	var tableCount, onlyInTable, valueDiff, daaOnlyDiff int
+	var tableOnlyEntries []outpointAndEntry
+	daaDelta := map[int64]int{}
+	var examplesTable, examplesValue []string
+	for ok := tableIterator.First(); ok; ok = tableIterator.Next() {
+		outpoint, entry, err := tableIterator.Get()
+		if err != nil {
+			fmt.Printf("  virtual table iterator.Get: %v\n", err)
+			return
+		}
+		tableCount++
+		want, ok2 := set[*outpoint]
+		if !ok2 {
+			onlyInTable++
+			if len(tableOnlyEntries) < 64 {
+				tableOnlyEntries = append(tableOnlyEntries, outpointAndEntry{*outpoint, entry})
+			}
+			if len(examplesTable) < 6 {
+				examplesTable = append(examplesTable, fmt.Sprintf("%s:%d amount=%d daa=%d coinbase=%t",
+					&outpoint.TransactionID, outpoint.Index, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase()))
+			}
+			continue
+		}
+		got := fingerprint(entry)
+		if got != want {
+			valueDiff++
+			if got.amount == want.amount && got.isCoinbase == want.isCoinbase &&
+				got.scriptVersion == want.scriptVersion && got.scriptSum == want.scriptSum {
+				daaOnlyDiff++
+				daaDelta[int64(got.daaScore)-int64(want.daaScore)]++
+			}
+			if len(examplesValue) < 6 {
+				examplesValue = append(examplesValue, fmt.Sprintf(
+					"%s:%d table{amount=%d daa=%d} replay{amount=%d daa=%d}",
+					&outpoint.TransactionID, outpoint.Index, got.amount, got.daaScore, want.amount, want.daaScore))
+			}
+		}
+		delete(set, *outpoint)
+	}
+	onlyInReplay := len(set)
+
+	fmt.Printf("  virtual table: %d entries | only in table: %d | only in replay: %d | value differences: %d "+
+		"(BlockDAAScore-only: %d)\n", tableCount, onlyInTable, onlyInReplay, valueDiff, daaOnlyDiff)
+	for _, e := range examplesTable {
+		fmt.Printf("    only-in-table : %s\n", e)
+	}
+	for _, e := range examplesValue {
+		fmt.Printf("    value-diff    : %s\n", e)
+	}
+	shown := 0
+	for outpoint, want := range set {
+		if shown >= 6 {
+			break
+		}
+		o := outpoint
+		fmt.Printf("    only-in-replay: %s:%d amount=%d daa=%d coinbase=%t\n",
+			&o.TransactionID, o.Index, want.amount, want.daaScore, want.isCoinbase)
+		shown++
+	}
+	if len(daaDelta) > 0 {
+		deltas := make([]int64, 0, len(daaDelta))
+		for d := range daaDelta {
+			deltas = append(deltas, d)
+		}
+		sort.Slice(deltas, func(i, j int) bool { return daaDelta[deltas[i]] > daaDelta[deltas[j]] })
+		fmt.Printf("    BlockDAAScore delta (table minus replay), %d distinct values:\n", len(deltas))
+		for i, d := range deltas {
+			if i >= 6 {
+				break
+			}
+			fmt.Printf("      %+d : %d entries\n", d, daaDelta[d])
+		}
+	}
+
+	if *recover_ {
+		replayOnly := make([]externalapi.DomainOutpoint, 0, len(set))
+		for outpoint := range set {
+			replayOnly = append(replayOnly, outpoint)
+		}
+		tryRecoverPruningPointSet(s, sa, pp, tableOnlyEntries, replayOnly)
+	}
+}
+
+type outpointAndEntry struct {
+	outpoint externalapi.DomainOutpoint
+	entry    externalapi.UTXOEntry
+}
+
+// tryRecoverPruningPointSet asks whether the UTXO set the network actually committed to is within
+// reach of the set this node holds. The materialised table and the acceptance replay disagree on a
+// handful of outpoints; the true set is plausibly the served bucket with some subset of those
+// disagreements corrected. Every subset is applied to the bucket's multiset and hashed against the
+// pruning point's header commitment. A hit means the correct set is recoverable locally, with no
+// peer involved and no resync from genesis.
+func tryRecoverPruningPointSet(s *stores, sa *model.StagingArea, pp *externalapi.DomainHash,
+	tableOnly []outpointAndEntry, replayOnly []externalapi.DomainOutpoint) {
+	header, err := s.headers.BlockHeader(s.db, sa, pp)
+	if err != nil {
+		fmt.Printf("  recover: pruning point header: %v\n", err)
+		return
+	}
+	target := header.UTXOCommitment()
+
+	wanted := make(map[externalapi.DomainOutpoint]bool, len(replayOnly))
+	for _, o := range replayOnly {
+		wanted[o] = true
+	}
+	replayEntries := make([]outpointAndEntry, 0, len(replayOnly))
+
+	bucketIterator, err := s.pruning.PruningPointUTXOIterator(s.db)
+	if err != nil {
+		fmt.Printf("  recover: bucket iterator: %v\n", err)
+		return
+	}
+	base := multiset.New()
+	for ok := bucketIterator.First(); ok; ok = bucketIterator.Next() {
+		outpoint, entry, err := bucketIterator.Get()
+		if err != nil {
+			bucketIterator.Close()
+			fmt.Printf("  recover: bucket iterator.Get: %v\n", err)
+			return
+		}
+		serialized, err := utxo.SerializeUTXO(entry, outpoint)
+		if err != nil {
+			bucketIterator.Close()
+			fmt.Printf("  recover: SerializeUTXO: %v\n", err)
+			return
+		}
+		base.Add(serialized)
+		if wanted[*outpoint] {
+			replayEntries = append(replayEntries, outpointAndEntry{*outpoint, entry})
+		}
+	}
+	bucketIterator.Close()
+
+	// Each candidate is one correction: remove an entry the table has and the replay does not, or
+	// add back one the replay has and the table does not.
+	type correction struct {
+		serialized []byte
+		add        bool
+		label      string
+	}
+	var candidates []correction
+	for _, oe := range tableOnly {
+		serialized, err := utxo.SerializeUTXO(oe.entry, &oe.outpoint)
+		if err != nil {
+			continue
+		}
+		candidates = append(candidates, correction{serialized, true,
+			fmt.Sprintf("+%s:%d(daa=%d)", &oe.outpoint.TransactionID, oe.outpoint.Index, oe.entry.BlockDAAScore())})
+	}
+	for _, oe := range replayEntries {
+		serialized, err := utxo.SerializeUTXO(oe.entry, &oe.outpoint)
+		if err != nil {
+			continue
+		}
+		candidates = append(candidates, correction{serialized, false,
+			fmt.Sprintf("-%s:%d(daa=%d)", &oe.outpoint.TransactionID, oe.outpoint.Index, oe.entry.BlockDAAScore())})
+	}
+
+	if len(candidates) == 0 || len(candidates) > 20 {
+		fmt.Printf("  recover: %d candidate corrections - %s\n", len(candidates),
+			map[bool]string{true: "nothing to try", false: "too many to enumerate exhaustively"}[len(candidates) == 0])
+		return
+	}
+
+	fmt.Printf("  recover: bucket hashes to %s, header wants %s, trying all %d combinations of %d "+
+		"candidate corrections\n", base.Hash(), target, 1<<len(candidates), len(candidates))
+	for mask := 0; mask < 1<<len(candidates); mask++ {
+		trial := base.Clone()
+		var applied []string
+		for i, c := range candidates {
+			if mask&(1<<i) == 0 {
+				continue
+			}
+			if c.add {
+				trial.Add(c.serialized)
+			} else {
+				trial.Remove(c.serialized)
+			}
+			applied = append(applied, c.label)
+		}
+		if trial.Hash().Equal(target) {
+			fmt.Printf("  recover: MATCH - the pruning point's committed UTXO set is the served bucket with "+
+				"these %d corrections applied: %v\n", len(applied), applied)
+			return
+		}
+	}
+	fmt.Printf("  recover: no combination of these corrections reproduces the header commitment - the true " +
+		"set differs from this node's by more than the disagreements found here\n")
 }
