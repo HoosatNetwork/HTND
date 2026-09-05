@@ -50,12 +50,17 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
+	"github.com/pkg/errors"
 )
 
 var (
-	dbPath      = flag.String("db", "", "path to a COPY of a datadir2 (pebble)")
-	blockArg    = flag.String("block", "", "block hash to analyze")
-	scanN       = flag.Int("scan", 0, "also scan N selected-chain blocks up from the pruning point")
+	dbPath   = flag.String("db", "", "path to a COPY of a datadir2 (pebble)")
+	blockArg = flag.String("block", "", "block hash to analyze")
+	scanN    = flag.Int("scan", 0, "also scan N selected-chain blocks up from the pruning point")
+	dbPath2  = flag.String("db2", "", "second database COPY; with -diffsets, its pruning point UTXO set is "+
+		"compared entry-by-entry against -db's")
+	diffSets = flag.Bool("diffsets", false, "diff the pruning point UTXO sets of -db and -db2 (which must be at "+
+		"the same pruning point) - the direct test of whether two peers serve the same set")
 	reconstruct = flag.Bool("reconstruct", false, "rebuild the pruning point's absolute UTXO set from virtual's "+
 		"UTXO table plus the stored diff chain, verify it against the pruning point's header commitment, and "+
 		"diff it entry-by-entry against the served bucket")
@@ -95,33 +100,10 @@ func main() {
 	}
 	defer db.Close()
 
-	activePrefix, exists, err := prefixmanager.ActivePrefix(db)
-	if err != nil || !exists {
-		fmt.Fprintf(os.Stderr, "active prefix: err=%v exists=%t\n", err, exists)
+	s, err := openStores(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stores: %v\n", err)
 		os.Exit(1)
-	}
-
-	dbManager := consensusdatabase.New(db)
-	pb := consensusdatabase.MakeBucket(activePrefix.Serialize())
-
-	bs, err := blockstore.New(dbManager, pb, 100, false)
-	if err != nil {
-		panic(err)
-	}
-	bhs, err := blockheaderstore.New(dbManager, pb, 100, false)
-	if err != nil {
-		panic(err)
-	}
-	s := &stores{
-		db: dbManager, headers: bhs, blocks: bs,
-		accept:  acceptancedatastore.New(pb, 100, false),
-		ms:      multisetstore.New(pb, 100, false),
-		gd:      ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
-		daa:     daablocksstore.New(pb, 100, 100, false),
-		chain:   headersselectedchainstore.New(pb, 100, false),
-		pruning: pruningstore.New(pb, 2, false),
-		state:   consensusstatestore.New(pb, 100, false),
-		diffs:   utxodiffstore.New(pb, 100, false),
 	}
 	sa := model.NewStagingArea()
 
@@ -131,6 +113,25 @@ func main() {
 			panic(err)
 		}
 		analyze(s, sa, h)
+	}
+
+	if *diffSets {
+		if *dbPath2 == "" {
+			fmt.Fprintln(os.Stderr, "-diffsets requires -db2")
+			os.Exit(2)
+		}
+		db2, err := pebble.NewPebbleDB(*dbPath2, 256)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "open db2: %v\n", err)
+			os.Exit(1)
+		}
+		defer db2.Close()
+		s2, err := openStores(db2)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "stores for db2: %v\n", err)
+			os.Exit(1)
+		}
+		diffPruningPointSets(s, s2, sa)
 	}
 
 	if *reconstruct {
@@ -395,9 +396,16 @@ func baseCheck(s *stores, sa *model.StagingArea) {
 				continue
 			}
 			if ms.Hash().Equal(baseHash) {
-				fmt.Printf("  the bucket hash equals the stored multiset of chain block %s at index %d "+
-					"(pruning point is at index %d, offset %+d) - the bucket is STALE, not corrupt\n",
-					h, i, idx, int64(i)-int64(idx))
+				if i == idx {
+					fmt.Printf("  the bucket hash equals THIS node's own stored multiset for the pruning " +
+						"point - bucket and per-block multiset chain agree with each other and both differ " +
+						"from the header, i.e. the offset was inherited (imported), not introduced by the " +
+						"bucket's own maintenance\n")
+				} else {
+					fmt.Printf("  the bucket hash equals the stored multiset of chain block %s at index %d "+
+						"(pruning point is at index %d, offset %+d) - the bucket is STALE, not corrupt\n",
+						h, i, idx, int64(i)-int64(idx))
+				}
 				matched = true
 				break
 			}
@@ -711,5 +719,147 @@ func reconstructPruningPointSet(s *stores, sa *model.StagingArea) {
 	if missingFromBucket > 0 {
 		fmt.Printf("    missing entries span DAA scores %d..%d (pruning point DAA score is %d)\n",
 			missingDAAMin, missingDAAMax, ppHeader.DAAScore())
+	}
+}
+
+func openStores(db *pebble.DB) (*stores, error) {
+	activePrefix, exists, err := prefixmanager.ActivePrefix(db)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("no active database prefix - is this a pebble datadir2?")
+	}
+	dbManager := consensusdatabase.New(db)
+	pb := consensusdatabase.MakeBucket(activePrefix.Serialize())
+
+	bs, err := blockstore.New(dbManager, pb, 100, false)
+	if err != nil {
+		return nil, err
+	}
+	bhs, err := blockheaderstore.New(dbManager, pb, 100, false)
+	if err != nil {
+		return nil, err
+	}
+	return &stores{
+		db: dbManager, headers: bhs, blocks: bs,
+		accept:  acceptancedatastore.New(pb, 100, false),
+		ms:      multisetstore.New(pb, 100, false),
+		gd:      ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
+		daa:     daablocksstore.New(pb, 100, 100, false),
+		chain:   headersselectedchainstore.New(pb, 100, false),
+		pruning: pruningstore.New(pb, 2, false),
+		state:   consensusstatestore.New(pb, 100, false),
+		diffs:   utxodiffstore.New(pb, 100, false),
+	}, nil
+}
+
+// diffPruningPointSets compares, entry by entry, the pruning point UTXO sets two databases hold. Run
+// against two nodes that fetched the same pruning point from different peers, it answers the question
+// a hash comparison cannot: do peers serve the SAME (possibly wrong) set, or different ones - and if
+// different, exactly which outpoints and whether they differ in membership or only in values such as
+// BlockDAAScore.
+func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
+	ppA, errA := a.pruning.PruningPoint(a.db, sa)
+	ppB, errB := b.pruning.PruningPoint(b.db, sa)
+	if errA != nil || errB != nil {
+		fmt.Printf("pruning points: %v / %v\n", errA, errB)
+		return
+	}
+	fmt.Printf("\n=== pruning point UTXO set comparison\n  db  pruning point: %s\n  db2 pruning point: %s\n", ppA, ppB)
+	if !ppA.Equal(ppB) {
+		fmt.Printf("  the two databases are at DIFFERENT pruning points - their sets are not comparable\n")
+		return
+	}
+	if header, err := a.headers.BlockHeader(a.db, sa, ppA); err == nil {
+		fmt.Printf("  header commitment: %s\n", header.UTXOCommitment())
+	}
+
+	setA := make(map[externalapi.DomainOutpoint]entryFingerprint)
+	iterA, err := a.pruning.PruningPointUTXOIterator(a.db)
+	if err != nil {
+		fmt.Printf("  db bucket iterator: %v\n", err)
+		return
+	}
+	msA := multiset.New()
+	for ok := iterA.First(); ok; ok = iterA.Next() {
+		outpoint, entry, err := iterA.Get()
+		if err != nil {
+			fmt.Printf("  db bucket iterator.Get: %v\n", err)
+			iterA.Close()
+			return
+		}
+		setA[*outpoint] = fingerprint(entry)
+		if serialized, err := utxo.SerializeUTXO(entry, outpoint); err == nil {
+			msA.Add(serialized)
+		}
+	}
+	iterA.Close()
+
+	iterB, err := b.pruning.PruningPointUTXOIterator(b.db)
+	if err != nil {
+		fmt.Printf("  db2 bucket iterator: %v\n", err)
+		return
+	}
+	defer iterB.Close()
+	msB := multiset.New()
+	var countB, onlyInB, valueDiff, daaOnlyDiff int
+	var examplesOnlyB, examplesValue []string
+	for ok := iterB.First(); ok; ok = iterB.Next() {
+		outpoint, entry, err := iterB.Get()
+		if err != nil {
+			fmt.Printf("  db2 bucket iterator.Get: %v\n", err)
+			return
+		}
+		countB++
+		if serialized, err := utxo.SerializeUTXO(entry, outpoint); err == nil {
+			msB.Add(serialized)
+		}
+		want, ok2 := setA[*outpoint]
+		if !ok2 {
+			onlyInB++
+			if len(examplesOnlyB) < 8 {
+				examplesOnlyB = append(examplesOnlyB, fmt.Sprintf("%s:%d amount=%d daa=%d coinbase=%t",
+					&outpoint.TransactionID, outpoint.Index, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase()))
+			}
+			continue
+		}
+		got := fingerprint(entry)
+		if got != want {
+			valueDiff++
+			sameExceptDAA := got.amount == want.amount && got.isCoinbase == want.isCoinbase &&
+				got.scriptVersion == want.scriptVersion && got.scriptSum == want.scriptSum
+			if sameExceptDAA {
+				daaOnlyDiff++
+			}
+			if len(examplesValue) < 8 {
+				examplesValue = append(examplesValue, fmt.Sprintf(
+					"%s:%d db{amount=%d daa=%d} db2{amount=%d daa=%d} differsOnlyInDAAScore=%t",
+					&outpoint.TransactionID, outpoint.Index, want.amount, want.daaScore,
+					got.amount, got.daaScore, sameExceptDAA))
+			}
+		}
+		delete(setA, *outpoint)
+	}
+	onlyInA := len(setA)
+
+	fmt.Printf("  db  set hash: %s\n  db2 set hash: %s\n", msA.Hash(), msB.Hash())
+	fmt.Printf("  db2 entries: %d | only in db: %d | only in db2: %d | value differences: %d (of which "+
+		"BlockDAAScore-only: %d)\n", countB, onlyInA, onlyInB, valueDiff, daaOnlyDiff)
+	for _, e := range examplesOnlyB {
+		fmt.Printf("    only-in-db2: %s\n", e)
+	}
+	for _, e := range examplesValue {
+		fmt.Printf("    value-diff : %s\n", e)
+	}
+	shown := 0
+	for outpoint, want := range setA {
+		if shown >= 8 {
+			break
+		}
+		o := outpoint
+		fmt.Printf("    only-in-db : %s:%d amount=%d daa=%d coinbase=%t\n",
+			&o.TransactionID, o.Index, want.amount, want.daaScore, want.isCoinbase)
+		shown++
 	}
 }
