@@ -1,6 +1,7 @@
 package consensusstatemanager
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -107,6 +108,17 @@ func TestBlockSurveyKeepsEveryFailure(t *testing.T) {
 	}
 	if spentBy := survey.missing[*outpoint(5, 2)].spentBy; spentBy != "tx-two" {
 		t.Errorf("expected the first spender to be attributed, got %q", spentBy)
+	}
+
+	// The label names the rule; the detail carries the evidence. ErrImmatureSpend is the case that
+	// matters: "a coinbase was spent too early" is not actionable, and the DAA scores in its message
+	// are what say whether the entry was stamped under a different rule than the producer used.
+	details := survey.errorDetails()
+	if len(details) != 3 {
+		t.Fatalf("expected one detail per distinct failure message, got %d: %v", len(details), details)
+	}
+	if !strings.Contains(strings.Join(details, "\n"), "first symptom") {
+		t.Errorf("the detail must preserve the failure's own message, got %v", details)
 	}
 
 	label := survey.errorLabel()

@@ -141,6 +141,15 @@ type Record struct {
 	// "ErrBadUTXOCommitment+missing-input".
 	Error string `json:"error"`
 
+	// ErrorDetails is each failure's full message, deduplicated. The label in Error names the rule
+	// that fired; the message is where the rule put its evidence, and for some rules that evidence is
+	// the finding. ErrImmatureSpend is the case that forced this field: its label says only that a
+	// coinbase was spent too early, while its message carries the coinbase's DAA score, the spending
+	// block's, and the required maturity - the three numbers that decide whether the entry was
+	// stamped under a different rule than the producer used, which is a handling mismatch, or whether
+	// acceptance diverged upstream so a different block merged it, which is not.
+	ErrorDetails []string `json:"errorDetails"`
+
 	HeaderUTXOCommitment     string `json:"headerUTXOCommitment"`
 	CalculatedUTXOCommitment string `json:"calculatedUTXOCommitment"`
 

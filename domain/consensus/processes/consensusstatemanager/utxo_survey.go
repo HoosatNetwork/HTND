@@ -111,6 +111,26 @@ func (bs *blockSurvey) failed() bool {
 	return len(bs.steps) > 0 || len(bs.missing) > 0
 }
 
+// errorDetails returns each distinct failure message, capped, so that a rule whose evidence lives in
+// its message rather than in its name is not reduced to the name.
+func (bs *blockSurvey) errorDetails() []string {
+	const maxDetails = 8
+	seen := make(map[string]struct{}, len(bs.steps))
+	details := make([]string, 0, len(bs.steps))
+	for _, failure := range bs.steps {
+		message := failure.err.Error()
+		if _, duplicate := seen[message]; duplicate {
+			continue
+		}
+		seen[message] = struct{}{}
+		if len(details) >= maxDetails {
+			continue
+		}
+		details = append(details, message)
+	}
+	return details
+}
+
 // errorLabel joins every failed check's identifying name, e.g. "ErrBadUTXOCommitment+missing-input".
 func (bs *blockSurvey) errorLabel() string {
 	seen := make(map[string]struct{}, len(bs.steps))
@@ -171,6 +191,7 @@ func (csm *consensusStateManager) recordBlockSurvey(stagingArea *model.StagingAr
 		BlockHash:      blockHash.String(),
 		IBDStage:       survey.stage,
 		Error:          survey.errorLabel(),
+		ErrorDetails:   survey.errorDetails(),
 		Classification: utxosurvey.ClassificationUnknown,
 	}
 	var notes []string
