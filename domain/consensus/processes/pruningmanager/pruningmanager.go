@@ -1046,35 +1046,18 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPointsUsi
 		if err != nil {
 			return nil, err
 		}
-		// chainBlockAcceptanceData holds one BlockAcceptanceData entry per merge-set block that `child`
-		// accepted (see applyMergeSetBlocks), each carrying its OWN BlockHash - not just child's. Every
-		// transaction in a given entry must be stamped with that entry's own creating block's DAA score,
-		// not child's (chainBlockHeader.DAAScore() was being applied to every merge-set block's
-		// transactions uniformly - the same wrong-DAA-score-stamping bug fixed in 96efc0d3d for
-		// calculate_past_utxo.go's applyMergeSetBlocks/maybeAcceptTransaction, and in calculateMultiset/
-		// addTransactionToMultiset in multisets.go, independently present here too). This is what was
-		// producing the "pruning point diff verification (acceptance-data) FAILED" errors: the
-		// acceptance-data-replay diff didn't reproduce the header's UTXO commitment because entries in
-		// it carried the wrong BlockDAAScore.
-		for _, blockAcceptanceData := range chainBlockAcceptanceData {
-			creatingBlockHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, blockAcceptanceData.BlockHash)
-			var creatingBlockDAAScore uint64
-			if err != nil {
-				creatingBlockDAAScore, err = pm.daaBlocksStore.DAAScore(pm.databaseContext, stagingArea, blockAcceptanceData.BlockHash)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				creatingBlockDAAScore = creatingBlockHeader.DAAScore()
-			}
-			for _, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
-				if transactionAcceptanceData.IsAccepted {
-					err = utxoDiff.AddTransaction(transactionAcceptanceData.Transaction, creatingBlockDAAScore)
-					if err != nil {
-						return nil, err
-					}
-				}
-			}
+		chainBlockHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, child)
+		if err != nil {
+			return nil, err
+		}
+		// `child` is the merging block for every entry in chainBlockAcceptanceData, so its DAA score is
+		// what all the UTXOs this replay creates are stamped with - the same rule, through the same
+		// helper, that calculateMultiset and applyMergeSetBlocks use, so that this independently-built
+		// diff can be compared against the pruning point's header UTXO commitment at all. See
+		// utxo.AcceptedUTXOBlockDAAScore.
+		err = utxo.ApplyAcceptanceDataToDiff(utxoDiff, chainBlockAcceptanceData, chainBlockHeader.DAAScore())
+		if err != nil {
+			return nil, err
 		}
 	}
 

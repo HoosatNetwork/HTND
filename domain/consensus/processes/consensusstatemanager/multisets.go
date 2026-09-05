@@ -1,20 +1,18 @@
 package consensusstatemanager
 
 import (
-	"math"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-	"github.com/pkg/errors"
 )
 
 func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 	acceptanceData externalapi.AcceptanceData,
 	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData,
+	daaScore uint64,
 ) (model.Multiset, error) {
 	log.Tracef("calculateMultiset start for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 	defer log.Tracef("calculateMultiset end for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
@@ -41,166 +39,33 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	}
 	log.Debugf("The multiset for the selected parent %s is: %s", selectedParent, ms.Hash())
 
-	// blockAcceptanceData holds one entry per merge-set block resolved by blockHash (see
-	// applyMergeSetBlocks), each carrying its OWN BlockHash. Before the fix in 96efc0d3d
-	// ("Fix address balance disagreement between nodes"), this loop and applyMergeSetBlocks'
-	// AddTransaction call both stamped every merge-set block's transactions with daaScore (blockHash's
-	// own DAA score) - wrong, but consistently wrong in both places, so the multiset computed here and
-	// the UTXODiff built by applyMergeSetBlocks still agreed with each other bit-for-bit, even though
-	// both disagreed with the network's true per-coin DAA scores.
-	//
-	// 96efc0d3d fixed ONLY applyMergeSetBlocks/AddTransaction to stamp each entry with its own creating
-	// block's DAA score (creatingBlockDAAScore) - but left this function using the single, uniform
-	// daaScore. That turned a globally-consistent-but-wrong value into a value that now DISAGREES with
-	// the diff on this node for every non-selected-parent merge-set block: the diff holds
-	// creatingBlockDAAScore, this multiset serializes with daaScore, so the exact same real UTXO
-	// serializes to different bytes in each - producing a UTXO commitment that doesn't match the
-	// node's own diff, i.e. exactly the class of failure golden-data tests and consensus validation
-	// would start hitting immediately after 96efc0d3d landed alone. Must be fixed together with it.
-	for _, blockAcceptanceData := range acceptanceData {
-		creatingBlockDAAScore, err := csm.blockOwnDAAScore(stagingArea, blockAcceptanceData.BlockHash)
-		if err != nil {
-			return nil, err
-		}
-		for i, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
-			transaction := transactionAcceptanceData.Transaction
-			transactionID := consensushashing.TransactionID(transaction)
-			if !transactionAcceptanceData.IsAccepted {
-				log.Tracef("Skipping transaction %s because it was not accepted", transactionID)
-				continue
-			}
-
-			isCoinbase := i == 0
-			log.Tracef("Is transaction %s a coinbase transaction: %t", transactionID, isCoinbase)
-
-			err := addTransactionToMultiset(ms, transaction, creatingBlockDAAScore, isCoinbase)
-			if err != nil {
-				return nil, err
-			}
-			log.Tracef("Added transaction %s to the multiset", transactionID)
-		}
+	// daaScore is blockHash's own DAA score - blockHash is the merging block for every entry in
+	// acceptanceData, so it is the DAA score every created UTXO is stamped with. See
+	// utxo.AcceptedUTXOBlockDAAScore for the rule and why it is a consensus rule rather than a
+	// choice. applyMergeSetBlocks builds this block's UTXO diff from the same daaScore, so the diff
+	// and the multiset stay two representations of one UTXO set.
+	err = utxo.ApplyAcceptanceDataToMultiset(ms, acceptanceData, daaScore)
+	if err != nil {
+		return nil, err
 	}
 
 	return ms, nil
 }
 
 // reverseMultiset applies the reverse of the given acceptance data to a multiset.
-// This undoes the effect of calculateMultiset / addTransactionToMultiset for the
-// provided acceptance data (remove outputs, re-add inputs).
+// This undoes the effect of calculateMultiset for the provided acceptance data
+// (remove outputs, re-add inputs).
 //
-// Currently unused (no live call sites), but fixed here to match calculateMultiset's per-merge-set-
-// block DAA score handling so it doesn't become a landmine if it's wired up later - see the comment
-// in calculateMultiset above.
-func (csm *consensusStateManager) reverseMultiset(stagingArea *model.StagingArea, ms model.Multiset,
+// Currently unused (no live call sites), but kept exactly inverse to calculateMultiset so it doesn't
+// become a landmine if it's wired up later.
+func (csm *consensusStateManager) reverseMultiset(ms model.Multiset,
 	acceptanceData externalapi.AcceptanceData,
+	daaScore uint64,
 ) error {
 	log.Tracef("reverseMultiset start")
 	defer log.Tracef("reverseMultiset end")
 
-	// Process in reverse order of acceptance data so that the net effect is an exact inverse.
-	for i := len(acceptanceData) - 1; i >= 0; i-- {
-		blockAcceptanceData := acceptanceData[i]
-		creatingBlockDAAScore, err := csm.blockOwnDAAScore(stagingArea, blockAcceptanceData.BlockHash)
-		if err != nil {
-			return err
-		}
-		for j := len(blockAcceptanceData.TransactionAcceptanceData) - 1; j >= 0; j-- {
-			transactionAcceptanceData := blockAcceptanceData.TransactionAcceptanceData[j]
-			transaction := transactionAcceptanceData.Transaction
-			transactionID := consensushashing.TransactionID(transaction)
-			if !transactionAcceptanceData.IsAccepted {
-				log.Tracef("Skipping transaction %s because it was not accepted", transactionID)
-				continue
-			}
-
-			isCoinbase := j == 0
-			log.Tracef("Is transaction %s a coinbase transaction: %t", transactionID, isCoinbase)
-
-			err := removeTransactionFromMultiset(ms, transaction, creatingBlockDAAScore, isCoinbase)
-			if err != nil {
-				return err
-			}
-			log.Tracef("Removed transaction %s from the multiset", transactionID)
-		}
-	}
-
-	return nil
-}
-
-func addTransactionToMultiset(multiset model.Multiset, transaction *externalapi.DomainTransaction,
-	blockDAAScore uint64, isCoinbase bool,
-) error {
-	transactionID := consensushashing.TransactionID(transaction)
-	log.Tracef("addTransactionToMultiset start for transaction %s", transactionID)
-	defer log.Tracef("addTransactionToMultiset end for transaction %s", transactionID)
-
-	for _, input := range transaction.Inputs {
-		log.Tracef("Removing input %s at index %d from the multiset",
-			input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index)
-		err := removeUTXOFromMultiset(multiset, input.UTXOEntry, &input.PreviousOutpoint)
-		if err != nil {
-			return err
-		}
-	}
-
-	for i, output := range transaction.Outputs {
-		if i < 0 || i > math.MaxUint32 {
-			return errors.Errorf("output index %d cannot be represented as uint32", i)
-		}
-		outpoint := &externalapi.DomainOutpoint{
-			TransactionID: *transactionID,
-			Index:         uint32(i),
-		}
-		utxoEntry := utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, isCoinbase, blockDAAScore)
-
-		log.Tracef("Adding output %s at index %d to the multiset", transactionID, i)
-		err := addUTXOToMultiset(multiset, utxoEntry, outpoint)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// removeTransactionFromMultiset is the exact inverse of addTransactionToMultiset.
-// It removes the transaction's outputs from the multiset and re-adds its inputs.
-func removeTransactionFromMultiset(multiset model.Multiset, transaction *externalapi.DomainTransaction,
-	blockDAAScore uint64, isCoinbase bool,
-) error {
-	transactionID := consensushashing.TransactionID(transaction)
-	log.Tracef("removeTransactionFromMultiset start for transaction %s", transactionID)
-	defer log.Tracef("removeTransactionFromMultiset end for transaction %s", transactionID)
-
-	// Reverse of add: first remove the outputs that were added.
-	for i, output := range transaction.Outputs {
-		if i < 0 || i > math.MaxUint32 {
-			return errors.Errorf("output index %d cannot be represented as uint32", i)
-		}
-		outpoint := &externalapi.DomainOutpoint{
-			TransactionID: *transactionID,
-			Index:         uint32(i),
-		}
-		utxoEntry := utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, isCoinbase, blockDAAScore)
-
-		log.Tracef("Removing output %s at index %d from the multiset", transactionID, i)
-		err := removeUTXOFromMultiset(multiset, utxoEntry, outpoint)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Then re-add the inputs that were previously removed.
-	for _, input := range transaction.Inputs {
-		log.Tracef("Adding input %s at index %d back to the multiset",
-			input.PreviousOutpoint.TransactionID, input.PreviousOutpoint.Index)
-		err := addUTXOToMultiset(multiset, input.UTXOEntry, &input.PreviousOutpoint)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return utxo.RemoveAcceptanceDataFromMultiset(ms, acceptanceData, daaScore)
 }
 
 func addUTXOToMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
@@ -211,18 +76,6 @@ func addUTXOToMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
 		return err
 	}
 	multiset.Add(serializedUTXO)
-
-	return nil
-}
-
-func removeUTXOFromMultiset(multiset model.Multiset, entry externalapi.UTXOEntry,
-	outpoint *externalapi.DomainOutpoint,
-) error {
-	serializedUTXO, err := utxo.SerializeUTXO(entry, outpoint)
-	if err != nil {
-		return err
-	}
-	multiset.Remove(serializedUTXO)
 
 	return nil
 }
@@ -305,7 +158,7 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 	case !agree && freshMatchesHeader:
 		log.Debugf("[UTXO-DEBUG] %s (%s): fresh recomputation from the actual UTXO set MATCHES the header "+
 			"but the incrementally-maintained multiset does NOT - proves the incremental Add/Remove "+
-			"bookkeeping (calculateMultiset/addTransactionToMultiset) has drifted away from the actual, "+
+			"bookkeeping (calculateMultiset/utxo.ApplyAcceptanceDataToMultiset) has drifted away from the actual, "+
 			"correct UTXO set. This is the Add/Remove accounting bug.", label, blockHash)
 	case !agree && incrementalMatchesHeader:
 		log.Debugf("[UTXO-DEBUG] %s (%s): incremental multiset MATCHES the header but the fresh "+
@@ -322,26 +175,20 @@ func (csm *consensusStateManager) verifyMultisetSelfConsistency(stagingArea *mod
 // verifyAcceptanceDataAgainstDiff cross-checks, entry by entry, that acceptanceData and diff agree
 // on every single UTXO produced by this block's resolution. They're built by two structurally
 // separate implementations walking the exact same acceptanceData - applyMergeSetBlocks builds diff
-// via MutableUTXODiff.AddTransaction, calculateMultiset builds the multiset via its own
-// addTransactionToMultiset - so this is the direct test of whether those two implementations still
-// agree, checking the actual amount/script/isCoinbase/daaScore values, not just aggregate hashes.
-// Prints every specific outpoint where they don't, which a hash comparison alone can't do.
+// via MutableUTXODiff.AddTransaction, calculateMultiset builds the multiset via
+// utxo.ApplyAcceptanceDataToMultiset - so this is the direct test of whether those two
+// implementations still agree, checking the actual amount/script/isCoinbase/daaScore values, not
+// just aggregate hashes. Prints every specific outpoint where they don't, which a hash comparison
+// alone can't do.
 //
-// Each entry must be checked against its OWN creating block's DAA score (blockAcceptanceData.BlockHash),
-// not a single caller-supplied value - both applyMergeSetBlocks and calculateMultiset stamp per-entry
-// now (see the fix in each), so comparing against one uniform score here would itself manufacture
-// false "MISMATCH" reports for every non-selected-parent merge-set block.
-func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(stagingArea *model.StagingArea, label string, blockHash *externalapi.DomainHash,
-	acceptanceData externalapi.AcceptanceData, diff externalapi.UTXODiff,
+// daaScore is blockHash's own DAA score: blockHash is the merging block for every entry in
+// acceptanceData, so it is the single score every created entry must carry on both sides (see
+// utxo.AcceptedUTXOBlockDAAScore).
+func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, blockHash *externalapi.DomainHash,
+	acceptanceData externalapi.AcceptanceData, diff externalapi.UTXODiff, daaScore uint64,
 ) {
 	mismatches := 0
 	for _, blockAcceptanceData := range acceptanceData {
-		daaScore, err := csm.blockOwnDAAScore(stagingArea, blockAcceptanceData.BlockHash)
-		if err != nil {
-			log.Debugf("[UTXO-DEBUG] %s (%s): could not fetch own DAA score for merge-set block %s: %s",
-				label, blockHash, blockAcceptanceData.BlockHash, err)
-			continue
-		}
 		for i, txAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
 			if !txAcceptance.IsAccepted {
 				continue

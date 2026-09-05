@@ -7,6 +7,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
 )
 
@@ -61,52 +62,41 @@ func TestUTXOCommitment(t *testing.T) {
 	})
 }
 
-// expectedUTXOCommitments stores the golden data for expected UTXO commitments
-// for each network and block. These values are updated when the UTXO commitment
-// calculation logic changes.
-var expectedUTXOCommitments = map[string]map[string]string{
-	"hoosat-mainnet": {
-		"A": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
-		"B": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
-		"C": "df82b779639675289429fcbd7dcaa907b5d32a1c88d4be1b826c71313c011bfe",
-		"D": "c9574ea9e190f2e7803498d84a9890de33776b9918f709ebae632f42865db92f",
-		"E": "44e4a7f8e152bcef1e345bcea16658b544521f2895e93c445ad300a9a5add7a7",
-	},
-	"hoosat-testnet": {
-		"A": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
-		"B": "544eb3142c000f0ad2c76ac41f4222abbababed830eeafee4b6dc56b52d5cac0",
-		"C": "e167c35a1a601d72b3e0f0681a3c0fe26c49f45c1905b5ca5a54b843d8cc566a",
-		"D": "faff3a4dffea1fe5f719dacd2c2c959effad97a3d289c1634fb8a3c46f3dd1f6",
-		"E": "96f667be6a98fa90c7a88dc7af3e5303fc8f7bfa2960e514bef87b88deb65588",
-	},
-}
-
 func checkBlockUTXOCommitment(t *testing.T, consensus testapi.TestConsensus, blockHash *externalapi.DomainHash, blockName string) {
 	block, _, err := consensus.GetBlock(blockHash)
 	if err != nil {
 		t.Fatalf("Error getting block %s: %+v", blockName, err)
 	}
 
-	// Get the network name from the consensus DAG params
-	networkName := consensus.DAGParams().Name
-
-	// Get the expected commitment for this network and block
-	expectedCommitmentStr, ok := expectedUTXOCommitments[networkName][blockName]
-	if !ok {
-		t.Fatalf("No expected UTXO commitment found for network %s, block %s", networkName, blockName)
-	}
-
-	// Parse the expected commitment string to a DomainHash
-	expectedCommitment, err := externalapi.NewDomainHashFromString(expectedCommitmentStr)
+	// Get the past UTXO set of block
+	csm := consensus.ConsensusStateManager()
+	utxoSetIterator, err := csm.RestorePastUTXOSetIterator(model.NewStagingArea(), blockHash)
 	if err != nil {
-		t.Fatalf("Failed to parse expected UTXO commitment for block %s: %s", blockName, expectedCommitmentStr)
+		t.Fatalf("Error restoring past UTXO of block %s: %+v", blockName, err)
+	}
+	defer utxoSetIterator.Close()
+
+	// Build a Multiset
+	ms := multiset.New()
+	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
+		outpoint, entry, err := utxoSetIterator.Get()
+		if err != nil {
+			t.Fatalf("Error getting from UTXOSet iterator: %+v", err)
+		}
+		err = consensus.ConsensusStateManager().AddUTXOToMultiset(ms, entry, outpoint)
+		if err != nil {
+			t.Fatalf("Error adding utxo to multiset: %+v", err)
+		}
 	}
 
-	// Compare the actual (stored) commitment with the expected one
-	actualCommitment := block.Header.UTXOCommitment()
-	if !expectedCommitment.Equal(actualCommitment) {
-		t.Fatalf("TestUTXOCommitment: expected UTXO commitment for block %s doesn't match actual. Want: %s, got: %s",
-			blockName, expectedCommitment, actualCommitment)
+	// Turn the multiset into a UTXO commitment
+	utxoCommitment := ms.Hash()
+
+	// Make sure that the two commitments are equal
+	if !utxoCommitment.Equal(block.Header.UTXOCommitment()) {
+		t.Fatalf("TestUTXOCommitment: calculated UTXO commitment for block %s and "+
+			"actual UTXO commitment don't match. Want: %s, got: %s", blockName,
+			utxoCommitment, block.Header.UTXOCommitment())
 	}
 }
 

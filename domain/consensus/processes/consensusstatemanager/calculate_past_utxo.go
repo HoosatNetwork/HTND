@@ -110,7 +110,7 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	}
 
 	log.Debugf("Calculating the multiset of %s", blockHash)
-	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData)
+	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData, daaScore)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -273,27 +273,16 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		isSelectedParent := i == 0
 		log.Tracef("Is merge set block %s the selected parent: %t", mergeSetBlockHash, isSelectedParent)
 
-		// UTXO entries created here must be stamped with the DAA score of the block that actually
-		// created them (mergeSetBlockHash), not with daaScore (the DAA score of blockHash, the block
-		// whose past-UTXO-and-acceptance-data is being resolved). blockHash is usually a different,
-		// later block than mergeSetBlockHash for every non-selected-parent member of the merge set -
-		// stamping all of them with blockHash's daaScore was corrupting BlockDAAScore on the majority
-		// of UTXO entries in this DAG (blockDAAScore is part of the UTXO commitment multiset input and
-		// drives coinbase maturity checks), causing the same real coin to be reconstructed with a
-		// different DAAScore depending on which block's past-UTXO was being resolved at the time -
-		// producing UTXO commitment mismatches and, via DiffFrom's (outpoint, BlockDAAScore) keying,
-		// silently divergent per-node UTXO sets and address balances.
-		creatingBlockDAAScore, err := csm.blockOwnDAAScore(stagingArea, mergeSetBlockHash)
-		if err != nil {
-			return nil, nil, err
-		}
-
+		// Every UTXO created by any member of this merge set is stamped with daaScore - blockHash's
+		// own DAA score - because blockHash is the block that merges them, i.e. the block that adds
+		// them to the UTXO set. See utxo.AcceptedUTXOBlockDAAScore for the rule; it is a consensus
+		// rule (BlockDAAScore is part of the UTXO commitment preimage), not a local choice, and
+		// calculateMultiset stamps the same acceptance data with the same daaScore.
 		for j, transaction := range mergeSetBlock.Transactions {
 			var isAccepted bool
 
 			isAccepted, accumulatedMass, err = csm.maybeAcceptTransaction(stagingArea, transaction, blockHash,
-				isSelectedParent, accumulatedUTXODiff, accumulatedMass, selectedParentMedianTime, daaScore,
-				creatingBlockDAAScore)
+				isSelectedParent, accumulatedUTXODiff, accumulatedMass, selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -319,22 +308,6 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	return multiblockAcceptanceData, accumulatedUTXODiff, nil
 }
 
-// blockOwnDAAScore returns blockHash's own DAA score - preferring its header when available, exactly
-// like the resolving-block daaScore lookup in calculatePastUTXOAndAcceptanceDataWithSelectedParentUTXO
-// - for use when stamping UTXO entries that blockHash itself creates.
-func (csm *consensusStateManager) blockOwnDAAScore(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash) (uint64, error) {
-	header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, blockHash)
-	if err != nil {
-		daaScore, err := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, blockHash)
-		if err != nil {
-			return 0, err
-		}
-		return daaScore, nil
-	}
-	return header.DAAScore(), nil
-}
-
 func (csm *consensusStateManager) maybeAcceptTransaction(
 	stagingArea *model.StagingArea,
 	transaction *externalapi.DomainTransaction,
@@ -344,7 +317,6 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	accumulatedMassBefore uint64,
 	_ int64,
 	blockDAAScore uint64,
-	creatingBlockDAAScore uint64,
 ) (isAccepted bool, accumulatedMassAfter uint64, err error) {
 	if transaction == nil {
 		log.Errorf("maybeAcceptTransaction called with nil transaction for block %s", blockHash)
@@ -401,10 +373,10 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	}
 
 	log.Tracef("Adding transaction %s in block %s to the accumulated diff", transactionID, blockHash)
-	// creatingBlockDAAScore (the merge-set block's own DAA score), not blockDAAScore (the resolving
-	// block's DAA score used above only for context validation), is what gets stamped into the
-	// UTXOEntries this transaction creates - see the comment at the call site in applyMergeSetBlocks.
-	err = accumulatedUTXODiff.AddTransaction(transaction, creatingBlockDAAScore)
+	// blockDAAScore is the merging block's DAA score, which is what the UTXOEntries this transaction
+	// creates are stamped with - see the comment at the call site in applyMergeSetBlocks and
+	// utxo.AcceptedUTXOBlockDAAScore.
+	err = accumulatedUTXODiff.AddTransaction(transaction, utxo.AcceptedUTXOBlockDAAScore(blockDAAScore))
 	if err != nil {
 		// Do NOT swallow this into isAccepted=false: transaction was already validated above (or is
 		// the selected parent's coinbase), so a failure here is not a legitimate rejection - it's
