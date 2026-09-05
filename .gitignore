@@ -67,3 +67,4 @@ coverage.tmp
 /htnwallet
 esscapes_summary.txt
 .release-notes
+/utxoforensics
