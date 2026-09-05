@@ -118,6 +118,8 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		PruningInterval:                   pruningInterval,
 		EnableSanityCheckPruningUTXOSet:   cfg.EnableSanityCheckPruningUTXOSet,
 		EnableUTXODebugDiagnostics:        cfg.EnableUTXODebugDiagnostics,
+		EnableAutoExodusExportOnPruning:   cfg.EnableAutoExodusExportOnPruning,
+		AutoExodusExportDir:               cfg.AutoExodusExportDir,
 		UseHoohashCLibrary:                cfg.UseHoohashCLibrary,
 		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
 	}

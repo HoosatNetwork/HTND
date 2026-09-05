@@ -47,6 +47,8 @@ type PruningStore interface {
 	LastUTXODebugCheckedPruningPoint(dbContext DBReader) (*externalapi.DomainHash, error)
 	SetLastUTXODebugReproducedRootHash(dbContext DBWriter, rootHash *externalapi.DomainHash) error
 	LastUTXODebugReproducedRootHash(dbContext DBReader) (*externalapi.DomainHash, error)
+	SetLastAutoExodusExportedPruningPoint(dbContext DBWriter, pruningPoint *externalapi.DomainHash) error
+	LastAutoExodusExportedPruningPoint(dbContext DBReader) (*externalapi.DomainHash, error)
 
 	CacheLen() int
 	UnstageAll(stagingArea *StagingArea)

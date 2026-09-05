@@ -81,6 +81,10 @@ type Config struct {
 	// 15-20+ minutes on a mature chain. Off by default; only for actively investigating a UTXO
 	// commitment mismatch.
 	EnableUTXODebugDiagnostics bool
+	// EnableAutoExodusExportOnPruning exports an acceptance-data Exodus bundle after a pruning point moves.
+	// AutoExodusExportDir is the parent directory for those best-effort diagnostic bundles.
+	EnableAutoExodusExportOnPruning bool
+	AutoExodusExportDir             string
 
 	SkipAddingGenesis bool
 
@@ -355,6 +359,14 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
+	var c *consensus
+	var autoExodusExport func(*externalapi.DomainHash)
+	if config.EnableAutoExodusExportOnPruning {
+		autoExodusExport = func(pruningPoint *externalapi.DomainHash) {
+			go c.exportPruningPointExodusBundle(pruningPoint, config.AutoExodusExportDir, config.Name)
+		}
+	}
+
 	pruningManager := pruningmanager.New(
 		dbManager,
 		dagTraversalManager,
@@ -384,6 +396,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.DataRetentionDuration,
 		config.PruningInterval,
 		config.EnableSanityCheckPruningUTXOSet,
+		autoExodusExport,
 		config.K,
 		config.DifficultyAdjustmentWindowSize,
 		config.TargetTimePerBlock,
@@ -539,7 +552,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.MaxBlockLevel,
 	)
 
-	c := &consensus{
+	c = &consensus{
 		lock:            &sync.Mutex{},
 		databaseContext: dbManager,
 		genesisBlock:    config.GenesisBlock,

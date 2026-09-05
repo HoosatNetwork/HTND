@@ -50,6 +50,7 @@ type pruningManager struct {
 	dataRetentionDuration           time.Duration
 	pruningInterval                 time.Duration
 	shouldSanityCheckPruningUTXOSet bool
+	autoExodusExport                func(*externalapi.DomainHash)
 	k                               []externalapi.KType
 	difficultyAdjustmentWindowSize  []int
 
@@ -91,6 +92,7 @@ func New(
 	dataRetentionDuration time.Duration,
 	pruningInterval time.Duration,
 	shouldSanityCheckPruningUTXOSet bool,
+	autoExodusExport func(*externalapi.DomainHash),
 	k []externalapi.KType,
 	difficultyAdjustmentWindowSize []int,
 	targetTimePerBlock []time.Duration,
@@ -124,6 +126,7 @@ func New(
 		pruningInterval:                 pruningInterval,
 		finalityInterval:                finalityInterval,
 		shouldSanityCheckPruningUTXOSet: shouldSanityCheckPruningUTXOSet,
+		autoExodusExport:                autoExodusExport,
 		k:                               k,
 		difficultyAdjustmentWindowSize:  difficultyAdjustmentWindowSize,
 		targetTimePerBlock:              targetTimePerBlock,
@@ -2118,7 +2121,28 @@ func (pm *pruningManager) updatePruningPoint() error {
 	pm.cachedPruningPointAnticone = nil
 
 	log.Info("Finishing updating the pruning point UTXO set")
-	return pm.pruningStore.FinishUpdatingPruningPointUTXOSet(pm.databaseContext)
+	err = pm.pruningStore.FinishUpdatingPruningPointUTXOSet(pm.databaseContext)
+	if err != nil {
+		return err
+	}
+	pm.triggerAutoExodusExport(pruningPoint)
+	return nil
+}
+
+func (pm *pruningManager) triggerAutoExodusExport(pruningPoint *externalapi.DomainHash) {
+	if pm.autoExodusExport == nil || pruningPoint.Equal(pm.genesisHash) {
+		return
+	}
+	if lastExported, err := pm.pruningStore.LastAutoExodusExportedPruningPoint(pm.databaseContext); err == nil && lastExported.Equal(pruningPoint) {
+		log.Infof("[AUTO-EXODUS] pruning point %s was already exported; skipping", pruningPoint)
+		return
+	}
+	if err := pm.pruningStore.SetLastAutoExodusExportedPruningPoint(pm.databaseContext, pruningPoint); err != nil {
+		log.Errorf("[AUTO-EXODUS] could not persist export marker for pruning point %s: %s; skipping export to prevent duplicates", pruningPoint, err)
+		return
+	}
+	log.Infof("[AUTO-EXODUS] scheduling acceptance-data Exodus export for pruning point %s", pruningPoint)
+	pm.autoExodusExport(pruningPoint)
 }
 
 func (pm *pruningManager) PruneAllBlocksBelow(stagingArea *model.StagingArea, pruningPointHash *externalapi.DomainHash) error {

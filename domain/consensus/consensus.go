@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -18,8 +19,10 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/domain/exodus"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/util/staging"
+	"github.com/HoosatNetwork/HTND/version"
 	"github.com/pkg/errors"
 )
 
@@ -75,6 +78,60 @@ type consensus struct {
 
 	consensusEventsChan chan externalapi.ConsensusEvent
 	virtualNotUpdated   bool
+}
+
+func (s *consensus) exportPruningPointExodusBundle(pruningPoint *externalapi.DomainHash, exportRoot, network string) {
+	onEnd := logger.LogAndMeasureExecutionTime(log, "[AUTO-EXODUS] exportPruningPointExodusBundle")
+	defer onEnd()
+
+	header, err := s.GetBlockHeader(pruningPoint)
+	if err != nil {
+		log.Errorf("[AUTO-EXODUS] FAILED: could not fetch header for pruning point %s: %s", pruningPoint, err)
+		return
+	}
+	daaScore := header.DAAScore()
+	bundleDir := filepath.Join(exportRoot, "pruning-point-"+fmt.Sprintf("%d-%s", daaScore, pruningPoint))
+	log.Infof("[AUTO-EXODUS] exporting pruning point %s (DAA score %d) from acceptance data to %s",
+		pruningPoint, daaScore, bundleDir)
+
+	writer, err := exodus.NewWriter(bundleDir, exodus.BundleTarget{
+		BlockHash: pruningPoint,
+		DAAScore:  daaScore,
+	}, exodus.DefaultChunkEntryCount)
+	if err != nil {
+		log.Errorf("[AUTO-EXODUS] FAILED: could not create bundle at %s: %s", bundleDir, err)
+		return
+	}
+
+	err = s.IterateUTXOSetAtBlockFromAcceptanceData(pruningPoint,
+		func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
+			return writer.AddEntry(outpoint, entry)
+		})
+	if err != nil {
+		log.Errorf("[AUTO-EXODUS] FAILED: acceptance-data UTXO walk for pruning point %s failed: %s (partial bundle: %s)",
+			pruningPoint, err, bundleDir)
+		return
+	}
+
+	commitment, err := writer.Finalize(exodus.BundleMeta{
+		ToolVersion: version.Version(),
+		NodeVersion: version.Version(),
+		Network:     network,
+	})
+	if err != nil {
+		log.Errorf("[AUTO-EXODUS] FAILED: could not finalize bundle for pruning point %s at %s: %s",
+			pruningPoint, bundleDir, err)
+		return
+	}
+
+	headerCommitment := header.UTXOCommitment()
+	if commitment.Equal(headerCommitment) {
+		log.Infof("[AUTO-EXODUS] PASS: pruning point %s (DAA score %d) exported %d UTXOs; computed commitment %s matches header commitment %s; bundle=%s",
+			pruningPoint, daaScore, writer.EntryCount(), commitment, headerCommitment, bundleDir)
+		return
+	}
+	log.Errorf("[AUTO-EXODUS] FAIL: pruning point %s (DAA score %d) exported %d UTXOs; computed commitment %s does not match header commitment %s; bundle=%s",
+		pruningPoint, daaScore, writer.EntryCount(), commitment, headerCommitment, bundleDir)
 }
 
 // In order to prevent a situation that the consensus lock is held for too much time, we
