@@ -203,33 +203,33 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 	return nil
 }
 
+// sameCoin reports whether two entries at one outpoint describe the same coin. containsWithDAAScore
+// matches on (outpoint, BlockDAAScore) alone, which is NOT an identity for a UTXO: two entries can
+// share both and still be different coins carrying different amounts or scripts. Cancelling one
+// against the other on that partial match is what silently loses coins from a diff - and, once that
+// diff is applied to the materialised UTXO set, from the node's UTXO set permanently.
+func sameCoin(a, b externalapi.UTXOEntry) bool {
+	return a != nil && b != nil && a.Amount() == b.Amount() && a.IsCoinbase() == b.IsCoinbase() &&
+		a.ScriptPublicKey().Equal(b.ScriptPublicKey())
+}
+
 func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
 	if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
-		if entry.IsCoinbase() {
-			existing, _ := mud.toRemove.Get(outpoint)
-			valueDiffers := existing == nil || existing.Amount() != entry.Amount() ||
-				!existing.ScriptPublicKey().Equal(entry.ScriptPublicKey())
-			if valueDiffers {
-				// A coinbase output can't legitimately be removed-then-recreated within a single
-				// AddTransaction call (it has no inputs of its own to trigger that), and a genuine
-				// coinbase-ID collision (see isTolerableConflict below) always carries the same
-				// spendable value on both sides. A DIFFERENT value landing on the same
-				// (outpoint, DAA score) pair here isn't explained by either of those - dropping this
-				// coinbase's real, freshly minted reward from the diff with no error would be wrong
-				// regardless of the exact cause. Drop the stale toRemove entry and still record this
-				// output as newly added.
-				log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) collided with "+
-					"a DIFFERENT-valued pre-existing toRemove entry (amount=%d) - adding to toAdd instead of "+
-					"silently cancelling out", outpoint, entry.Amount(), entry.BlockDAAScore(), existing.Amount())
-				mud.toRemove.remove(outpoint)
-				mud.toAdd.add(outpoint, entry)
-				return nil
-			}
-			log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d isCoinbase=%t) cancels "+
-				"out against a same-valued pre-existing toRemove entry (amount=%d isCoinbase=%t) - treated as "+
-				"legitimate no-op", outpoint, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase(),
-				existing.Amount(), existing.IsCoinbase())
+		existing, _ := mud.toRemove.Get(outpoint)
+		if !sameCoin(existing, entry) {
+			// The pending removal is for a different coin that merely shares this outpoint and DAA
+			// score. Cancelling the two against each other drops this addition entirely, which loses a
+			// real, freshly created output from the diff - and from the UTXO set once the diff is
+			// applied. Discard the entry that cannot be right and record what this call was told to do.
+			log.Debugf("[UTXO-DEBUG] addEntry: outpoint %s (amount=%d daaScore=%d isCoinbase=%t) collided "+
+				"with a DIFFERENT-valued pre-existing toRemove entry (amount=%d) - these are distinct coins, "+
+				"so record the addition instead of silently cancelling it out",
+				outpoint, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase(), existing.Amount())
+			mud.toRemove.remove(outpoint)
+			mud.toAdd.add(outpoint, entry)
+			return nil
 		}
+		// Same coin: this addition genuinely cancels the pending removal.
 		mud.toRemove.remove(outpoint)
 	} else if mud.toAdd.Contains(outpoint) {
 		if entry.IsCoinbase() {
@@ -260,15 +260,20 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 
 func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
 	if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
-		if entry.IsCoinbase() {
-			if existing, ok := mud.toAdd.Get(outpoint); ok && (existing.Amount() != entry.Amount() ||
-				!existing.ScriptPublicKey().Equal(entry.ScriptPublicKey())) {
-				log.Debugf("[UTXO-DEBUG] removeEntry: coinbase outpoint %s being spent (amount=%d daaScore=%d) "+
-					"matches a DIFFERENT-valued entry already in toAdd (amount=%d) - removing that toAdd entry "+
-					"instead of the one actually being spent. Likely the same content-derived coinbase ID "+
-					"collision as addEntry, hitting the removal path instead.",
-					outpoint, entry.Amount(), entry.BlockDAAScore(), existing.Amount())
-			}
+		existing, _ := mud.toAdd.Get(outpoint)
+		if !sameCoin(existing, entry) {
+			// The coin being spent is not the coin sitting in toAdd - they only share an outpoint and a
+			// DAA score. Dropping the toAdd entry and stopping there, as this used to do, records no
+			// removal at all, so the coin that was actually spent survives into the resulting UTXO set
+			// and stays spendable forever. Mirror addEntry's handling of the same collision: discard the
+			// entry that cannot be right and record what this call was actually told to do.
+			log.Debugf("[UTXO-DEBUG] removeEntry: outpoint %s being spent (amount=%d daaScore=%d "+
+				"isCoinbase=%t) collided with a DIFFERENT-valued entry in toAdd (amount=%d) - these are "+
+				"distinct coins, so record the removal instead of dropping it",
+				outpoint, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase(), existing.Amount())
+			mud.toAdd.remove(outpoint)
+			mud.toRemove.add(outpoint, entry)
+			return nil
 		}
 		mud.toAdd.remove(outpoint)
 	} else if mud.toRemove.Contains(outpoint) {
