@@ -26,6 +26,8 @@ htnd
 cmd/gencerts/gencerts
 cmd/htnctl/htnctl
 cmd/hoosatminer/hoosatminer
+cmd/htnexodus/htnexodus
+/htnexodus
 *.exe
 *.exe~
 

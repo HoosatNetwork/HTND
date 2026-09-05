@@ -65,4 +65,11 @@ type Consensus interface {
 	ReresolveInvalidBlocks() error
 	GetBlockByTransactionID(transactionID *DomainTransactionID) (*DomainBlock, error)
 	CheckMergeSetBluesAndIfBlockExistsInThem(searchedBlock *DomainHash) error
+
+	// IterateUTXOSetAtBlock streams the full UTXO set as of the given (past, UTXO-valid) block,
+	// invoking callback once for every outpoint/entry pair. The whole iteration runs under the
+	// consensus lock, so callback must not call back into this Consensus instance. This is used
+	// by tooling (e.g. the exodus pruning point candidate generator) that needs the UTXO set of
+	// an arbitrary historical block, not just the current pruning point or virtual.
+	IterateUTXOSetAtBlock(blockHash *DomainHash, callback func(outpoint *DomainOutpoint, entry UTXOEntry) error) error
 }

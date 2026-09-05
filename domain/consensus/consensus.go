@@ -832,6 +832,37 @@ func (s *consensus) GetVirtualUTXOs(expectedVirtualParents []*externalapi.Domain
 	return virtualUTXOs, nil
 }
 
+// IterateUTXOSetAtBlock streams the full UTXO set as of the given (past, UTXO-valid) block,
+// invoking callback once for every outpoint/entry pair, while holding the consensus lock for
+// the duration of the iteration. See externalapi.Consensus for details.
+func (s *consensus) IterateUTXOSetAtBlock(blockHash *externalapi.DomainHash,
+	callback func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error,
+) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+
+	utxoSetIterator, err := s.consensusStateManager.RestorePastUTXOSetIterator(stagingArea, blockHash)
+	if err != nil {
+		return err
+	}
+	defer utxoSetIterator.Close()
+
+	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
+		outpoint, entry, err := utxoSetIterator.Get()
+		if err != nil {
+			return err
+		}
+		err = callback(outpoint, entry)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *consensus) PruningPoint() (*externalapi.DomainHash, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
