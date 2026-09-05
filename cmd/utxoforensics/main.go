@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 
 	consensusdatabase "github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/acceptancedatastore"
@@ -54,10 +55,18 @@ import (
 )
 
 var (
-	dbPath   = flag.String("db", "", "path to a COPY of a datadir2 (pebble)")
-	blockArg = flag.String("block", "", "block hash to analyze")
-	scanN    = flag.Int("scan", 0, "also scan N selected-chain blocks up from the pruning point")
-	dbPath2  = flag.String("db2", "", "second database COPY; with -diffsets, its pruning point UTXO set is "+
+	dbPath         = flag.String("db", "", "path to a COPY of a datadir2 (pebble)")
+	blockArg       = flag.String("block", "", "block hash to analyze")
+	scanN          = flag.Int("scan", 0, "also scan N selected-chain blocks up from the pruning point")
+	prefixOverride = flag.Int("prefix", -1, "read this database prefix (0 or 1) instead of the active one - "+
+		"needed to inspect the staging consensus an IBD-with-headers-proof is still building, which lives "+
+		"under the inactive prefix until it is committed")
+	prefixOverride2 = flag.Int("prefix2", -1, "prefix override for -db2 (see -prefix)")
+	srcA            = flag.String("src", "bucket", "which UTXO set of -db to use for -diffsets: \"bucket\" (the "+
+		"served pruning point set) or \"imported\" (the raw set as received from a peer, before it is copied "+
+		"into the served bucket)")
+	srcB    = flag.String("src2", "bucket", "which UTXO set of -db2 to use for -diffsets (see -src)")
+	dbPath2 = flag.String("db2", "", "second database COPY; with -diffsets, its pruning point UTXO set is "+
 		"compared entry-by-entry against -db's")
 	diffSets = flag.Bool("diffsets", false, "diff the pruning point UTXO sets of -db and -db2 (which must be at "+
 		"the same pruning point) - the direct test of whether two peers serve the same set")
@@ -100,7 +109,7 @@ func main() {
 	}
 	defer db.Close()
 
-	s, err := openStores(db)
+	s, err := openStores(db, *prefixOverride)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stores: %v\n", err)
 		os.Exit(1)
@@ -126,7 +135,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer db2.Close()
-		s2, err := openStores(db2)
+		s2, err := openStores(db2, *prefixOverride2)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "stores for db2: %v\n", err)
 			os.Exit(1)
@@ -722,16 +731,26 @@ func reconstructPruningPointSet(s *stores, sa *model.StagingArea) {
 	}
 }
 
-func openStores(db *pebble.DB) (*stores, error) {
-	activePrefix, exists, err := prefixmanager.ActivePrefix(db)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.New("no active database prefix - is this a pebble datadir2?")
+func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
+	var prefixBytes []byte
+	if prefixFlag >= 0 {
+		if prefixFlag > 1 {
+			return nil, errors.Errorf("prefix must be 0 or 1, got %d", prefixFlag)
+		}
+		prefixBytes = []byte{byte(prefixFlag)}
+		fmt.Printf("using prefix override %d\n", prefixFlag)
+	} else {
+		activePrefix, exists, err := prefixmanager.ActivePrefix(db)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errors.New("no active database prefix - is this a pebble datadir2?")
+		}
+		prefixBytes = activePrefix.Serialize()
 	}
 	dbManager := consensusdatabase.New(db)
-	pb := consensusdatabase.MakeBucket(activePrefix.Serialize())
+	pb := consensusdatabase.MakeBucket(prefixBytes)
 
 	bs, err := blockstore.New(dbManager, pb, 100, false)
 	if err != nil {
@@ -766,7 +785,8 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 		fmt.Printf("pruning points: %v / %v\n", errA, errB)
 		return
 	}
-	fmt.Printf("\n=== pruning point UTXO set comparison\n  db  pruning point: %s\n  db2 pruning point: %s\n", ppA, ppB)
+	fmt.Printf("\n=== pruning point UTXO set comparison\n  db  pruning point: %s (source: %s)\n"+
+		"  db2 pruning point: %s (source: %s)\n", ppA, *srcA, ppB, *srcB)
 	if !ppA.Equal(ppB) {
 		fmt.Printf("  the two databases are at DIFFERENT pruning points - their sets are not comparable\n")
 		return
@@ -776,7 +796,7 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 	}
 
 	setA := make(map[externalapi.DomainOutpoint]entryFingerprint)
-	iterA, err := a.pruning.PruningPointUTXOIterator(a.db)
+	iterA, err := utxoSetIterator(a, *srcA)
 	if err != nil {
 		fmt.Printf("  db bucket iterator: %v\n", err)
 		return
@@ -796,7 +816,7 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 	}
 	iterA.Close()
 
-	iterB, err := b.pruning.PruningPointUTXOIterator(b.db)
+	iterB, err := utxoSetIterator(b, *srcB)
 	if err != nil {
 		fmt.Printf("  db2 bucket iterator: %v\n", err)
 		return
@@ -804,6 +824,7 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 	defer iterB.Close()
 	msB := multiset.New()
 	var countB, onlyInB, valueDiff, daaOnlyDiff int
+	daaDelta := map[int64]int{}
 	var examplesOnlyB, examplesValue []string
 	for ok := iterB.First(); ok; ok = iterB.Next() {
 		outpoint, entry, err := iterB.Get()
@@ -831,6 +852,7 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 				got.scriptVersion == want.scriptVersion && got.scriptSum == want.scriptSum
 			if sameExceptDAA {
 				daaOnlyDiff++
+				daaDelta[int64(want.daaScore)-int64(got.daaScore)]++
 			}
 			if len(examplesValue) < 8 {
 				examplesValue = append(examplesValue, fmt.Sprintf(
@@ -852,6 +874,23 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 	for _, e := range examplesValue {
 		fmt.Printf("    value-diff : %s\n", e)
 	}
+	if len(daaDelta) > 0 {
+		deltas := make([]int64, 0, len(daaDelta))
+		for d := range daaDelta {
+			deltas = append(deltas, d)
+		}
+		sort.Slice(deltas, func(i, j int) bool { return daaDelta[deltas[i]] > daaDelta[deltas[j]] })
+		fmt.Printf("    BlockDAAScore delta (db minus db2) distribution over %d entries, %d distinct values:\n",
+			daaOnlyDiff, len(daaDelta))
+		for i, d := range deltas {
+			if i >= 10 {
+				fmt.Printf("      ... and %d more distinct deltas\n", len(deltas)-10)
+				break
+			}
+			fmt.Printf("      %+d : %d entries (%.2f%%)\n", d, daaDelta[d],
+				100*float64(daaDelta[d])/float64(daaOnlyDiff))
+		}
+	}
 	shown := 0
 	for outpoint, want := range setA {
 		if shown >= 8 {
@@ -861,5 +900,20 @@ func diffPruningPointSets(a, b *stores, sa *model.StagingArea) {
 		fmt.Printf("    only-in-db : %s:%d amount=%d daa=%d coinbase=%t\n",
 			&o.TransactionID, o.Index, want.amount, want.daaScore, want.isCoinbase)
 		shown++
+	}
+}
+
+// utxoSetIterator picks between the served pruning point bucket and the raw imported set - the one a
+// peer actually sent, which an IBD keeps under the staging prefix until it is committed and cleared.
+// Comparing one node's imported set against another's lets two peers' answers for the same pruning
+// point be diffed directly.
+func utxoSetIterator(s *stores, src string) (externalapi.ReadOnlyUTXOSetIterator, error) {
+	switch src {
+	case "bucket":
+		return s.pruning.PruningPointUTXOIterator(s.db)
+	case "imported":
+		return s.pruning.ImportedPruningPointUTXOIterator(s.db)
+	default:
+		return nil, errors.Errorf("unknown UTXO set source %q (want \"bucket\" or \"imported\")", src)
 	}
 }
