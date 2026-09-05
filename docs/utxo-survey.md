@@ -29,9 +29,18 @@ HTND_UTXO_SURVEY=/var/log/htnd/utxo-survey.jsonl htnd --...
 | `HTND_UTXO_SURVEY` | unset (off) | File to append JSONL records to. |
 | `HTND_UTXO_SURVEY_MAX` | `5000` | Stop after this many records. `0` means unlimited. |
 | `HTND_UTXO_SURVEY_MAX_TXIDS` | `128` | Cap on each per-record transaction-ID and diff-element list. `0` means unlimited. |
-| `HTND_UTXO_SURVEY_DEEP` | `0` | How many records may pay for an O(UTXO-set) recomputation of the selected parent's multiset. Each one is a multi-minute full scan on a mature chain; `1` or `2` is usually enough. |
+| `HTND_UTXO_SURVEY_DEEP` | `0` | How many records may pay for an O(UTXO-set) recomputation of the selected parent's multiset. **Leave it at 0 for a first run.** |
 
 Records are flushed on every write, so a killed node keeps everything it surveyed.
+
+`HTND_UTXO_SURVEY_DEEP` deserves a warning. The recomputation it enables runs *inline in virtual
+resolution*, on the thread that is resolving the block, and it walks the entire UTXO set: on a
+16.4M-entry mainnet set that is one to three minutes during which the node resolves nothing. It is
+rationed rather than capped in duration, so `DEEP=2` costs two such stalls, not a bounded overhead.
+Leave it at 0 to get the distribution and the classification, which is what a first run is for; turn
+it on afterwards, at 1, only when a specific block's `parentRecomputedMultiset` is the value you
+need — it answers whether the parent's stored multiset drifted from the parent's own UTXO set, and
+nothing else in the record answers that.
 
 IBD with a headers proof runs in a staging consensus, which has its own consensus state manager;
 both it and the main consensus append to the same file. So a sync that failed against one peer and
