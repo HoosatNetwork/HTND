@@ -49,13 +49,19 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
 	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
 	"github.com/pkg/errors"
 )
 
 var (
-	dbPath         = flag.String("db", "", "path to a COPY of a datadir2 (pebble)")
+	dbPath     = flag.String("db", "", "path to a COPY of a datadir2 (pebble)")
+	surveyPath = flag.String("survey", "", "cluster a UTXO survey JSONL file (written by a node run with "+
+		"HTND_UTXO_SURVEY) and print the classification table: failures by error and by A/B/C class, their "+
+		"spread over DAA scores, whether the pruning point import was already offset, which outpoints block "+
+		"more than one block, and which of those are present under disagreeing SerializeUTXO preimages - "+
+		"i.e. handling rather than loss. Needs no -db.")
 	blockArg       = flag.String("block", "", "block hash to analyze")
 	scanN          = flag.Int("scan", 0, "also scan N selected-chain blocks up from the pruning point")
 	prefixOverride = flag.Int("prefix", -1, "read this database prefix (0 or 1) instead of the active one - "+
@@ -107,6 +113,22 @@ type stores struct {
 
 func main() {
 	flag.Parse()
+
+	// Clustering a survey reads only the JSONL file the node wrote; there is nothing to open a
+	// database for, and requiring one would mean carrying a copy of a datadir around to answer
+	// questions the survey already contains the answers to.
+	if *surveyPath != "" {
+		records, err := utxosurvey.Read(*surveyPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read survey: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(utxosurvey.Summarize(records))
+		if *dbPath == "" {
+			return
+		}
+	}
+
 	if *dbPath == "" {
 		fmt.Fprintln(os.Stderr, "-db is required")
 		os.Exit(2)

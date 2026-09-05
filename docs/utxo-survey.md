@@ -93,7 +93,22 @@ different bytes is not lost, however many other symptoms accompany it.
 
 ## Clustering a run
 
-The questions worth answering before touching any logic, and the one-liners that answer them:
+`utxoforensics -survey` prints the whole table in one command, and needs no database:
+
+```sh
+go run ./cmd/utxoforensics -survey /var/log/htnd/utxo-survey.jsonl
+```
+
+It reports failures by error and by classification, their spread over DAA scores, whether the
+pruning-point import was already offset, which block the offset *enters* the chain at (the one whose
+selected parent still agrees with its own header — on a run with an offset import there is normally
+none, and a block appearing here is the one worth chasing), which outpoints block more than one
+block, and which of those are held under disagreeing `SerializeUTXO` preimages.
+
+It refuses to read a malformed line rather than skipping it: every conclusion below is a count, and
+a survey that quietly undercounts is worse than one that will not open.
+
+The same questions by hand, when you want to slice them differently:
 
 ```sh
 SURVEY=/var/log/htnd/utxo-survey.jsonl
