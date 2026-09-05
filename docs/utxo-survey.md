@@ -33,6 +33,11 @@ HTND_UTXO_SURVEY=/var/log/htnd/utxo-survey.jsonl htnd --...
 
 Records are flushed on every write, so a killed node keeps everything it surveyed.
 
+IBD with a headers proof runs in a staging consensus, which has its own consensus state manager;
+both it and the main consensus append to the same file. So a sync that failed against one peer and
+retried against another leaves an import record for each attempt, which is the point — two peers'
+sets are directly comparable that way, and `-survey` lists every import record it finds.
+
 To survey a database that has already synced, reset the statuses of the chain segment you care
 about to `UTXOPendingVerification` and re-resolve — a block that already has a status is never
 re-verified.
