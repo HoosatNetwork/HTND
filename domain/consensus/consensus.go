@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"os"
