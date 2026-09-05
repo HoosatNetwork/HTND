@@ -388,7 +388,7 @@ func (csm *consensusStateManager) surveyMissingOutpoints(stagingArea *model.Stag
 			if entry, ok := selectedParentPastUTXO.ToAdd().Get(&outpoint); ok {
 				result.FoundInParentSet = true
 				result.AlternateMatches = appendAlternateMatch(result.AlternateMatches,
-					"selected-parent-diff-toAdd", &outpoint, entry)
+					utxosurvey.SourceSelectedParentDiff, &outpoint, entry)
 			} else if selectedParentPastUTXO.ToRemove().Contains(&outpoint) {
 				result.FoundInParentSet = false
 			}
@@ -401,7 +401,13 @@ func (csm *consensusStateManager) surveyMissingOutpoints(stagingArea *model.Stag
 			reference = virtualEntry
 		}
 		for _, match := range result.AlternateMatches {
-			if match.Source == utxosurvey.SourceMergesetAcceptance || reference == nil {
+			// With no reference there is nothing to be different from: the coin was neither created by
+			// this block's acceptance data nor held by virtual, which is a missing coin, not a
+			// misspelled one. The acceptance entry is skipped because it IS the reference when present.
+			if reference == nil {
+				break
+			}
+			if match.Source == utxosurvey.SourceMergesetAcceptance {
 				continue
 			}
 			if match.BlockDAAScore != reference.BlockDAAScore() {
@@ -422,6 +428,10 @@ func (csm *consensusStateManager) surveyMissingOutpoints(stagingArea *model.Stag
 
 // virtualUTXOEntry is a point lookup into virtual's materialised UTXO table, reporting absence
 // rather than an error so the survey can record "not here" as a finding.
+//
+// It asks Has first rather than treating UTXOByOutpoint's error as absence, because that call
+// returns an error for a genuine database fault as well as for a missing entry, and reporting a
+// failed read as a missing coin would fabricate exactly the finding this survey exists to count.
 func (csm *consensusStateManager) virtualUTXOEntry(stagingArea *model.StagingArea,
 	outpoint *externalapi.DomainOutpoint,
 ) (externalapi.UTXOEntry, bool) {

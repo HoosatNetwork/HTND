@@ -71,6 +71,7 @@ const (
 	SourcePastDiffToRemove    = "past-utxo-diff-toRemove"
 	SourceMergesetAcceptance  = "mergeset-acceptance-output"
 	SourceImportedPruningSet  = "imported-pruning-point-utxo-set"
+	SourceSelectedParentDiff  = "selected-parent-diff-toAdd"
 )
 
 // AlternateMatch is one place the survey found an outpoint that a block reported as missing,
