@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
@@ -93,6 +94,14 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 
 			csm.acceptanceDataStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, acceptanceData)
 			csm.multisetStore.Stage(stagingAreaForCurrentBlock, unverifiedBlockHash, multiset)
+
+			// This branch never calls verifyUTXO: once a chain block is disqualified, every descendant
+			// is disqualified by inheritance and the node never asks what *those* blocks would have
+			// failed on. That is a large part of why a whole IBD's worth of UTXO trouble presents as one
+			// error. When the survey is on, verify them anyway, purely to record it, and discard the
+			// verdict - the status staged below is unchanged either way.
+			csm.surveyCascadedBlock(stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockHash,
+				previousBlockUTXOSet, pastUTXOSet, acceptanceData, multiset)
 
 			utxoDiff, err := previousBlockUTXOSet.DiffFrom(pastUTXOSet)
 			if err != nil {
@@ -324,7 +333,12 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 	}
 
 	log.Tracef("verifying the UTXO of block %s", blockHash)
-	err = csm.verifyUTXO(stagingArea, block, blockHash, pastUTXOSet, acceptanceData, multiset)
+	survey := newBlockSurvey(utxosurvey.StageChainReplay)
+	err = csm.verifyUTXO(stagingArea, block, blockHash, pastUTXOSet, acceptanceData, multiset, survey)
+	// Recorded before the error is acted on, and regardless of whether verifyUTXO tolerated the
+	// failure or returned it: a tolerated failure is still a failure this survey exists to count.
+	csm.recordBlockSurvey(stagingArea, survey, block, blockHash, selectedParentHash,
+		selectedParentPastUTXOSet, pastUTXOSet, acceptanceData, multiset)
 	if err != nil {
 		if errors.As(err, &ruleerrors.RuleError{}) {
 			log.Warnf("UTXO verification for block %s failed: %s", blockHash, err)

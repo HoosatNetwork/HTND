@@ -1,6 +1,8 @@
 package consensusstatemanager
 
 import (
+	"fmt"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
@@ -116,6 +118,17 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 			"Those transactions are skipped and left unvalidated so the import can complete; they are "+
 			"not accepted into the UTXO set either way.",
 			newPruningPoint, err, importedPruningPointMissingInputReason(utxoSetMatchesHeader))
+
+		// Every outpoint named here is original by construction - the imported set is the only place
+		// it could have come from - so this record is the survey's baseline: any ORIGINAL_MISSING
+		// finding on a later chain block that names one of these outpoints is the same gap, not a new
+		// one.
+		var missingTxOut ruleerrors.ErrMissingTxOut
+		if errors.As(err, &missingTxOut) {
+			csm.recordPruningPointImportSurvey(stagingArea, newPruningPoint, importedPruningPointMultiset,
+				"missing-input", importedPruningPointMissingInputReason(utxoSetMatchesHeader),
+				missingTxOut.MissingOutpoints, spendingTransactionsByOutpoint(newPruningPointBlock))
+		}
 	}
 
 	// Before we manually mark the new pruning point as valid, we validate that all of its transactions are valid
@@ -240,6 +253,13 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 	}
 
 	if expectedCommitment.Equal(recomputedMultiset.Hash()) {
+		csm.recordPruningPointImportSurvey(stagingArea, newPruningPoint, accumulatedMultiset,
+			"imported-multiset-double-counted",
+			fmt.Sprintf("the accumulated multiset double-counted re-delivered chunks; a fresh multiset over "+
+				"the %d deduplicated stored entries (%s) matches the header. The UTXO set itself was intact.",
+				entryCount, recomputedMultiset.Hash()),
+			nil, nil)
+
 		log.Warnf("Repaired imported pruning point %s UTXO set: a fresh multiset over the %d stored "+
 			"entries matches the header commitment %s. The accumulated multiset (%s) had double-counted "+
 			"one or more re-delivered chunks; using the recomputed multiset as the trust anchor.",
@@ -255,7 +275,34 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 		"mismatch their own commitments until the upstream disqualifications are fixed.",
 		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 
+	// The record that every later chain-replay record has to be read against: if the set this node
+	// starts from does not hash to what the pruning point's header commits to, every block resolved
+	// forward inherits that exact offset, and its own commitment mismatch is a symptom rather than a
+	// cause.
+	csm.recordPruningPointImportSurvey(stagingArea, newPruningPoint, recomputedMultiset,
+		"imported-multiset-mismatch",
+		fmt.Sprintf("neither the accumulated multiset (%s) nor a fresh multiset over the %d deduplicated "+
+			"stored entries (%s) matches the pruning point's header commitment; the served UTXO set is "+
+			"incomplete, so every block resolved forward from here inherits this offset",
+			accumulatedMultiset.Hash(), entryCount, recomputedMultiset.Hash()),
+		nil, nil)
+
 	return recomputedMultiset, false, nil
+}
+
+// spendingTransactionsByOutpoint maps each outpoint the block spends to the transaction that spends
+// it, so a survey record can say which transaction went looking for a missing coin.
+func spendingTransactionsByOutpoint(block *externalapi.DomainBlock) map[externalapi.DomainOutpoint]string {
+	spentBy := make(map[externalapi.DomainOutpoint]string)
+	for _, transaction := range block.Transactions {
+		transactionID := consensushashing.TransactionID(transaction).String()
+		for _, input := range transaction.Inputs {
+			if _, alreadySeen := spentBy[input.PreviousOutpoint]; !alreadySeen {
+				spentBy[input.PreviousOutpoint] = transactionID
+			}
+		}
+	}
+	return spentBy
 }
 
 // importedPruningPointMissingInputReason explains, for the operator, why an input of a transaction

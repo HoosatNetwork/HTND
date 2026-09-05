@@ -18,9 +18,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// verifyUTXO runs every UTXO check a block has to pass. survey may be nil; when it is not, each
+// check is run even after an earlier one has failed and each failure is recorded, so that the
+// resulting survey record describes the whole block instead of only its first symptom. The error
+// returned to the caller is still the first non-tolerated one either way, so validation behaves
+// identically whether or not the survey is on.
 func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
 	blockHash *externalapi.DomainHash, pastUTXODiff externalapi.UTXODiff, acceptanceData externalapi.AcceptanceData,
-	multiset model.Multiset,
+	multiset model.Multiset, survey *blockSurvey,
 ) error {
 	log.Tracef("verifyUTXO start for block %s", blockHash)
 	defer log.Tracef("verifyUTXO end for block %s", blockHash)
@@ -34,46 +39,57 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
 	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
-	permit := func(step string, err error) error {
+
+	// firstError is what the caller sees: the first failure that was not tolerated, exactly as
+	// before. stop reports whether verification should abandon the remaining checks - it does unless
+	// the survey is on, in which case the rest are run purely to fill in the record.
+	var firstError error
+	stop := func(step string, err error) bool {
 		if err == nil {
-			return nil
+			return false
 		}
+		survey.noteFailure(step, err)
 		if tolerate && errors.As(err, &ruleerrors.RuleError{}) {
 			csm.logToleratedIssue(step, blockHash, err)
-			return nil
+			return false
 		}
-		return err
+		if firstError == nil {
+			firstError = err
+		}
+		// The survey runs the remaining checks so that one record describes the whole block. That is
+		// only worth doing for consensus failures: a non-RuleError is a database or programming fault,
+		// not a finding, and continuing past one can only produce noise on top of it.
+		return !survey.active() || !errors.As(err, &ruleerrors.RuleError{})
 	}
 
 	log.Debugf("Validating UTXO commitment for block %s", blockHash)
-	if err := permit("utxo-commitment", csm.validateUTXOCommitment(stagingArea, block, blockHash, multiset)); err != nil {
-		return err
+	if stop("utxo-commitment", csm.validateUTXOCommitment(stagingArea, block, blockHash, multiset)) {
+		return firstError
 	}
 	log.Debugf("UTXO commitment validation passed for block %s", blockHash)
 
 	log.Debugf("Validating acceptedIDMerkleRoot for block %s", blockHash)
-	if err := permit("accepted-id-merkle-root",
-		csm.validateAcceptedIDMerkleRoot(block, blockHash, acceptanceData)); err != nil {
-		return err
+	if stop("accepted-id-merkle-root", csm.validateAcceptedIDMerkleRoot(block, blockHash, acceptanceData)) {
+		return firstError
 	}
 	log.Debugf("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
 
 	coinbaseTransaction := block.Transactions[0]
-	if err := permit("coinbase-transaction",
-		csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)); err != nil {
-		return err
+	if stop("coinbase-transaction",
+		csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)) {
+		return firstError
 	}
 	log.Debugf("Coinbase transaction validation passed for block %s", blockHash)
 
 	log.Debugf("Validating transactions against past UTXO for block %s", blockHash)
-	if err := permit("block-transactions-vs-past-utxo",
-		csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff)); err != nil {
-		return err
+	if stop("block-transactions-vs-past-utxo",
+		csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff, survey)) {
+		return firstError
 	}
 	log.Debugf("Block transaction against past UTXO passed for %s", blockHash)
 	log.Tracef("Transactions against past UTXO validation passed for block %s", blockHash)
 
-	return nil
+	return firstError
 }
 
 // logToleratedIssue records that an inherited-offset toleration point fired: the first time for a
@@ -90,8 +106,15 @@ func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *exte
 		"fully validated. Further %s tolerations are logged at debug level.", blockHash, step, err, step)
 }
 
+// validateBlockTransactionsAgainstPastUTXO validates every non-coinbase transaction in the block
+// against the block's past UTXO set. survey may be nil; when it is not, every transaction is
+// checked even after one of them has already failed, and every missing outpoint is recorded. That
+// matters because a block whose inputs are missing usually has more than one of them, and the
+// existing behaviour - abandon the remaining transactions the moment one fails - would leave the
+// survey with a single outpoint out of however many the block actually could not resolve. The error
+// returned is still a missing-input RuleError either way.
 func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagingArea *model.StagingArea,
-	block *externalapi.DomainBlock, pastUTXODiff externalapi.UTXODiff,
+	block *externalapi.DomainBlock, pastUTXODiff externalapi.UTXODiff, survey *blockSurvey,
 ) error {
 	blockHash := consensushashing.BlockHash(block)
 	log.Tracef("validateBlockTransactionsAgainstPastUTXO start for block %s", blockHash)
@@ -131,7 +154,9 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 
 			select {
 			case <-done:
-				return // Early exit if another goroutine found an error
+				if !survey.active() {
+					return // Early exit if another goroutine found an error
+				}
 			default:
 			}
 
@@ -144,6 +169,12 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			stagingMu.Unlock()
 			if err != nil {
 				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})
+				if isMissingTxOut {
+					// Recorded here rather than in verifyUTXO's stop(), because a tolerated
+					// missing input never reaches it: this function returns nil in that case.
+					survey.noteFailure("block-transactions-vs-past-utxo", err)
+					survey.noteMissingOutpointsFromError(transactionID.String(), err)
+				}
 				if isMissingTxOut && tolerateMissingTxOut {
 					csm.logToleratedIssue("block-transaction-missing-input", blockHash,
 						errors.Wrapf(err, "transaction %s skipped", transactionID))
@@ -166,7 +197,12 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			err = csm.transactionValidator.ValidateTransactionInContextAndPopulateFee(
 				stagingArea, tx, blockHash, block.Header.DAAScore())
 			if err != nil {
-				if tolerateMissingTxOut && errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
+				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})
+				if isMissingTxOut {
+					survey.noteFailure("block-transactions-vs-past-utxo", err)
+					survey.noteMissingOutpointsFromError(transactionID.String(), err)
+				}
+				if isMissingTxOut && tolerateMissingTxOut {
 					csm.logToleratedIssue("block-transaction-missing-input", blockHash,
 						errors.Wrapf(err, "transaction %s skipped", transactionID))
 					return
@@ -228,10 +264,18 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 		// not fresh corruption - and tolerate it: stage the calculated multiset and continue. Fully
 		// self-scoping: as soon as the chain reaches a block whose selected parent is consistent
 		// (e.g. built on a clean pruning point), this returns false and strict enforcement resumes.
+		//
+		// The toleration itself lives in verifyUTXO, which applies the same predicate to any RuleError
+		// from any of its checks and logs it through the same logToleratedIssue("utxo-commitment").
+		// This branch therefore only skips the verbose dump below - which would otherwise fire once
+		// per block for an entire offset chain - and still RETURNS the error. Returning nil here
+		// instead, as it used to, made the toleration invisible above this frame: the failure never
+		// reached verifyUTXO, so the survey could not count it, and on an offset chain those are the
+		// failures there are thousands of.
 		if csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash) {
-			csm.logToleratedIssue("utxo-commitment", blockHash,
-				errors.Errorf("header %s, calculated %s", expectedCommitment, calculatedCommitment))
-			return nil
+			return errors.Wrapf(ruleerrors.ErrBadUTXOCommitment, "block %s UTXO commitment is invalid - "+
+				"block header indicates %s, but calculated value is %s (inherited pruning-point offset)",
+				blockHash, expectedCommitment, calculatedCommitment)
 		}
 
 		// --- DEBUG LOGGING START ---
