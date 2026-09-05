@@ -19,6 +19,13 @@ func runCreate(args []string) error {
 	out := fs.String("out", "", "Directory to write the candidate bundle to")
 	note := fs.String("note", "", "Free-text operator note/identity to embed in the bundle")
 	chunkSize := fs.Int("chunk-size", exodus.DefaultChunkEntryCount, "UTXO entries per chunk file")
+	source := fs.String("source", "acceptance-data", "Which derivation of the UTXO set to snapshot: "+
+		"\"acceptance-data\" (rebuild it from the pruning point set plus the recorded acceptance data - the "+
+		"derivation that reproduces block headers' UTXO commitments) or \"materialised\" (read virtual's "+
+		"UTXO table through the stored diff chain, which is never recomputed and is known to drift)")
+	allowMismatch := fs.Bool("allow-commitment-mismatch", false, "Write the bundle even when its commitment "+
+		"does not match the target block's own header UTXO commitment. A bundle that fails that check is not "+
+		"the UTXO set the chain committed to, and adopting one as a trusted floor makes its errors permanent.")
 	err := fs.Parse(args)
 	if err != nil {
 		return err
@@ -62,15 +69,25 @@ func runCreate(args []string) error {
 	}
 	daaScore := header.DAAScore()
 
+	var iterate func(*externalapi.DomainHash, func(*externalapi.DomainOutpoint, externalapi.UTXOEntry) error) error
+	switch *source {
+	case "acceptance-data":
+		iterate = cs.IterateUTXOSetAtBlockFromAcceptanceData
+	case "materialised", "materialized":
+		iterate = cs.IterateUTXOSetAtBlock
+	default:
+		return errors.Errorf("unknown --source %q (expected \"acceptance-data\" or \"materialised\")", *source)
+	}
+
 	fmt.Printf("Target block: %s (DAA score %d)\n", blockHash, daaScore)
-	fmt.Printf("Walking UTXO set into bundle at %s ...\n", *out)
+	fmt.Printf("Walking UTXO set into bundle at %s (source: %s) ...\n", *out, *source)
 
 	writer, err := exodus.NewWriter(*out, exodus.BundleTarget{BlockHash: blockHash, DAAScore: daaScore}, *chunkSize)
 	if err != nil {
 		return err
 	}
 
-	err = cs.IterateUTXOSetAtBlock(blockHash, func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
+	err = iterate(blockHash, func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
 		err := writer.AddEntry(outpoint, entry)
 		if err != nil {
 			return err
@@ -101,12 +118,31 @@ func runCreate(args []string) error {
 	fmt.Printf("Computed UTXO set commitment: %s\n", commitment)
 	if header.UTXOCommitment().Equal(commitment) {
 		fmt.Printf("Matches the target block's own header UTXO commitment.\n")
-	} else {
-		fmt.Printf("WARNING: does NOT match the target block's own header UTXO commitment (%s).\n"+
-			"This is expected if the node's locally-tolerated pruning UTXO set calculation is exactly\n"+
-			"the discrepancy this tooling exists to help investigate; it does not necessarily mean the\n"+
-			"bundle itself is wrong.\n", header.UTXOCommitment())
+		return nil
 	}
+
+	// The header commitment is the one thing here the network agreed on: it is in a block that was
+	// mined, propagated and accepted. A bundle that hashes to something else is, by definition, not
+	// the UTXO set this chain committed to at that block - and a bundle's whole purpose is to become
+	// a floor that nodes stop recomputing, so adopting a mismatched one makes its errors permanent
+	// and unrecoverable. Refuse by default rather than emit it with a warning.
+	message := fmt.Sprintf("bundle commitment %s does NOT match the target block's own header UTXO "+
+		"commitment %s", commitment, header.UTXOCommitment())
+	if !*allowMismatch {
+		return errors.Errorf("%s.\nThe bundle was written to %s but must not be published as a candidate "+
+			"as it stands.\nIf --source was \"materialised\", retry with --source acceptance-data: virtual's "+
+			"materialised UTXO table is never recomputed, so a mis-applied UTXO diff persists in it "+
+			"indefinitely, while acceptance data is what the per-block multiset chain the headers commit "+
+			"to is built from.\nIf it already was \"acceptance-data\", this node's pruning point set is "+
+			"itself offset from what the chain committed to, and no bundle derived from it can be "+
+			"trusted - compare against an independently-run node with \"htnexodus diff\" before going "+
+			"further.\nPass --allow-commitment-mismatch only to produce an artifact for that comparison, "+
+			"never to publish a candidate.", message, *out)
+	}
+	fmt.Printf("WARNING: %s.\n"+
+		"Written anyway because --allow-commitment-mismatch was given. This bundle is NOT the UTXO set\n"+
+		"the chain committed to at this block and must not be adopted as a trusted floor; it is only\n"+
+		"useful for diffing against another node's bundle to locate where they disagree.\n", message)
 
 	return nil
 }

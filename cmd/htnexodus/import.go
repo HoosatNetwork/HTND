@@ -42,6 +42,10 @@ func runImport(args []string) error {
 	bundleDir := fs.String("bundle", "", "Path to the candidate bundle directory to import")
 	batchSize := fs.Int("batch-size", exodus.DefaultChunkEntryCount,
 		"UTXO entries staged per AppendImportedPruningPointUTXOs call")
+	allowMismatch := fs.Bool("allow-commitment-mismatch", false,
+		"Import the bundle even though its commitment does not match the target block's own header UTXO "+
+			"commitment. Such a bundle is not the UTXO set the chain committed to at that block, and importing "+
+			"it as a trusted floor makes its errors permanent - this node stops recomputing that set.")
 	force := fs.Bool("force", false,
 		"Required: actually perform the rebaseline (this overwrites the node's virtual chain "+
 			"state and UTXO baseline)")
@@ -122,6 +126,29 @@ func runImport(args []string) error {
 				"the imported UTXO set", blockHash)
 	}
 
+	// The target block's header commitment is the one value in this whole procedure that the network
+	// demonstrably agreed on - it is in a block that was mined, propagated and accepted. Importing a
+	// bundle that hashes to anything else installs a UTXO set the chain never committed to, as the
+	// very thing this node will stop recomputing. That is the irreversible step, so it is checked
+	// here and not only in create/verify, which an operator receiving a bundle may never have run.
+	targetHeader, err := cs.GetBlockHeader(blockHash)
+	if err != nil {
+		return errors.Wrapf(err, "failed to fetch the header of target block %s", blockHash)
+	}
+	if manifest.UTXOCommitment != targetHeader.UTXOCommitment().String() {
+		message := fmt.Sprintf("bundle commitment %s does NOT match the target block's own header UTXO "+
+			"commitment %s", manifest.UTXOCommitment, targetHeader.UTXOCommitment())
+		if !*allowMismatch {
+			return errors.Errorf("%s.\nRefusing to rebaseline onto a UTXO set this chain did not commit "+
+				"to at %s. Verify the bundle against a node with `htnexodus verify --bundle <dir> --db-path "+
+				"<path>`, and diff it against a bundle from an independently-run node, before importing "+
+				"anything. Pass --allow-commitment-mismatch only if you have decided, deliberately and with "+
+				"the rest of the network, to adopt a set that does not match the header.",
+				message, blockHash)
+		}
+		fmt.Printf("WARNING: %s.\nImporting anyway because --allow-commitment-mismatch was given.\n", message)
+	}
+
 	previousPruningPoint, err := cs.PruningPoint()
 	if err != nil {
 		return errors.Wrapf(err, "failed to read the current pruning point")
@@ -138,8 +165,8 @@ func runImport(args []string) error {
 		blockHash, manifest.DAAScore, manifest.UTXOCommitment)
 	fmt.Printf("Forcing the virtual block's sole parent to this block and replacing the node's virtual "+
 		"UTXO set with the bundle's %d entries as the new trusted baseline.\n", manifest.EntryCount)
-	fmt.Printf("This does not change any consensus rule, does not verify the bundle's authenticity "+
-		"beyond internal self-consistency (no signature/ratification), and does not distribute this "+
+	fmt.Printf("This does not change any consensus rule, does not verify the bundle's authenticity " +
+		"beyond internal self-consistency (no signature/ratification), and does not distribute this " +
 		"bundle to any peer.\n\n")
 
 	fmt.Printf("Clearing any stale import staging data...\n")
@@ -191,7 +218,7 @@ func runImport(args []string) error {
 	}
 	fmt.Printf("Staged %d entries.\n", staged)
 
-	fmt.Printf("Validating and inserting the imported pruning point (forces the virtual parent, marks "+
+	fmt.Printf("Validating and inserting the imported pruning point (forces the virtual parent, marks " +
 		"the block UTXO-valid, stages its multiset, and replaces the virtual UTXO set)...\n")
 	err = cs.ValidateAndInsertImportedPruningPoint(blockHash)
 	if err != nil {

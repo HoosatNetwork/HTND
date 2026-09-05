@@ -17,6 +17,10 @@ func runDiff(args []string) error {
 	dbType := fs.String("db-type", "pebble", "Database engine: pebble or leveldb")
 	network := fs.String("network", "mainnet", "Network the database belongs to")
 	maxPrint := fs.Int("max-print", 20, "Maximum number of differing/unique outpoints to print per category")
+	source := fs.String("source", "acceptance-data", "With --live, which derivation to recompute the UTXO set "+
+		"from: \"acceptance-data\" or \"materialised\". Diffing the two against each other on one node is "+
+		"itself informative: they are meant to be the same set, and where they are not, the materialised "+
+		"one is the side that drifted")
 	err := fs.Parse(args)
 	if err != nil {
 		return err
@@ -55,10 +59,21 @@ func runDiff(args []string) error {
 		}
 		defer db.Close()
 
-		sourceB = func(callback exodus.EntryCallback) error {
-			return cs.IterateUTXOSetAtBlock(blockHash, callback)
+		var iterate func(*externalapi.DomainHash,
+			func(*externalapi.DomainOutpoint, externalapi.UTXOEntry) error) error
+		switch *source {
+		case "acceptance-data":
+			iterate = cs.IterateUTXOSetAtBlockFromAcceptanceData
+		case "materialised", "materialized":
+			iterate = cs.IterateUTXOSetAtBlock
+		default:
+			return errors.Errorf("unknown --source %q (expected \"acceptance-data\" or \"materialised\")", *source)
 		}
-		labelB = fmt.Sprintf("live recomputation at %s (from %s)", blockHash, *dbPath)
+
+		sourceB = func(callback exodus.EntryCallback) error {
+			return iterate(blockHash, callback)
+		}
+		labelB = fmt.Sprintf("live recomputation at %s (from %s, source: %s)", blockHash, *dbPath, *source)
 	} else {
 		readerB, err := exodus.OpenBundle(*bundleBDir)
 		if err != nil {

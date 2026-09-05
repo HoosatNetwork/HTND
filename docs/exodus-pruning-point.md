@@ -109,12 +109,43 @@ back and failing with a confusing low-level "block header does not exist" error 
 the pruning boundary (that history has been discarded locally and is simply not retrievable from
 this node - pick a more recent DAA score, or sync a node with a deeper retention window).
 
-This prints the computed UTXO set commitment and compares it against the target block's own
-header commitment as a sanity check (a mismatch is expected precisely in the cases this tooling
-exists to help investigate - the node's own pruning-time UTXO calculation being unreliable - and
-does not by itself mean the bundle is wrong).
+#### Which UTXO set a candidate is built from
 
-### Verify a candidate bundle's internal self-consistency
+`--source` selects the derivation, and it defaults to `acceptance-data`:
+
+- **`acceptance-data`** rebuilds the set as the pruning point's UTXO set plus every accepted
+  transaction between the pruning point and the target block, taken from the acceptance data the
+  node recorded when it resolved each of those blocks. This is what the per-block multiset chain -
+  the thing block headers commit to - is computed from, so it is the derivation that reproduces
+  header UTXO commitments.
+- **`materialised`** reads virtual's materialised UTXO table through the stored UTXO-diff chain
+  (what `IterateUTXOSetAtBlock` has always done).
+
+The two are meant to be the same set. In practice they are not: the materialised table is
+maintained by applying UTXO diffs and is never recomputed, so a diff that was mis-applied stays
+mis-applied indefinitely. On a mainnet database idle since August the two derivations differ by
+seven outpoints out of 10,150,996 - six coinbase outputs the table holds that the acceptance
+history says were never created, and one spendable 629,814 HTN output the acceptance history says
+exists and the table had lost. Use `materialised` only to compare the two against each other.
+
+#### The header commitment check
+
+`create` compares the bundle's commitment against the target block's own header UTXO commitment
+and **fails if they differ**. That commitment sits in a block that was mined, propagated and
+accepted, so it is the one value here that the network agreed on; a bundle hashing to anything
+else is not the UTXO set this chain committed to at that block. Because a bundle exists precisely
+to become a floor that nodes stop recomputing, adopting a mismatched one makes its errors
+permanent and unrecoverable.
+
+If the check fails, the bundle is still written (so it can be diffed) but `create` exits non-zero
+and says not to publish it. Retry with `--source acceptance-data` if it was built from the
+materialised table; if it already was, this node's own pruning point set is offset from what the
+chain committed to and no bundle derived from it can be trusted - compare against an
+independently-run node with `htnexodus diff` before going further. `--allow-commitment-mismatch`
+downgrades the failure to a warning, and exists only for producing an artifact for that
+comparison.
+
+### Verify a candidate bundle
 
 ```sh
 ./htnexodus verify --bundle ./candidate-2025-09
@@ -123,6 +154,19 @@ does not by itself mean the bundle is wrong).
 Re-reads every chunk, checks its SHA-256 digest and entry count against the manifest, recomputes
 the multiset commitment from the entries, and compares it against the manifest's claimed
 commitment.
+
+That is self-consistency only: it proves the chunks match the bundle's own manifest and says
+nothing about whether the bundle is the set the chain committed to. Pass `--db-path` (pointing at
+a stopped node that has the target block's header) to additionally check the recomputed commitment
+against that block's own header UTXO commitment, which is the check that actually decides whether
+a candidate is adoptable:
+
+```sh
+./htnexodus verify --bundle ./candidate-2025-09 \
+  --db-path ~/.htnd/hoosat-mainnet/datadir2 --network mainnet
+```
+
+A bundle that is internally consistent but does not match the header commitment fails verification.
 
 ### Diff two candidates
 
@@ -137,12 +181,22 @@ commitment.
   --db-path ~/.htnd/hoosat-mainnet/datadir2 --network mainnet
 ```
 
+`--source` applies here too. Diffing one node's two derivations against each other -
+`create --source materialised` then `diff --live --source acceptance-data` - localises that node's
+own drift and names the outpoints involved.
+
 `diff` reports counts for both sides, outpoints present in only one side (with aggregate sompi
 value), and outpoints present in both but with a differing entry (amount, script, DAA score, or
 coinbase flag), which is intended to be the primary tool for reconciling disagreements between
 independently-run trusted nodes.
 
 ### Import a candidate bundle (rebaseline the node's own consensus state)
+
+`import` performs the same header-commitment check as `create` and `verify`, and refuses a bundle
+that fails it unless `--allow-commitment-mismatch` is also given. This is the irreversible step -
+the imported set becomes the floor the node stops recomputing - and an operator receiving a bundle
+from someone else may never have run `create` or `verify` on it, so the check belongs here too.
+
 
 > **This is the one command in this tool that mutates the node's own consensus database.**
 > `create`, `verify`, and `diff` never write anything to the node's own database - `import`

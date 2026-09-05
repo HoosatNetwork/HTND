@@ -72,4 +72,15 @@ type Consensus interface {
 	// by tooling (e.g. the exodus pruning point candidate generator) that needs the UTXO set of
 	// an arbitrary historical block, not just the current pruning point or virtual.
 	IterateUTXOSetAtBlock(blockHash *DomainHash, callback func(outpoint *DomainOutpoint, entry UTXOEntry) error) error
+
+	// IterateUTXOSetAtBlockFromAcceptanceData streams the same set as IterateUTXOSetAtBlock, derived
+	// independently: the pruning point's UTXO set with every accepted transaction up to blockHash
+	// applied from the recorded acceptance data, rather than read out of virtual's materialised UTXO
+	// table via the stored UTXO-diff chain. The two derivations are meant to agree and in practice do
+	// not - the materialised table is never recomputed, so a mis-applied diff persists - and it is
+	// this one that reproduces the UTXO commitments in block headers. Tooling that produces a set
+	// intended to be trusted should use it. The whole iteration runs under the consensus lock, so
+	// callback must not call back into this Consensus instance.
+	IterateUTXOSetAtBlockFromAcceptanceData(blockHash *DomainHash,
+		callback func(outpoint *DomainOutpoint, entry UTXOEntry) error) error
 }

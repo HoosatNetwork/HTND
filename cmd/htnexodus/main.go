@@ -16,8 +16,13 @@
 // `create`, `verify` and `diff` are read-only: `create` opens the node's own on-disk database
 // directly (the node must not be running at the same time, since both processes would
 // otherwise contend for the same database files) and walks the UTXO set as of the requested
-// block, exactly like the node's own pruning point UTXO set calculation, but generalized to an
-// arbitrary historical block.
+// block, generalized to an arbitrary historical block.
+//
+// By default it derives that set from the recorded acceptance data rather than from virtual's
+// materialised UTXO table, because those two disagree in practice and it is the acceptance-derived
+// one that reproduces the UTXO commitments in block headers. A bundle whose commitment does not
+// match the target block's header commitment is refused rather than warned about: a bundle exists
+// to become a floor nodes stop recomputing, so adopting a wrong one makes its errors permanent.
 //
 // `import` is the one command that mutates the node's own consensus state: it forces virtual's
 // selected parent to the bundle's block and replaces the virtual UTXO set with the bundle's
@@ -34,8 +39,8 @@ import (
 
 func usage() {
 	fmt.Fprint(os.Stderr, `Usage:
-  htnexodus create --db-path <path> [--network mainnet] (--block <hash> | --daa-score <n>) --out <dir> [--note "..."] [--chunk-size N]
-  htnexodus verify --bundle <dir>
+  htnexodus create --db-path <path> [--network mainnet] (--block <hash> | --daa-score <n>) --out <dir> [--note "..."] [--chunk-size N] [--source acceptance-data]
+  htnexodus verify --bundle <dir> [--db-path <path> [--network mainnet]]
   htnexodus diff --bundle-a <dir> --bundle-b <dir> [--max-print N]
   htnexodus diff --bundle-a <dir> --live --db-path <path> [--network mainnet] [--max-print N]
   htnexodus import --bundle <dir> --db-path <path> [--network mainnet] [--db-type pebble] [--batch-size N] --force
@@ -52,6 +57,16 @@ Options:
   --out string          Directory to write the candidate bundle to (created if missing; a
                         previous, unfinished attempt at the same block is resumed automatically)
   --note string         Free-text operator note/identity to embed in the bundle (no signature)
+  --source string       Which derivation of the UTXO set to snapshot/recompute: "acceptance-data"
+                        (default; rebuilt from the pruning point set plus recorded acceptance data,
+                        the derivation that reproduces block headers' UTXO commitments) or
+                        "materialised" (virtual's UTXO table through the stored diff chain, which is
+                        never recomputed and is known to drift from it)
+  --allow-commitment-mismatch
+                        create/import: proceed even though the bundle does not match the target
+                        block's own header UTXO commitment. Such a bundle is not the UTXO set the
+                        chain committed to and must never be adopted as a trusted floor; it is only
+                        useful as an artifact to diff against another node's
   --chunk-size int      UTXO entries per chunk file (default 500000)
   --bundle string       Bundle directory to verify or import
   --bundle-a string     First bundle directory to diff
