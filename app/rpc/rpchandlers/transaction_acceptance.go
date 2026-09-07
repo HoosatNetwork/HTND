@@ -55,23 +55,37 @@ func findTransactionAcceptance(context *rpccontext.Context, containingBlock *ext
 			// looking rather than concluding anything from its absence.
 			continue
 		}
-		for _, blockAcceptanceData := range acceptanceData {
-			if blockAcceptanceData.BlockHash == nil || !blockAcceptanceData.BlockHash.Equal(containingBlock) {
-				continue
-			}
-			// This chain block merged the containing block, so its verdict on the transaction is the
-			// answer, whichever way it went.
-			for _, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
-				if !consensushashing.TransactionID(transactionAcceptanceData.Transaction).Equal(transactionID) {
-					continue
-				}
-				return &transactionAcceptance{
-					acceptingBlock: chainBlock,
-					accepted:       transactionAcceptanceData.IsAccepted,
-				}, nil
-			}
+
+		mergedHere, acceptedHere := verdictForTransaction(acceptanceData, transactionID)
+		if mergedHere {
+			return &transactionAcceptance{acceptingBlock: chainBlock, accepted: acceptedHere}, nil
 		}
 	}
 
 	return &transactionAcceptance{}, nil
+}
+
+// verdictForTransaction reads one chain block's acceptance data for a transaction's fate.
+//
+// The verdict belongs to the TRANSACTION, not to one copy of it. A chain block merges every block in
+// its merge set, so when several of them carry the same transaction its acceptance data holds one
+// entry per carrier - exactly one accepted, the rest rejected as duplicates. Reading only the entry
+// for the block the transaction happened to be found in therefore reports a perfectly good
+// transaction as invalid whenever the block-store scan landed on a duplicate, which on a DAG is most
+// of the time. Accepted anywhere in this block's acceptance data means accepted.
+func verdictForTransaction(acceptanceData externalapi.AcceptanceData,
+	transactionID *externalapi.DomainTransactionID,
+) (merged bool, accepted bool) {
+	for _, blockAcceptanceData := range acceptanceData {
+		for _, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
+			if !consensushashing.TransactionID(transactionAcceptanceData.Transaction).Equal(transactionID) {
+				continue
+			}
+			merged = true
+			if transactionAcceptanceData.IsAccepted {
+				accepted = true
+			}
+		}
+	}
+	return merged, accepted
 }
