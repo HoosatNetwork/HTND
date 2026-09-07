@@ -150,15 +150,20 @@ func TestUTXODiff(t *testing.T) {
 
 	// ---------- Duplicate handling ----------
 
-	// Adding a second, distinct (non-coinbase) outpoint that's already in toAdd must still fail.
-	// Coinbase outpoints have their own dedicated tolerance-vs-error behavior, covered by
-	// TestAddRemoveEntryDuplicates.
+	// Re-adding an outpoint already in toAdd with the SAME coin is a no-op, not an error: a set holds
+	// a coin once, and ApplyAcceptanceDataToMultiset skips the same duplicates so the multiset stays
+	// the hash of a set. This is no longer coinbase-only - see TestAddRemoveEntryDuplicates. Only a
+	// collision between genuinely different coins is still an error.
 	if err := diff.addEntry(outpoint2, utxoEntry2); err != nil {
 		t.Fatalf("error adding entry: %s", err)
 	}
-	err := diff.addEntry(outpoint2, utxoEntry2)
+	if err := diff.addEntry(outpoint2, utxoEntry2); err != nil {
+		t.Errorf("expected a duplicate add of the same coin to be a no-op, got: %v", err)
+	}
+	err := diff.addEntry(outpoint2, NewUTXOEntry(utxoEntry2.Amount()+1, utxoEntry2.ScriptPublicKey(),
+		utxoEntry2.IsCoinbase(), utxoEntry2.BlockDAAScore()))
 	if err == nil {
-		t.Errorf("expected error when adding duplicate outpoint to toAdd, got nil")
+		t.Errorf("expected error when a different-valued coin collides at an outpoint in toAdd, got nil")
 	} else if !strings.Contains(err.Error(), "Cannot add outpoint") {
 		t.Errorf("unexpected error message for duplicate add: %v", err)
 	}
@@ -1143,14 +1148,35 @@ func TestCoinbaseCollisionConflicts(t *testing.T) {
 func TestAddRemoveEntryDuplicates(t *testing.T) {
 	_, _, _, outpoint0, outpoint1, _, utxoEntry0, utxoEntry1, _, utxoEntry0AltDAA := testFixtures()
 
-	t.Run("double add same outpoint same DAA (non-coinbase)", func(t *testing.T) {
+	// Previously this asserted that a non-coinbase duplicate add is an error. It is not: the same
+	// outpoint carrying the same amount, script and coinbase flag is the same coin, whatever produced
+	// it, and a set holds it once. Erroring aborted the entire virtual update, and because the block
+	// is then re-requested and fails identically, a node in that state never advanced again - one
+	// coin stalled an IBD 61 times against six peers. A different-valued collision is still an error;
+	// that case is immediately below.
+	t.Run("double add same outpoint same DAA (non-coinbase) is a no-op", func(t *testing.T) {
 		d := newMutableUTXODiff()
 		if err := d.addEntry(outpoint1, utxoEntry1); err != nil {
 			t.Fatalf("first add failed: %v", err)
 		}
-		err := d.addEntry(outpoint1, utxoEntry1)
+		if err := d.addEntry(outpoint1, utxoEntry1); err != nil {
+			t.Fatalf("expected the duplicate add of the same coin to be tolerated, got: %v", err)
+		}
+		if d.toAdd.Len() != 1 {
+			t.Errorf("expected the set to hold the coin once, got %d entries", d.toAdd.Len())
+		}
+	})
+
+	t.Run("double add same outpoint, different value (non-coinbase) is still an error", func(t *testing.T) {
+		d := newMutableUTXODiff()
+		if err := d.addEntry(outpoint1, utxoEntry1); err != nil {
+			t.Fatalf("first add failed: %v", err)
+		}
+		different := NewUTXOEntry(utxoEntry1.Amount()+1, utxoEntry1.ScriptPublicKey(),
+			utxoEntry1.IsCoinbase(), utxoEntry1.BlockDAAScore())
+		err := d.addEntry(outpoint1, different)
 		if err == nil {
-			t.Fatal("expected error on second add of same outpoint")
+			t.Fatal("expected error when a different-valued coin collides at the same outpoint")
 		}
 		if !strings.Contains(err.Error(), "Cannot add outpoint") {
 			t.Errorf("unexpected error: %v", err)

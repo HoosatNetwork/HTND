@@ -232,24 +232,48 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 		// Same coin: this addition genuinely cancels the pending removal.
 		mud.toRemove.remove(outpoint)
 	} else if mud.toAdd.Contains(outpoint) {
-		if entry.IsCoinbase() {
-			if existing, ok := mud.toAdd.Get(outpoint); ok && existing.Amount() == entry.Amount() &&
-				existing.ScriptPublicKey().Equal(entry.ScriptPublicKey()) {
-				// Same reasoning as the toRemove-collision branch above: two blocks whose coinbase
-				// transactions are byte-identical (a genuine content-derived ID collision, or the
-				// same mining template reused across multiple valid nonces before being refreshed -
-				// see the isTolerableConflict-style handling above) can both attempt to add this
-				// exact outpoint within a single accumulated diff, e.g. when
-				// calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData replays
-				// every accepted transaction across an entire pruning-point-to-pruning-point chain
-				// segment. A same-valued duplicate is a legitimate no-op, not corruption - erroring
-				// here only forces a fallback to the diff-chain-walk reconstruction, which is the
-				// mechanism actually proven unreliable this session.
-				log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) already "+
-					"present in toAdd with the same value - treated as a legitimate duplicate, not "+
-					"re-added", outpoint, entry.Amount(), entry.BlockDAAScore())
+		if existing, ok := mud.toAdd.Get(outpoint); ok {
+			if sameCoin(existing, entry) {
+				// A set holds a coin once. Adding an outpoint that is already pending with the SAME
+				// amount, script and coinbase flag is therefore a no-op on the set, not corruption -
+				// and MuHash agrees: ApplyAcceptanceDataToMultiset skips exactly these duplicates so
+				// the multiset stays the hash of a set. The diff has to make the same choice, or the
+				// two quantities that must match by construction are computed under different rules.
+				//
+				// This used to be allowed only for coinbases, on the theory that only byte-identical
+				// coinbases can share a transaction ID. That was too narrow. A transaction ID is
+				// content-derived, so ANY two entries at one outpoint carrying the same value are the
+				// same coin, whatever produced them - and a block re-merged into virtual after its
+				// transaction is already reflected there presents precisely that. Refusing it aborted
+				// the whole virtual update, which is not a recoverable condition: the block is
+				// re-requested, fails identically, and the node retries forever without ever
+				// advancing. One such coin stalled a node's IBD 61 times against six different peers.
+				//
+				// Note this deliberately does not compare BlockDAAScore. Two adds of one coin can
+				// carry different scores when different blocks merge it, and the first one wins - the
+				// same tie-break ApplyAcceptanceDataToMultiset makes by skipping the later add.
+				if entry.IsCoinbase() {
+					log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) already "+
+						"present in toAdd with the same value - treated as a legitimate duplicate, not "+
+						"re-added", outpoint, entry.Amount(), entry.BlockDAAScore())
+				} else {
+					// Warn, not debug: unlike the coinbase case this is not routine, it is the shape
+					// that deadlocked IBD, and a node running at the default log level has to be able
+					// to see it happening without being rebuilt.
+					log.Warnf("[UTXO-DEBUG] addEntry: outpoint %s (amount=%d daaScore=%d) is already "+
+						"pending in toAdd with the same value (daaScore=%d) - same coin, so the "+
+						"duplicate add is a no-op rather than an error",
+						outpoint, entry.Amount(), entry.BlockDAAScore(), existing.BlockDAAScore())
+				}
 				return nil
 			}
+			// Different values at one outpoint. That is not a duplicate of anything, and silently
+			// picking either one would corrupt the set, so it stays an error - but say what the two
+			// coins actually were, because "cannot add twice" alone gives nothing to diagnose from.
+			return errors.Errorf("AddEntry: Cannot add outpoint %s twice: pending entry has "+
+				"amount=%d daaScore=%d isCoinbase=%t, incoming entry has amount=%d daaScore=%d "+
+				"isCoinbase=%t", outpoint, existing.Amount(), existing.BlockDAAScore(),
+				existing.IsCoinbase(), entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase())
 		}
 		return errors.Errorf("AddEntry: Cannot add outpoint %s twice", outpoint)
 	} else {
