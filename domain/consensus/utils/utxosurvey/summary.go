@@ -153,8 +153,16 @@ type Summary struct {
 	// RejectionReasons counts, over the whole run, why merge-set transactions were not accepted.
 	RejectionReasons map[string]int
 
-	// SelfInflictedMissing are unresolvable coins whose creating transaction THIS NODE rejected for a
-	// missing input. They are the gap spreading: an earlier absent coin made that transaction
+	// LostAfterCreation are unresolvable coins this node created and no record spent - a real loss.
+	LostAfterCreation int
+
+	// DoubleSpendMissing are unresolvable coins that were created and then legitimately spent before
+	// the block that went looking for them. Ordinary DAG behaviour and the commonest confounder here:
+	// counted separately so it can never be mistaken for damage.
+	DoubleSpendMissing int
+
+	// SelfInflictedMissing are unresolvable coins whose creating transaction this node rejected for a
+	// missing input AND never managed to accept anywhere. They are the gap spreading: an earlier absent coin made that transaction
 	// unacceptable, so the coins it would have created were never created either, and they are
 	// indistinguishable from an inherited gap in every other measurement.
 	SelfInflictedMissing int
@@ -418,17 +426,28 @@ func summarizeCreatedThenAbsent(records []Record, summary *Summary) {
 // correct set from outside, while a self-inflicted one means the node is still manufacturing new gaps
 // from the old one and will do it again to any clean set it is given.
 func summarizeGapOrigin(records []Record, summary *Summary) {
-	rejectedForMissingInput := map[string]struct{}{}
-	seenTransaction := map[string]struct{}{}
+	// Position of the first time each fact is seen, in resolution order. Ordering is the whole
+	// measurement: a transaction accepted after a coin went missing explains nothing about why it was
+	// missing, and neither does a spend that happened later.
+	firstAccepted := map[string]int{}
+	firstSpent := map[string]int{}
+	starvedAndNeverAccepted := map[string]struct{}{}
+	position := 0
 	for _, record := range records {
-		for _, transactionID := range record.RejectedForMissingInputTxIDs {
-			rejectedForMissingInput[transactionID] = struct{}{}
-		}
 		for _, transactionID := range record.AcceptedTxIDs {
-			seenTransaction[transactionID] = struct{}{}
+			if _, seen := firstAccepted[transactionID]; !seen {
+				firstAccepted[transactionID] = position
+			}
+			position++
 		}
-		for _, transactionID := range record.RejectedOrRedTxIDs {
-			seenTransaction[transactionID] = struct{}{}
+		for _, spend := range record.AcceptedSpends {
+			if _, seen := firstSpent[spend]; !seen {
+				firstSpent[spend] = position
+			}
+			position++
+		}
+		for _, transactionID := range record.RejectedForMissingInputTxIDs {
+			starvedAndNeverAccepted[transactionID] = struct{}{}
 		}
 		for reason, count := range record.RejectionReasons {
 			if summary.RejectionReasons == nil {
@@ -437,20 +456,41 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 			summary.RejectionReasons[reason] += count
 		}
 	}
+	// A transaction rejected for a missing input in one block and accepted in another is ordinary DAG
+	// duplicate handling, not a starved transaction: the coins it creates exist. Only one this node
+	// never managed to accept anywhere actually failed to create anything.
+	for transactionID := range firstAccepted {
+		delete(starvedAndNeverAccepted, transactionID)
+	}
 
 	counted := map[string]struct{}{}
+	secondPosition := 0
 	for _, record := range records {
+		secondPosition += len(record.AcceptedTxIDs) + len(record.AcceptedSpends)
 		for _, missing := range record.MissingOutpoints {
 			key := fmt.Sprintf("%s:%d", missing.TxID, missing.Index)
 			if _, already := counted[key]; already {
 				continue
 			}
 			counted[key] = struct{}{}
-			if _, selfInflicted := rejectedForMissingInput[missing.TxID]; selfInflicted {
+
+			acceptedAt, wasAccepted := firstAccepted[missing.TxID]
+			if wasAccepted && acceptedAt < secondPosition {
+				// The coin was created. Either it was spent before this block wanted it - an ordinary
+				// double spend - or it went missing after being created, which is a real loss.
+				spentAt, wasSpent := firstSpent[key]
+				if wasSpent && spentAt > acceptedAt && spentAt <= secondPosition {
+					summary.DoubleSpendMissing++
+				} else {
+					summary.LostAfterCreation++
+				}
+				continue
+			}
+			if _, starved := starvedAndNeverAccepted[missing.TxID]; starved {
 				summary.SelfInflictedMissing++
 				continue
 			}
-			if _, seen := seenTransaction[missing.TxID]; !seen {
+			if !wasAccepted {
 				summary.InheritedMissing++
 			}
 		}
@@ -493,11 +533,42 @@ func summarizeCascade(records []Record, summary *Summary) {
 		}
 	}
 
-	// Blast radius: from each seed, follow the coins its starved transactions would have created.
+	// Index the absent coins by the transaction that would have created them, once. Walking the
+	// cascade without this means re-scanning every absent coin for every step of every walk, which on
+	// a real survey does not finish.
+	outpointsByCreatingTx := map[string][]string{}
+	for outpoint := range starves {
+		if creatingTx, _, found := strings.Cut(outpoint, ":"); found {
+			outpointsByCreatingTx[creatingTx] = append(outpointsByCreatingTx[creatingTx], outpoint)
+		}
+	}
+
+	// Rank first, walk second. The blast radius of a seed is only interesting for the seeds that
+	// starve the most transactions, and a survey where every absence is inherited produces tens of
+	// thousands of seeds that each starve one or two - walking all of them means re-traversing the
+	// same shared subgraph tens of thousands of times, which does not finish. Ranking by direct
+	// starvation is cheap, deterministic, and puts the seeds worth understanding at the top.
 	for outpoint := range seeds {
-		seed := CascadeSeed{Outpoint: outpoint, StarvedDirectly: len(starves[outpoint])}
-		visited := map[string]struct{}{outpoint: {}}
-		frontier := append([]string{}, starves[outpoint]...)
+		summary.CascadeSeeds = append(summary.CascadeSeeds, CascadeSeed{
+			Outpoint: outpoint, StarvedDirectly: len(starves[outpoint]),
+		})
+	}
+	sort.SliceStable(summary.CascadeSeeds, func(i, j int) bool {
+		a, b := summary.CascadeSeeds[i], summary.CascadeSeeds[j]
+		if a.StarvedDirectly != b.StarvedDirectly {
+			return a.StarvedDirectly > b.StarvedDirectly
+		}
+		return a.Outpoint < b.Outpoint
+	})
+
+	const seedsToWalk = 50
+	for i := range summary.CascadeSeeds {
+		if i >= seedsToWalk {
+			break
+		}
+		seed := &summary.CascadeSeeds[i]
+		visited := map[string]struct{}{seed.Outpoint: {}}
+		frontier := append([]string{}, starves[seed.Outpoint]...)
 		depth := 0
 		for len(frontier) > 0 && depth < 64 {
 			depth++
@@ -505,17 +576,13 @@ func summarizeCascade(records []Record, summary *Summary) {
 			for _, starvedTx := range frontier {
 				// Every coin that transaction would have created is now absent too, so anything
 				// spending one of them was starved by this same seed.
-				for downstreamOutpoint, downstreamTxs := range starves {
-					creatingTx, _, _ := strings.Cut(downstreamOutpoint, ":")
-					if creatingTx != starvedTx {
-						continue
-					}
+				for _, downstreamOutpoint := range outpointsByCreatingTx[starvedTx] {
 					if _, seen := visited[downstreamOutpoint]; seen {
 						continue
 					}
 					visited[downstreamOutpoint] = struct{}{}
-					seed.StarvedDownstream += len(downstreamTxs)
-					next = append(next, downstreamTxs...)
+					seed.StarvedDownstream += len(starves[downstreamOutpoint])
+					next = append(next, starves[downstreamOutpoint]...)
 				}
 			}
 			frontier = next
@@ -523,15 +590,7 @@ func summarizeCascade(records []Record, summary *Summary) {
 		if depth > summary.CascadeDepth {
 			summary.CascadeDepth = depth
 		}
-		summary.CascadeSeeds = append(summary.CascadeSeeds, seed)
 	}
-	sort.SliceStable(summary.CascadeSeeds, func(i, j int) bool {
-		a, b := summary.CascadeSeeds[i], summary.CascadeSeeds[j]
-		if a.StarvedDirectly+a.StarvedDownstream != b.StarvedDirectly+b.StarvedDownstream {
-			return a.StarvedDirectly+a.StarvedDownstream > b.StarvedDirectly+b.StarvedDownstream
-		}
-		return a.Outpoint < b.Outpoint
-	})
 }
 
 func sortedKeys(set map[string]struct{}) []string {
@@ -654,17 +713,23 @@ func (s *Summary) String() string {
 		}
 	}
 
-	if s.SelfInflictedMissing > 0 || s.InheritedMissing > 0 {
+	if s.SelfInflictedMissing+s.InheritedMissing+s.LostAfterCreation+s.DoubleSpendMissing > 0 {
 		b.WriteString("\n--- where the gap came from\n")
-		fmt.Fprintf(&b, "  %d unresolvable coins whose creating transaction THIS NODE rejected for a missing\n"+
-			"    input - the gap spreading: an earlier absent coin stopped that transaction being accepted,\n"+
-			"    so the coins it would have created were never created either.\n", s.SelfInflictedMissing)
-		fmt.Fprintf(&b, "  %d unresolvable coins whose creating transaction this run never saw - the gap that\n"+
-			"    arrived with the imported set.\n", s.InheritedMissing)
-		if s.SelfInflictedMissing > 0 {
-			b.WriteString("  A non-zero first number means a clean UTXO set handed to this node would start\n" +
-				"  degrading again from the first missing input it met. Repairing the set is not sufficient\n" +
-				"  on its own.\n")
+		fmt.Fprintf(&b, "  %6d inherited: creating transaction never accepted in this run, so the coin\n"+
+			"           predates the surveyed window and arrived absent with the imported set.\n", s.InheritedMissing)
+		fmt.Fprintf(&b, "  %6d self-inflicted: creating transaction was rejected for a missing input and\n"+
+			"           never accepted anywhere, so this node failed to create the coin itself.\n",
+			s.SelfInflictedMissing)
+		fmt.Fprintf(&b, "  %6d LOST: created by an accepted transaction, never spent, and then absent.\n",
+			s.LostAfterCreation)
+		fmt.Fprintf(&b, "  %6d ordinary double spends: created, spent, then wanted again. Not damage.\n",
+			s.DoubleSpendMissing)
+		if s.SelfInflictedMissing > 0 || s.LostAfterCreation > 0 {
+			b.WriteString("  A non-zero self-inflicted or LOST count means repairing the UTXO set is not\n" +
+				"  sufficient on its own - this node is still producing absences of its own.\n")
+		} else {
+			b.WriteString("  Nothing self-inflicted and nothing lost: every absence predates the surveyed\n" +
+				"  window, which is what purely inherited damage looks like. Repairing the set addresses it.\n")
 		}
 	}
 

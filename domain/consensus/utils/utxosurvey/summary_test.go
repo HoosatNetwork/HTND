@@ -496,6 +496,10 @@ func TestSummarizeSplitsSelfInflictedFromInheritedGap(t *testing.T) {
 	if summary.SelfInflictedMissing != 1 {
 		t.Errorf("expected 1 self-inflicted missing coin, got %d", summary.SelfInflictedMissing)
 	}
+	if summary.LostAfterCreation != 0 || summary.DoubleSpendMissing != 0 {
+		t.Errorf("neither coin was created by an accepted transaction: lost=%d doubleSpend=%d",
+			summary.LostAfterCreation, summary.DoubleSpendMissing)
+	}
 	if summary.InheritedMissing != 1 {
 		t.Errorf("expected 1 inherited missing coin, got %d", summary.InheritedMissing)
 	}
@@ -504,11 +508,11 @@ func TestSummarizeSplitsSelfInflictedFromInheritedGap(t *testing.T) {
 	}
 
 	rendered := summary.String()
-	if !strings.Contains(rendered, "the gap spreading") {
-		t.Errorf("the summary must name the spreading gap, got:\n%s", rendered)
+	if !strings.Contains(rendered, "self-inflicted") || !strings.Contains(rendered, "inherited") {
+		t.Errorf("the summary must name both origins, got:\n%s", rendered)
 	}
 	// The consequence is the point: repairing the set is not enough while this is non-zero.
-	if !strings.Contains(rendered, "not sufficient") {
+	if !strings.Contains(rendered, "not\n  sufficient") && !strings.Contains(rendered, "not sufficient") {
 		t.Errorf("the summary must say a repair alone will not hold, got:\n%s", rendered)
 	}
 }
@@ -593,5 +597,60 @@ func TestSummarizeDoesNotCallADownstreamCoinASeed(t *testing.T) {
 	}
 	if len(summary.CascadeSeeds) != 1 || summary.CascadeSeeds[0].Outpoint != "real-seed:0" {
 		t.Errorf("expected exactly real-seed:0, got %+v", summary.CascadeSeeds)
+	}
+}
+
+// TestSummarizeDoesNotCallADuplicateRejectionSelfInflicted is the confounder that made the first
+// version of this measurement report 82% self-inflicted damage on a mainnet survey when the true
+// figure was zero.
+//
+// On a DAG the same transaction is routinely included in several blocks: one block accepts it, the
+// others reject it because its input has already been consumed. That rejection is recorded as
+// "missing-input" and looks exactly like a transaction starved by a real gap - but the coins it
+// creates exist, because another block accepted it. Only a transaction this node never managed to
+// accept anywhere actually failed to create anything.
+func TestSummarizeDoesNotCallADuplicateRejectionSelfInflicted(t *testing.T) {
+	records := []Record{{
+		RunID: "r", BlockHash: "accepting-block", IBDStage: StageChainReplay,
+		AcceptedTxIDs: []string{"dup-tx"}, AcceptedSpends: []string{"unrelated:0"},
+	}, {
+		RunID: "r", BlockHash: "rejecting-block", IBDStage: StageChainReplay,
+		RejectedOrRedTxIDs:           []string{"dup-tx"},
+		RejectionReasons:             map[string]int{"missing-input": 1},
+		RejectedForMissingInputTxIDs: []string{"dup-tx"},
+	}, {
+		RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+		MissingOutpoints: []MissingOutpoint{{TxID: "dup-tx", Index: 0}},
+	}}
+
+	summary := Summarize(records)
+	if summary.SelfInflictedMissing != 0 {
+		t.Errorf("dup-tx was accepted elsewhere, so it created its coins - not self-inflicted: %d",
+			summary.SelfInflictedMissing)
+	}
+	// It was created and never spent, so by this run's evidence it is a genuine loss - which is a
+	// different finding, and the one that should be reported.
+	if summary.LostAfterCreation != 1 {
+		t.Errorf("expected the coin to be reported as lost after creation, got %d", summary.LostAfterCreation)
+	}
+}
+
+// A coin created, spent, and then wanted again is ordinary and must land in neither damage bucket.
+func TestSummarizeCountsAnOrdinaryDoubleSpendSeparately(t *testing.T) {
+	summary := Summarize([]Record{{
+		RunID: "r", BlockHash: "creator", IBDStage: StageChainReplay, AcceptedTxIDs: []string{"tx"},
+	}, {
+		RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, AcceptedSpends: []string{"tx:0"},
+	}, {
+		RunID: "r", BlockHash: "respender", IBDStage: StageChainReplay, Error: "missing-input",
+		MissingOutpoints: []MissingOutpoint{{TxID: "tx", Index: 0}},
+	}})
+
+	if summary.DoubleSpendMissing != 1 {
+		t.Errorf("expected 1 ordinary double spend, got %d", summary.DoubleSpendMissing)
+	}
+	if summary.LostAfterCreation != 0 || summary.SelfInflictedMissing != 0 || summary.InheritedMissing != 0 {
+		t.Errorf("an ordinary double spend is not damage: lost=%d self=%d inherited=%d",
+			summary.LostAfterCreation, summary.SelfInflictedMissing, summary.InheritedMissing)
 	}
 }
