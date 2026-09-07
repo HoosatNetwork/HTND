@@ -654,3 +654,79 @@ func TestSummarizeCountsAnOrdinaryDoubleSpendSeparately(t *testing.T) {
 			summary.LostAfterCreation, summary.SelfInflictedMissing, summary.InheritedMissing)
 	}
 }
+
+// TestSummarizeAttributesAVanishedAcceptanceToAReorg is the fourth confounder this analysis has had
+// to learn, and the one that turned 38 apparent losses into a handful of ordinary events on a live
+// survey - nine of them to a single block.
+//
+// A survey is a record of one node resolving a DAG, not a linear history. When a block leaves the
+// selected chain its acceptance is undone and every coin it created correctly ceases to exist. Each
+// of those coins then looks exactly like a loss: created by an accepted transaction, never spent,
+// later absent. Counting them individually turns one reorg into a pile of findings and points the
+// investigation at coin loss that never happened.
+func TestSummarizeAttributesAVanishedAcceptanceToAReorg(t *testing.T) {
+	// One block creates four coins; all four are later unresolvable. That is the block leaving the
+	// chain, not four separate losses.
+	records := []Record{{
+		RunID: "r", BlockHash: "reorged-out", IBDStage: StageChainReplay,
+		AcceptedTxIDs:  []string{"tx-a", "tx-b", "tx-c", "tx-d"},
+		AcceptedSpends: []string{"unrelated:0"},
+	}, {
+		RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+		MissingOutpoints: []MissingOutpoint{
+			{TxID: "tx-a", Index: 0}, {TxID: "tx-b", Index: 0},
+			{TxID: "tx-c", Index: 0}, {TxID: "tx-d", Index: 0},
+		},
+	}}
+
+	summary := Summarize(records)
+	if summary.LostAfterCreation != 0 {
+		t.Errorf("a whole block's acceptance vanishing is one reorg, not %d losses",
+			summary.LostAfterCreation)
+	}
+	if summary.LostByVanishedAcceptance != 4 {
+		t.Errorf("expected all four coins attributed to the vanished acceptance, got %d",
+			summary.LostByVanishedAcceptance)
+	}
+}
+
+// A coin whose accepting block is not implicated in anything else still stands as a loss - the reorg
+// exclusion must not become a way to explain away every finding.
+func TestSummarizeStillReportsAnIsolatedLoss(t *testing.T) {
+	records := []Record{{
+		RunID: "r", BlockHash: "creator", IBDStage: StageChainReplay,
+		AcceptedTxIDs: []string{"lonely-tx"}, AcceptedSpends: []string{"unrelated:0"},
+	}, {
+		RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+		MissingOutpoints: []MissingOutpoint{{TxID: "lonely-tx", Index: 0}},
+	}}
+
+	summary := Summarize(records)
+	if summary.LostAfterCreation != 1 {
+		t.Errorf("a single coin from an otherwise unimplicated block is still a loss, got %d",
+			summary.LostAfterCreation)
+	}
+	if summary.LostByVanishedAcceptance != 0 {
+		t.Errorf("nothing here looks like a reorg, got %d", summary.LostByVanishedAcceptance)
+	}
+}
+
+// A transaction accepted by several blocks cannot support "created once and then absent", and the
+// created-then-absent pass has always excluded those. This one used to report them as losses.
+func TestSummarizeExcludesAmbiguousCreationFromLosses(t *testing.T) {
+	records := []Record{
+		{RunID: "r", BlockHash: "a", IBDStage: StageChainReplay, AcceptedTxIDs: []string{"dup"},
+			AcceptedSpends: []string{"unrelated:0"}},
+		{RunID: "r", BlockHash: "b", IBDStage: StageChainReplay, AcceptedTxIDs: []string{"dup"}},
+		{RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+			MissingOutpoints: []MissingOutpoint{{TxID: "dup", Index: 0}}},
+	}
+
+	summary := Summarize(records)
+	if summary.LostAfterCreation != 0 {
+		t.Errorf("a coin with no settled creation point is not a loss, got %d", summary.LostAfterCreation)
+	}
+	if summary.LostWithAmbiguousCreation != 1 {
+		t.Errorf("expected it counted as ambiguous, got %d", summary.LostWithAmbiguousCreation)
+	}
+}

@@ -153,8 +153,23 @@ type Summary struct {
 	// RejectionReasons counts, over the whole run, why merge-set transactions were not accepted.
 	RejectionReasons map[string]int
 
-	// LostAfterCreation are unresolvable coins this node created and no record spent - a real loss.
+	// LostAfterCreation are unresolvable coins this node created exactly once, no record spent, and
+	// which no single block's vanished acceptance explains - what is left after every ordinary
+	// explanation has been taken away.
 	LostAfterCreation int
+
+	// LostByVanishedAcceptance counts coins excluded from the above because the block that accepted
+	// them also accounts for several other apparent losses. A whole block's acceptance disappearing at
+	// once is a reorg - the block left the selected chain and the coins it created correctly ceased to
+	// exist - not this node losing coins one at a time. On a live survey 38 apparent losses collapsed
+	// to a handful of blocks this way, nine of them to one block.
+	LostByVanishedAcceptance int
+
+	// LostWithAmbiguousCreation counts coins excluded because their creating transaction was accepted
+	// by more than one block, so "created once and then absent" is not a statement this run can make.
+	// The created-then-absent pass has always excluded these; this one did not, and reported them as
+	// losses.
+	LostWithAmbiguousCreation int
 
 	// DoubleSpendMissing are unresolvable coins that were created and then legitimately spent before
 	// the block that went looking for them. Ordinary DAG behaviour and the commonest confounder here:
@@ -431,12 +446,16 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 	// missing, and neither does a spend that happened later.
 	firstAccepted := map[string]int{}
 	firstSpent := map[string]int{}
+	acceptedTimes := map[string]int{}
+	acceptingBlock := map[string]string{}
 	starvedAndNeverAccepted := map[string]struct{}{}
 	position := 0
 	for _, record := range records {
 		for _, transactionID := range record.AcceptedTxIDs {
+			acceptedTimes[transactionID]++
 			if _, seen := firstAccepted[transactionID]; !seen {
 				firstAccepted[transactionID] = position
+				acceptingBlock[transactionID] = record.BlockHash
 			}
 			position++
 		}
@@ -463,6 +482,14 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 		delete(starvedAndNeverAccepted, transactionID)
 	}
 
+	// Apparent losses are attributed to the block that accepted them first, so that a block whose
+	// whole acceptance vanished can be recognised as one event rather than counted as many losses.
+	type apparentLoss struct {
+		outpoint       string
+		acceptingBlock string
+	}
+	var apparentLosses []apparentLoss
+
 	counted := map[string]struct{}{}
 	secondPosition := 0
 	for _, record := range records {
@@ -477,13 +504,20 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 			acceptedAt, wasAccepted := firstAccepted[missing.TxID]
 			if wasAccepted && acceptedAt < secondPosition {
 				// The coin was created. Either it was spent before this block wanted it - an ordinary
-				// double spend - or it went missing after being created, which is a real loss.
+				// double spend - or it went missing after being created, which may be a real loss.
 				spentAt, wasSpent := firstSpent[key]
 				if wasSpent && spentAt > acceptedAt && spentAt <= secondPosition {
 					summary.DoubleSpendMissing++
-				} else {
-					summary.LostAfterCreation++
+					continue
 				}
+				if acceptedTimes[missing.TxID] > 1 {
+					// Accepted by more than one block: "created once and then absent" is not something
+					// this run can say about it. The created-then-absent pass excludes these too.
+					summary.LostWithAmbiguousCreation++
+					continue
+				}
+				apparentLosses = append(apparentLosses,
+					apparentLoss{outpoint: key, acceptingBlock: acceptingBlock[missing.TxID]})
 				continue
 			}
 			if _, starved := starvedAndNeverAccepted[missing.TxID]; starved {
@@ -494,6 +528,24 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 				summary.InheritedMissing++
 			}
 		}
+	}
+
+	// A block whose whole acceptance disappears at once is a reorg: it left the selected chain and the
+	// coins it created correctly ceased to exist. Counting each of those coins as a separate loss
+	// turns one ordinary event into a pile of findings - on a live survey 38 apparent losses collapsed
+	// to a handful of blocks, nine of them to a single block. Only a coin whose accepting block is not
+	// implicated in several others is left standing as a loss.
+	const vanishedAcceptanceThreshold = 3
+	perBlock := map[string]int{}
+	for _, loss := range apparentLosses {
+		perBlock[loss.acceptingBlock]++
+	}
+	for _, loss := range apparentLosses {
+		if loss.acceptingBlock != "" && perBlock[loss.acceptingBlock] >= vanishedAcceptanceThreshold {
+			summary.LostByVanishedAcceptance++
+			continue
+		}
+		summary.LostAfterCreation++
 	}
 }
 
@@ -720,8 +772,13 @@ func (s *Summary) String() string {
 		fmt.Fprintf(&b, "  %6d self-inflicted: creating transaction was rejected for a missing input and\n"+
 			"           never accepted anywhere, so this node failed to create the coin itself.\n",
 			s.SelfInflictedMissing)
-		fmt.Fprintf(&b, "  %6d LOST: created by an accepted transaction, never spent, and then absent.\n",
-			s.LostAfterCreation)
+		fmt.Fprintf(&b, "  %6d LOST: created once, never spent, then absent, and not explained by a\n"+
+			"           whole block's acceptance vanishing.\n", s.LostAfterCreation)
+		fmt.Fprintf(&b, "  %6d excluded as a reorg: their accepting block accounts for several apparent\n"+
+			"           losses at once, which is a block leaving the chain rather than coins going missing.\n",
+			s.LostByVanishedAcceptance)
+		fmt.Fprintf(&b, "  %6d excluded as ambiguous: creating transaction accepted by more than one block.\n",
+			s.LostWithAmbiguousCreation)
 		fmt.Fprintf(&b, "  %6d ordinary double spends: created, spent, then wanted again. Not damage.\n",
 			s.DoubleSpendMissing)
 		if s.SelfInflictedMissing > 0 || s.LostAfterCreation > 0 {
