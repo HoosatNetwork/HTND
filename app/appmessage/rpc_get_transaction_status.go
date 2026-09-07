@@ -5,14 +5,21 @@ import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 // TransactionStatus describes the current state of a transaction in the node.
 type TransactionStatus byte
 
+// The values match protowire.TransactionStatus exactly, and must keep matching. They used to be
+// declared in a different order, with Invalid inserted at 3 where the wire enum has ORPHAN, so every
+// status from 3 upwards was sent one place out of step: an invalid transaction was reported to
+// clients as an orphan, an orphan as accepted, an accepted as confirmed, and a confirmed one as a
+// bare 6 the wire enum had no name for. The conversions are explicit now (see
+// protowire.toWireTransactionStatus), so a future divergence is a compile error rather than a wallet
+// being told a transaction it cannot spend has been accepted.
 const (
 	TransactionStatusUnknown TransactionStatus = iota
 	TransactionStatusNotFound
 	TransactionStatusPending
-	TransactionStatusInvalid
 	TransactionStatusOrphan
 	TransactionStatusAccepted
 	TransactionStatusConfirmed
+	TransactionStatusInvalid
 )
 
 var transactionStatusToString = map[TransactionStatus]string{
@@ -22,6 +29,7 @@ var transactionStatusToString = map[TransactionStatus]string{
 	TransactionStatusOrphan:    "orphan",
 	TransactionStatusAccepted:  "accepted",
 	TransactionStatusConfirmed: "confirmed",
+	TransactionStatusInvalid:   "invalid",
 }
 
 func (ts TransactionStatus) String() string {

@@ -3,13 +3,22 @@ package rpchandlers
 import (
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/domain/consensus"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/pkg/errors"
 )
 
 // HandleGetTransactionStatus handles the respectively named RPC command.
+// confirmationsConsideredSettled is where an accepted transaction is additionally reported as
+// confirmed. Accepted means a chain block took it; confirmed means enough chain has been built on
+// top that reversal is not a practical concern. The two used to be the wrong way round - fewer than
+// 1000 confirmations reported "confirmed" and more reported "accepted" - so a transaction became
+// less settled-sounding the deeper it was buried.
+const confirmationsConsideredSettled = 1000
+
 func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
 	getTransactionStatusRequest := request.(*appmessage.GetTransactionStatusRequestMessage)
 
@@ -38,7 +47,15 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 	// Try to find block
 	block, err := context.Domain.Consensus().GetBlockByTransactionID(transactionID)
 	if err != nil {
-		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusNotFound, emptyHash, 0), nil
+		// Only a completed search that found nothing is "not found". A search that could not be
+		// completed is a fault in this node and has to be reported as one: answering "not found" tells
+		// a wallet the transaction does not exist here, which may be false, and which it may act on by
+		// rebroadcasting or by treating its funds as unspent.
+		if errors.Is(err, consensus.ErrTransactionNotInAnyBlock) {
+			return appmessage.NewGetTransactionStatusResponseMessage(
+				appmessage.TransactionStatusNotFound, emptyHash, 0), nil
+		}
+		return nil, err
 	}
 
 	blockHash := consensushashing.BlockHash(block)
@@ -70,45 +87,38 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 
 	confirmations := selectedParentInfo.BlueScore - blockInfo.BlueScore + 1
 
-	// Status logic
-	switch {
-	case blockInfo.BlockStatus == externalapi.StatusInvalid || blockInfo.BlockStatus == externalapi.StatusDisqualifiedFromChain:
+	if blockInfo.BlockStatus == externalapi.StatusInvalid {
 		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusInvalid, emptyHash, 0), nil
+	}
 
-	case blockInfo.BlockStatus == externalapi.StatusHeaderOnly:
-		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusUnknown, emptyHash, confirmations), nil
+	// Whether a transaction was accepted is decided by the chain block that MERGED the block carrying
+	// it, not by that block's own status. Most blocks carrying a transaction are not on the selected
+	// chain and stay StatusUTXOPendingVerification permanently, which is correct for them and says
+	// nothing about the transaction. Reading the containing block's status reported transactions the
+	// chain had accepted as "pending" indefinitely, with their confirmation count climbing.
+	acceptance, err := findTransactionAcceptance(context, blockHash, transactionID)
+	if err != nil {
+		return nil, err
+	}
 
-	case blockInfo.BlockStatus == externalapi.StatusUTXOPendingVerification:
-		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusPending, emptyHash, confirmations), nil
+	switch {
+	case acceptance.acceptingBlock == nil:
+		// No chain block has merged it yet. Genuinely pending, whatever the containing block's status.
+		return appmessage.NewGetTransactionStatusResponseMessage(
+			appmessage.TransactionStatusPending, emptyHash, confirmations), nil
 
-	case blockInfo.BlockStatus == externalapi.StatusUTXOValid:
-		_, children, err := context.Domain.Consensus().GetBlockRelations(blockHash)
-		if err != nil {
-			return nil, err
-		}
+	case !acceptance.accepted:
+		// Merged and rejected - a duplicate of one already accepted, or a spend of something already
+		// spent. That is a settled answer and must not be reported as still pending.
+		return appmessage.NewGetTransactionStatusResponseMessage(
+			appmessage.TransactionStatusInvalid, acceptance.acceptingBlock, confirmations), nil
 
-		childHash, _ := externalapi.NewDomainHashFromString("")
-		for _, child := range children {
-			childInfo, err := context.Domain.Consensus().GetBlockInfo(child)
-			if err != nil {
-				return nil, err
-			}
-			log.Infof("child %s selected parent %s", child, childInfo.SelectedParent)
-			isChainBlock, err := context.Domain.Consensus().IsChainBlock(child)
-			if err != nil {
-				return nil, err
-			}
-			if isChainBlock && childInfo.SelectedParent.Equal(blockHash) {
-				childHash = child
-				break
-			}
-		}
-		if confirmations >= 1000 {
-			return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusAccepted, childHash, confirmations), nil
-		}
-		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusConfirmed, childHash, confirmations), nil
+	case confirmations >= confirmationsConsideredSettled:
+		return appmessage.NewGetTransactionStatusResponseMessage(
+			appmessage.TransactionStatusConfirmed, acceptance.acceptingBlock, confirmations), nil
 
 	default:
-		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusUnknown, emptyHash, confirmations), nil
+		return appmessage.NewGetTransactionStatusResponseMessage(
+			appmessage.TransactionStatusAccepted, acceptance.acceptingBlock, confirmations), nil
 	}
 }

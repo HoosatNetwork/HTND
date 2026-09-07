@@ -1857,8 +1857,18 @@ func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTra
 		}
 	}
 
-	return nil, errors.New("Transaction not found in any block")
+	return nil, errors.Wrapf(ErrTransactionNotInAnyBlock, "transaction %s is not in any block this node "+
+		"holds", transactionID)
 }
+
+// ErrTransactionNotInAnyBlock is returned by GetBlockByTransactionID when the scan completed and no
+// stored block contains the transaction, as opposed to the scan itself failing.
+//
+// Callers used to collapse both into "not found", which tells a caller two very different things
+// with one answer: that this node has never seen the transaction, or that the node could not manage
+// to look. The first is information about the transaction, the second is a fault in the node, and a
+// wallet deciding whether to rebroadcast needs to tell them apart.
+var ErrTransactionNotInAnyBlock = errors.New("transaction is not in any block this node holds")
 
 // ValidateUTXODiffChildChains validates and repairs UTXO diff child chains
 func (s *consensus) ValidateUTXODiffChildChains() error {

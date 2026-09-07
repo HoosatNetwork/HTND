@@ -382,6 +382,9 @@ enum TransactionStatus {
   TRANSACTION_STATUS_ORPHAN = 3;
   TRANSACTION_STATUS_ACCEPTED = 4;
   TRANSACTION_STATUS_CONFIRMED = 5;
+  // Added at 6 rather than in its natural place beside NOT_FOUND: values 0-5 are already on the wire,
+  // and renumbering them would silently change what every existing client is told.
+  TRANSACTION_STATUS_INVALID = 6;
 }
 
 message GetTransactionStatusRequestMessage{
