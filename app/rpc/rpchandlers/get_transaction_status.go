@@ -107,6 +107,17 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 		return nil, err
 	}
 
+	if acceptance.inconclusive {
+		// The node stopped looking before reaching a verdict. Unknown is the only honest answer: saying
+		// "pending" would be a claim about the transaction made from a fact about the search.
+		response := &appmessage.GetTransactionStatusResponseMessage{
+			Status:        appmessage.TransactionStatusUnknown,
+			Confirmations: confirmations,
+		}
+		response.Error = appmessage.RPCErrorf("could not determine whether transaction %s was accepted: "+
+			"the search for the chain block that merged it was cut short", transactionID)
+		return response, nil
+	}
 	if acceptance.acceptingBlock == nil {
 		// No chain block has merged it yet. Genuinely pending, whatever the containing block's status.
 		return appmessage.NewGetTransactionStatusResponseMessage(

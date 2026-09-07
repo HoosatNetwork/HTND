@@ -10,7 +10,11 @@ import (
 // block that merged a given block. A block is merged within a few chain blocks of itself, so this is
 // generous; it exists so a transaction in a block that never gets merged cannot turn one RPC call
 // into a walk to the tip.
-const maxChainBlocksSearchedForAcceptance = 200
+// Generous rather than tight: Added runs from the common ancestor upward, so the block that merged a
+// given block is normally within a handful of entries - but a transaction carried only by blocks off
+// the selected chain can push the common ancestor far below it, and cutting the search short there
+// produced a confident wrong answer instead of an admission that the node had stopped looking.
+const maxChainBlocksSearchedForAcceptance = 20000
 
 // maxChainBlocksSearchedFromTip bounds the fast path that looks for a transaction in recently
 // accepted chain blocks. A transaction submitted to a node is mined within seconds on this chain, so
@@ -58,13 +62,20 @@ func findRecentlyAcceptedTransaction(context *rpccontext.Context,
 // transactionAcceptance is what a chain block decided about one transaction.
 type transactionAcceptance struct {
 	// acceptingBlock is the chain block that merged the block carrying the transaction. Nil when no
-	// chain block has merged it yet.
+	// verdict was found.
 	acceptingBlock *externalapi.DomainHash
 
 	// accepted is that block's verdict. A merged transaction can be rejected - a duplicate of one
 	// already accepted, or a spend of something already spent - and rejected is a settled answer, not
 	// a pending one.
 	accepted bool
+
+	// inconclusive means the search ran out of room before reaching a verdict, rather than
+	// establishing that no chain block has merged the transaction. The two must not be reported the
+	// same way: "not merged yet" is a claim about the transaction, while this is a statement about how
+	// far the node looked. Reporting a truncated search as "pending" is how one node came back PENDING
+	// for a transaction another node reported CONFIRMED, with 15,000 confirmations on both.
+	inconclusive bool
 }
 
 // findTransactionAcceptance answers who accepted a transaction, and whether they did.
@@ -90,7 +101,8 @@ func findTransactionAcceptance(context *rpccontext.Context, containingBlock *ext
 
 	for i, chainBlock := range chainPath.Added {
 		if i >= maxChainBlocksSearchedForAcceptance {
-			break
+			// Out of room, not out of chain. Say so rather than implying the transaction is unmerged.
+			return &transactionAcceptance{inconclusive: true}, nil
 		}
 		acceptanceData, err := context.Domain.Consensus().GetBlockAcceptanceData(chainBlock)
 		if err != nil {
