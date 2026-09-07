@@ -346,12 +346,21 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 	} else {
 		iterator, err = pm.dagTraversalManager.SelectedChildIterator(stagingArea, ghostdagData.SelectedParent(), lowHash, true)
 		if err != nil {
-			// Instead of erroring if SelectedChildIterator decides to crash because
-			// low hash is not in the selected parent hash of the highhash- So we
-			// use highhash as block iterator from one block, so that we don't
-			// advance further and gracefully handle error.
-			iterator = &blockIteratorFromOneBlock{hash: ghostdagData.SelectedParent()}
-			// return nil, nil, err
+			// The pruning point has to be a pure function of the DAG: two nodes holding the same chain
+			// must choose the same one, because it decides which UTXO set every syncing peer is handed.
+			// Swallowing this error broke that guarantee silently. The walk would be replaced by a
+			// single-block iterator, the candidate would not advance, and the node would keep an older
+			// pruning point than a node with identical chain data that did not hit the error - with
+			// nothing logged and nothing returned to say so.
+			//
+			// The error means lowHash is not on the selected parent chain of the block being examined,
+			// which is a real inconsistency in this node's own view rather than something to route
+			// around. Returning it leaves the pruning point where it was, exactly as the fallback did,
+			// but the caller and the operator now know it happened.
+			return nil, nil, errors.Wrapf(err, "cannot determine the next pruning point: the selected "+
+				"child walk from %s to %s failed. The pruning point must be the same on every node "+
+				"holding the same chain, so this node declines to pick one from an inconsistent view "+
+				"rather than quietly keeping an older one", lowHash, ghostdagData.SelectedParent())
 		}
 	}
 	defer iterator.Close()

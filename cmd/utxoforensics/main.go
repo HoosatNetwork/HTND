@@ -27,11 +27,13 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"math"
 	"os"
 	"sort"
+	"strings"
 
 	consensusdatabase "github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/acceptancedatastore"
@@ -92,6 +94,12 @@ var (
 	virtualCheck = flag.Bool("virtualcheck", false, "hash virtual's materialised UTXO table and compare it to "+
 		"virtual's own stored multiset - the same quantity maintained by two different mechanisms, so a "+
 		"mismatch localises the drift to the materialised table rather than to the multiset chain")
+	hasOutpoints = flag.String("hasoutpoints", "", "path to a file of \"txid:index\" lines; report which of "+
+		"them the pruning point UTXO set of -db holds. Answers whether two nodes' gaps are the SAME coins "+
+		"without needing them at the same pruning point: take the coins one node found missing and ask "+
+		"another node's set for them. Present in the other set means the gaps differ and a bundle built "+
+		"from one node is not correct for the other; absent in both means one shared gap.")
+
 	baseTest = flag.Bool("basecheck", false, "hash the stored pruning point UTXO set, compare it to the pruning "+
 		"point's header commitment, and - if it matches - use it as a network-sourced base to discriminate the "+
 		"two DAA-stamp rules on the next selected-chain blocks")
@@ -193,6 +201,10 @@ func main() {
 
 	if *baseTest {
 		baseCheck(s, sa)
+	}
+
+	if *hasOutpoints != "" {
+		lookUpOutpoints(s, *hasOutpoints)
 	}
 
 	if *scanN > 0 {
@@ -1322,4 +1334,86 @@ func tryRecoverPruningPointSet(s *stores, sa *model.StagingArea, pp *externalapi
 	}
 	fmt.Printf("  recover: no combination of these corrections reproduces the header commitment - the true " +
 		"set differs from this node's by more than the disagreements found here\n")
+}
+
+// lookUpOutpoints reports which of the given outpoints the pruning point UTXO set holds.
+//
+// It exists to compare two nodes' gaps when they are not at the same pruning point, which -diffsets
+// requires and which peers rarely oblige. The coins one node reported missing are looked up in
+// another node's served set: if that set holds them, the two nodes are missing different coins and no
+// single repaired set is correct for both; if neither holds them, the gap is shared and one bundle
+// serves everyone. That distinction decides whether a rebaseline is a network-wide fix or a per-node
+// one, and nothing else measured so far reaches it.
+//
+// The bucket has no point-lookup API, so this walks it once and answers every outpoint in one pass.
+func lookUpOutpoints(s *stores, path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "open %s: %v\n", path, err)
+		return
+	}
+	defer file.Close()
+
+	wanted := map[string]struct{}{}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			wanted[line] = struct{}{}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "read %s: %v\n", path, err)
+		return
+	}
+	fmt.Printf("\n=== looking up %d outpoints in this node's pruning point UTXO set\n", len(wanted))
+
+	iterator, err := s.pruning.PruningPointUTXOIterator(s.db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pruning point UTXO iterator: %v\n", err)
+		return
+	}
+	defer iterator.Close()
+
+	found := map[string]struct{}{}
+	scanned := 0
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		outpoint, _, err := iterator.Get()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "iterate: %v\n", err)
+			return
+		}
+		scanned++
+		key := fmt.Sprintf("%s:%d", outpoint.TransactionID, outpoint.Index)
+		if _, want := wanted[key]; want {
+			found[key] = struct{}{}
+			if len(found) == len(wanted) {
+				break
+			}
+		}
+	}
+
+	fmt.Printf("  scanned %d entries\n", scanned)
+	fmt.Printf("  PRESENT in this set: %d\n", len(found))
+	fmt.Printf("  ABSENT from this set: %d\n", len(wanted)-len(found))
+	switch {
+	case len(found) == 0:
+		fmt.Println("  => this node is missing them too: the gap is shared, and one repaired set serves both")
+	case len(found) == len(wanted):
+		fmt.Println("  => this node holds every one of them: the two nodes are missing DIFFERENT coins, so a " +
+			"bundle built from one is not correct for the other")
+	default:
+		fmt.Println("  => partly shared: some coins are missing from both sets and some from only one, so a " +
+			"bundle repairs part of another node's gap and not the rest")
+	}
+	shown := 0
+	for outpoint := range wanted {
+		if _, ok := found[outpoint]; ok {
+			continue
+		}
+		if shown++; shown > 10 {
+			break
+		}
+		fmt.Printf("    absent here too: %s\n", outpoint)
+	}
 }
