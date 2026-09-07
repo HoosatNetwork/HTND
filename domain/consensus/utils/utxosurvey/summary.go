@@ -324,8 +324,13 @@ func summarizeCreatedThenAbsent(records []Record, summary *Summary) {
 			reported[key] = struct{}{}
 
 			spendIndex, wasSpent := spentAt[key]
-			// A spend that happened after this block tripped over the coin does not explain anything.
-			spentInBetween := wasSpent && spendIndex > created.index && spendIndex < i
+			// A spend recorded after this block tripped over the coin does not explain anything, but a
+			// spend recorded BY this block does: the commonest shape of all is one mergeset containing
+			// two transactions that spend the same coin, where the first is accepted and the second
+			// correctly fails with a missing input. That lands the spend and the failure in the same
+			// record, so the bound has to include it - requiring a strictly earlier record reports the
+			// most ordinary double spend there is as a lost coin.
+			spentInBetween := wasSpent && spendIndex > created.index && spendIndex <= i
 			if spentInBetween {
 				summary.CreatedThenSpentThenAbsent++
 				continue

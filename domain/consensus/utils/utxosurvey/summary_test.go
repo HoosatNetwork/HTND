@@ -382,3 +382,30 @@ func TestSummarizeStillFindsLossWithinASingleRun(t *testing.T) {
 		t.Fatalf("a loss within one run must still be reported: %+v", summary.CreatedThenLost)
 	}
 }
+
+// TestSummarizeExcusesACoinSpentByTheSameBlock is the commonest double spend there is: one mergeset
+// holds two transactions spending the same coin, the first is accepted and the second fails with a
+// missing input. The spend and the failure are then in the SAME record, and an ordering test that
+// demands a strictly earlier spend calls that a lost coin.
+//
+// Found against a real 81,701-block survey, where it produced the investigation's only NEW_MISSING
+// candidate - one coin, which the record itself showed as present in the parent set and spent by the
+// very block reporting it missing.
+func TestSummarizeExcusesACoinSpentByTheSameBlock(t *testing.T) {
+	records := []Record{
+		{RunID: "r", BlockHash: "creator", IBDStage: StageChainReplay,
+			AcceptedTxIDs: []string{"coin-tx"}, AcceptedSpends: []string{"unrelated:0"}},
+		{RunID: "r", BlockHash: "double-spender", IBDStage: StageChainReplay, Error: "missing-input",
+			AcceptedSpends:   []string{"coin-tx:0"},
+			MissingOutpoints: []MissingOutpoint{{TxID: "coin-tx", Index: 0}}},
+	}
+
+	summary := Summarize(records)
+	if len(summary.CreatedThenLost) != 0 {
+		t.Errorf("a coin spent by the same block that reports it missing is a double spend, not a "+
+			"loss: %+v", summary.CreatedThenLost)
+	}
+	if summary.CreatedThenSpentThenAbsent != 1 {
+		t.Errorf("expected it counted as a double-spend rejection, got %d", summary.CreatedThenSpentThenAbsent)
+	}
+}
