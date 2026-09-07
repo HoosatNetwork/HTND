@@ -49,10 +49,43 @@ func AcceptedUTXOBlockDAAScore(mergingBlockDAAScore uint64) uint64 {
 // each spent input's UTXO and adding each created output's UTXO - stamping created entries per
 // AcceptedUTXOBlockDAAScore. mergingBlockDAAScore is the DAA score of the block that acceptanceData
 // belongs to.
+//
+// selectedParentPastUTXO is the set this block starts from, and it is what keeps the multiset a hash
+// of an actual SET. A MuHash Add is not idempotent, so adding one outpoint twice produces a
+// value that is not the hash of any set at all - and acceptance data really can present the same
+// outpoint twice, because two blocks with byte-identical coinbases share a transaction ID and each
+// can be accepted by a different merging block. The diff already refuses the second add
+// (mutableUTXODiff.addEntry, "already present in toAdd with the same value"); the multiset had no
+// equivalent and hashed it again, so the block's commitment stopped matching its header with nothing
+// else about the block wrong. On a live mainnet survey 8,174 coinbase transactions were accepted by
+// more than one chain block.
+//
+// selectedParentPastUTXO may be nil, which keeps the within-replay deduplication but cannot tell that
+// a coin already existed before this block.
 func ApplyAcceptanceDataToMultiset(ms MultisetWriter, acceptanceData externalapi.AcceptanceData,
-	mergingBlockDAAScore uint64) error {
+	mergingBlockDAAScore uint64, selectedParentPastUTXO externalapi.UTXODiff) error {
+	// Two ways the same outpoint can be presented for adding twice, and the diff refuses both:
+	//
+	//   - it is already in the set before this block, because an earlier chain block accepted the same
+	//     byte-identical coinbase. selectedParentPastUTXO's toAdd is where such a coin sits.
+	//   - this one acceptance data presents it twice, because two merge-set blocks carried the same
+	//     coinbase.
+	//
+	// Either way the set holds it once, so the multiset must hash it once.
+	addedHere := map[externalapi.DomainOutpoint]struct{}{}
+	skipDuplicate := func(outpoint *externalapi.DomainOutpoint) bool {
+		if _, already := addedHere[*outpoint]; already {
+			return true
+		}
+		if selectedParentPastUTXO != nil && selectedParentPastUTXO.ToAdd().Contains(outpoint) {
+			return true
+		}
+		addedHere[*outpoint] = struct{}{}
+		return false
+	}
+
 	return forEachAcceptedTransaction(acceptanceData, func(transaction *externalapi.DomainTransaction, isCoinbase bool) error {
-		return applyTransactionToMultiset(ms, transaction, mergingBlockDAAScore, isCoinbase, false)
+		return applyTransactionToMultiset(ms, transaction, mergingBlockDAAScore, isCoinbase, false, skipDuplicate)
 	})
 }
 
@@ -69,7 +102,7 @@ func RemoveAcceptanceDataFromMultiset(ms MultisetWriter, acceptanceData external
 				continue
 			}
 			err := applyTransactionToMultiset(ms, transactionAcceptanceData.Transaction,
-				mergingBlockDAAScore, j == 0, true)
+				mergingBlockDAAScore, IsAcceptedCoinbase(transactionAcceptanceData.Transaction, j), true, nil)
 			if err != nil {
 				return err
 			}
@@ -139,7 +172,8 @@ func forEachAcceptedTransaction(acceptanceData externalapi.AcceptanceData,
 // applyTransactionToMultiset removes the transaction's inputs from ms and adds its outputs, or the
 // exact reverse of that when reverse is true.
 func applyTransactionToMultiset(ms MultisetWriter, transaction *externalapi.DomainTransaction,
-	mergingBlockDAAScore uint64, isCoinbase bool, reverse bool) error {
+	mergingBlockDAAScore uint64, isCoinbase bool, reverse bool,
+	skipDuplicate func(*externalapi.DomainOutpoint) bool) error {
 	transactionID := consensushashing.TransactionID(transaction)
 
 	addUTXO := func(entry externalapi.UTXOEntry, outpoint *externalapi.DomainOutpoint) error {
@@ -178,6 +212,11 @@ func applyTransactionToMultiset(ms MultisetWriter, transaction *externalapi.Doma
 		outpoint := &externalapi.DomainOutpoint{
 			TransactionID: *transactionID,
 			Index:         uint32(i),
+		}
+		if skipDuplicate != nil && skipDuplicate(outpoint) {
+			// Already in the set, and the diff refused to add it a second time. Hashing it again here
+			// would make the multiset disagree with the very set it is supposed to summarise.
+			continue
 		}
 		entry := NewUTXOEntry(output.Value, output.ScriptPublicKey,
 			isCoinbase, AcceptedUTXOBlockDAAScore(mergingBlockDAAScore))

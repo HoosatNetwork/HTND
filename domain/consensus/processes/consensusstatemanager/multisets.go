@@ -8,11 +8,15 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 )
 
+// calculateMultiset builds blockHash's multiset from its selected parent's and its own acceptance
+// data. pastDiff is the UTXO diff that same acceptance data produced, and is what keeps the two
+// representations of one set in agreement - see utxo.ApplyAcceptanceDataToMultiset.
 func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 	acceptanceData externalapi.AcceptanceData,
 	blockGHOSTDAGData *externalapi.BlockGHOSTDAGData,
 	daaScore uint64,
+	selectedParentPastUTXO externalapi.UTXODiff,
 ) (model.Multiset, error) {
 	log.Tracef("calculateMultiset start for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
 	defer log.Tracef("calculateMultiset end for block with selected parent %s", blockGHOSTDAGData.SelectedParent())
@@ -44,7 +48,7 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	// utxo.AcceptedUTXOBlockDAAScore for the rule and why it is a consensus rule rather than a
 	// choice. applyMergeSetBlocks builds this block's UTXO diff from the same daaScore, so the diff
 	// and the multiset stay two representations of one UTXO set.
-	err = utxo.ApplyAcceptanceDataToMultiset(ms, acceptanceData, daaScore)
+	err = utxo.ApplyAcceptanceDataToMultiset(ms, acceptanceData, daaScore, selectedParentPastUTXO)
 	if err != nil {
 		return nil, err
 	}

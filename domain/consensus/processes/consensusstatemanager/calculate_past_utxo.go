@@ -117,7 +117,8 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	csm.stashRejectionReasons(blockHash, rejectionReasons)
 
 	log.Debugf("Calculating the multiset of %s", blockHash)
-	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData, daaScore)
+	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData,
+		daaScore, selectedParentPastUTXO)
 	if err != nil {
 		return nil, nil, nil, err
 	}
