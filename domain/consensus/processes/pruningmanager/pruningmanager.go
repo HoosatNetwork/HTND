@@ -1887,11 +1887,19 @@ func applyDiffToMultiset(startMultiset model.Multiset, utxoSetDiff externalapi.U
 	return result, nil
 }
 
-// verifyPruningPointDiffAgainstCommitment logs whether applying utxoSetDiff to previousPruningHash's
-// stored per-block multiset reproduces currentPruningHash's own header UTXO commitment, and returns
-// that verdict. A false result means either the diff for this transition is wrong, or the baseline
-// it's applied to is already offset from the header (the network-wide condition where an imported
+// verifyPruningPointDiffAgainstCommitment reports whether applying utxoSetDiff to
+// previousPruningHash's stored per-block multiset reproduces currentPruningHash's own header UTXO
+// commitment. A false result means either the diff for this transition is wrong, or the baseline it's
+// applied to is already offset from the header (the network-wide condition where an imported
 // pruning-point UTXO set doesn't match its own header).
+//
+// It cannot tell those two apart, which is why a false result is NOT logged as an error: on the
+// current network the offset is the normal case, so this check fails on every transition, and the
+// only caller immediately runs pickConsistentPruningPointDiff - which can tell them apart, and which
+// logs the one outcome that is genuinely bad. Logging FAILED at error level here put an alarming
+// line in the log a minute and a half before the system concluded the transition was fine, and never
+// retracted it; read on its own it says the derivation the whole rebaseline depends on is broken,
+// which is exactly what it does not say.
 func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *model.StagingArea,
 	previousPruningHash, currentPruningHash *externalapi.DomainHash, utxoSetDiff externalapi.UTXODiff, methodUsed string,
 ) bool {
@@ -1923,8 +1931,10 @@ func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *m
 			methodUsed, previousPruningHash, resultHash, currentPruningHash)
 		return true
 	}
-	log.Errorf("[UTXO-DEBUG] pruning point diff verification (%s) FAILED: applying the computed diff to "+
-		"%s's multiset produces %s, but %s's own header expects UTXO commitment %s.",
+	log.Debugf("[UTXO-DEBUG] pruning point diff verification (%s) did not reproduce the header: applying "+
+		"the computed diff to %s's multiset produces %s, but %s's own header expects UTXO commitment %s. "+
+		"Expected whenever this node is on an offset baseline; the consistency check that follows decides "+
+		"whether the diff itself is wrong.",
 		methodUsed, previousPruningHash, resultHash, currentPruningHash, expectedCommitment)
 	return false
 }
