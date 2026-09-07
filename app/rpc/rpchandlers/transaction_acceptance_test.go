@@ -3,6 +3,8 @@ package rpchandlers
 import (
 	"testing"
 
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
@@ -94,5 +96,42 @@ func TestATransactionNotInTheDataIsNotMerged(t *testing.T) {
 	if merged || accepted {
 		t.Errorf("a transaction this block never merged must be reported as neither merged nor "+
 			"accepted, got merged=%t accepted=%t", merged, accepted)
+	}
+}
+
+// TestMalformedTransactionIDIsNotReportedAsNotFound covers a wrong answer that cost real
+// investigation time.
+//
+// A transaction id that lost one character in a copy-paste came back as TRANSACTION_STATUS_NOT_FOUND
+// - the same answer the node gives for a transaction it has genuinely never seen. That reads as
+// evidence about the network when the truth is about the question, and it sent an investigation after
+// transaction propagation instead of after a typo. A request the node cannot parse has to say so.
+func TestMalformedTransactionIDIsNotReportedAsNotFound(t *testing.T) {
+	tests := []struct {
+		name          string
+		transactionID string
+	}{
+		{"one character short, as a truncated copy-paste produces", "eab97296545fcc3a8188e499f8fc4ede1595d5b38b6f9a76801d64dd7c8cd0b"},
+		{"empty", ""},
+		{"not hexadecimal", "zzzz7296545fcc3a8188e499f8fc4ede1595d5b38b6f9a76801d64dd7c8cd0b7"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// The parse happens before the handler touches the node, so this exercises the real path.
+			response, err := HandleGetTransactionStatus(nil, nil,
+				appmessage.NewGetTransactionStatusRequestMessage(test.transactionID))
+			if err != nil {
+				t.Fatalf("a malformed id should be answered, not error out: %+v", err)
+			}
+			statusResponse := response.(*appmessage.GetTransactionStatusResponseMessage)
+			if statusResponse.Status == appmessage.TransactionStatusNotFound {
+				t.Error("an id the node cannot parse must not be reported as a transaction it has not " +
+					"seen - that is an answer about the network to a question about the request")
+			}
+			if statusResponse.Error == nil {
+				t.Error("the caller has to be told the id was rejected, and why")
+			}
+		})
 	}
 }

@@ -24,13 +24,19 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 
 	transactionID, err := transactionid.FromString(getTransactionStatusRequest.TransactionID)
 	if err != nil {
-		emptyHash, _ := externalapi.NewDomainHashFromString("")
-		errorMessage := appmessage.NewGetTransactionStatusResponseMessage(
-			appmessage.TransactionStatusNotFound,
-			emptyHash,
-			0,
-		)
-		return errorMessage, nil
+		// An unparseable id is a malformed request, not a transaction the node has never seen.
+		// Answering "not found" told the caller something about the network when the truth was about
+		// the question: a transaction id that lost a character in a copy-paste came back as NOT_FOUND,
+		// indistinguishable from a transaction that genuinely had not propagated, and sent an
+		// investigation after the network instead of the typo.
+		response := &appmessage.GetTransactionStatusResponseMessage{
+			Status: appmessage.TransactionStatusUnknown,
+		}
+		response.Error = appmessage.RPCErrorf(
+			"%q is not a valid transaction id: %s. A transaction id is 64 hexadecimal characters; "+
+				"this one has %d", getTransactionStatusRequest.TransactionID, err,
+			len(getTransactionStatusRequest.TransactionID))
+		return response, nil
 	}
 
 	// Check mempool first
