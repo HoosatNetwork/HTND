@@ -2090,11 +2090,35 @@ func (pm *pruningManager) updatePruningPoint() error {
 	if err != nil {
 		return err
 	}
-	log.Info("Validating the UTXO set fits commitment")
-	if pm.shouldSanityCheckPruningUTXOSet && !pruningPoint.Equal(pm.genesisHash) {
-		err = pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint)
-		if err != nil {
-			return err
+	// Verify what this node is about to serve, and do it unconditionally rather than only under
+	// --enable-sanity-check-pruning-utxo. This bucket is handed verbatim to every peer that syncs
+	// from this node, and until now it could be written and served without ever being checked against
+	// the commitment the chain made for it: a node had no way to know whether it was propagating a
+	// gap, and no operator had a way to ask.
+	//
+	// Reported rather than enforced by default. On the current network no node holds a set that
+	// matches its own header, so failing the advancement here would stop every node advancing without
+	// stopping anything from spreading. --enable-sanity-check-pruning-utxo keeps the strict behaviour
+	// for a node that should refuse rather than serve an unverified set. Once a rebaseline has
+	// produced sets that do match, this is the check that says which nodes are clean - and the point
+	// at which enforcing by default becomes the right default.
+	//
+	// It costs one pass over the served set per pruning point advancement, which is infrequent. That
+	// is the price of a node knowing what it serves.
+	if !pruningPoint.Equal(pm.genesisHash) {
+		log.Info("Validating that the pruning point UTXO set this node will serve fits its commitment")
+		if validationErr := pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint); validationErr != nil {
+			if pm.shouldSanityCheckPruningUTXOSet {
+				return validationErr
+			}
+			log.Warnf("Pruning point %s: the UTXO set this node now serves does NOT match the chain's "+
+				"commitment for it. Every peer that syncs from this node inherits this set, gap included. "+
+				"Continuing because no node currently holds a matching set; run with "+
+				"--enable-sanity-check-pruning-utxo to refuse the advancement instead. Details: %s",
+				pruningPoint, validationErr)
+		} else {
+			log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
+				pruningPoint)
 		}
 	}
 	var newPruningTime *time.Time

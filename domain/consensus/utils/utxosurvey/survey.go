@@ -188,6 +188,17 @@ type Record struct {
 
 	CoinbaseTxID string `json:"coinbaseTxId"`
 
+	// RejectionReasons counts why this block's merge-set transactions were not accepted, and
+	// RejectedForMissingInputTxIDs names the ones rejected because an input could not be found.
+	//
+	// That distinction is how a UTXO gap is caught spreading. A transaction whose input is missing is
+	// marked unaccepted exactly like one that broke a rule, so the outputs it would have created never
+	// enter the set - and every coin it would have created then looks, to every later block and to
+	// this survey, like a coin that was never there. Without this field a self-inflicted gap and an
+	// inherited one are indistinguishable.
+	RejectionReasons             map[string]int `json:"rejectionReasons"`
+	RejectedForMissingInputTxIDs []string       `json:"rejectedForMissingInputTxIds"`
+
 	// AcceptedSpends are the outpoints this block's accepted transactions spend, in "txid:index"
 	// form. Cross-referenced across a whole run, they are what turns "this coin was created earlier
 	// and is now absent" from a lead into a verdict: a coin created, never spent, and then absent was

@@ -137,6 +137,20 @@ type Summary struct {
 	// across them.
 	Runs int
 
+	// RejectionReasons counts, over the whole run, why merge-set transactions were not accepted.
+	RejectionReasons map[string]int
+
+	// SelfInflictedMissing are unresolvable coins whose creating transaction THIS NODE rejected for a
+	// missing input. They are the gap spreading: an earlier absent coin made that transaction
+	// unacceptable, so the coins it would have created were never created either, and they are
+	// indistinguishable from an inherited gap in every other measurement.
+	SelfInflictedMissing int
+
+	// InheritedMissing are unresolvable coins whose creating transaction this run never saw at all -
+	// created below the pruning point or outside the surveyed window. These are the gap that arrived
+	// with the imported set.
+	InheritedMissing int
+
 	// SpendHistoryAbsent is true when no record carries any accepted-spend data at all, while records
 	// do carry accepted transactions. A survey written before the field existed looks exactly like a
 	// run in which nothing was ever spent, and the difference is the whole of CreatedThenLost: with no
@@ -263,6 +277,7 @@ func Summarize(records []Record) *Summary {
 	summary.Runs = len(runOrder)
 	for _, id := range runOrder {
 		summarizeCreatedThenAbsent(byRun[id], summary)
+		summarizeGapOrigin(byRun[id], summary)
 	}
 
 	return summary
@@ -364,6 +379,55 @@ func summarizeCreatedThenAbsent(records []Record, summary *Summary) {
 				AbsentAtBlock:  record.BlockHash,
 				SpentInBetween: false,
 			})
+		}
+	}
+}
+
+// summarizeGapOrigin splits the run's unresolvable coins into the two that matter: coins this node
+// failed to create because it had already lost their transaction's input, and coins it never saw
+// created at all.
+//
+// They look identical everywhere else. Both are simply absent, with no entry anywhere and nothing in
+// the failing block's mergeset creating them, so both land under ORIGINAL_MISSING and both read as
+// "the snapshot never had it". The difference decides what a fix has to do: an inherited gap needs a
+// correct set from outside, while a self-inflicted one means the node is still manufacturing new gaps
+// from the old one and will do it again to any clean set it is given.
+func summarizeGapOrigin(records []Record, summary *Summary) {
+	rejectedForMissingInput := map[string]struct{}{}
+	seenTransaction := map[string]struct{}{}
+	for _, record := range records {
+		for _, transactionID := range record.RejectedForMissingInputTxIDs {
+			rejectedForMissingInput[transactionID] = struct{}{}
+		}
+		for _, transactionID := range record.AcceptedTxIDs {
+			seenTransaction[transactionID] = struct{}{}
+		}
+		for _, transactionID := range record.RejectedOrRedTxIDs {
+			seenTransaction[transactionID] = struct{}{}
+		}
+		for reason, count := range record.RejectionReasons {
+			if summary.RejectionReasons == nil {
+				summary.RejectionReasons = map[string]int{}
+			}
+			summary.RejectionReasons[reason] += count
+		}
+	}
+
+	counted := map[string]struct{}{}
+	for _, record := range records {
+		for _, missing := range record.MissingOutpoints {
+			key := fmt.Sprintf("%s:%d", missing.TxID, missing.Index)
+			if _, already := counted[key]; already {
+				continue
+			}
+			counted[key] = struct{}{}
+			if _, selfInflicted := rejectedForMissingInput[missing.TxID]; selfInflicted {
+				summary.SelfInflictedMissing++
+				continue
+			}
+			if _, seen := seenTransaction[missing.TxID]; !seen {
+				summary.InheritedMissing++
+			}
 		}
 	}
 }
@@ -486,6 +550,24 @@ func (s *Summary) String() string {
 			fmt.Fprintf(&b, "  %s  created by %s, unresolvable at %s\n",
 				coin.Outpoint, coin.CreatedAtBlock, coin.AbsentAtBlock)
 		}
+	}
+
+	if s.SelfInflictedMissing > 0 || s.InheritedMissing > 0 {
+		b.WriteString("\n--- where the gap came from\n")
+		fmt.Fprintf(&b, "  %d unresolvable coins whose creating transaction THIS NODE rejected for a missing\n"+
+			"    input - the gap spreading: an earlier absent coin stopped that transaction being accepted,\n"+
+			"    so the coins it would have created were never created either.\n", s.SelfInflictedMissing)
+		fmt.Fprintf(&b, "  %d unresolvable coins whose creating transaction this run never saw - the gap that\n"+
+			"    arrived with the imported set.\n", s.InheritedMissing)
+		if s.SelfInflictedMissing > 0 {
+			b.WriteString("  A non-zero first number means a clean UTXO set handed to this node would start\n" +
+				"  degrading again from the first missing input it met. Repairing the set is not sufficient\n" +
+				"  on its own.\n")
+		}
+	}
+
+	if len(s.RejectionReasons) > 0 {
+		writeCounts(&b, "why merge-set transactions were not accepted", s.RejectionReasons)
 	}
 
 	if len(s.DeltaReasons) > 0 {

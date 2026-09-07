@@ -460,3 +460,71 @@ func TestSummarizeExcludesAmbiguousCreation(t *testing.T) {
 		})
 	}
 }
+
+// TestSummarizeSplitsSelfInflictedFromInheritedGap is the measurement that decides what a fix has to
+// do, and the two cases are indistinguishable without it. Both coins below are simply absent - no
+// entry anywhere, nothing in the failing block's mergeset creating them - so both land under
+// ORIGINAL_MISSING and both read as "the imported snapshot never had it".
+//
+// One of them was in fact never created BY THIS NODE, because the node had already lost the input of
+// the transaction that would have created it and silently marked that transaction unaccepted. A
+// clean UTXO set handed to a node doing that would start degrading again immediately, so counting it
+// as inherited damage would hide the reason a repair alone cannot hold.
+func TestSummarizeSplitsSelfInflictedFromInheritedGap(t *testing.T) {
+	records := []Record{{
+		RunID:                        "r",
+		BlockHash:                    "rejector",
+		IBDStage:                     StageChainReplay,
+		RejectedOrRedTxIDs:           []string{"starved-tx"},
+		RejectionReasons:             map[string]int{"missing-input": 1},
+		RejectedForMissingInputTxIDs: []string{"starved-tx"},
+	}, {
+		RunID:          "r",
+		BlockHash:      "spender",
+		IBDStage:       StageChainReplay,
+		Error:          "missing-input",
+		Classification: ClassificationOriginalMissing,
+		MissingOutpoints: []MissingOutpoint{
+			// Created by the transaction this node starved of its input: self-inflicted.
+			{TxID: "starved-tx", Index: 0},
+			// Never seen at all in this run: inherited with the imported set.
+			{TxID: "never-seen-tx", Index: 0},
+		},
+	}}
+
+	summary := Summarize(records)
+	if summary.SelfInflictedMissing != 1 {
+		t.Errorf("expected 1 self-inflicted missing coin, got %d", summary.SelfInflictedMissing)
+	}
+	if summary.InheritedMissing != 1 {
+		t.Errorf("expected 1 inherited missing coin, got %d", summary.InheritedMissing)
+	}
+	if summary.RejectionReasons["missing-input"] != 1 {
+		t.Errorf("rejection reasons should be totalled over the run, got %v", summary.RejectionReasons)
+	}
+
+	rendered := summary.String()
+	if !strings.Contains(rendered, "the gap spreading") {
+		t.Errorf("the summary must name the spreading gap, got:\n%s", rendered)
+	}
+	// The consequence is the point: repairing the set is not enough while this is non-zero.
+	if !strings.Contains(rendered, "not sufficient") {
+		t.Errorf("the summary must say a repair alone will not hold, got:\n%s", rendered)
+	}
+}
+
+// With nothing self-inflicted, the warning must not fire - it would argue against a repair that is
+// in fact sufficient.
+func TestSummarizeDoesNotWarnWhenNothingIsSelfInflicted(t *testing.T) {
+	summary := Summarize([]Record{{
+		RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+		MissingOutpoints: []MissingOutpoint{{TxID: "never-seen-tx", Index: 0}},
+	}})
+
+	if summary.SelfInflictedMissing != 0 {
+		t.Errorf("nothing was rejected for a missing input, got %d", summary.SelfInflictedMissing)
+	}
+	if strings.Contains(summary.String(), "not sufficient") {
+		t.Error("the repair-is-not-enough warning must not fire when nothing is self-inflicted")
+	}
+}

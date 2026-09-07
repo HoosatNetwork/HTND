@@ -101,6 +101,7 @@ disagreement is an element the commitment will be wrong by. Read the `reason` on
 
 | `classification` | What it means | Where to look |
 | --- | --- | --- |
+| `SELF_INFLICTED (run scope)` | Not a per-block class — see the run-scope "where the gap came from" section. A coin whose creating transaction *this node* rejected for a missing input. The gap spreading. | The silent `isAccepted = false` on missing input in `maybeAcceptTransaction`. |
 | `ORIGINAL_MISSING` | The coin is in neither the selected parent's UTXO view nor anything **this block** accepts. Per-block only — check the run-scope section before believing it. | Pruning-point snapshot, IBD chunk transfer, deserialization, the imported multiset. |
 | `NEW_MISSING` | This block's own acceptance data creates the coin, and it is not there. | Acceptance apply, coinbase collisions, `AddTransaction`, the selected-tip diff. |
 | `HANDLING_MISMATCH` | The coin is present with a different `SerializeUTXO` preimage. **Nothing was destroyed.** | DAA stamping, script version, `isCoinbase`, serialization on both producer and validator. |
@@ -197,6 +198,12 @@ two databases' sets directly; the survey tells you which outpoints to compare.
   not in the failing block's past view. That can be a spend in that past, a coin not yet created at
   that point on the chain, or a branch the block is not on. It is not by itself benign and not by
   itself a finding.
+- `ORIGINAL_MISSING` does **not** mean the snapshot never had the coin. A coin this node failed to
+  create — because it had already lost the input of the transaction that would have created it, and
+  marked that transaction unaccepted — is absent in exactly the same way. The run-scope "where the
+  gap came from" section separates the two, and the difference decides whether repairing the set is
+  sufficient: while coins are self-inflicted, a clean set handed to the node degrades again from the
+  first missing input it meets.
 - A per-block `ORIGINAL_MISSING` verdict is scoped to that block. The run-scope section is what
   distinguishes a coin the snapshot never had from one this sync created and lost, and those two
   point at completely different code.

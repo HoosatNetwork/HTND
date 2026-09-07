@@ -5,8 +5,11 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"strings"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 
@@ -104,10 +107,14 @@ func (csm *consensusStateManager) calculatePastUTXOAndAcceptanceDataWithSelected
 	log.Debugf("Calculating PastUTXO and acceptance data with DAAScore %d", daaScore)
 
 	log.Debugf("Applying blue blocks to the selected parent past UTXO of block %s", blockHash)
-	acceptanceData, utxoDiff, err := csm.applyMergeSetBlocks(stagingArea, blockHash, selectedParentPastUTXO, daaScore)
+	acceptanceData, utxoDiff, rejectionReasons, err := csm.applyMergeSetBlocks(stagingArea, blockHash, selectedParentPastUTXO, daaScore)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// Stashed rather than returned: the public CalculatePastUTXOAndAcceptanceData signature is part of
+	// the model interface, and this is diagnostic data that only the survey consumes. Keyed by block
+	// so a concurrent resolution of another block cannot pick up these reasons.
+	csm.stashRejectionReasons(blockHash, rejectionReasons)
 
 	log.Debugf("Calculating the multiset of %s", blockHash)
 	multiset, err := csm.calculateMultiset(stagingArea, blockHash, acceptanceData, blockGHOSTDAGData, daaScore)
@@ -210,20 +217,28 @@ func (csm *consensusStateManager) restorePastUTXO(
 	return accumulatedDiff.ToImmutable(), nil
 }
 
+// applyMergeSetBlocks applies the block's merge set to the selected parent's past UTXO. It also
+// returns, when the survey is on, why each unaccepted transaction was not accepted - see
+// maybeAcceptTransaction for why that distinction is the one worth recording.
 func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	selectedParentPastUTXODiff externalapi.UTXODiff, daaScore uint64) (
-	externalapi.AcceptanceData, externalapi.MutableUTXODiff, error,
+	externalapi.AcceptanceData, externalapi.MutableUTXODiff, map[externalapi.DomainTransactionID]string, error,
 ) {
 	log.Tracef("applyMergeSetBlocks start for block %s", blockHash)
 	defer log.Tracef("applyMergeSetBlocks end for block %s", blockHash)
 
 	if selectedParentPastUTXODiff == nil {
-		return nil, nil, errors.Errorf("selected parent past UTXO diff is nil for block %s", blockHash)
+		return nil, nil, nil, errors.Errorf("selected parent past UTXO diff is nil for block %s", blockHash)
+	}
+
+	var rejectionReasons map[externalapi.DomainTransactionID]string
+	if utxosurvey.Enabled() {
+		rejectionReasons = make(map[externalapi.DomainTransactionID]string)
 	}
 
 	mergeSetHashes, err := csm.ghostdagManager.GetSortedMergeSet(stagingArea, blockHash)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// VirtualGenesisBlockHash is only a marker – it has no block body.
 	// It appears as SelectedParent of the pruning-point / first known blocks.
@@ -251,12 +266,12 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	log.Debugf("Merge set for block %s is %v", blockHash, mergeSetHashes)
 	mergeSetBlocks, err := csm.blockStore.Blocks(csm.databaseContext, stagingArea, mergeSetHashes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	selectedParentMedianTime, err := csm.pastMedianTimeManager.PastMedianTime(stagingArea, blockHash)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	log.Tracef("The past median time for block %s is: %d", blockHash, selectedParentMedianTime)
 
@@ -281,10 +296,17 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		for j, transaction := range mergeSetBlock.Transactions {
 			var isAccepted bool
 
-			isAccepted, accumulatedMass, err = csm.maybeAcceptTransaction(stagingArea, transaction, blockHash,
-				isSelectedParent, accumulatedUTXODiff, accumulatedMass, selectedParentMedianTime, daaScore)
+			var rejectionReason string
+			isAccepted, accumulatedMass, rejectionReason, err = csm.maybeAcceptTransaction(stagingArea,
+				transaction, blockHash, isSelectedParent, accumulatedUTXODiff, accumulatedMass,
+				selectedParentMedianTime, daaScore)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
+			}
+			if rejectionReasons != nil && rejectionReason != "" {
+				if transactionID := consensushashing.TransactionID(transaction); transactionID != nil {
+					rejectionReasons[*transactionID] = rejectionReason
+				}
 			}
 
 			var transactionInputUTXOEntries []externalapi.UTXOEntry
@@ -305,9 +327,22 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		multiblockAcceptanceData[i] = blockAcceptanceData
 	}
 
-	return multiblockAcceptanceData, accumulatedUTXODiff, nil
+	return multiblockAcceptanceData, accumulatedUTXODiff, rejectionReasons, nil
 }
 
+// maybeAcceptTransaction decides whether one merge-set transaction is accepted, and - when it is not
+// - says why.
+//
+// The reason matters far more than it looks. A transaction rejected because an input could not be
+// found is indistinguishable, in the acceptance data and in every log, from one rejected because it
+// broke a rule; but the first kind is how a UTXO gap SPREADS. The missing input makes this
+// transaction unaccepted, so the outputs it would have created never enter the set either, so every
+// later transaction spending those outputs is rejected in turn. A survey of mainnet found 3,470 of
+// 9,076 missing coins had a creating transaction this node itself had rejected, which is that
+// cascade, and nothing in the node distinguished it from ordinary rejection.
+//
+// rejectionReason is empty when the transaction is accepted, and is only populated when the UTXO
+// survey is enabled - it is diagnostic, and never affects the verdict.
 func (csm *consensusStateManager) maybeAcceptTransaction(
 	stagingArea *model.StagingArea,
 	transaction *externalapi.DomainTransaction,
@@ -317,10 +352,10 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	accumulatedMassBefore uint64,
 	_ int64,
 	blockDAAScore uint64,
-) (isAccepted bool, accumulatedMassAfter uint64, err error) {
+) (isAccepted bool, accumulatedMassAfter uint64, rejectionReason string, err error) {
 	if transaction == nil {
 		log.Errorf("maybeAcceptTransaction called with nil transaction for block %s", blockHash)
-		return false, accumulatedMassBefore, errors.New("nil transaction passed to maybeAcceptTransaction")
+		return false, accumulatedMassBefore, "", errors.New("nil transaction passed to maybeAcceptTransaction")
 	}
 	transactionID := "<nil>"
 	transactionIDPtr := consensushashing.TransactionID(transaction)
@@ -333,7 +368,10 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	log.Tracef("Populating transaction %s with UTXO entries", transactionID)
 	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable())
 	if err != nil {
-		return false, accumulatedMassBefore, nil
+		// The cascade path. Not an error here by design - the transaction simply cannot be accepted
+		// against a set that lacks its input - but it is the one rejection reason that means this
+		// node's own gap just got bigger.
+		return false, accumulatedMassBefore, rejectionReasonFor("missing-input", err), nil
 	}
 
 	// Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain.
@@ -343,7 +381,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			log.Tracef("Transaction %s is the coinbase of block %s "+
 				"but said block is not in the selected parent chain. "+
 				"As such, it is not accepted", transactionID, blockHash)
-			return false, accumulatedMassBefore, nil
+			return false, accumulatedMassBefore, "coinbase-not-on-selected-chain", nil
 		}
 		log.Tracef("Transaction %s is the coinbase of block %s", transactionID, blockHash)
 	} else {
@@ -352,12 +390,12 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			stagingArea, transaction, blockHash, blockDAAScore)
 		if err != nil {
 			if !errors.As(err, &(ruleerrors.RuleError{})) {
-				return false, 0, err
+				return false, 0, "", err
 			}
 
 			log.Tracef("Validation failed for transaction %s "+
 				"in block %s: %s", transactionID, blockHash, err)
-			return false, accumulatedMassBefore, nil
+			return false, accumulatedMassBefore, rejectionReasonFor("rule-error", err), nil
 		}
 		log.Tracef("Validation passed for transaction %s in block %s", transactionID, blockHash)
 	}
@@ -388,7 +426,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		// transaction - continuing and merely marking it "not accepted" would silently persist that
 		// partial, inconsistent diff as this block's official acceptance data. Abort instead of writing
 		// corrupted acceptance data to disk.
-		return false, 0, errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
+		return false, 0, "", errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
 			transactionID, blockHash)
 	}
 
@@ -421,7 +459,27 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		}
 	}
 
-	return true, accumulatedMassAfter, nil
+	return true, accumulatedMassAfter, "", nil
+}
+
+// rejectionReasonFor names why a transaction was not accepted, cheaply and only when the survey is
+// on. A missing input keeps its own label rather than the rule name it arrives under, because that
+// is the distinction the whole measurement exists to make.
+func rejectionReasonFor(kind string, err error) string {
+	if !utxosurvey.Enabled() {
+		return ""
+	}
+	var missingTxOut ruleerrors.ErrMissingTxOut
+	if errors.As(err, &missingTxOut) {
+		return "missing-input"
+	}
+	var ruleError ruleerrors.RuleError
+	if errors.As(err, &ruleError) {
+		if name, _, _ := strings.Cut(ruleError.Error(), ": "); name != "" {
+			return name
+		}
+	}
+	return kind
 }
 
 // RestorePastUTXOSetIterator restores the given block's UTXOSet iterator, and returns it as a externalapi.ReadOnlyUTXOSetIterator

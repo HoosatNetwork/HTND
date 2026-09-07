@@ -3,6 +3,7 @@ package consensusstatemanager
 import (
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -242,6 +243,7 @@ func (csm *consensusStateManager) recordBlockSurvey(stagingArea *model.StagingAr
 	}
 
 	createdByAcceptance := summarizeAcceptance(record, acceptanceData)
+	summarizeRejectionReasons(record, csm.takeRejectionReasons(blockHash))
 
 	record.MissingOutpoints = csm.surveyMissingOutpoints(stagingArea, survey, record.DAAScore,
 		selectedParentPastUTXO, pastUTXODiff, createdByAcceptance)
@@ -347,6 +349,32 @@ func summarizeAcceptance(record *utxosurvey.Record,
 		}
 	}
 	return created
+}
+
+// summarizeRejectionReasons records why this block's merge-set transactions were not accepted. The
+// missing-input ones are listed individually rather than merely counted, because they are the coins
+// this block failed to create, and a run-scope pass needs their identities to tell an inherited gap
+// from one this node made itself.
+func summarizeRejectionReasons(record *utxosurvey.Record,
+	reasons map[externalapi.DomainTransactionID]string,
+) {
+	if len(reasons) == 0 {
+		return
+	}
+	record.RejectionReasons = make(map[string]int, len(reasons))
+	maxTxIDs := utxosurvey.MaxTxIDs()
+	for transactionID, reason := range reasons {
+		record.RejectionReasons[reason]++
+		if reason != "missing-input" {
+			continue
+		}
+		if maxTxIDs != 0 && len(record.RejectedForMissingInputTxIDs) >= maxTxIDs {
+			continue
+		}
+		record.RejectedForMissingInputTxIDs = append(record.RejectedForMissingInputTxIDs,
+			transactionID.String())
+	}
+	sort.Strings(record.RejectedForMissingInputTxIDs)
 }
 
 // surveyMissingOutpoints answers, for each outpoint the block could not resolve, the question the
@@ -840,4 +868,38 @@ func (csm *consensusStateManager) surveyCascadedBlock(stagingArea *model.Staging
 	_ = csm.verifyUTXO(stagingArea, block, blockHash, pastUTXODiff, acceptanceData, blockMultiset, survey)
 	csm.recordBlockSurvey(stagingArea, survey, block, blockHash, selectedParentHash,
 		selectedParentPastUTXO, pastUTXODiff, acceptanceData, blockMultiset)
+}
+
+// stashRejectionReasons holds, per block, why each of that block's merge-set transactions was not
+// accepted, so recordBlockSurvey can put it in the block's record.
+//
+// It is a side channel rather than a return value because CalculatePastUTXOAndAcceptanceData is part
+// of the model.ConsensusStateManager interface, and widening a consensus interface to carry
+// diagnostics that only an opt-in survey reads is the wrong trade. Keyed by block hash and consumed
+// once, so two blocks resolving concurrently cannot pick up each other's reasons; bounded because
+// every stash is either consumed by the record or dropped when the next resolution of that block
+// replaces it.
+//
+// No-op when the survey is off - applyMergeSetBlocks does not even build the map in that case.
+func (csm *consensusStateManager) stashRejectionReasons(blockHash *externalapi.DomainHash,
+	reasons map[externalapi.DomainTransactionID]string,
+) {
+	if len(reasons) == 0 {
+		return
+	}
+	csm.rejectionReasons.Store(*blockHash, reasons)
+}
+
+// takeRejectionReasons consumes the reasons stashed for a block, if any.
+func (csm *consensusStateManager) takeRejectionReasons(blockHash *externalapi.DomainHash,
+) map[externalapi.DomainTransactionID]string {
+	stashed, ok := csm.rejectionReasons.LoadAndDelete(*blockHash)
+	if !ok {
+		return nil
+	}
+	reasons, ok := stashed.(map[externalapi.DomainTransactionID]string)
+	if !ok {
+		return nil
+	}
+	return reasons
 }

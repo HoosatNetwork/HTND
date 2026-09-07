@@ -77,6 +77,11 @@ type consensusStateManager struct {
 	// point advances.
 	baselineOffsetPruningPoint *externalapi.DomainHash
 	baselineOffset             bool
+
+	// rejectionReasons carries, per block hash, why each of that block's merge-set transactions was
+	// not accepted, from applyMergeSetBlocks to the survey record. Only populated when the UTXO survey
+	// is enabled. See stashRejectionReasons for why it is a side channel and not a return value.
+	rejectionReasons sync.Map
 }
 
 // New instantiates a new ConsensusStateManager
