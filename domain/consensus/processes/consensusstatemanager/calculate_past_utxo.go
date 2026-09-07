@@ -484,6 +484,14 @@ func newTransactionRejection(kind string, err error) *transactionRejection {
 	}
 	var missingTxOut ruleerrors.ErrMissingTxOut
 	if errors.As(err, &missingTxOut) {
+		// A transaction spending a coin this view has already spent is rejected for being a double
+		// spend, which is correct and expected on a DAG - the same transaction sits in several blocks
+		// and only the first merge accepts it. Counting those as "missing-input" made ordinary
+		// duplicate handling indistinguishable from this node lacking a coin, and a survey of a live
+		// sync read 82% of absent coins as self-inflicted damage on the strength of that conflation.
+		if missingTxOut.HasDoubleSpend() {
+			return &transactionRejection{reason: "double-spend", missingOutpoints: missingTxOut.SpentOutpoints}
+		}
 		return &transactionRejection{reason: "missing-input", missingOutpoints: missingTxOut.MissingOutpoints}
 	}
 	var ruleError ruleerrors.RuleError

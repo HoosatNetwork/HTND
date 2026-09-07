@@ -365,6 +365,8 @@ func summarizeRejectionReasons(record *utxosurvey.Record,
 	maxTxIDs := utxosurvey.MaxTxIDs()
 	for transactionID, rejection := range reasons {
 		record.RejectionReasons[rejection.reason]++
+		// Only a genuine shortage of coins is worth tracing. A double spend is the network working
+		// correctly and would swamp the trace with ordinary duplicate handling.
 		if rejection.reason != "missing-input" {
 			continue
 		}

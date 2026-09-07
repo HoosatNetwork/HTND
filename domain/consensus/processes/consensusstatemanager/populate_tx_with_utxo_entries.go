@@ -30,6 +30,11 @@ func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromVirtualO
 	defer log.Tracef("populateTransactionWithUTXOEntriesFromVirtualOrDiff end for transaction %s", transactionID)
 
 	var missingOutpoints []*externalapi.DomainOutpoint
+	// Inputs whose coin the view being validated against has already spent. That is a genuine double
+	// spend and a real rule violation, unlike an input simply absent from this node's UTXO set, which
+	// says only that this node is missing a coin the network has. Kept apart so a node whose set is
+	// known to be incomplete can go on tolerating the second without ever tolerating the first.
+	var spentOutpoints []*externalapi.DomainOutpoint
 	for _, transactionInput := range transaction.Inputs {
 		// skip all inputs that have a pre-filled utxo entry
 		if transactionInput.UTXOEntry != nil {
@@ -48,9 +53,12 @@ func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromVirtualO
 			}
 
 			if utxoDiff.ToRemove().Contains(&transactionInput.PreviousOutpoint) {
-				log.Tracef("Outpoint %s:%d is missing in the given utxoDiff",
+				// The view being validated against has already spent this coin, so spending it again is
+				// a double spend rather than a hole in this node's data.
+				log.Tracef("Outpoint %s:%d was already spent in the given utxoDiff - double spend",
 					transactionInput.PreviousOutpoint.TransactionID, transactionInput.PreviousOutpoint.Index)
 				missingOutpoints = append(missingOutpoints, &transactionInput.PreviousOutpoint)
+				spentOutpoints = append(spentOutpoints, &transactionInput.PreviousOutpoint)
 				continue
 			}
 		}
@@ -79,7 +87,7 @@ func (csm *consensusStateManager) populateTransactionWithUTXOEntriesFromVirtualO
 	}
 
 	if len(missingOutpoints) > 0 {
-		return ruleerrors.NewErrMissingTxOut(missingOutpoints)
+		return ruleerrors.NewErrMissingOrSpentTxOut(missingOutpoints, spentOutpoints)
 	}
 
 	return nil

@@ -309,19 +309,49 @@ func newRuleError(message string) RuleError {
 
 // ErrMissingTxOut indicates a transaction output referenced by an input
 // either does not exist or has already been spent.
+//
+// Those are not the same finding and must not be treated as one. An outpoint already spent in the
+// view being validated against is a genuine double spend - a real rule violation, and rejecting it
+// is the point of the check. An outpoint simply absent from this node's UTXO set says nothing about
+// the transaction: it says this node does not hold a coin the network does, and the transaction may
+// be perfectly valid. SpentOutpoints separates the first kind so a node can never tolerate a double
+// spend on the grounds that its own UTXO set is incomplete.
 type ErrMissingTxOut struct {
+	// MissingOutpoints is every input that could not be resolved, of either kind.
 	MissingOutpoints []*externalapi.DomainOutpoint
+
+	// SpentOutpoints is the subset already spent in the view being validated against - the genuine
+	// double spends. Empty means every unresolved input was merely absent from this node's set.
+	SpentOutpoints []*externalapi.DomainOutpoint
+}
+
+// HasDoubleSpend reports whether any unresolved input was already spent, rather than merely absent
+// from this node's UTXO set.
+func (e ErrMissingTxOut) HasDoubleSpend() bool {
+	return len(e.SpentOutpoints) > 0
 }
 
 func (e ErrMissingTxOut) Error() string {
+	if len(e.SpentOutpoints) > 0 {
+		return fmt.Sprintf("missing the following outpoint: %v (of which already spent, a double "+
+			"spend: %v)", e.MissingOutpoints, e.SpentOutpoints)
+	}
 	return fmt.Sprintf("missing the following outpoint: %v", e.MissingOutpoints)
 }
 
 // NewErrMissingTxOut Creates a new ErrMissingTxOut error wrapped in a RuleError
 func NewErrMissingTxOut(missingOutpoints []*externalapi.DomainOutpoint) error {
+	return NewErrMissingOrSpentTxOut(missingOutpoints, nil)
+}
+
+// NewErrMissingOrSpentTxOut creates an ErrMissingTxOut that distinguishes inputs already spent in
+// the view being validated against - genuine double spends - from inputs merely absent from this
+// node's UTXO set. spentOutpoints must also appear in missingOutpoints, which stays the full list so
+// that every existing consumer sees exactly what it saw before.
+func NewErrMissingOrSpentTxOut(missingOutpoints, spentOutpoints []*externalapi.DomainOutpoint) error {
 	return errors.WithStack(RuleError{
 		message: "ErrMissingTxOut",
-		inner:   ErrMissingTxOut{missingOutpoints},
+		inner:   ErrMissingTxOut{MissingOutpoints: missingOutpoints, SpentOutpoints: spentOutpoints},
 	})
 }
 

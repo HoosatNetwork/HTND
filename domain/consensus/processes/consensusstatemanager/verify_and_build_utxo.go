@@ -134,7 +134,29 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	// This means the block body is NOT being fully validated - the node is trusting the network's
 	// acceptance of it - and only ever happens on a chain already known to be offset from the true
 	// UTXO set.
+	//
+	// It does NOT extend to a double spend. ErrMissingTxOut covers two unrelated findings - an input
+	// this node does not hold, and an input this block's own past has already spent - and only the
+	// first is excused by an incomplete UTXO set. Tolerating the second would mean a node on an offset
+	// baseline silently accepting blocks that spend the same coin twice, which is the one thing this
+	// check exists to prevent and has nothing to do with the gap. See ErrMissingTxOut.HasDoubleSpend.
 	tolerateMissingTxOut := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	tolerable := func(err error) bool {
+		if !tolerateMissingTxOut {
+			return false
+		}
+		var missingTxOut ruleerrors.ErrMissingTxOut
+		if !errors.As(err, &missingTxOut) {
+			return false
+		}
+		if missingTxOut.HasDoubleSpend() {
+			log.Warnf("Block %s: refusing to tolerate a transaction that spends already-spent outputs "+
+				"(%v). An incomplete UTXO set excuses an input this node does not hold; it does not "+
+				"excuse spending the same coin twice.", blockHash, missingTxOut.SpentOutpoints)
+			return false
+		}
+		return true
+	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -175,7 +197,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 					survey.noteFailure("block-transactions-vs-past-utxo", err)
 					survey.noteMissingOutpointsFromError(transactionID.String(), err)
 				}
-				if isMissingTxOut && tolerateMissingTxOut {
+				if isMissingTxOut && tolerable(err) {
 					csm.logToleratedIssue("block-transaction-missing-input", blockHash,
 						errors.Wrapf(err, "transaction %s skipped", transactionID))
 					return
@@ -202,7 +224,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 					survey.noteFailure("block-transactions-vs-past-utxo", err)
 					survey.noteMissingOutpointsFromError(transactionID.String(), err)
 				}
-				if isMissingTxOut && tolerateMissingTxOut {
+				if isMissingTxOut && tolerable(err) {
 					csm.logToleratedIssue("block-transaction-missing-input", blockHash,
 						errors.Wrapf(err, "transaction %s skipped", transactionID))
 					return
