@@ -82,6 +82,12 @@ type consensusStateManager struct {
 	// not accepted, from applyMergeSetBlocks to the survey record. Only populated when the UTXO survey
 	// is enabled. See stashRejectionReasons for why it is a side channel and not a return value.
 	rejectionReasons sync.Map
+
+	// refuseMismatchedImportedPruningPointUTXOSet makes an imported pruning point UTXO set that does
+	// not hash to its own header commitment a hard failure, so IBD moves on to another peer instead of
+	// building the whole node on it. Off by default: on the current network no peer has a matching
+	// set, so refusing every one of them means never syncing at all.
+	refuseMismatchedImportedPruningPointUTXOSet bool
 }
 
 // New instantiates a new ConsensusStateManager
@@ -118,6 +124,7 @@ func New(
 	mergeDepthRootStore model.MergeDepthRootStore,
 	windowHeapSliceStore model.WindowHeapSliceStore,
 	resolveBlockStatusCacheSize int,
+	refuseMismatchedImportedPruningPointUTXOSet bool,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
 		maxBlockParents:   maxBlockParents,
@@ -155,6 +162,8 @@ func New(
 		resolveBlockStatusCache:   lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
 
 		expensiveDiagnosticRunsRemaining: 3,
+
+		refuseMismatchedImportedPruningPointUTXOSet: refuseMismatchedImportedPruningPointUTXOSet,
 
 		stores: []model.Store{
 			consensusStateStore,

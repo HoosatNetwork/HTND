@@ -275,6 +275,26 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 		"mismatch their own commitments until the upstream disqualifications are fixed.",
 		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 
+	// This is the last point at which a node can decline to build itself on a UTXO set the chain never
+	// committed to. Everything downstream inherits it: MuHash is homomorphic, so the offset propagates
+	// unchanged to every block resolved forward, and a survey of a live sync found failures beginning
+	// two blocks above the pruning point and never stopping.
+	//
+	// Refusing returns ErrBadPruningPointUTXOSet, which the IBD flow already treats as "try another
+	// peer" without banning - so a node run this way keeps looking for a peer whose set matches its
+	// own header, rather than accepting the first one that does not.
+	//
+	// Off by default, and it has to be: every peer measured so far serves a set that fails this check,
+	// so a node that refuses them all never syncs. It is for finding a clean peer once one exists,
+	// and for a node that should stay off a broken baseline rather than join it.
+	if csm.refuseMismatchedImportedPruningPointUTXOSet {
+		return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+			"imported pruning point %s UTXO set does not match its own header commitment (header %s, "+
+				"fresh multiset over %d stored entries %s) and this node is configured to refuse an "+
+				"unverifiable set rather than build on it",
+			newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
+	}
+
 	// The record that every later chain-replay record has to be read against: if the set this node
 	// starts from does not hash to what the pruning point's header commits to, every block resolved
 	// forward inherits that exact offset, and its own commitment mismatch is a symptom rather than a

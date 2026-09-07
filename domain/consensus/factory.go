@@ -350,7 +350,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		headersSelectedChainStore,
 		mergeDepthRootStore,
 		windowHeapSliceStore,
-		5000)
+		5000,
+		config.EnableSanityCheckPruningUTXOSet)
 	if err != nil {
 		return nil, false, err
 	}

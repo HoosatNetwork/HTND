@@ -190,6 +190,17 @@ Q6 — whether two nodes that disagree on balance still hold the same outpoints 
 metadata — is a node-to-node question the survey cannot answer alone. `cmd/utxoforensics` compares
 two databases' sets directly; the survey tells you which outpoints to compare.
 
+## Refusing a bad baseline
+
+`--enable-sanity-check-pruning-utxo` now also makes an imported pruning-point UTXO set that does not
+hash to its own header commitment a hard failure. The IBD flow already treats that as "try another
+peer" without banning, so a node run this way keeps looking for a peer whose set matches, instead of
+accepting the first one that does not and inheriting its gap.
+
+It is off by default and has to be: every peer measured serves a set that fails this check, so a node
+that refuses them all never syncs. Turn it on to find a clean peer once one exists, or to keep a node
+off a broken baseline rather than join it.
+
 ## What not to conclude
 
 - A `missing-input` error does **not** mean the coin was spent or deleted. Check
