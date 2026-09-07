@@ -356,16 +356,16 @@ func summarizeAcceptance(record *utxosurvey.Record,
 // this block failed to create, and a run-scope pass needs their identities to tell an inherited gap
 // from one this node made itself.
 func summarizeRejectionReasons(record *utxosurvey.Record,
-	reasons map[externalapi.DomainTransactionID]string,
+	reasons map[externalapi.DomainTransactionID]*transactionRejection,
 ) {
 	if len(reasons) == 0 {
 		return
 	}
 	record.RejectionReasons = make(map[string]int, len(reasons))
 	maxTxIDs := utxosurvey.MaxTxIDs()
-	for transactionID, reason := range reasons {
-		record.RejectionReasons[reason]++
-		if reason != "missing-input" {
+	for transactionID, rejection := range reasons {
+		record.RejectionReasons[rejection.reason]++
+		if rejection.reason != "missing-input" {
 			continue
 		}
 		if maxTxIDs != 0 && len(record.RejectedForMissingInputTxIDs) >= maxTxIDs {
@@ -373,8 +373,24 @@ func summarizeRejectionReasons(record *utxosurvey.Record,
 		}
 		record.RejectedForMissingInputTxIDs = append(record.RejectedForMissingInputTxIDs,
 			transactionID.String())
+		// The coins this transaction went looking for and did not find. Each one is a link in the
+		// cascade: whatever created it was itself starved, or it is a seed - a coin that went missing
+		// for some reason other than this mechanism, which is the only kind worth chasing upstream.
+		starved := utxosurvey.StarvedTransaction{TxID: transactionID.String()}
+		for _, outpoint := range rejection.missingOutpoints {
+			if outpoint == nil {
+				continue
+			}
+			starved.MissingOutpoints = append(starved.MissingOutpoints,
+				fmt.Sprintf("%s:%d", outpoint.TransactionID, outpoint.Index))
+		}
+		sort.Strings(starved.MissingOutpoints)
+		record.StarvedTransactions = append(record.StarvedTransactions, starved)
 	}
 	sort.Strings(record.RejectedForMissingInputTxIDs)
+	sort.Slice(record.StarvedTransactions, func(i, j int) bool {
+		return record.StarvedTransactions[i].TxID < record.StarvedTransactions[j].TxID
+	})
 }
 
 // surveyMissingOutpoints answers, for each outpoint the block could not resolve, the question the
@@ -882,7 +898,7 @@ func (csm *consensusStateManager) surveyCascadedBlock(stagingArea *model.Staging
 //
 // No-op when the survey is off - applyMergeSetBlocks does not even build the map in that case.
 func (csm *consensusStateManager) stashRejectionReasons(blockHash *externalapi.DomainHash,
-	reasons map[externalapi.DomainTransactionID]string,
+	reasons map[externalapi.DomainTransactionID]*transactionRejection,
 ) {
 	if len(reasons) == 0 {
 		return
@@ -892,12 +908,12 @@ func (csm *consensusStateManager) stashRejectionReasons(blockHash *externalapi.D
 
 // takeRejectionReasons consumes the reasons stashed for a block, if any.
 func (csm *consensusStateManager) takeRejectionReasons(blockHash *externalapi.DomainHash,
-) map[externalapi.DomainTransactionID]string {
+) map[externalapi.DomainTransactionID]*transactionRejection {
 	stashed, ok := csm.rejectionReasons.LoadAndDelete(*blockHash)
 	if !ok {
 		return nil
 	}
-	reasons, ok := stashed.(map[externalapi.DomainTransactionID]string)
+	reasons, ok := stashed.(map[externalapi.DomainTransactionID]*transactionRejection)
 	if !ok {
 		return nil
 	}

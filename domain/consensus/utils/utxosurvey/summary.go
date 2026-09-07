@@ -61,6 +61,19 @@ type OutpointCluster struct {
 	AbsentEverywhere         bool
 }
 
+// CascadeSeed is a coin whose absence is not explained by this node having starved the transaction
+// that would have created it - the point where following the cascade upstream stops. Repairing a
+// seed removes everything downstream of it; repairing anything downstream removes only itself.
+type CascadeSeed struct {
+	Outpoint string
+
+	// StarvedDirectly is how many transactions could not be accepted because this exact coin was
+	// missing. StarvedDownstream adds the transactions starved by coins those transactions would have
+	// created, transitively - the full blast radius of this one absent coin.
+	StarvedDirectly   int
+	StarvedDownstream int
+}
+
 // CreatedThenAbsent is a coin an earlier record in the same run says was created, which a later
 // record could not resolve. It answers a question no single block's record can reach:
 // MissingOutpoint.FoundInMergesetAdds looks only at the failing block's own mergeset, so a coin
@@ -150,6 +163,17 @@ type Summary struct {
 	// created below the pruning point or outside the surveyed window. These are the gap that arrived
 	// with the imported set.
 	InheritedMissing int
+
+	// CascadeSeeds are the coins the cascade terminates at: absent, spent by a transaction this node
+	// could not accept, and NOT themselves created by any transaction this node starved. Everything
+	// else in the cascade is downstream of one of these. Ordered by how many starved transactions
+	// trace back to each.
+	CascadeSeeds []CascadeSeed
+
+	// CascadeDepth is the longest chain of starved transactions walked back from any coin - 1 means
+	// every starved transaction was starved by a seed directly, higher means the gap is feeding on
+	// coins it destroyed itself.
+	CascadeDepth int
 
 	// SpendHistoryAbsent is true when no record carries any accepted-spend data at all, while records
 	// do carry accepted transactions. A survey written before the field existed looks exactly like a
@@ -278,6 +302,7 @@ func Summarize(records []Record) *Summary {
 	for _, id := range runOrder {
 		summarizeCreatedThenAbsent(byRun[id], summary)
 		summarizeGapOrigin(byRun[id], summary)
+		summarizeCascade(byRun[id], summary)
 	}
 
 	return summary
@@ -432,6 +457,83 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 	}
 }
 
+// summarizeCascade walks the starvation chain back to where it starts.
+//
+// Each starved transaction names the coins it could not find. A coin is itself created by some
+// transaction; if that transaction was also starved, the coin is a link and not a cause. Following
+// that relation upstream terminates at coins nothing in this run explains - the seeds - and those
+// are the only coins whose repair removes anything but themselves. Everything else in the cascade
+// disappears on its own once its seed is restored.
+func summarizeCascade(records []Record, summary *Summary) {
+	// txid -> the coins that transaction could not find
+	starvedBy := map[string][]string{}
+	// outpoint -> the transactions it starved
+	starves := map[string][]string{}
+	for _, record := range records {
+		for _, starved := range record.StarvedTransactions {
+			starvedBy[starved.TxID] = append(starvedBy[starved.TxID], starved.MissingOutpoints...)
+			for _, outpoint := range starved.MissingOutpoints {
+				starves[outpoint] = append(starves[outpoint], starved.TxID)
+			}
+		}
+	}
+	if len(starves) == 0 {
+		return
+	}
+
+	// A coin is a seed unless the transaction that would have created it was itself starved.
+	seeds := map[string]struct{}{}
+	for outpoint := range starves {
+		creatingTx, _, found := strings.Cut(outpoint, ":")
+		if !found {
+			continue
+		}
+		if _, wasStarved := starvedBy[creatingTx]; !wasStarved {
+			seeds[outpoint] = struct{}{}
+		}
+	}
+
+	// Blast radius: from each seed, follow the coins its starved transactions would have created.
+	for outpoint := range seeds {
+		seed := CascadeSeed{Outpoint: outpoint, StarvedDirectly: len(starves[outpoint])}
+		visited := map[string]struct{}{outpoint: {}}
+		frontier := append([]string{}, starves[outpoint]...)
+		depth := 0
+		for len(frontier) > 0 && depth < 64 {
+			depth++
+			var next []string
+			for _, starvedTx := range frontier {
+				// Every coin that transaction would have created is now absent too, so anything
+				// spending one of them was starved by this same seed.
+				for downstreamOutpoint, downstreamTxs := range starves {
+					creatingTx, _, _ := strings.Cut(downstreamOutpoint, ":")
+					if creatingTx != starvedTx {
+						continue
+					}
+					if _, seen := visited[downstreamOutpoint]; seen {
+						continue
+					}
+					visited[downstreamOutpoint] = struct{}{}
+					seed.StarvedDownstream += len(downstreamTxs)
+					next = append(next, downstreamTxs...)
+				}
+			}
+			frontier = next
+		}
+		if depth > summary.CascadeDepth {
+			summary.CascadeDepth = depth
+		}
+		summary.CascadeSeeds = append(summary.CascadeSeeds, seed)
+	}
+	sort.SliceStable(summary.CascadeSeeds, func(i, j int) bool {
+		a, b := summary.CascadeSeeds[i], summary.CascadeSeeds[j]
+		if a.StarvedDirectly+a.StarvedDownstream != b.StarvedDirectly+b.StarvedDownstream {
+			return a.StarvedDirectly+a.StarvedDownstream > b.StarvedDirectly+b.StarvedDownstream
+		}
+		return a.Outpoint < b.Outpoint
+	})
+}
+
 func sortedKeys(set map[string]struct{}) []string {
 	keys := make([]string, 0, len(set))
 	for key := range set {
@@ -563,6 +665,22 @@ func (s *Summary) String() string {
 			b.WriteString("  A non-zero first number means a clean UTXO set handed to this node would start\n" +
 				"  degrading again from the first missing input it met. Repairing the set is not sufficient\n" +
 				"  on its own.\n")
+		}
+	}
+
+	if len(s.CascadeSeeds) > 0 {
+		fmt.Fprintf(&b, "\n--- what the cascade starts from (%d seeds, longest chain %d deep)\n",
+			len(s.CascadeSeeds), s.CascadeDepth)
+		b.WriteString("  Coins absent for a reason other than this node having starved the transaction that\n" +
+			"  would have created them. Everything else in the cascade is downstream of one of these, so\n" +
+			"  these are the only coins whose repair removes more than itself.\n")
+		for i, seed := range s.CascadeSeeds {
+			if i == 20 {
+				fmt.Fprintf(&b, "  ... and %d more\n", len(s.CascadeSeeds)-20)
+				break
+			}
+			fmt.Fprintf(&b, "  %s  starved %d tx directly, %d downstream\n",
+				seed.Outpoint, seed.StarvedDirectly, seed.StarvedDownstream)
 		}
 	}
 

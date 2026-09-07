@@ -528,3 +528,70 @@ func TestSummarizeDoesNotWarnWhenNothingIsSelfInflicted(t *testing.T) {
 		t.Error("the repair-is-not-enough warning must not fire when nothing is self-inflicted")
 	}
 }
+
+// TestSummarizeTracesCascadeToItsSeed is the root-cause walk. A gap does not stay one coin: the
+// absent coin starves a transaction, the coins that transaction would have created are absent in
+// turn, and whatever spends those is starved as well. Counting the absences says how bad it is;
+// following them upstream says which single coin to fix.
+//
+// Only the seed is worth repairing - restore it and everything downstream reappears on its own,
+// while restoring a downstream coin fixes exactly that coin and nothing else.
+func TestSummarizeTracesCascadeToItsSeed(t *testing.T) {
+	records := []Record{{
+		RunID:     "r",
+		BlockHash: "block",
+		IBDStage:  StageChainReplay,
+		StarvedTransactions: []StarvedTransaction{
+			// tx-a could not find seed-tx:0. Nothing starved seed-tx, so that coin is the seed.
+			{TxID: "tx-a", MissingOutpoints: []string{"seed-tx:0"}},
+			// tx-b could not find a coin tx-a would have created - downstream of the same seed.
+			{TxID: "tx-b", MissingOutpoints: []string{"tx-a:0"}},
+			// tx-c could not find a coin tx-b would have created - two hops down.
+			{TxID: "tx-c", MissingOutpoints: []string{"tx-b:1"}},
+		},
+	}}
+
+	summary := Summarize(records)
+	if len(summary.CascadeSeeds) != 1 {
+		t.Fatalf("only the coin nothing starved is a seed, got %+v", summary.CascadeSeeds)
+	}
+	seed := summary.CascadeSeeds[0]
+	if seed.Outpoint != "seed-tx:0" {
+		t.Errorf("expected seed-tx:0 to be the seed, got %s", seed.Outpoint)
+	}
+	if seed.StarvedDirectly != 1 {
+		t.Errorf("expected 1 transaction starved directly, got %d", seed.StarvedDirectly)
+	}
+	// tx-b and tx-c are both downstream of the one seed.
+	if seed.StarvedDownstream != 2 {
+		t.Errorf("expected 2 transactions starved downstream of the seed, got %d", seed.StarvedDownstream)
+	}
+	if summary.CascadeDepth < 2 {
+		t.Errorf("expected the chain to be walked at least 2 deep, got %d", summary.CascadeDepth)
+	}
+	if !strings.Contains(summary.String(), "removes more than itself") {
+		t.Errorf("the summary must say why only seeds are worth repairing, got:\n%s", summary.String())
+	}
+}
+
+// A coin whose creating transaction was itself starved is a link, not a cause, and must not be
+// offered as something to repair - fixing it leaves the thing that caused it untouched.
+func TestSummarizeDoesNotCallADownstreamCoinASeed(t *testing.T) {
+	summary := Summarize([]Record{{
+		RunID: "r", BlockHash: "block", IBDStage: StageChainReplay,
+		StarvedTransactions: []StarvedTransaction{
+			{TxID: "upstream-tx", MissingOutpoints: []string{"real-seed:0"}},
+			{TxID: "downstream-tx", MissingOutpoints: []string{"upstream-tx:3"}},
+		},
+	}})
+
+	for _, seed := range summary.CascadeSeeds {
+		if seed.Outpoint == "upstream-tx:3" {
+			t.Errorf("upstream-tx was starved, so the coin it would have created is a link, not a seed: %+v",
+				summary.CascadeSeeds)
+		}
+	}
+	if len(summary.CascadeSeeds) != 1 || summary.CascadeSeeds[0].Outpoint != "real-seed:0" {
+		t.Errorf("expected exactly real-seed:0, got %+v", summary.CascadeSeeds)
+	}
+}

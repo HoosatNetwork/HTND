@@ -125,6 +125,13 @@ type MissingOutpoint struct {
 	AlternateMatches []AlternateMatch `json:"alternateMatches"`
 }
 
+// StarvedTransaction is a transaction this node could not accept because coins it spends were absent
+// from its UTXO set, together with those coins.
+type StarvedTransaction struct {
+	TxID             string   `json:"txid"`
+	MissingOutpoints []string `json:"missingOutpoints"`
+}
+
 // DiffElement is one entry of a block's own UTXO delta that its acceptance data does not account
 // for (or vice versa) - the "extra add/remove" of a COMMITMENT_ONLY failure.
 type DiffElement struct {
@@ -198,6 +205,13 @@ type Record struct {
 	// inherited one are indistinguishable.
 	RejectionReasons             map[string]int `json:"rejectionReasons"`
 	RejectedForMissingInputTxIDs []string       `json:"rejectedForMissingInputTxIds"`
+
+	// StarvedTransactions names, for each transaction rejected because an input was absent, the coins
+	// it went looking for. That is what makes the cascade traceable rather than merely countable: the
+	// coin it could not find was itself created by some transaction, which may have been starved the
+	// same way, and following that back terminates at a coin that went missing for some other reason.
+	// Those terminations are the seeds, and they are the only links in the chain worth fixing.
+	StarvedTransactions []StarvedTransaction `json:"starvedTransactions"`
 
 	// AcceptedSpends are the outpoints this block's accepted transactions spend, in "txid:index"
 	// form. Cross-referenced across a whole run, they are what turns "this coin was created earlier

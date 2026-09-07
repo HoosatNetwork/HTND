@@ -222,7 +222,7 @@ func (csm *consensusStateManager) restorePastUTXO(
 // maybeAcceptTransaction for why that distinction is the one worth recording.
 func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	selectedParentPastUTXODiff externalapi.UTXODiff, daaScore uint64) (
-	externalapi.AcceptanceData, externalapi.MutableUTXODiff, map[externalapi.DomainTransactionID]string, error,
+	externalapi.AcceptanceData, externalapi.MutableUTXODiff, map[externalapi.DomainTransactionID]*transactionRejection, error,
 ) {
 	log.Tracef("applyMergeSetBlocks start for block %s", blockHash)
 	defer log.Tracef("applyMergeSetBlocks end for block %s", blockHash)
@@ -231,9 +231,9 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		return nil, nil, nil, errors.Errorf("selected parent past UTXO diff is nil for block %s", blockHash)
 	}
 
-	var rejectionReasons map[externalapi.DomainTransactionID]string
+	var rejectionReasons map[externalapi.DomainTransactionID]*transactionRejection
 	if utxosurvey.Enabled() {
-		rejectionReasons = make(map[externalapi.DomainTransactionID]string)
+		rejectionReasons = make(map[externalapi.DomainTransactionID]*transactionRejection)
 	}
 
 	mergeSetHashes, err := csm.ghostdagManager.GetSortedMergeSet(stagingArea, blockHash)
@@ -296,16 +296,16 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 		for j, transaction := range mergeSetBlock.Transactions {
 			var isAccepted bool
 
-			var rejectionReason string
-			isAccepted, accumulatedMass, rejectionReason, err = csm.maybeAcceptTransaction(stagingArea,
+			var rejection *transactionRejection
+			isAccepted, accumulatedMass, rejection, err = csm.maybeAcceptTransaction(stagingArea,
 				transaction, blockHash, isSelectedParent, accumulatedUTXODiff, accumulatedMass,
 				selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			if rejectionReasons != nil && rejectionReason != "" {
+			if rejectionReasons != nil && rejection != nil {
 				if transactionID := consensushashing.TransactionID(transaction); transactionID != nil {
-					rejectionReasons[*transactionID] = rejectionReason
+					rejectionReasons[*transactionID] = rejection
 				}
 			}
 
@@ -352,10 +352,10 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	accumulatedMassBefore uint64,
 	_ int64,
 	blockDAAScore uint64,
-) (isAccepted bool, accumulatedMassAfter uint64, rejectionReason string, err error) {
+) (isAccepted bool, accumulatedMassAfter uint64, rejection *transactionRejection, err error) {
 	if transaction == nil {
 		log.Errorf("maybeAcceptTransaction called with nil transaction for block %s", blockHash)
-		return false, accumulatedMassBefore, "", errors.New("nil transaction passed to maybeAcceptTransaction")
+		return false, accumulatedMassBefore, nil, errors.New("nil transaction passed to maybeAcceptTransaction")
 	}
 	transactionID := "<nil>"
 	transactionIDPtr := consensushashing.TransactionID(transaction)
@@ -371,7 +371,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		// The cascade path. Not an error here by design - the transaction simply cannot be accepted
 		// against a set that lacks its input - but it is the one rejection reason that means this
 		// node's own gap just got bigger.
-		return false, accumulatedMassBefore, rejectionReasonFor("missing-input", err), nil
+		return false, accumulatedMassBefore, newTransactionRejection("missing-input", err), nil
 	}
 
 	// Coinbase transaction outputs are added to the UTXO-set only if they are in the selected parent chain.
@@ -381,7 +381,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			log.Tracef("Transaction %s is the coinbase of block %s "+
 				"but said block is not in the selected parent chain. "+
 				"As such, it is not accepted", transactionID, blockHash)
-			return false, accumulatedMassBefore, "coinbase-not-on-selected-chain", nil
+			return false, accumulatedMassBefore, newTransactionRejection("coinbase-not-on-selected-chain", nil), nil
 		}
 		log.Tracef("Transaction %s is the coinbase of block %s", transactionID, blockHash)
 	} else {
@@ -390,12 +390,12 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			stagingArea, transaction, blockHash, blockDAAScore)
 		if err != nil {
 			if !errors.As(err, &(ruleerrors.RuleError{})) {
-				return false, 0, "", err
+				return false, 0, nil, err
 			}
 
 			log.Tracef("Validation failed for transaction %s "+
 				"in block %s: %s", transactionID, blockHash, err)
-			return false, accumulatedMassBefore, rejectionReasonFor("rule-error", err), nil
+			return false, accumulatedMassBefore, newTransactionRejection("rule-error", err), nil
 		}
 		log.Tracef("Validation passed for transaction %s in block %s", transactionID, blockHash)
 	}
@@ -426,7 +426,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		// transaction - continuing and merely marking it "not accepted" would silently persist that
 		// partial, inconsistent diff as this block's official acceptance data. Abort instead of writing
 		// corrupted acceptance data to disk.
-		return false, 0, "", errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
+		return false, 0, nil, errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
 			transactionID, blockHash)
 	}
 
@@ -459,27 +459,40 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		}
 	}
 
-	return true, accumulatedMassAfter, "", nil
+	return true, accumulatedMassAfter, nil, nil
 }
 
-// rejectionReasonFor names why a transaction was not accepted, cheaply and only when the survey is
-// on. A missing input keeps its own label rather than the rule name it arrives under, because that
-// is the distinction the whole measurement exists to make.
-func rejectionReasonFor(kind string, err error) string {
+// transactionRejection is why one merge-set transaction was not accepted, and - for the case that
+// matters - which coins it went looking for and could not find.
+//
+// MissingOutpoints is what makes the cascade traceable. A coin absent from this node's set stops a
+// transaction being accepted, so the coins that transaction would have created are absent too, and
+// the same thing happens to whatever would have spent those. Knowing only that a transaction was
+// rejected gives you one link; knowing which outpoint it could not find lets the chain be walked
+// back to whatever went missing first, which is the only thing on that chain worth fixing.
+type transactionRejection struct {
+	reason           string
+	missingOutpoints []*externalapi.DomainOutpoint
+}
+
+// newTransactionRejection names why a transaction was not accepted, cheaply and only when the survey
+// is on. A missing input keeps its own label rather than the rule name it arrives under, because
+// that is the distinction the whole measurement exists to make.
+func newTransactionRejection(kind string, err error) *transactionRejection {
 	if !utxosurvey.Enabled() {
-		return ""
+		return nil
 	}
 	var missingTxOut ruleerrors.ErrMissingTxOut
 	if errors.As(err, &missingTxOut) {
-		return "missing-input"
+		return &transactionRejection{reason: "missing-input", missingOutpoints: missingTxOut.MissingOutpoints}
 	}
 	var ruleError ruleerrors.RuleError
 	if errors.As(err, &ruleError) {
 		if name, _, _ := strings.Cut(ruleError.Error(), ": "); name != "" {
-			return name
+			return &transactionRejection{reason: name}
 		}
 	}
-	return kind
+	return &transactionRejection{reason: kind}
 }
 
 // RestorePastUTXOSetIterator restores the given block's UTXOSet iterator, and returns it as a externalapi.ReadOnlyUTXOSetIterator
