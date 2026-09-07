@@ -409,3 +409,54 @@ func TestSummarizeExcusesACoinSpentByTheSameBlock(t *testing.T) {
 		t.Errorf("expected it counted as a double-spend rejection, got %d", summary.CreatedThenSpentThenAbsent)
 	}
 }
+
+// TestSummarizeExcludesAmbiguousCreation covers the DAG realities the pass cannot model. A
+// transaction accepted by two different blocks - a reorg re-accepting it on the new chain, or two
+// blocks whose byte-identical coinbases share a transaction ID - has no single creation point, and
+// neither does one that was accepted somewhere and rejected somewhere else. "Created here, absent
+// later" is then a statement about nothing, and reporting it as a lost coin is a guess dressed as a
+// finding.
+//
+// Both shapes turned up in a real 125,159-block survey, as the run's only NEW_MISSING candidate.
+func TestSummarizeExcludesAmbiguousCreation(t *testing.T) {
+	tests := []struct {
+		name    string
+		records []Record
+	}{{
+		name: "accepted by two different blocks",
+		records: []Record{
+			{RunID: "r", BlockHash: "creator-a", IBDStage: StageChainReplay,
+				AcceptedTxIDs: []string{"coin-tx"}, AcceptedSpends: []string{"unrelated:0"}},
+			{RunID: "r", BlockHash: "creator-b", IBDStage: StageChainReplay,
+				AcceptedTxIDs: []string{"coin-tx"}},
+			{RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+				MissingOutpoints: []MissingOutpoint{{TxID: "coin-tx", Index: 0}}},
+		},
+	}, {
+		name: "accepted in one block and rejected in another",
+		records: []Record{
+			{RunID: "r", BlockHash: "creator", IBDStage: StageChainReplay,
+				AcceptedTxIDs: []string{"coin-tx"}, AcceptedSpends: []string{"unrelated:0"}},
+			{RunID: "r", BlockHash: "rejector", IBDStage: StageChainReplay,
+				RejectedOrRedTxIDs: []string{"coin-tx"}},
+			{RunID: "r", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+				MissingOutpoints: []MissingOutpoint{{TxID: "coin-tx", Index: 0}}},
+		},
+	}}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			summary := Summarize(test.records)
+			if len(summary.CreatedThenLost) != 0 {
+				t.Errorf("a coin with no settled creation point must not be called lost: %+v",
+					summary.CreatedThenLost)
+			}
+			if summary.AmbiguousCreation != 1 {
+				t.Errorf("expected it counted as ambiguous, got %d", summary.AmbiguousCreation)
+			}
+			if !strings.Contains(summary.String(), "no single creation point") {
+				t.Errorf("the summary must explain the exclusion, got:\n%s", summary.String())
+			}
+		})
+	}
+}

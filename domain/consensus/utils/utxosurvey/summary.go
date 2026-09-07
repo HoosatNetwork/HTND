@@ -121,6 +121,13 @@ type Summary struct {
 	// rejections rather than losses - so the two are never conflated.
 	CreatedThenSpentThenAbsent int
 
+	// AmbiguousCreation counts unresolvable coins whose creating transaction does not have one settled
+	// creation in this run: it was accepted by more than one block, or accepted and also rejected
+	// somewhere. On a DAG that is ordinary - a reorg re-accepts a transaction on the new chain, and
+	// two blocks with byte-identical coinbases share a transaction ID - but it means "created at" has
+	// no single answer, so nothing can be concluded about the coin going absent later.
+	AmbiguousCreation int
+
 	// SpendHistoryIncomplete is true when any record hit its accepted-spends cap, which makes "no
 	// spend recorded" weaker than "no spend happened" and CreatedThenLost an upper bound.
 	SpendHistoryIncomplete bool
@@ -280,6 +287,11 @@ func summarizeCreatedThenAbsent(records []Record, summary *Summary) {
 	}
 	createdAt := map[string]creation{}
 	spentAt := map[string]int{}
+	// A transaction accepted by more than one block, or accepted and also rejected, has no single
+	// creation point in this run. Both happen normally on a DAG and both make "created here, absent
+	// later" meaningless for the coins involved.
+	acceptedCount := map[string]int{}
+	everRejected := map[string]bool{}
 
 	// First pass: when each coin was created and when it was first spent by an accepted transaction.
 	anySpendsRecorded, anyAcceptanceRecorded := false, false
@@ -298,7 +310,11 @@ func summarizeCreatedThenAbsent(records []Record, summary *Summary) {
 				spentAt[spend] = i
 			}
 		}
+		for _, transactionID := range record.RejectedOrRedTxIDs {
+			everRejected[transactionID] = true
+		}
 		for _, transactionID := range record.AcceptedTxIDs {
+			acceptedCount[transactionID]++
 			// A record lists the transactions it accepted, not the outpoints they create, so a coin is
 			// keyed back to its creating transaction and matched by transaction ID below.
 			if _, seen := createdAt[transactionID]; !seen {
@@ -333,6 +349,13 @@ func summarizeCreatedThenAbsent(records []Record, summary *Summary) {
 			spentInBetween := wasSpent && spendIndex > created.index && spendIndex <= i
 			if spentInBetween {
 				summary.CreatedThenSpentThenAbsent++
+				continue
+			}
+			// Checked only after the spend, because a recorded spend explains the coin outright
+			// whatever else is true of its creation, and shelving those as "cannot say" would hide the
+			// evidence that this pass detects what it claims to detect.
+			if acceptedCount[missing.TxID] > 1 || everRejected[missing.TxID] {
+				summary.AmbiguousCreation++
 				continue
 			}
 			summary.CreatedThenLost = append(summary.CreatedThenLost, CreatedThenAbsent{
@@ -428,7 +451,7 @@ func (s *Summary) String() string {
 			"block's own past view.\n")
 
 	b.WriteString("\n--- coins created earlier in this run and then unresolvable (run scope)\n")
-	if len(s.CreatedThenLost) == 0 && s.CreatedThenSpentThenAbsent == 0 {
+	if len(s.CreatedThenLost) == 0 && s.CreatedThenSpentThenAbsent == 0 && s.AmbiguousCreation == 0 {
 		b.WriteString("  None: no unresolvable coin was created by anything this run accepted. Every missing\n" +
 			"  coin predates the surveyed range, which is what an inherited snapshot gap looks like.\n")
 	} else {
@@ -443,6 +466,12 @@ func (s *Summary) String() string {
 				len(s.CreatedThenLost))
 			fmt.Fprintf(&b, "  %d created, spent in between, then unresolvable - ordinary double-spend rejections.\n",
 				s.CreatedThenSpentThenAbsent)
+		}
+		if s.AmbiguousCreation > 0 {
+			fmt.Fprintf(&b, "  %d excluded: their creating transaction was accepted by more than one block,\n"+
+				"  or accepted and also rejected, so it has no single creation point in this run (a reorg, or\n"+
+				"  two blocks sharing a byte-identical coinbase). Nothing can be concluded about these.\n",
+				s.AmbiguousCreation)
 		}
 		if s.SpendHistoryIncomplete {
 			b.WriteString("  NOTE: at least one record hit its accepted-spends cap, so some coins counted as\n" +

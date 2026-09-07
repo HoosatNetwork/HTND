@@ -130,7 +130,10 @@ coin this node created fifty blocks earlier and then dropped is filed `ORIGINAL_
 inherited snapshot gap — and points the investigation at the import when the loss happened here,
 during the sync. Only the run as a whole shows the creation and the absence together. `acceptedSpends`
 is what makes the answer trustworthy: a coin created, *spent*, and only then reported absent is an
-ordinary double-spend rejection, not a loss. If a survey carries no spend data at all the tool says
+ordinary double-spend rejection, not a loss. Coins whose creating transaction has no single creation
+point in the run — accepted by more than one block, or accepted and also rejected, which is what a
+reorg or a byte-identical coinbase looks like — are excluded and counted separately, because
+"created here" has no answer for them. If a survey carries no spend data at all the tool says
 so and refuses to call anything lost, because absent evidence and "nothing was spent" look
 identical and only one of them supports a finding.
 
