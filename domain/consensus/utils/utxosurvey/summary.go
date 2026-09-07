@@ -125,6 +125,11 @@ type Summary struct {
 	// spend recorded" weaker than "no spend happened" and CreatedThenLost an upper bound.
 	SpendHistoryIncomplete bool
 
+	// Runs is how many distinct node processes wrote into this survey file. More than one means the
+	// file spans several syncs, and the run-scope analysis was performed within each rather than
+	// across them.
+	Runs int
+
 	// SpendHistoryAbsent is true when no record carries any accepted-spend data at all, while records
 	// do carry accepted transactions. A survey written before the field existed looks exactly like a
 	// run in which nothing was ever spent, and the difference is the whole of CreatedThenLost: with no
@@ -237,7 +242,21 @@ func Summarize(records []Record) *Summary {
 		return summary.RepeatedOutpoints[i].Blocks > summary.RepeatedOutpoints[j].Blocks
 	})
 
-	summarizeCreatedThenAbsent(records, summary)
+	// Scoped per run: a survey file is appended to, so one file routinely holds several syncs, and
+	// after a --reset-db the database between them is not even the same database. Comparing across
+	// that boundary turns every coin the next sync had not re-created yet into a lost coin.
+	byRun := map[string][]Record{}
+	runOrder := []string{}
+	for _, record := range records {
+		if _, seen := byRun[record.RunID]; !seen {
+			runOrder = append(runOrder, record.RunID)
+		}
+		byRun[record.RunID] = append(byRun[record.RunID], record)
+	}
+	summary.Runs = len(runOrder)
+	for _, id := range runOrder {
+		summarizeCreatedThenAbsent(byRun[id], summary)
+	}
 
 	return summary
 }
@@ -337,6 +356,11 @@ func (s *Summary) String() string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "=== UTXO survey: %d failing blocks\n", s.Records)
+	if s.Runs > 1 {
+		fmt.Fprintf(&b, "  Spans %d separate node runs. Counts below are over the whole file; the\n"+
+			"  created-then-absent analysis is scoped within each run, because a coin created in one\n"+
+			"  sync and absent in the next says nothing about either.\n", s.Runs)
+	}
 	if s.Records == 0 {
 		b.WriteString("  Nothing recorded. Either no block failed, or the survey was not enabled for the run\n" +
 			"  (HTND_UTXO_SURVEY) - those are very different findings, so check the node's log for the\n" +

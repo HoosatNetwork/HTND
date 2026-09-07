@@ -25,9 +25,11 @@ package utxosurvey
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Classification is the A/B/C verdict for one failing block. Written into Record.Classification.
@@ -138,6 +140,13 @@ type DiffElement struct {
 // Record is one failing block. The field set is fixed so that a whole run can be clustered with
 // ordinary JSONL tooling without knowing which code path produced any given line.
 type Record struct {
+	// RunID identifies the node process that wrote this record. A survey file is appended to, never
+	// replaced, so one file routinely holds several syncs - and after a --reset-db the database
+	// between them is not the same database. The run-scope analysis has to be scoped by this or it
+	// reads a coin created in one sync and unresolvable in the next as a coin that was lost, which is
+	// the single loudest false finding this tool can produce.
+	RunID string `json:"runId"`
+
 	BlockHash      string `json:"blockHash"`
 	SelectedParent string `json:"selectedParent"`
 	DAAScore       uint64 `json:"daaScore"`
@@ -215,6 +224,13 @@ type writer struct {
 }
 
 var w = &writer{}
+
+// runID labels every record this process writes. It only has to be distinct between processes
+// sharing an output file, so the start time and PID are enough and stay readable in the file.
+var runID = fmt.Sprintf("%d-%d", time.Now().UTC().Unix(), os.Getpid())
+
+// RunID returns this process's survey run identifier.
+func RunID() string { return runID }
 
 // loadConfigLocked reads the environment the first time anything asks. Deliberately not done in a
 // package-level initializer: that would run before a test (or an embedding process) could set the
@@ -323,6 +339,10 @@ func Write(record *Record) {
 		w.file = file
 		w.buffered = bufio.NewWriter(file)
 		w.log("UTXO survey recording to %s (max %d records, 0 = unlimited)", w.path, w.max)
+	}
+
+	if record.RunID == "" {
+		record.RunID = runID
 	}
 
 	encoded, err := json.Marshal(record)

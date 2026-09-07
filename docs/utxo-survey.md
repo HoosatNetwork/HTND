@@ -33,6 +33,11 @@ HTND_UTXO_SURVEY=/var/log/htnd/utxo-survey.jsonl htnd --...
 
 Records are flushed on every write, so a killed node keeps everything it surveyed.
 
+The file is appended to, never replaced, so one file can hold several syncs. Each record carries the
+`runId` of the process that wrote it and `-survey` scopes the created-then-absent analysis within
+each run — a coin created in one sync and absent in the next says nothing about either, least of all
+across a `--reset-db`. Every other count is over the whole file.
+
 `HTND_UTXO_SURVEY_DEEP` deserves a warning. The recomputation it enables runs *inline in virtual
 resolution*, on the thread that is resolving the block, and it walks the entire UTXO set: on a
 16.4M-entry mainnet set that is one to three minutes during which the node resolves nothing. It is

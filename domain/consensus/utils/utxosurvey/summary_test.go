@@ -341,3 +341,44 @@ func TestSummarizeReportsLossWhenSpendHistoryExists(t *testing.T) {
 		t.Error("with spend history present the finding should be stated plainly")
 	}
 }
+
+// TestSummarizeScopesCreatedThenAbsentPerRun is the appended-file trap. A survey file is never
+// replaced, so one file routinely holds several syncs, and after a --reset-db the database between
+// them is not the same database. Comparing a coin created in one sync against its absence in the
+// next turns ordinary "this sync has not re-created that coin yet" into a lost coin - and it would
+// do so for thousands of coins at once, which is the loudest false finding this tool can produce.
+func TestSummarizeScopesCreatedThenAbsentPerRun(t *testing.T) {
+	records := []Record{
+		{RunID: "run-a", BlockHash: "a-creator", IBDStage: StageChainReplay,
+			AcceptedTxIDs: []string{"coin-tx"}, AcceptedSpends: []string{"unrelated:0"}},
+		{RunID: "run-b", BlockHash: "b-spender", IBDStage: StageChainReplay, Error: "missing-input",
+			AcceptedSpends:   []string{"unrelated:1"},
+			MissingOutpoints: []MissingOutpoint{{TxID: "coin-tx", Index: 0}}},
+	}
+
+	summary := Summarize(records)
+	if summary.Runs != 2 {
+		t.Fatalf("expected the file to be read as 2 runs, got %d", summary.Runs)
+	}
+	if len(summary.CreatedThenLost) != 0 {
+		t.Errorf("a coin created in one run and absent in another is not a loss: %+v", summary.CreatedThenLost)
+	}
+	if !strings.Contains(summary.String(), "scoped within each run") {
+		t.Errorf("the summary must say the analysis was scoped per run, got:\n%s", summary.String())
+	}
+}
+
+// Within one run the finding must still be reported - the scoping must not silence real losses.
+func TestSummarizeStillFindsLossWithinASingleRun(t *testing.T) {
+	records := []Record{
+		{RunID: "run-a", BlockHash: "creator", IBDStage: StageChainReplay,
+			AcceptedTxIDs: []string{"coin-tx"}, AcceptedSpends: []string{"unrelated:0"}},
+		{RunID: "run-a", BlockHash: "spender", IBDStage: StageChainReplay, Error: "missing-input",
+			MissingOutpoints: []MissingOutpoint{{TxID: "coin-tx", Index: 0}}},
+	}
+
+	summary := Summarize(records)
+	if len(summary.CreatedThenLost) != 1 {
+		t.Fatalf("a loss within one run must still be reported: %+v", summary.CreatedThenLost)
+	}
+}
