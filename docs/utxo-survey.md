@@ -29,6 +29,7 @@ HTND_UTXO_SURVEY=/var/log/htnd/utxo-survey.jsonl htnd --...
 | `HTND_UTXO_SURVEY` | unset (off) | File to append JSONL records to. |
 | `HTND_UTXO_SURVEY_MAX` | `5000` | Stop after this many records. `0` means unlimited. |
 | `HTND_UTXO_SURVEY_MAX_TXIDS` | `128` | Cap on each per-record transaction-ID, accepted-spend, and diff-element list. `0` means unlimited. |
+| `HTND_UTXO_SURVEY_VERIFIED_EVERY` | `1000` | Write a checkpoint record after this many blocks pass every check. `0` disables it — but then a clean run and an unwatched one leave identical files. |
 | `HTND_UTXO_SURVEY_DEEP` | `0` | How many records may pay for an O(UTXO-set) recomputation of the selected parent's multiset. **Leave it at 0 for a first run.** |
 
 Records are flushed on every write, so a killed node keeps everything it surveyed.
@@ -189,6 +190,16 @@ jq -r '(.extraAddsNotInHeaderView + .extraRemovesNotInHeaderView)[]?.reason' "$S
 Q6 — whether two nodes that disagree on balance still hold the same outpoints with different entry
 metadata — is a node-to-node question the survey cannot answer alone. `cmd/utxoforensics` compares
 two databases' sets directly; the survey tells you which outpoints to compare.
+
+## Confirming a run was clean
+
+A survey that recorded only failures left an empty file both when every block passed and when it was
+never switched on. That is harmless while everything is failing and becomes the whole question the
+first time a repair is attempted — "the rebaseline worked" must not rest on an absence of evidence.
+
+Blocks that pass every check are therefore counted, and a checkpoint record is written every
+`HTND_UTXO_SURVEY_VERIFIED_EVERY` of them. `-survey` reports them as *"N verified and sound"*, and a
+file with checkpoints and no failures says so explicitly instead of looking like silence.
 
 ## Refusing a bad baseline
 

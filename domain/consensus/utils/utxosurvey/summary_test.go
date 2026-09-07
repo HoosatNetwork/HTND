@@ -730,3 +730,54 @@ func TestSummarizeExcludesAmbiguousCreationFromLosses(t *testing.T) {
 		t.Errorf("expected it counted as ambiguous, got %d", summary.LostWithAmbiguousCreation)
 	}
 }
+
+// TestSummarizeTellsAHealthyRunFromAnUnwatchedOne is the measurement gap that would have mattered
+// most at exactly the wrong moment.
+//
+// A survey that records only failures leaves an empty file both when every block passed and when it
+// was never switched on. That ambiguity is harmless while everything is failing, and becomes the
+// entire question the first time a repair is attempted: "the rebaseline worked" must not be a
+// conclusion drawn from an absence of evidence. A checkpoint record says how many blocks were
+// actually checked and found sound.
+func TestSummarizeTellsAHealthyRunFromAnUnwatchedOne(t *testing.T) {
+	healthy := Summarize([]Record{
+		{RunID: "r", IBDStage: StageVerified, VerifiedBlocks: 1000},
+		{RunID: "r", IBDStage: StageVerified, VerifiedBlocks: 1000},
+	})
+	if healthy.VerifiedBlocks != 2000 {
+		t.Errorf("expected 2000 verified blocks, got %d", healthy.VerifiedBlocks)
+	}
+	if healthy.Records != 0 {
+		t.Errorf("a checkpoint is not a failure and must not be counted as one, got %d", healthy.Records)
+	}
+	rendered := healthy.String()
+	if !strings.Contains(rendered, "this is not silence") {
+		t.Errorf("a clean run must say so positively, got:\n%s", rendered)
+	}
+
+	unwatched := Summarize(nil)
+	if !strings.Contains(unwatched.String(), "HTND_UTXO_SURVEY") {
+		t.Error("an empty file with no checkpoints must still warn that the survey may never have run")
+	}
+	if strings.Contains(unwatched.String(), "this is not silence") {
+		t.Error("an unwatched run must not be reported as a healthy one")
+	}
+}
+
+// Checkpoints must not distort the failure analysis they sit alongside.
+func TestVerifiedCheckpointsDoNotPolluteFailureCounts(t *testing.T) {
+	summary := Summarize([]Record{
+		{RunID: "r", IBDStage: StageVerified, VerifiedBlocks: 500},
+		{RunID: "r", BlockHash: "bad", IBDStage: StageChainReplay, Error: "ErrBadUTXOCommitment",
+			Classification: ClassificationCommitmentOnly},
+	})
+	if summary.Records != 1 {
+		t.Errorf("only the failing block counts as a record, got %d", summary.Records)
+	}
+	if summary.ByError["ErrBadUTXOCommitment"] != 1 || len(summary.ByError) != 1 {
+		t.Errorf("checkpoints must not appear in the error breakdown: %v", summary.ByError)
+	}
+	if summary.VerifiedBlocks != 500 {
+		t.Errorf("expected 500 verified, got %d", summary.VerifiedBlocks)
+	}
+}

@@ -183,6 +183,7 @@ func (csm *consensusStateManager) recordBlockSurvey(stagingArea *model.StagingAr
 	blockMultiset model.Multiset,
 ) {
 	if !survey.failed() {
+		csm.noteVerifiedBlock(blockHash, block)
 		return
 	}
 	survey.mu.Lock()
@@ -262,6 +263,50 @@ func (csm *consensusStateManager) recordBlockSurvey(stagingArea *model.StagingAr
 	}
 
 	record.Classification, record.Notes = classifySurveyRecord(record, notes)
+	utxosurvey.Write(record)
+}
+
+// noteVerifiedBlock counts a block that passed every UTXO check, and writes a checkpoint record
+// every so often.
+//
+// A survey that records only failures cannot distinguish a node where everything passed from one
+// where it was never enabled: both leave an empty file. That ambiguity is harmless while every block
+// is failing, and becomes the whole question the moment a repair is attempted - "the rebaseline
+// worked" must not be a conclusion drawn from silence. A checkpoint says how many blocks were
+// actually checked and found sound.
+func (csm *consensusStateManager) noteVerifiedBlock(blockHash *externalapi.DomainHash,
+	block *externalapi.DomainBlock,
+) {
+	if !utxosurvey.Enabled() {
+		return
+	}
+	every := utxosurvey.VerifiedCheckpointEvery()
+	if every <= 0 {
+		return
+	}
+
+	csm.verifiedBlocksMutex.Lock()
+	csm.verifiedBlocksSinceCheckpoint++
+	count := csm.verifiedBlocksSinceCheckpoint
+	if count < every {
+		csm.verifiedBlocksMutex.Unlock()
+		return
+	}
+	csm.verifiedBlocksSinceCheckpoint = 0
+	csm.verifiedBlocksMutex.Unlock()
+
+	record := &utxosurvey.Record{
+		BlockHash:      blockHash.String(),
+		IBDStage:       utxosurvey.StageVerified,
+		VerifiedBlocks: count,
+		Notes: "these blocks passed every UTXO check, including their commitment - recorded so a " +
+			"healthy run can be told apart from one the survey never watched",
+	}
+	if block != nil && block.Header != nil {
+		record.DAAScore = block.Header.DAAScore()
+		record.HeaderUTXOCommitment = block.Header.UTXOCommitment().String()
+		record.CalculatedUTXOCommitment = record.HeaderUTXOCommitment
+	}
 	utxosurvey.Write(record)
 }
 

@@ -145,6 +145,10 @@ type Summary struct {
 	// spend recorded" weaker than "no spend happened" and CreatedThenLost an upper bound.
 	SpendHistoryIncomplete bool
 
+	// VerifiedBlocks is how many blocks passed every UTXO check, from the checkpoint records. It is
+	// what makes a clean run distinguishable from an unwatched one.
+	VerifiedBlocks int
+
 	// Runs is how many distinct node processes wrote into this survey file. More than one means the
 	// file spans several syncs, and the run-scope analysis was performed within each rather than
 	// across them.
@@ -233,6 +237,11 @@ func Summarize(records []Record) *Summary {
 	order := []string{}
 
 	for _, record := range records {
+		if record.IBDStage == StageVerified {
+			summary.VerifiedBlocks += record.VerifiedBlocks
+			summary.Records--
+			continue
+		}
 		summary.ByError[record.Error]++
 		summary.ByClassification[record.Classification]++
 		summary.ByStage[record.IBDStage]++
@@ -558,13 +567,29 @@ func summarizeGapOrigin(records []Record, summary *Summary) {
 // disappears on its own once its seed is restored.
 func summarizeCascade(records []Record, summary *Summary) {
 	// txid -> the coins that transaction could not find
-	starvedBy := map[string][]string{}
+	//
+	// Deduplicated per transaction rather than accumulated across every block that carried it. The
+	// same transaction appears in many blocks on a DAG, and each occurrence reports whatever was
+	// missing in that block's view; unioning them attributes to one transaction a set of misses no
+	// single evaluation of it ever had, which manufactures edges - and, through them, cycles that
+	// cannot exist in a real dependency graph, since a transaction cannot spend its own output. On a
+	// live survey that left 180 chains unresolvable as "cycle or too deep".
+	starvedBy := map[string]map[string]struct{}{}
 	// outpoint -> the transactions it starved
 	starves := map[string][]string{}
+	seenEdge := map[string]struct{}{}
 	for _, record := range records {
 		for _, starved := range record.StarvedTransactions {
-			starvedBy[starved.TxID] = append(starvedBy[starved.TxID], starved.MissingOutpoints...)
 			for _, outpoint := range starved.MissingOutpoints {
+				if starvedBy[starved.TxID] == nil {
+					starvedBy[starved.TxID] = map[string]struct{}{}
+				}
+				starvedBy[starved.TxID][outpoint] = struct{}{}
+				edge := starved.TxID + "<-" + outpoint
+				if _, duplicate := seenEdge[edge]; duplicate {
+					continue
+				}
+				seenEdge[edge] = struct{}{}
 				starves[outpoint] = append(starves[outpoint], starved.TxID)
 			}
 		}
@@ -627,7 +652,8 @@ func summarizeCascade(records []Record, summary *Summary) {
 			var next []string
 			for _, starvedTx := range frontier {
 				// Every coin that transaction would have created is now absent too, so anything
-				// spending one of them was starved by this same seed.
+				// spending one of them was starved by this same seed. A coin is visited once, so a
+				// shared subgraph is walked once per seed rather than revisited.
 				for _, downstreamOutpoint := range outpointsByCreatingTx[starvedTx] {
 					if _, seen := visited[downstreamOutpoint]; seen {
 						continue
@@ -660,11 +686,22 @@ func sortedKeys(set map[string]struct{}) []string {
 func (s *Summary) String() string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "=== UTXO survey: %d failing blocks\n", s.Records)
+	fmt.Fprintf(&b, "=== UTXO survey: %d failing blocks", s.Records)
+	if s.VerifiedBlocks > 0 {
+		fmt.Fprintf(&b, ", %d verified and sound", s.VerifiedBlocks)
+	}
+	b.WriteString("\n")
+	if s.Records == 0 && s.VerifiedBlocks > 0 {
+		fmt.Fprintf(&b, "  Nothing failed, and this is not silence: %d blocks were checked and passed,\n"+
+			"  including their UTXO commitments.\n", s.VerifiedBlocks)
+	}
 	if s.Runs > 1 {
 		fmt.Fprintf(&b, "  Spans %d separate node runs. Counts below are over the whole file; the\n"+
 			"  created-then-absent analysis is scoped within each run, because a coin created in one\n"+
 			"  sync and absent in the next says nothing about either.\n", s.Runs)
+	}
+	if s.Records == 0 && s.VerifiedBlocks > 0 {
+		return b.String()
 	}
 	if s.Records == 0 {
 		b.WriteString("  Nothing recorded. Either no block failed, or the survey was not enabled for the run\n" +

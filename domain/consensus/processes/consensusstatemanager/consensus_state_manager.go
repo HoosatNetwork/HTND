@@ -83,6 +83,12 @@ type consensusStateManager struct {
 	// is enabled. See stashRejectionReasons for why it is a side channel and not a return value.
 	rejectionReasons sync.Map
 
+	// verifiedBlocksSinceCheckpoint counts blocks that passed every UTXO check, so the survey can
+	// record positive evidence of health rather than leaving an empty file that means either
+	// "nothing failed" or "nobody was watching".
+	verifiedBlocksMutex           sync.Mutex
+	verifiedBlocksSinceCheckpoint int
+
 	// refuseMismatchedImportedPruningPointUTXOSet makes an imported pruning point UTXO set that does
 	// not hash to its own header commitment a hard failure, so IBD moves on to another peer instead of
 	// building the whole node on it. Off by default: on the current network no peer has a matching

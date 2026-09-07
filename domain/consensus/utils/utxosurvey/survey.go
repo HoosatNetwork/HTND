@@ -63,6 +63,12 @@ const (
 	StageBodies            = "bodies"
 	StagePruningUTXOImport = "pruning-utxo-import"
 	StageChainReplay       = "chain-replay"
+
+	// StageVerified marks a checkpoint record: a batch of blocks that passed every UTXO check. A
+	// survey that only ever records failures cannot tell a healthy node from one where it was never
+	// switched on - both produce an empty file - and "the repair worked" is exactly the conclusion
+	// that must not rest on silence.
+	StageVerified = "verified"
 )
 
 // Sources an outpoint can be found under in AlternateMatch.Source.
@@ -195,6 +201,11 @@ type Record struct {
 
 	CoinbaseTxID string `json:"coinbaseTxId"`
 
+	// VerifiedBlocks is set only on a StageVerified checkpoint: how many blocks passed every UTXO
+	// check since the previous checkpoint. Positive evidence that the node was checking and the blocks
+	// were sound, which an absence of failure records cannot provide.
+	VerifiedBlocks int `json:"verifiedBlocks,omitempty"`
+
 	// RejectionReasons counts why this block's merge-set transactions were not accepted, and
 	// RejectedForMissingInputTxIDs names the ones rejected because an input could not be found.
 	//
@@ -234,16 +245,17 @@ type Record struct {
 }
 
 type writer struct {
-	mu       sync.Mutex
-	loaded   bool
-	path     string
-	file     *os.File
-	buffered *bufio.Writer
-	written  int
-	max      int
-	maxTxIDs int
-	deep     int
-	failed   bool
+	mu            sync.Mutex
+	loaded        bool
+	path          string
+	file          *os.File
+	buffered      *bufio.Writer
+	written       int
+	max           int
+	maxTxIDs      int
+	deep          int
+	verifiedEvery int
+	failed        bool
 	// logf is set by the owning package so this one needn't depend on a logger.
 	logf func(format string, args ...any)
 }
@@ -269,6 +281,7 @@ func (wr *writer) loadConfigLocked() {
 	wr.max = envInt("HTND_UTXO_SURVEY_MAX", 5000)
 	wr.maxTxIDs = envInt("HTND_UTXO_SURVEY_MAX_TXIDS", 128)
 	wr.deep = envInt("HTND_UTXO_SURVEY_DEEP", 0)
+	wr.verifiedEvery = envInt("HTND_UTXO_SURVEY_VERIFIED_EVERY", 1000)
 }
 
 func envInt(key string, fallback int) int {
@@ -328,6 +341,16 @@ func MaxTxIDs() int {
 	defer w.mu.Unlock()
 	w.loadConfigLocked()
 	return w.maxTxIDs
+}
+
+// VerifiedCheckpointEvery is how many consecutive passing blocks are summarised into one checkpoint
+// record. Small enough that a short healthy run still attests to itself, large enough that a long one
+// does not fill the file with good news.
+func VerifiedCheckpointEvery() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.loadConfigLocked()
+	return w.verifiedEvery
 }
 
 // TakeDeepBudget claims one of the HTND_UTXO_SURVEY_DEEP permits for an O(UTXO-set) recomputation,
@@ -423,5 +446,6 @@ func Reset() {
 	w.max = 0
 	w.maxTxIDs = 0
 	w.deep = 0
+	w.verifiedEvery = 0
 	w.failed = false
 }
