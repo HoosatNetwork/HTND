@@ -12,6 +12,49 @@ import (
 // into a walk to the tip.
 const maxChainBlocksSearchedForAcceptance = 200
 
+// maxChainBlocksSearchedFromTip bounds the fast path that looks for a transaction in recently
+// accepted chain blocks. A transaction submitted to a node is mined within seconds on this chain, so
+// the block that accepted it is a short walk back from virtual - and finding it there costs a few
+// acceptance-data reads instead of a scan of every block the node holds.
+const maxChainBlocksSearchedFromTip = 2000
+
+// findRecentlyAcceptedTransaction looks for a transaction in the acceptance data of chain blocks near
+// the tip, walking back from virtual's selected parent.
+//
+// The general lookup is a scan of the entire block store, taking the consensus lock once per block.
+// On a node with millions of blocks that is slow enough to be unusable for the case people actually
+// ask about - "I just submitted this, where is it" - and any error along the way used to come back as
+// "not found", which reads as an answer about the transaction rather than about the search. A
+// transaction accepted in the last few thousand chain blocks is found here in a fraction of the time,
+// and the answer carries the accepting block with it.
+//
+// Returns nil when the transaction is not in that window, which is not a verdict - the caller falls
+// back to the full search.
+func findRecentlyAcceptedTransaction(context *rpccontext.Context,
+	transactionID *externalapi.DomainTransactionID,
+) *transactionAcceptance {
+	current, err := context.Domain.Consensus().GetVirtualSelectedParent()
+	if err != nil {
+		return nil
+	}
+
+	for i := 0; i < maxChainBlocksSearchedFromTip && current != nil; i++ {
+		acceptanceData, err := context.Domain.Consensus().GetBlockAcceptanceData(current)
+		if err == nil {
+			if merged, accepted := verdictForTransaction(acceptanceData, transactionID); merged {
+				return &transactionAcceptance{acceptingBlock: current, accepted: accepted}
+			}
+		}
+
+		blockInfo, err := context.Domain.Consensus().GetBlockInfo(current)
+		if err != nil || blockInfo.SelectedParent == nil {
+			return nil
+		}
+		current = blockInfo.SelectedParent
+	}
+	return nil
+}
+
 // transactionAcceptance is what a chain block decided about one transaction.
 type transactionAcceptance struct {
 	// acceptingBlock is the chain block that merged the block carrying the transaction. Nil when no

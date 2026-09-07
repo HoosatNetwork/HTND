@@ -107,22 +107,42 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 		return nil, err
 	}
 
-	switch {
-	case acceptance.acceptingBlock == nil:
+	if acceptance.acceptingBlock == nil {
 		// No chain block has merged it yet. Genuinely pending, whatever the containing block's status.
 		return appmessage.NewGetTransactionStatusResponseMessage(
 			appmessage.TransactionStatusPending, emptyHash, confirmations), nil
+	}
+	return transactionStatusResponse(context, acceptance)
+}
 
+// transactionStatusResponse turns a chain block's verdict into a response, counting confirmations
+// from the block that accepted the transaction rather than from whichever block happened to carry
+// it. Both lookup paths end here so they cannot drift apart in what they report.
+func transactionStatusResponse(context *rpccontext.Context, acceptance *transactionAcceptance,
+) (appmessage.Message, error) {
+	selectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
+	if err != nil {
+		return nil, err
+	}
+	selectedParentInfo, err := context.Domain.Consensus().GetBlockInfo(selectedParent)
+	if err != nil {
+		return nil, err
+	}
+	acceptingBlockInfo, err := context.Domain.Consensus().GetBlockInfo(acceptance.acceptingBlock)
+	if err != nil {
+		return nil, err
+	}
+	confirmations := selectedParentInfo.BlueScore - acceptingBlockInfo.BlueScore + 1
+
+	switch {
 	case !acceptance.accepted:
 		// Merged and rejected - a duplicate of one already accepted, or a spend of something already
 		// spent. That is a settled answer and must not be reported as still pending.
 		return appmessage.NewGetTransactionStatusResponseMessage(
 			appmessage.TransactionStatusInvalid, acceptance.acceptingBlock, confirmations), nil
-
 	case confirmations >= confirmationsConsideredSettled:
 		return appmessage.NewGetTransactionStatusResponseMessage(
 			appmessage.TransactionStatusConfirmed, acceptance.acceptingBlock, confirmations), nil
-
 	default:
 		return appmessage.NewGetTransactionStatusResponseMessage(
 			appmessage.TransactionStatusAccepted, acceptance.acceptingBlock, confirmations), nil
