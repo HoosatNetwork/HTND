@@ -194,7 +194,10 @@ func (csm *consensusStateManager) verifyAcceptanceDataAgainstDiff(label string, 
 				continue
 			}
 			transaction := txAcceptance.Transaction
-			isCoinbase := i == 0
+			// Same definition the multiset itself uses - see utxo.IsAcceptedCoinbase. A checker that
+			// derives coinbase-ness differently from the thing it checks cannot see a disagreement about
+			// it, which is exactly the disagreement worth seeing.
+			isCoinbase := utxo.IsAcceptedCoinbase(transaction, i)
 			transactionID := consensushashing.TransactionID(transaction)
 
 			for outIdx, output := range transaction.Outputs {

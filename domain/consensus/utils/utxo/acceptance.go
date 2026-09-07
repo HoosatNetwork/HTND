@@ -5,6 +5,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
 	"github.com/pkg/errors"
 )
 
@@ -89,6 +90,35 @@ func ApplyAcceptanceDataToDiff(diff externalapi.MutableUTXODiff, acceptanceData 
 	})
 }
 
+// IsAcceptedCoinbase reports whether an accepted transaction is a coinbase, for the purpose of the
+// isCoinbase flag stamped into the UTXO entries it creates.
+//
+// There is one definition and both representations of the UTXO set must use it. isCoinbase is
+// serialized into the MuHash preimage by SerializeUTXO, so it is part of a coin's committed identity:
+// if the diff and the multiset answer this question differently for the same transaction, they
+// produce different bytes for the same coin, the block's commitment stops matching its header, and
+// nothing about the block itself is wrong. The diff path has always used the transaction's own
+// subnetwork ID via AddTransaction; the multiset path used its position in the block's acceptance
+// data instead. Consensus puts the coinbase at index 0, so for a valid block the two agree - but they
+// are not the same question, and only one of them is about the transaction.
+//
+// positionInBlock is kept only so a disagreement can be reported rather than silently chosen between.
+func IsAcceptedCoinbase(transaction *externalapi.DomainTransaction, positionInBlock int) bool {
+	isCoinbase := transactionhelper.IsCoinBase(transaction)
+	if isCoinbase != (positionInBlock == 0) {
+		// Either a coinbase somewhere other than index 0, or a non-coinbase at index 0. Both are
+		// invalid blocks, so this should be unreachable - and if it is ever reached, it is the exact
+		// shape of a commitment failure with no other symptom, which is worth a loud line rather than
+		// a silent choice.
+		log.Warnf("Transaction %s at position %d of its block: subnetwork says coinbase=%t but position "+
+			"says coinbase=%t. Stamping the UTXO entries it creates with the subnetwork's answer, which "+
+			"is what the UTXO diff uses. If a block's UTXO commitment fails with nothing else wrong, "+
+			"this is why.", consensushashing.TransactionID(transaction), positionInBlock, isCoinbase,
+			positionInBlock == 0)
+	}
+	return isCoinbase
+}
+
 func forEachAcceptedTransaction(acceptanceData externalapi.AcceptanceData,
 	apply func(transaction *externalapi.DomainTransaction, isCoinbase bool) error) error {
 	for _, blockAcceptanceData := range acceptanceData {
@@ -96,7 +126,8 @@ func forEachAcceptedTransaction(acceptanceData externalapi.AcceptanceData,
 			if !transactionAcceptanceData.IsAccepted {
 				continue
 			}
-			err := apply(transactionAcceptanceData.Transaction, i == 0)
+			err := apply(transactionAcceptanceData.Transaction,
+				IsAcceptedCoinbase(transactionAcceptanceData.Transaction, i))
 			if err != nil {
 				return err
 			}

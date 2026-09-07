@@ -2071,8 +2071,12 @@ func (s *consensus) IterateUTXOSetAtBlockFromAcceptanceData(blockHash *externala
 					}
 					outpoint := externalapi.DomainOutpoint{TransactionID: transactionID, Index: uint32(outputIndex)}
 					delete(spentFromPruningPointSet, outpoint)
+					// One definition of coinbase-ness, shared with the multiset and the diff - see
+					// utxo.IsAcceptedCoinbase. This derivation is what an exodus bundle is built from, so
+					// a coin stamped differently here than in the set the chain committed to would be
+					// baked into the floor every node is asked to adopt.
 					created[outpoint] = utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey,
-						j == 0, mergingBlockDAAScore)
+						utxo.IsAcceptedCoinbase(transaction, j), mergingBlockDAAScore)
 				}
 			}
 		}

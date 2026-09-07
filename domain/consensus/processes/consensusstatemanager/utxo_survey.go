@@ -335,7 +335,8 @@ func summarizeAcceptance(record *utxosurvey.Record,
 			record.AcceptedTxIDs = appendCapped(record.AcceptedTxIDs,
 				&record.AcceptedTxIDsTruncated, transactionID.String())
 
-			isCoinbase := i == 0
+			// One definition, shared with the multiset and the diff - see utxo.IsAcceptedCoinbase.
+			isCoinbase := utxo.IsAcceptedCoinbase(transactionAcceptance.Transaction, i)
 			for outputIndex, output := range transactionAcceptance.Transaction.Outputs {
 				outpoint := externalapi.DomainOutpoint{TransactionID: *transactionID, Index: uint32(outputIndex)}
 				created[outpoint] = acceptedOutput{output: output, isCoinbase: isCoinbase}
@@ -570,7 +571,8 @@ func surveyBlockDelta(selectedParentPastUTXO, pastUTXODiff externalapi.UTXODiff,
 			}
 			transaction := transactionAcceptance.Transaction
 			transactionID := consensushashing.TransactionID(transaction)
-			isCoinbase := i == 0
+			// One definition, shared with the multiset and the diff - see utxo.IsAcceptedCoinbase.
+			isCoinbase := utxo.IsAcceptedCoinbase(transactionAcceptance.Transaction, i)
 			for outputIndex, output := range transaction.Outputs {
 				outpoint := externalapi.DomainOutpoint{TransactionID: *transactionID, Index: uint32(outputIndex)}
 				expectedAdds[outpoint] = utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, isCoinbase,

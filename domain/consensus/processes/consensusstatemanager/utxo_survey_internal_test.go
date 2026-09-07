@@ -7,6 +7,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
 	"github.com/pkg/errors"
@@ -262,10 +263,24 @@ func surveyDeltaFixture(t *testing.T, toAdd, toRemove map[externalapi.DomainOutp
 // right here too.
 func acceptedTransaction(inputs []*externalapi.DomainOutpoint, outputValues ...uint64,
 ) *externalapi.DomainTransaction {
+	return acceptedTransactionOfKind(subnetworks.SubnetworkIDNative, inputs, outputValues...)
+}
+
+// acceptedCoinbase builds a transaction that is structurally a coinbase. Position in the block is no
+// longer what decides it - see utxo.IsAcceptedCoinbase - so a fixture that wants a coinbase has to
+// be one, exactly as a real block's is.
+func acceptedCoinbase(outputValues ...uint64) *externalapi.DomainTransaction {
+	return acceptedTransactionOfKind(subnetworks.SubnetworkIDCoinbase, nil, outputValues...)
+}
+
+func acceptedTransactionOfKind(subnetworkID externalapi.DomainSubnetworkID,
+	inputs []*externalapi.DomainOutpoint, outputValues ...uint64,
+) *externalapi.DomainTransaction {
 	transaction := &externalapi.DomainTransaction{
-		Version: 0,
-		Inputs:  make([]*externalapi.DomainTransactionInput, 0, len(inputs)),
-		Outputs: make([]*externalapi.DomainTransactionOutput, 0, len(outputValues)),
+		Version:      0,
+		SubnetworkID: subnetworkID,
+		Inputs:       make([]*externalapi.DomainTransactionInput, 0, len(inputs)),
+		Outputs:      make([]*externalapi.DomainTransactionOutput, 0, len(outputValues)),
 	}
 	for _, input := range inputs {
 		transaction.Inputs = append(transaction.Inputs, &externalapi.DomainTransactionInput{
@@ -311,7 +326,7 @@ func reasonsOf(elements []utxosurvey.DiffElement) []string {
 func TestSurveyBlockDeltaIgnoresCoinsCreatedAndSpentInTheSameBlock(t *testing.T) {
 	const blockDAAScore = 500
 
-	coinbase := acceptedTransaction(nil, 100)
+	coinbase := acceptedCoinbase(100)
 	coinbaseID := consensushashing.TransactionID(coinbase)
 	createdAndSpent := &externalapi.DomainOutpoint{TransactionID: *coinbaseID, Index: 0}
 	spender := acceptedTransaction([]*externalapi.DomainOutpoint{createdAndSpent}, 90)
@@ -341,7 +356,7 @@ func TestSurveyBlockDelta(t *testing.T) {
 	const blockDAAScore = 500
 	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
 
-	coinbase := acceptedTransaction(nil, 100)
+	coinbase := acceptedCoinbase(100)
 	coinbaseID := consensushashing.TransactionID(coinbase)
 	coinbaseOutpoint := externalapi.DomainOutpoint{TransactionID: *coinbaseID, Index: 0}
 	coinbaseEntry := utxo.NewUTXOEntry(100, script, true, blockDAAScore)
