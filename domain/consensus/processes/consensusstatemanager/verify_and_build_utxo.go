@@ -43,13 +43,33 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// firstError is what the caller sees: the first failure that was not tolerated, exactly as
 	// before. stop reports whether verification should abandon the remaining checks - it does unless
 	// the survey is on, in which case the rest are run purely to fill in the record.
+	// Tolerating the inherited offset must not mean tolerating everything. A block whose own
+	// acceptance data and UTXO diff disagree has created or destroyed something its own record does
+	// not account for, and no baseline offset can explain that - waving it through lets new corruption
+	// arrive on top of the old under the same log line. Checked once per block, only when something
+	// has actually failed and toleration is on the table.
+	carriesOffsetOnly, arithmeticProblem := true, ""
+	if tolerate {
+		carriesOffsetOnly, arithmeticProblem = blockOnlyCarriesTheInheritedOffset(
+			acceptanceData, pastUTXODiff, block.Header.DAAScore(),
+			func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
+				return csm.virtualUTXOEntry(stagingArea, outpoint)
+			})
+		if !carriesOffsetOnly {
+			log.Warnf("Block %s: NOT tolerating its failures despite this node's offset baseline - %s. "+
+				"An incomplete pruning-point UTXO set explains a commitment that cannot be reproduced; "+
+				"it does not explain a block whose own acceptance data and UTXO diff disagree.",
+				blockHash, arithmeticProblem)
+		}
+	}
+
 	var firstError error
 	stop := func(step string, err error) bool {
 		if err == nil {
 			return false
 		}
 		survey.noteFailure(step, err)
-		if tolerate && errors.As(err, &ruleerrors.RuleError{}) {
+		if tolerate && carriesOffsetOnly && errors.As(err, &ruleerrors.RuleError{}) {
 			csm.logToleratedIssue(step, blockHash, err)
 			return false
 		}
@@ -83,7 +103,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 
 	log.Debugf("Validating transactions against past UTXO for block %s", blockHash)
 	if stop("block-transactions-vs-past-utxo",
-		csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff, survey)) {
+		csm.validateBlockTransactionsAgainstPastUTXO(stagingArea, block, pastUTXODiff, acceptanceData, survey)) {
 		return firstError
 	}
 	log.Debugf("Block transaction against past UTXO passed for %s", blockHash)
@@ -114,7 +134,8 @@ func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *exte
 // survey with a single outpoint out of however many the block actually could not resolve. The error
 // returned is still a missing-input RuleError either way.
 func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagingArea *model.StagingArea,
-	block *externalapi.DomainBlock, pastUTXODiff externalapi.UTXODiff, survey *blockSurvey,
+	block *externalapi.DomainBlock, pastUTXODiff externalapi.UTXODiff,
+	acceptanceData externalapi.AcceptanceData, survey *blockSurvey,
 ) error {
 	blockHash := consensushashing.BlockHash(block)
 	log.Tracef("validateBlockTransactionsAgainstPastUTXO start for block %s", blockHash)
@@ -141,6 +162,17 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	// baseline silently accepting blocks that spend the same coin twice, which is the one thing this
 	// check exists to prevent and has nothing to do with the gap. See ErrMissingTxOut.HasDoubleSpend.
 	tolerateMissingTxOut := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	if tolerateMissingTxOut {
+		// Same verdict as verifyUTXO's: a block whose own arithmetic is broken gets no leniency from
+		// a baseline that only explains commitments it cannot reproduce.
+		if carriesOffsetOnly, _ := blockOnlyCarriesTheInheritedOffset(
+			acceptanceData, pastUTXODiff, block.Header.DAAScore(),
+			func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
+				return csm.virtualUTXOEntry(stagingArea, outpoint)
+			}); !carriesOffsetOnly {
+			tolerateMissingTxOut = false
+		}
+	}
 	tolerable := func(err error) bool {
 		if !tolerateMissingTxOut {
 			return false
