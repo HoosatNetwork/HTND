@@ -26,12 +26,13 @@ func TestExpireIntervalIsAUnitConversion(t *testing.T) {
 		targetTimePerBlock time.Duration
 		wantDAAScore       uint64
 	}{
-		// One block per second: 60 seconds is 60 blocks. The only case the old code got right.
-		{"1 block per second", time.Second, 60},
-		// Five blocks per second, which is what block versions 5 and up target. 60 seconds is 300
-		// blocks. The old code produced 12 - under three seconds of real time.
-		{"5 blocks per second", 200 * time.Millisecond, 300},
-		{"2 blocks per second", 500 * time.Millisecond, 120},
+		// Expressed against the constant rather than as bare numbers, so this keeps pinning the
+		// conversion - multiply by the block rate, do not divide by it - if the window is retuned.
+		// The one block per second case is the only one the old code got right.
+		{"1 block per second", time.Second, defaultTransactionExpireIntervalSeconds * 1},
+		// Five blocks per second is what block versions 5 and up target, and what the network runs.
+		{"5 blocks per second", 200 * time.Millisecond, defaultTransactionExpireIntervalSeconds * 5},
+		{"2 blocks per second", 500 * time.Millisecond, defaultTransactionExpireIntervalSeconds * 2},
 	}
 
 	for _, test := range tests {
@@ -65,11 +66,11 @@ func TestExpireIntervalFollowsTheLiveBlockVersion(t *testing.T) {
 	constants.SetBlockVersion(2)
 	atVersion2 := config.transactionExpireIntervalDAAScore()
 
-	if atVersion1 != 60 {
-		t.Errorf("at 1 block per second, expected 60 DAA score, got %d", atVersion1)
+	if want := defaultTransactionExpireIntervalSeconds * 1; atVersion1 != want {
+		t.Errorf("at 1 block per second, expected %d DAA score, got %d", want, atVersion1)
 	}
-	if atVersion2 != 300 {
-		t.Errorf("at 5 blocks per second, expected 300 DAA score, got %d", atVersion2)
+	if want := defaultTransactionExpireIntervalSeconds * 5; atVersion2 != want {
+		t.Errorf("at 5 blocks per second, expected %d DAA score, got %d", want, atVersion2)
 	}
 	if atVersion1 == atVersion2 {
 		t.Error("the interval must track the live block version, not the one seen at startup")

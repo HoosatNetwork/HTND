@@ -11,7 +11,16 @@ import (
 const (
 	defaultMaximumTransactionCount = 1_000_000
 
-	defaultTransactionExpireIntervalSeconds     uint64 = 60
+	// Ten minutes. Sixty seconds proved far too tight for chained transactions: a compounding run
+	// submits a new transaction every few seconds, each depending on the last, and expiry takes an
+	// expired transaction's dependants with it - so one link missing the window drops the whole
+	// chain from every mempool at once. Of twenty-two compounding transactions submitted over two
+	// and a half minutes, three survived.
+	//
+	// This is node-local policy, not consensus, so nodes running different windows interoperate
+	// normally - a longer window here simply means this node keeps offering the transaction to
+	// miners for longer.
+	defaultTransactionExpireIntervalSeconds     uint64 = 600
 	defaultTransactionExpireScanIntervalSeconds uint64 = 10
 	defaultOrphanExpireIntervalSeconds          uint64 = 60
 	defaultOrphanExpireScanIntervalSeconds      uint64 = 10
