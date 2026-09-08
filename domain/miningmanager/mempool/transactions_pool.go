@@ -138,6 +138,7 @@ func (tp *transactionsPool) expireOldTransactions() error {
 		return nil
 	}
 
+	expired := 0
 	for _, mempoolTransaction := range tp.allTransactions {
 		// Never expire high priority transactions
 		if mempoolTransaction.IsHighPriority() {
@@ -149,11 +150,22 @@ func (tp *transactionsPool) expireOldTransactions() error {
 		if daaScoreSinceAdded > tp.mempool.config.TransactionExpireIntervalDAAScore {
 			log.Debugf("Removing transaction %s, because it expired. DAAScore moved by %d, expire interval: %d",
 				mempoolTransaction.TransactionID(), daaScoreSinceAdded, tp.mempool.config.TransactionExpireIntervalDAAScore)
+			expired++
 			err = tp.mempool.removeTransaction(mempoolTransaction.TransactionID(), true)
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	// Reported per scan rather than per transaction, so the count stays readable when a stalled
+	// network expires a whole mempool at once. A relayed transaction that expires was never mined,
+	// and expiry takes its redeemers with it - so a chain of dependent transactions leaves together
+	// and every node then answers not-found for all of them. That is worth one line at info.
+	if expired > 0 {
+		log.Infof("Expired %d transaction(s) from the mempool: they were not mined within %d DAA "+
+			"score of being added. Dependent transactions were removed with them",
+			expired, tp.mempool.config.TransactionExpireIntervalDAAScore)
 	}
 
 	tp.lastExpireScanDAAScore = virtualDAAScore

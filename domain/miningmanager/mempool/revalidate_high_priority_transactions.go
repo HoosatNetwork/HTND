@@ -1,6 +1,9 @@
 package mempool
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool/model"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
@@ -99,7 +102,19 @@ func (mp *mempool) revalidateTransaction(transaction *model.MempoolTransaction) 
 		return false, err
 	}
 	if len(missingParents) > 0 {
-		log.Debugf("Removing transaction %s, it failed revalidation", transaction.TransactionID())
+		// Warn, not debug. These are high-priority transactions, which on this node means locally
+		// submitted ones - somebody's wallet sent this and got an id back. Dropping it here makes it
+		// vanish from every RPC answer, including on the node that accepted it seconds earlier, and
+		// the submitter is never told. Days were spent treating that disappearance as a propagation
+		// failure, because at the default log level there was nothing to read.
+		//
+		// The missing outpoints are named because they are the whole diagnosis: a transaction whose
+		// inputs cannot be found is not a bad transaction, it is a node that does not hold coins the
+		// transaction's author could see. Volume is not a concern - these are local submissions.
+		log.Warnf("Removing locally submitted transaction %s from the mempool: %d of its inputs "+
+			"cannot be found in this node's UTXO set (%s). The transaction was accepted earlier and "+
+			"will now report as not-found",
+			transaction.TransactionID(), len(missingParents), formatOutpoints(missingParents))
 		err := mp.removeTransaction(transaction.TransactionID(), false)
 		if err != nil {
 			return false, err
@@ -114,4 +129,24 @@ func clearInputs(transaction *model.MempoolTransaction) {
 	for _, input := range transaction.Transaction().Inputs {
 		input.UTXOEntry = nil
 	}
+}
+
+// formatOutpoints renders at most a handful of outpoints for a log line, so a transaction with a
+// hundred inputs - a compounding transaction, say - names enough of them to be traced without
+// filling the log with one line's worth of hashes.
+func formatOutpoints(outpoints []*externalapi.DomainOutpoint) string {
+	const maxListed = 4
+
+	listed := outpoints
+	suffix := ""
+	if len(listed) > maxListed {
+		listed = listed[:maxListed]
+		suffix = fmt.Sprintf(" and %d more", len(outpoints)-maxListed)
+	}
+
+	parts := make([]string, 0, len(listed))
+	for _, outpoint := range listed {
+		parts = append(parts, fmt.Sprintf("%s:%d", outpoint.TransactionID, outpoint.Index))
+	}
+	return strings.Join(parts, ", ") + suffix
 }
