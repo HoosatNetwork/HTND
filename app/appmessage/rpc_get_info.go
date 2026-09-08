@@ -31,6 +31,14 @@ type GetInfoResponseMessage struct {
 	// a node can answer true to the first and false to the second.
 	IsUtxoSetVerified bool
 
+	// CirculatingSompiSupply is what this node's UTXO set currently holds, and ReferenceSompiSupply
+	// is the fixed published snapshot to compare it against. Both zero without --utxoindex, or while
+	// the index is resyncing. The growth between them is for comparing nodes, not for judging one in
+	// isolation: emission makes every healthy node exceed a past snapshot.
+	CirculatingSompiSupply     uint64
+	ReferenceSompiSupply       uint64
+	ReferenceSupplyDescription string
+
 	Error *RPCError
 }
 
@@ -41,7 +49,8 @@ func (msg *GetInfoResponseMessage) Command() MessageCommand {
 
 // NewGetInfoResponseMessage returns a instance of the message
 func NewGetInfoResponseMessage(p2pID string, mempoolSize uint64, serverVersion string, isUtxoIndexed bool,
-	isSynced bool, isUTXOSetVerified bool,
+	isSynced bool, isUTXOSetVerified bool, circulatingSompiSupply uint64, referenceSompiSupply uint64,
+	referenceSupplyDescription string,
 ) *GetInfoResponseMessage {
 	return &GetInfoResponseMessage{
 		P2PID:             p2pID,
@@ -50,5 +59,9 @@ func NewGetInfoResponseMessage(p2pID string, mempoolSize uint64, serverVersion s
 		IsUtxoIndexed:     isUtxoIndexed,
 		IsSynced:          isSynced,
 		IsUtxoSetVerified: isUTXOSetVerified,
+
+		CirculatingSompiSupply:     circulatingSompiSupply,
+		ReferenceSompiSupply:       referenceSompiSupply,
+		ReferenceSupplyDescription: referenceSupplyDescription,
 	}
 }

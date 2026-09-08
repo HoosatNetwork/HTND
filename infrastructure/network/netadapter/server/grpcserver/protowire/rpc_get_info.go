@@ -33,7 +33,12 @@ func (x *HoosatdMessage_GetInfoResponse) fromAppMessage(message *appmessage.GetI
 		IsUtxoIndexed:     message.IsUtxoIndexed,
 		IsSynced:          message.IsSynced,
 		IsUtxoSetVerified: message.IsUtxoSetVerified,
-		Error:             err,
+
+		CirculatingSompiSupply:     message.CirculatingSompiSupply,
+		ReferenceSompiSupply:       message.ReferenceSompiSupply,
+		ReferenceSupplyDescription: message.ReferenceSupplyDescription,
+
+		Error: err,
 	}
 	return nil
 }
@@ -59,6 +64,10 @@ func (x *GetInfoResponseMessage) toAppMessage() (appmessage.Message, error) {
 		IsUtxoIndexed:     x.IsUtxoIndexed,
 		IsSynced:          x.IsSynced,
 		IsUtxoSetVerified: x.IsUtxoSetVerified,
+
+		CirculatingSompiSupply:     x.CirculatingSompiSupply,
+		ReferenceSompiSupply:       x.ReferenceSompiSupply,
+		ReferenceSupplyDescription: x.ReferenceSupplyDescription,
 
 		Error: rpcErr,
 	}, nil

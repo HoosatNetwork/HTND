@@ -33,6 +33,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	consensusdatabase "github.com/HoosatNetwork/HTND/domain/consensus/database"
@@ -52,8 +53,10 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
 	infradatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
@@ -94,6 +97,12 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	balanceCheck = flag.String("balancecheck", "", "path to a reference balance snapshot CSV "+
+		"(script_public_key_address,balance) and compare this node's UTXO set against it per address. "+
+		"Answers how far a datadir has drifted from a known-good point in time, which is how you pick "+
+		"the least corrupted one to rebaseline from. Balances are summed from the CONSENSUS UTXO set, "+
+		"not the utxoindex, so an index bug cannot flatter the result")
+
 	indexCheck = flag.Bool("indexcheck", false, "compare every entry in this node's utxoindex "+
 		"against the consensus UTXO set in the same database. The index is what GetUtxosByAddresses "+
 		"answers from - wallet balances, explorer pages - and it is derived from consensus, so any "+
@@ -215,6 +224,10 @@ func main() {
 
 	if *indexCheck {
 		utxoIndexConsistencyCheck(db, s, sa)
+	}
+
+	if *balanceCheck != "" {
+		balanceComparison(s, sa, *balanceCheck)
 	}
 
 	if *reconstruct {
@@ -1665,4 +1678,175 @@ func outpointFromIndexKey(suffix []byte) (*externalapi.DomainOutpoint, bool) {
 		return outpoint, true
 	}
 	return nil, false
+}
+
+// balanceComparison compares this node's per-address balances against a reference snapshot taken at
+// a known point in time.
+//
+// The question it answers is "how far has this datadir drifted", which is what picking a datadir to
+// rebaseline from comes down to. Drift shows up in two directions and they mean different things:
+// an address holding LESS than the reference has had coins spent (ordinary) or lost (a gap in this
+// node's set), while an address holding MORE has received coins (ordinary) or gained coins that do
+// not exist (inflation from duplicated or mis-stamped entries).
+//
+// Neither direction is damning on its own, and the totals are not either: coinbase emission adds
+// supply continuously, so every node's total is expected to exceed a past snapshot. The number that
+// carries information is the comparison BETWEEN nodes at a similar DAA score. Two nodes that agree
+// with the network agree with each other; a node carrying phantom coins reports more.
+//
+// Balances are summed from the consensus UTXO set rather than the utxoindex on purpose. The index is
+// derived and has already been found wrong in exactly this dimension - 130,857 entries with a
+// BlockDAAScore consensus disagreed with - so measuring drift with it would let an index bug flatter
+// or condemn a datadir that is fine.
+func balanceComparison(s *stores, sa *model.StagingArea, csvPath string) {
+	fmt.Printf("\n=== per-address balances against %s\n", csvPath)
+
+	reference, referenceTotal, err := readReferenceBalances(csvPath)
+	if err != nil {
+		fmt.Printf("  reading the reference: %v\n", err)
+		return
+	}
+	fmt.Printf("  reference: %d addresses, %d sompi\n", len(reference), referenceTotal)
+
+	iterator, err := s.state.VirtualUTXOSetIterator(s.db, sa)
+	if err != nil {
+		fmt.Printf("  virtual UTXO set iterator: %v\n", err)
+		return
+	}
+	defer iterator.Close()
+
+	current := make(map[string]uint64, len(reference))
+	var currentTotal, unreadable uint64
+	entries := 0
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		_, entry, err := iterator.Get()
+		if err != nil {
+			unreadable++
+			continue
+		}
+		entries++
+		currentTotal += entry.Amount()
+		_, address, err := txscript.ExtractScriptPubKeyAddress(entry.ScriptPublicKey(), &dagconfig.MainnetParams)
+		if err != nil {
+			// A script nobody can spend from, or one this build cannot parse. It still counts toward
+			// the total - the coins exist - but it belongs to no address.
+			unreadable++
+			continue
+		}
+		current[address.EncodeAddress()] += entry.Amount()
+	}
+
+	var grew, shrank, unchanged, absent int
+	var grewBy, shrankBy, absentBy uint64
+	type mover struct {
+		address            string
+		reference, now, by uint64
+	}
+	var growers []mover
+	for address, referenceBalance := range reference {
+		now, held := current[address]
+		switch {
+		case !held:
+			absent++
+			absentBy += referenceBalance
+		case now == referenceBalance:
+			unchanged++
+		case now > referenceBalance:
+			grew++
+			by := now - referenceBalance
+			grewBy += by
+			growers = append(growers, mover{address, referenceBalance, now, by})
+		default:
+			shrank++
+			shrankBy += referenceBalance - now
+		}
+	}
+
+	var newAddresses int
+	var newBalance uint64
+	for address, balance := range current {
+		if _, inReference := reference[address]; !inReference {
+			newAddresses++
+			newBalance += balance
+		}
+	}
+
+	sort.Slice(growers, func(i, j int) bool { return growers[i].by > growers[j].by })
+
+	fmt.Printf("  this node: %d UTXO entries, %d addresses, %d sompi\n", entries, len(current), currentTotal)
+	if unreadable > 0 {
+		fmt.Printf("    entries whose address could not be derived: %d (counted in the total)\n", unreadable)
+	}
+	fmt.Printf("\n  addresses present in the reference: %d\n", len(reference))
+	fmt.Printf("    unchanged                       : %d\n", unchanged)
+	fmt.Printf("    hold more than the reference    : %d  (+%d sompi)\n", grew, grewBy)
+	fmt.Printf("    hold less than the reference    : %d  (-%d sompi)\n", shrank, shrankBy)
+	fmt.Printf("    hold nothing at all now         : %d  (-%d sompi)\n", absent, absentBy)
+	fmt.Printf("  addresses absent from the reference: %d  (+%d sompi)\n", newAddresses, newBalance)
+
+	fmt.Printf("\n  reference total : %d sompi\n", referenceTotal)
+	fmt.Printf("  this node total : %d sompi\n", currentTotal)
+	if currentTotal >= referenceTotal {
+		growth := currentTotal - referenceTotal
+		fmt.Printf("  growth          : +%d sompi (+%.4f%%)\n", growth,
+			100*float64(growth)/float64(referenceTotal))
+	} else {
+		fmt.Printf("  shrinkage       : -%d sompi\n", referenceTotal-currentTotal)
+	}
+	fmt.Printf("  Growth is expected - coinbase emission adds supply continuously. This number is\n")
+	fmt.Printf("  informative COMPARED BETWEEN NODES at a similar DAA score, not on its own. Run it on\n")
+	fmt.Printf("  each candidate datadir and prefer the one closest to its peers.\n")
+
+	if len(growers) > 0 {
+		shown := len(growers)
+		if shown > 10 {
+			shown = 10
+		}
+		fmt.Printf("\n  largest increases among reference addresses:\n")
+		for _, m := range growers[:shown] {
+			fmt.Printf("    %s\n      reference %d -> now %d  (+%d)\n", m.address, m.reference, m.now, m.by)
+		}
+	}
+}
+
+// readReferenceBalances reads a two-column CSV of address and balance in sompi. A header row is
+// tolerated and skipped; a malformed row is an error rather than a silently dropped address,
+// because a snapshot read with holes in it would understate drift.
+func readReferenceBalances(path string) (map[string]uint64, uint64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer file.Close()
+
+	balances := make(map[string]uint64)
+	var total uint64
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	line := 0
+	for scanner.Scan() {
+		line++
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+		address, amount, found := strings.Cut(text, ",")
+		if !found {
+			return nil, 0, errors.Errorf("line %d: expected \"address,balance\", got %q", line, text)
+		}
+		address = strings.TrimSpace(address)
+		balance, err := strconv.ParseUint(strings.TrimSpace(amount), 10, 64)
+		if err != nil {
+			if line == 1 {
+				continue // header
+			}
+			return nil, 0, errors.Errorf("line %d: balance %q is not a number", line, amount)
+		}
+		balances[address] += balance
+		total += balance
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, 0, err
+	}
+	return balances, total, nil
 }

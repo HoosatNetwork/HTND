@@ -5,6 +5,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 	"github.com/HoosatNetwork/HTND/version"
 )
@@ -33,6 +34,18 @@ func HandleGetInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.M
 		isUTXOSetVerified = health.BaselineVerified
 	}
 
+	// Reported so operators can compare nodes against one fixed, published point rather than against
+	// each other's moving tips. Zero when there is no index to ask, or while it is resyncing - both
+	// are "no answer", and neither is worth failing GetInfo over.
+	var circulatingSompiSupply uint64
+	if context.Config.UTXOIndex && context.UTXOIndex != nil {
+		if supply, err := context.UTXOIndex.GetCirculatingSompiSupply(); err != nil {
+			log.Debugf("Could not read circulating supply for GetInfo: %s", err)
+		} else {
+			circulatingSompiSupply = supply
+		}
+	}
+
 	response := appmessage.NewGetInfoResponseMessage(
 		context.NetAdapter.ID().String(),
 		transactionCount,
@@ -40,6 +53,9 @@ func HandleGetInfo(context *rpccontext.Context, _ *router.Router, _ appmessage.M
 		context.Config.UTXOIndex,
 		context.ProtocolManager.Context().HasPeers() && isNearlySynced,
 		isUTXOSetVerified,
+		circulatingSompiSupply,
+		constants.ReferenceSupplySompi,
+		constants.ReferenceSupplyDescription,
 	)
 
 	return response, nil

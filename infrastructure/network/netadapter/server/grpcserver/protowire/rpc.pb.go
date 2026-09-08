@@ -5873,10 +5873,23 @@ type GetInfoResponseMessage struct {
 	// derived from it - may disagree with the network, OR that the node could not check. Both are
 	// reasons not to trust it, so they share an answer. A server too old to know about this field
 	// leaves it false, which is the safe reading.
-	IsUtxoSetVerified bool      `protobuf:"varint,6,opt,name=isUtxoSetVerified,proto3" json:"isUtxoSetVerified,omitempty"`
-	Error             *RPCError `protobuf:"bytes,1000,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	IsUtxoSetVerified bool `protobuf:"varint,6,opt,name=isUtxoSetVerified,proto3" json:"isUtxoSetVerified,omitempty"`
+	// The circulating supply this node currently holds, and the supply of a fixed published snapshot
+	// to compare it against - balances-20260801-00, 2026-08-01 00:00 UTC. Both are in sompi and both
+	// are zero when the node runs without --utxoindex or while the index is resyncing.
+	//
+	// The growth between them is NOT a health verdict on its own: coinbase emission adds supply
+	// continuously, so every healthy node exceeds a past snapshot and grows every second. It is for
+	// comparing nodes. Two nodes that agree with the network agree with each other; a node whose UTXO
+	// set has gained coins that do not exist reports more than its peers at the same DAA score, and one
+	// that has lost coins reports less. The reference is sent too so that nodes built from different
+	// revisions cannot be compared against different baselines unnoticed.
+	CirculatingSompiSupply     uint64    `protobuf:"varint,7,opt,name=circulatingSompiSupply,proto3" json:"circulatingSompiSupply,omitempty"`
+	ReferenceSompiSupply       uint64    `protobuf:"varint,8,opt,name=referenceSompiSupply,proto3" json:"referenceSompiSupply,omitempty"`
+	ReferenceSupplyDescription string    `protobuf:"bytes,9,opt,name=referenceSupplyDescription,proto3" json:"referenceSupplyDescription,omitempty"`
+	Error                      *RPCError `protobuf:"bytes,1000,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *GetInfoResponseMessage) Reset() {
@@ -5949,6 +5962,27 @@ func (x *GetInfoResponseMessage) GetIsUtxoSetVerified() bool {
 		return x.IsUtxoSetVerified
 	}
 	return false
+}
+
+func (x *GetInfoResponseMessage) GetCirculatingSompiSupply() uint64 {
+	if x != nil {
+		return x.CirculatingSompiSupply
+	}
+	return 0
+}
+
+func (x *GetInfoResponseMessage) GetReferenceSompiSupply() uint64 {
+	if x != nil {
+		return x.ReferenceSompiSupply
+	}
+	return 0
+}
+
+func (x *GetInfoResponseMessage) GetReferenceSupplyDescription() string {
+	if x != nil {
+		return x.ReferenceSupplyDescription
+	}
+	return ""
 }
 
 func (x *GetInfoResponseMessage) GetError() *RPCError {
@@ -7021,14 +7055,17 @@ const file_rpc_proto_rawDesc = "" +
 	"\x02ip\x18\x01 \x01(\tR\x02ip\"B\n" +
 	"\x14UnbanResponseMessage\x12*\n" +
 	"\x05error\x18\xe8\a \x01(\v2\x13.protowire.RPCErrorR\x05error\"\x17\n" +
-	"\x15GetInfoRequestMessage\"\x92\x02\n" +
+	"\x15GetInfoRequestMessage\"\xbe\x03\n" +
 	"\x16GetInfoResponseMessage\x12\x14\n" +
 	"\x05p2pId\x18\x01 \x01(\tR\x05p2pId\x12 \n" +
 	"\vmempoolSize\x18\x02 \x01(\x04R\vmempoolSize\x12$\n" +
 	"\rserverVersion\x18\x03 \x01(\tR\rserverVersion\x12$\n" +
 	"\risUtxoIndexed\x18\x04 \x01(\bR\risUtxoIndexed\x12\x1a\n" +
 	"\bisSynced\x18\x05 \x01(\bR\bisSynced\x12,\n" +
-	"\x11isUtxoSetVerified\x18\x06 \x01(\bR\x11isUtxoSetVerified\x12*\n" +
+	"\x11isUtxoSetVerified\x18\x06 \x01(\bR\x11isUtxoSetVerified\x126\n" +
+	"\x16circulatingSompiSupply\x18\a \x01(\x04R\x16circulatingSompiSupply\x122\n" +
+	"\x14referenceSompiSupply\x18\b \x01(\x04R\x14referenceSompiSupply\x12>\n" +
+	"\x1areferenceSupplyDescription\x18\t \x01(\tR\x1areferenceSupplyDescription\x12*\n" +
 	"\x05error\x18\xe8\a \x01(\v2\x13.protowire.RPCErrorR\x05error\"l\n" +
 	",EstimateNetworkHashesPerSecondRequestMessage\x12\x1e\n" +
 	"\n" +

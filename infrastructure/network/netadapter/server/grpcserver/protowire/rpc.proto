@@ -752,6 +752,19 @@ message GetInfoResponseMessage{
   // reasons not to trust it, so they share an answer. A server too old to know about this field
   // leaves it false, which is the safe reading.
   bool isUtxoSetVerified = 6;
+  // The circulating supply this node currently holds, and the supply of a fixed published snapshot
+  // to compare it against - balances-20260801-00, 2026-08-01 00:00 UTC. Both are in sompi and both
+  // are zero when the node runs without --utxoindex or while the index is resyncing.
+  //
+  // The growth between them is NOT a health verdict on its own: coinbase emission adds supply
+  // continuously, so every healthy node exceeds a past snapshot and grows every second. It is for
+  // comparing nodes. Two nodes that agree with the network agree with each other; a node whose UTXO
+  // set has gained coins that do not exist reports more than its peers at the same DAA score, and one
+  // that has lost coins reports less. The reference is sent too so that nodes built from different
+  // revisions cannot be compared against different baselines unnoticed.
+  uint64 circulatingSompiSupply = 7;
+  uint64 referenceSompiSupply = 8;
+  string referenceSupplyDescription = 9;
   RPCError error = 1000;
 }
 

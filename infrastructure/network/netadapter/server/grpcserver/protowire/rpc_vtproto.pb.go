@@ -2149,6 +2149,9 @@ func (m *GetInfoResponseMessage) CloneVT() *GetInfoResponseMessage {
 	r.IsUtxoIndexed = m.IsUtxoIndexed
 	r.IsSynced = m.IsSynced
 	r.IsUtxoSetVerified = m.IsUtxoSetVerified
+	r.CirculatingSompiSupply = m.CirculatingSompiSupply
+	r.ReferenceSompiSupply = m.ReferenceSompiSupply
+	r.ReferenceSupplyDescription = m.ReferenceSupplyDescription
 	r.Error = m.Error.CloneVT()
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
@@ -5171,6 +5174,15 @@ func (this *GetInfoResponseMessage) EqualVT(that *GetInfoResponseMessage) bool {
 		return false
 	}
 	if this.IsUtxoSetVerified != that.IsUtxoSetVerified {
+		return false
+	}
+	if this.CirculatingSompiSupply != that.CirculatingSompiSupply {
+		return false
+	}
+	if this.ReferenceSompiSupply != that.ReferenceSompiSupply {
+		return false
+	}
+	if this.ReferenceSupplyDescription != that.ReferenceSupplyDescription {
 		return false
 	}
 	if !this.Error.EqualVT(that.Error) {
@@ -11005,6 +11017,23 @@ func (m *GetInfoResponseMessage) MarshalToSizedBufferVT(dAtA []byte) (int, error
 		dAtA[i] = 0x3e
 		i--
 		dAtA[i] = 0xc2
+	}
+	if len(m.ReferenceSupplyDescription) > 0 {
+		i -= len(m.ReferenceSupplyDescription)
+		copy(dAtA[i:], m.ReferenceSupplyDescription)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.ReferenceSupplyDescription)))
+		i--
+		dAtA[i] = 0x4a
+	}
+	if m.ReferenceSompiSupply != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.ReferenceSompiSupply))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.CirculatingSompiSupply != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.CirculatingSompiSupply))
+		i--
+		dAtA[i] = 0x38
 	}
 	if m.IsUtxoSetVerified {
 		i--
@@ -17186,6 +17215,23 @@ func (m *GetInfoResponseMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int,
 		i--
 		dAtA[i] = 0xc2
 	}
+	if len(m.ReferenceSupplyDescription) > 0 {
+		i -= len(m.ReferenceSupplyDescription)
+		copy(dAtA[i:], m.ReferenceSupplyDescription)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.ReferenceSupplyDescription)))
+		i--
+		dAtA[i] = 0x4a
+	}
+	if m.ReferenceSompiSupply != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.ReferenceSompiSupply))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.CirculatingSompiSupply != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.CirculatingSompiSupply))
+		i--
+		dAtA[i] = 0x38
+	}
 	if m.IsUtxoSetVerified {
 		i--
 		if m.IsUtxoSetVerified {
@@ -19876,6 +19922,16 @@ func (m *GetInfoResponseMessage) SizeVT() (n int) {
 	}
 	if m.IsUtxoSetVerified {
 		n += 2
+	}
+	if m.CirculatingSompiSupply != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.CirculatingSompiSupply))
+	}
+	if m.ReferenceSompiSupply != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.ReferenceSompiSupply))
+	}
+	l = len(m.ReferenceSupplyDescription)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	if m.Error != nil {
 		l = m.Error.SizeVT()
@@ -32028,6 +32084,76 @@ func (m *GetInfoResponseMessage) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.IsUtxoSetVerified = bool(v != 0)
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CirculatingSompiSupply", wireType)
+			}
+			m.CirculatingSompiSupply = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CirculatingSompiSupply |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceSompiSupply", wireType)
+			}
+			m.ReferenceSompiSupply = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReferenceSompiSupply |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceSupplyDescription", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ReferenceSupplyDescription = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		case 1000:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
@@ -45655,6 +45781,80 @@ func (m *GetInfoResponseMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 				}
 			}
 			m.IsUtxoSetVerified = bool(v != 0)
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CirculatingSompiSupply", wireType)
+			}
+			m.CirculatingSompiSupply = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CirculatingSompiSupply |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceSompiSupply", wireType)
+			}
+			m.ReferenceSompiSupply = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReferenceSompiSupply |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceSupplyDescription", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var stringValue string
+			if intStringLen > 0 {
+				stringValue = unsafe.String(&dAtA[iNdEx], intStringLen)
+			}
+			m.ReferenceSupplyDescription = stringValue
+			iNdEx = postIndex
 		case 1000:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
