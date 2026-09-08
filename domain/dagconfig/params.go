@@ -214,6 +214,16 @@ func (p *Params) targetTimePerBlockForCurrentVersion() time.Duration {
 	return p.TargetTimePerBlock[currentBlockVersionIndexForSlice(len(p.TargetTimePerBlock))]
 }
 
+// TargetTimePerBlockForCurrentVersion is the exported form, for callers outside this package that
+// need the block rate the network is actually running at. Indexing TargetTimePerBlock directly with
+// constants.GetBlockVersion()-1 is not the same thing: the version is a process-global that starts
+// at 1 and is only raised as blocks arrive, so anything reading it during startup gets version 1's
+// parameters and keeps them. Callers should therefore call this at the point of use rather than
+// caching its result.
+func (p *Params) TargetTimePerBlockForCurrentVersion() time.Duration {
+	return p.targetTimePerBlockForCurrentVersion()
+}
+
 func (p *Params) finalityDurationForCurrentVersion() time.Duration {
 	return p.FinalityDuration[currentBlockVersionIndexForSlice(len(p.FinalityDuration))]
 }

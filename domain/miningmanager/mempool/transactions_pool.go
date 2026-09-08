@@ -133,7 +133,7 @@ func (tp *transactionsPool) expireOldTransactions() error {
 		return err
 	}
 
-	if virtualDAAScore-tp.lastExpireScanDAAScore < tp.mempool.config.TransactionExpireScanIntervalDAAScore ||
+	if virtualDAAScore-tp.lastExpireScanDAAScore < tp.mempool.config.transactionExpireScanIntervalDAAScore() ||
 		time.Since(tp.lastExpireScanTime).Seconds() < float64(tp.mempool.config.TransactionExpireScanIntervalSeconds) {
 		return nil
 	}
@@ -147,9 +147,9 @@ func (tp *transactionsPool) expireOldTransactions() error {
 
 		// Remove all transactions whose addedAtDAAScore is older then TransactionExpireIntervalDAAScore
 		daaScoreSinceAdded := virtualDAAScore - mempoolTransaction.AddedAtDAAScore()
-		if daaScoreSinceAdded > tp.mempool.config.TransactionExpireIntervalDAAScore {
+		if daaScoreSinceAdded > tp.mempool.config.transactionExpireIntervalDAAScore() {
 			log.Debugf("Removing transaction %s, because it expired. DAAScore moved by %d, expire interval: %d",
-				mempoolTransaction.TransactionID(), daaScoreSinceAdded, tp.mempool.config.TransactionExpireIntervalDAAScore)
+				mempoolTransaction.TransactionID(), daaScoreSinceAdded, tp.mempool.config.transactionExpireIntervalDAAScore())
 			expired++
 			err = tp.mempool.removeTransaction(mempoolTransaction.TransactionID(), true)
 			if err != nil {
@@ -165,7 +165,7 @@ func (tp *transactionsPool) expireOldTransactions() error {
 	if expired > 0 {
 		log.Infof("Expired %d transaction(s) from the mempool: they were not mined within %d DAA "+
 			"score of being added. Dependent transactions were removed with them",
-			expired, tp.mempool.config.TransactionExpireIntervalDAAScore)
+			expired, tp.mempool.config.transactionExpireIntervalDAAScore())
 	}
 
 	tp.lastExpireScanDAAScore = virtualDAAScore

@@ -288,7 +288,7 @@ func (op *orphansPool) expireOrphanTransactions() error {
 		return err
 	}
 
-	if virtualDAAScore-op.lastExpireScan < op.mempool.config.OrphanExpireScanIntervalDAAScore {
+	if virtualDAAScore-op.lastExpireScan < op.mempool.config.orphanExpireScanIntervalDAAScore() {
 		return nil
 	}
 
@@ -299,7 +299,7 @@ func (op *orphansPool) expireOrphanTransactions() error {
 		}
 
 		// Remove all transactions whose addedAtDAAScore is older then TransactionExpireIntervalDAAScore
-		if virtualDAAScore-orphanTransaction.AddedAtDAAScore() > op.mempool.config.OrphanExpireIntervalDAAScore {
+		if virtualDAAScore-orphanTransaction.AddedAtDAAScore() > op.mempool.config.orphanExpireIntervalDAAScore() {
 			err = op.removeOrphan(orphanTransaction.TransactionID(), false)
 			if err != nil {
 				return err

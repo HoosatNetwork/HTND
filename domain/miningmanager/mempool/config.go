@@ -1,8 +1,6 @@
 package mempool
 
 import (
-	"time"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 
 	"github.com/HoosatNetwork/HTND/util"
@@ -43,19 +41,22 @@ const (
 
 // Config represents a mempool configuration
 type Config struct {
-	MaximumTransactionCount               uint64
-	TransactionExpireIntervalDAAScore     uint64
-	TransactionExpireScanIntervalDAAScore uint64
-	TransactionExpireScanIntervalSeconds  uint64
-	OrphanExpireIntervalDAAScore          uint64
-	OrphanExpireScanIntervalDAAScore      uint64
-	MaximumOrphanTransactionMass          uint64
-	MaximumOrphanTransactionCount         uint64
-	AcceptNonStandard                     bool
-	MaximumMassPerBlock                   uint64
-	MinimumRelayTransactionFee            util.Amount
-	MinimumStandardTransactionVersion     uint16
-	MaximumStandardTransactionVersion     uint16
+	MaximumTransactionCount uint64
+
+	// Expiry is configured in seconds and converted to DAA score at the point of use, by
+	// transactionExpireIntervalDAAScore and friends. It used to be converted once, in DefaultConfig,
+	// which was wrong twice over - see those methods.
+	TransactionExpireIntervalSeconds     uint64
+	TransactionExpireScanIntervalSeconds uint64
+	OrphanExpireIntervalSeconds          uint64
+	OrphanExpireScanIntervalSeconds      uint64
+	MaximumOrphanTransactionMass         uint64
+	MaximumOrphanTransactionCount        uint64
+	AcceptNonStandard                    bool
+	MaximumMassPerBlock                  uint64
+	MinimumRelayTransactionFee           util.Amount
+	MinimumStandardTransactionVersion    uint16
+	MaximumStandardTransactionVersion    uint16
 
 	// Compound transaction rate limiting configuration
 	CompoundTxRateLimitEnabled       bool
@@ -73,22 +74,19 @@ type Config struct {
 
 // DefaultConfig returns the default mempool configuration
 func DefaultConfig(dagParams *dagconfig.Params) *Config {
-	targetBlocksPerSecond := time.Second.Seconds() / dagParams.TargetTimePerBlock[constants.GetBlockVersion()-1].Seconds()
-
 	return &Config{
-		MaximumTransactionCount:               defaultMaximumTransactionCount,
-		TransactionExpireIntervalDAAScore:     uint64(float64(defaultTransactionExpireIntervalSeconds) / targetBlocksPerSecond),
-		TransactionExpireScanIntervalDAAScore: uint64(float64(defaultTransactionExpireScanIntervalSeconds) / targetBlocksPerSecond),
-		TransactionExpireScanIntervalSeconds:  defaultTransactionExpireScanIntervalSeconds,
-		OrphanExpireIntervalDAAScore:          uint64(float64(defaultOrphanExpireIntervalSeconds) / targetBlocksPerSecond),
-		OrphanExpireScanIntervalDAAScore:      uint64(float64(defaultOrphanExpireScanIntervalSeconds) / targetBlocksPerSecond),
-		MaximumOrphanTransactionMass:          defaultMaximumOrphanTransactionMass,
-		MaximumOrphanTransactionCount:         defaultMaximumOrphanTransactionCount,
-		AcceptNonStandard:                     dagParams.RelayNonStdTxs,
-		MaximumMassPerBlock:                   dagParams.MaxBlockMass[constants.GetBlockVersion()-1],
-		MinimumRelayTransactionFee:            defaultMinimumRelayTransactionFee,
-		MinimumStandardTransactionVersion:     defaultMinimumStandardTransactionVersion,
-		MaximumStandardTransactionVersion:     defaultMaximumStandardTransactionVersion,
+		MaximumTransactionCount:              defaultMaximumTransactionCount,
+		TransactionExpireIntervalSeconds:     defaultTransactionExpireIntervalSeconds,
+		TransactionExpireScanIntervalSeconds: defaultTransactionExpireScanIntervalSeconds,
+		OrphanExpireIntervalSeconds:          defaultOrphanExpireIntervalSeconds,
+		OrphanExpireScanIntervalSeconds:      defaultOrphanExpireScanIntervalSeconds,
+		MaximumOrphanTransactionMass:         defaultMaximumOrphanTransactionMass,
+		MaximumOrphanTransactionCount:        defaultMaximumOrphanTransactionCount,
+		AcceptNonStandard:                    dagParams.RelayNonStdTxs,
+		MaximumMassPerBlock:                  dagParams.MaxBlockMass[constants.GetBlockVersion()-1],
+		MinimumRelayTransactionFee:           defaultMinimumRelayTransactionFee,
+		MinimumStandardTransactionVersion:    defaultMinimumStandardTransactionVersion,
+		MaximumStandardTransactionVersion:    defaultMaximumStandardTransactionVersion,
 
 		// Compound transaction rate limiting
 		CompoundTxRateLimitEnabled:       defaultCompoundTxRateLimitEnabled,
@@ -105,4 +103,51 @@ func DefaultConfig(dagParams *dagconfig.Params) *Config {
 			"hoosat:qpkcfshjeazmwex3t7x7qlctmhhratqauhkd5j254vfnmnuec7k6q4yzppn5q", // Frozen wallet address
 		},
 	}
+}
+
+// blocksPerSecond is the rate the network is currently targeting. Read at the point of use, never
+// cached: the block version is a process-global that starts at 1 and is raised later as blocks
+// arrive, so a value computed during startup describes version 1 forever.
+func (c *Config) blocksPerSecond() float64 {
+	targetTimePerBlock := c.DAGParams.TargetTimePerBlockForCurrentVersion().Seconds()
+	if targetTimePerBlock <= 0 {
+		return 1
+	}
+	return 1 / targetTimePerBlock
+}
+
+// secondsToDAAScore converts a duration in seconds into the number of blocks the network expects to
+// produce in that time.
+//
+// This used to divide by the block rate instead of multiplying by it, which is not a unit
+// conversion at all - it yields seconds squared per block. It went unnoticed because it is correct
+// at exactly one block per second, which is what the first four block versions target and, because
+// the block version defaults to 1 until blocks arrive, what DefaultConfig always saw. The current
+// versions target 200ms, so the intended 60-second mempool lifetime was being applied as 60 blocks -
+// twelve seconds - and had the block version been read correctly it would have been 12 blocks, or
+// under three seconds. Transactions that were not mined almost immediately were dropped from every
+// mempool on the network, taking their dependants with them.
+func (c *Config) secondsToDAAScore(seconds uint64) uint64 {
+	score := uint64(float64(seconds) * c.blocksPerSecond())
+	if score == 0 {
+		// Never collapse to zero: a zero interval expires everything on the first scan.
+		return 1
+	}
+	return score
+}
+
+func (c *Config) transactionExpireIntervalDAAScore() uint64 {
+	return c.secondsToDAAScore(c.TransactionExpireIntervalSeconds)
+}
+
+func (c *Config) transactionExpireScanIntervalDAAScore() uint64 {
+	return c.secondsToDAAScore(c.TransactionExpireScanIntervalSeconds)
+}
+
+func (c *Config) orphanExpireIntervalDAAScore() uint64 {
+	return c.secondsToDAAScore(c.OrphanExpireIntervalSeconds)
+}
+
+func (c *Config) orphanExpireScanIntervalDAAScore() uint64 {
+	return c.secondsToDAAScore(c.OrphanExpireScanIntervalSeconds)
 }
