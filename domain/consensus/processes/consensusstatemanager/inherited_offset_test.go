@@ -158,3 +158,59 @@ func TestCoinAlreadyInVirtualIsNotTreatedAsMissing(t *testing.T) {
 			"disagreement and must not be excused as an inherited offset")
 	}
 }
+
+// TestCoinCreatedAndSpentInTheSamePastLeavesNoDiffEntry is the case a live node hit within minutes
+// of this check being deployed, and it was a false conviction.
+//
+// A coin that this same past both creates and spends leaves no trace in the diff at all.
+// mutableUTXODiff.removeEntry cancels the pending toAdd rather than recording a removal, so the coin
+// is in neither toAdd nor toRemove - and it was never in virtual either, having been created and
+// destroyed before virtual ever saw it. The earlier version of this check only forgave the case
+// where the coin sat in toRemove, so it convicted every block carrying a transaction that spends
+// another transaction merged alongside it.
+//
+// A chain of compounding transactions is exactly that shape, which is why a node syncing live
+// traffic reported a block as internally inconsistent when nothing was wrong with it.
+func TestCoinCreatedAndSpentInTheSamePastLeavesNoDiffEntry(t *testing.T) {
+	const daaScore = 900
+
+	parent := acceptedCoinbase(100)
+	parentID := consensushashing.TransactionID(parent)
+	parentOutput := externalapi.DomainOutpoint{TransactionID: *parentID, Index: 0}
+
+	// A second accepted transaction spending the first one's output, both merged by this block.
+	child := acceptedTransactionOfKind(externalapi.DomainSubnetworkID{},
+		[]*externalapi.DomainOutpoint{&parentOutput}, 90)
+	childID := consensushashing.TransactionID(child)
+	childOutput := externalapi.DomainOutpoint{TransactionID: *childID, Index: 0}
+
+	acceptanceData := externalapi.AcceptanceData{{
+		BlockHash: externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{3}),
+		TransactionAcceptanceData: []*externalapi.TransactionAcceptanceData{
+			{Transaction: parent, IsAccepted: true},
+			{Transaction: child, IsAccepted: true},
+		},
+	}}
+
+	// The child's output survives and is in toAdd. The parent's output was created and spent here,
+	// so it appears nowhere - which is what the diff genuinely looks like.
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
+	toAdd := map[externalapi.DomainOutpoint]externalapi.UTXOEntry{
+		childOutput: utxo.NewUTXOEntry(90, script, false, daaScore),
+	}
+	diff, err := utxo.NewUTXODiffFromCollections(utxo.NewUTXOCollection(toAdd),
+		utxo.NewUTXOCollection(map[externalapi.DomainOutpoint]externalapi.UTXOEntry{}))
+	if err != nil {
+		t.Fatalf("NewUTXODiffFromCollections: %+v", err)
+	}
+
+	// Virtual holds neither: the parent's output never reached it, and the child's is accounted for
+	// by the diff.
+	tolerable, reason := blockOnlyCarriesTheInheritedOffset(acceptanceData, diff, daaScore,
+		func(*externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) { return nil, false })
+
+	if !tolerable {
+		t.Errorf("a coin created and spent in the same past nets to nothing and must not be treated "+
+			"as a block losing a coin, got: %s", reason)
+	}
+}

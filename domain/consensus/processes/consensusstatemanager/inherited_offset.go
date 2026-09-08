@@ -60,6 +60,24 @@ func blockOnlyCarriesTheInheritedOffset(acceptanceData externalapi.AcceptanceDat
 		return lookupVirtual(outpoint)
 	}
 
+	// Outpoints that this same past both creates and spends. Such a coin nets to nothing and leaves
+	// no trace in the diff at all: mutableUTXODiff.removeEntry cancels the pending toAdd rather than
+	// recording a removal, so the coin appears in neither toAdd nor toRemove, and it was never in
+	// virtual either. Without this set, every block carrying a transaction that spends another
+	// transaction merged alongside it is convicted of losing a coin it never lost - and a chain of
+	// compounding transactions is exactly that shape.
+	spentInThisPast := make(map[externalapi.DomainOutpoint]struct{})
+	for _, blockAcceptanceData := range acceptanceData {
+		for _, transactionAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
+			if !transactionAcceptance.IsAccepted {
+				continue
+			}
+			for _, input := range transactionAcceptance.Transaction.Inputs {
+				spentInThisPast[input.PreviousOutpoint] = struct{}{}
+			}
+		}
+	}
+
 	for _, blockAcceptanceData := range acceptanceData {
 		for i, transactionAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
 			if !transactionAcceptance.IsAccepted {
@@ -80,6 +98,11 @@ func blockOnlyCarriesTheInheritedOffset(acceptanceData externalapi.AcceptanceDat
 					// spent it - created and destroyed, netting to nothing, which the multiset nets to
 					// nothing as well.
 					if pastUTXODiff.ToRemove().Contains(outpoint) {
+						continue
+					}
+					if _, spentHere := spentInThisPast[*outpoint]; spentHere {
+						// Created and destroyed inside this same past. It nets to nothing in the diff
+						// and nets to nothing in the multiset, so its absence is correct.
 						continue
 					}
 					return false, fmt.Sprintf("accepted transaction %s output %d is absent from the "+
