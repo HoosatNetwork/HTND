@@ -93,14 +93,15 @@ type consensusStateManager struct {
 	// missingInput* accumulate, and periodically report, transactions this node refused during block
 	// acceptance because it does not hold a coin they spend. See noteAcceptanceRejection. Guarded by
 	// a mutex because acceptance runs transactions in per-block goroutines.
-	missingInputMutex        sync.Mutex
-	missingInputRejections   int
-	missingInputLastReport   time.Time
-	missingInputExample      string
-	missingInputExampleIndex uint32
-	missingInputExampleTx    string
-	missingInputExampleBlock string
-	missingInputExampleCount int
+	missingInputMutex         sync.Mutex
+	missingInputRejections    int
+	missingInputLastReport    time.Time
+	missingInputExample       string
+	missingInputExampleIndex  uint32
+	missingInputExampleTx     string
+	missingInputExampleBlock  string
+	missingInputExampleCount  int
+	missingInputExampleInputs int
 
 	// refuseMismatchedImportedPruningPointUTXOSet makes an imported pruning point UTXO set that does
 	// not hash to its own header commitment a hard failure, so IBD moves on to another peer instead of

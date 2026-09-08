@@ -369,7 +369,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	log.Tracef("Populating transaction %s with UTXO entries", transactionID)
 	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable())
 	if err != nil {
-		csm.noteAcceptanceRejection(blockHash, transactionIDPtr, err)
+		csm.noteAcceptanceRejection(blockHash, transactionIDPtr, len(transaction.Inputs), err)
 		// The cascade path. Not an error here by design - the transaction simply cannot be accepted
 		// against a set that lacks its input - but it is the one rejection reason that means this
 		// node's own gap just got bigger.
