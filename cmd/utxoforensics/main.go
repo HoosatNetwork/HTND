@@ -99,6 +99,10 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	supplyByDAA = flag.Uint64("supplybydaa", 0, "bucket size in DAA scores. Reports how much of this "+
+		"node's supply carries a stamp in each bucket, with a running total, so growth since a point "+
+		"in time can be accounted for rather than guessed at")
+
 	daaWindow = flag.String("daawindow", "", "\"from-to\" DAA score range. Groups every coin this "+
 		"node holds whose stamp falls in that range by address, largest first - which addresses "+
 		"gained, how much, and in how many coins. Only coins still UNSPENT are visible, so this is "+
@@ -252,6 +256,10 @@ func main() {
 
 	if *daaWindow != "" {
 		addressesGainingInDAAWindow(s, sa, *daaWindow)
+	}
+
+	if *supplyByDAA > 0 {
+		supplyHistogramByDAAScore(s, sa, *supplyByDAA)
 	}
 
 	if *reconstruct {
@@ -1792,6 +1800,11 @@ func balanceComparison(s *stores, sa *model.StagingArea, csvPath string) {
 		if _, inReference := reference[address]; !inReference {
 			newAddresses++
 			newBalance += balance
+			// An address the reference never mentions held nothing as far as the reference is
+			// concerned, so its whole balance is a gain. Ranked alongside the rest rather than
+			// listed apart, because "which addresses account for the growth" does not care whether
+			// the snapshot happened to know about them.
+			growers = append(growers, mover{address, 0, balance, balance})
 		}
 	}
 
@@ -1821,13 +1834,42 @@ func balanceComparison(s *stores, sa *model.StagingArea, csvPath string) {
 	reportExpectedEmission(s, sa, referenceTotal, currentTotal, newBalance)
 
 	if len(growers) > 0 {
-		shown := len(growers)
-		if shown > 10 {
-			shown = 10
+		var totalGain uint64
+		for _, m := range growers {
+			totalGain += m.by
 		}
-		fmt.Printf("\n  largest increases among reference addresses:\n")
-		for _, m := range growers[:shown] {
-			fmt.Printf("    %s\n      reference %d -> now %d  (+%d)\n", m.address, m.reference, m.now, m.by)
+		var netGrowth uint64
+		if currentTotal > referenceTotal {
+			netGrowth = currentTotal - referenceTotal
+		}
+
+		shown := len(growers)
+		if shown > 25 {
+			shown = 25
+		}
+		fmt.Printf("\n  largest gainers, counting addresses the reference never mentioned as having\n")
+		fmt.Printf("  started from nothing. %d addresses gained %d sompi between them", len(growers), totalGain)
+		if netGrowth > 0 {
+			fmt.Printf("; net growth is\n  %d, the difference being what other addresses lost", netGrowth)
+		}
+		fmt.Printf(".\n")
+		var running uint64
+		for i, m := range growers[:shown] {
+			running += m.by
+			share := ""
+			if netGrowth > 0 {
+				share = fmt.Sprintf("  [%.1f%% of net growth, %.1f%% cumulative]",
+					100*float64(m.by)/float64(netGrowth), 100*float64(running)/float64(netGrowth))
+			}
+			origin := fmt.Sprintf("reference %d", m.reference)
+			if m.reference == 0 {
+				origin = "NOT IN THE REFERENCE"
+			}
+			fmt.Printf("    %2d. %s\n        %s -> now %d  (+%d)%s\n",
+				i+1, m.address, origin, m.now, m.by, share)
+		}
+		if len(growers) > shown {
+			fmt.Printf("    ... and %d more gaining addresses\n", len(growers)-shown)
 		}
 	}
 }
@@ -2195,5 +2237,83 @@ func addressesGainingInDAAWindow(s *stores, sa *model.StagingArea, window string
 	}
 	if len(rows) > shown {
 		fmt.Printf("    ... and %d more addresses\n", len(rows)-shown)
+	}
+}
+
+// supplyHistogramByDAAScore reports where this node's supply sits along the DAA axis.
+//
+// It exists because "supply grew by X since a snapshot" and "coins stamped in some window total Y"
+// are different quantities, and comparing them directly invites a wrong conclusion. Growth is NET:
+// spending an old coin destroys it and creates new ones carrying a fresh stamp, so the coins stamped
+// after a point in time sum to more than the growth over that period - the difference is churn, not
+// issuance. This lays out the whole distribution so the arithmetic can be done rather than assumed.
+func supplyHistogramByDAAScore(s *stores, sa *model.StagingArea, bucketSize uint64) {
+	fmt.Printf("\n=== supply by the DAA score its coins are stamped with (buckets of %d)\n", bucketSize)
+
+	iterator, err := s.state.VirtualUTXOSetIterator(s.db, sa)
+	if err != nil {
+		fmt.Printf("  virtual UTXO set iterator: %v\n", err)
+		return
+	}
+	defer iterator.Close()
+
+	type bucket struct{ amount, coins, coinbase uint64 }
+	buckets := make(map[uint64]*bucket)
+	var total, coinbaseTotal uint64
+	var lowest, highest uint64
+	lowest = ^uint64(0)
+	coins := 0
+
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		_, entry, err := iterator.Get()
+		if err != nil {
+			continue
+		}
+		coins++
+		score := entry.BlockDAAScore()
+		if score < lowest {
+			lowest = score
+		}
+		if score > highest {
+			highest = score
+		}
+		total += entry.Amount()
+		if entry.IsCoinbase() {
+			coinbaseTotal += entry.Amount()
+		}
+		key := score / bucketSize * bucketSize
+		held := buckets[key]
+		if held == nil {
+			held = &bucket{}
+			buckets[key] = held
+		}
+		held.amount += entry.Amount()
+		held.coins++
+		if entry.IsCoinbase() {
+			held.coinbase += entry.Amount()
+		}
+	}
+
+	if coins == 0 {
+		fmt.Printf("  the UTXO set is empty\n")
+		return
+	}
+
+	keys := make([]uint64, 0, len(buckets))
+	for key := range buckets {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	fmt.Printf("  %d coins, %d sompi total, stamps from %d to %d\n", coins, total, lowest, highest)
+	fmt.Printf("    minted by a coinbase: %d sompi (%.2f%%)\n\n", coinbaseTotal,
+		100*float64(coinbaseTotal)/float64(total))
+	fmt.Printf("  %-14s %22s %10s %9s %12s\n", "from DAA", "sompi", "coins", "coinbase%", "cumulative%")
+	var running uint64
+	for _, key := range keys {
+		held := buckets[key]
+		running += held.amount
+		fmt.Printf("  %-14d %22d %10d %8.2f%% %11.2f%%\n", key, held.amount, held.coins,
+			100*float64(held.coinbase)/float64(held.amount), 100*float64(running)/float64(total))
 	}
 }
