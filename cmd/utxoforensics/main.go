@@ -51,7 +51,9 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/utxodiffstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/coinbasemanager"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
@@ -97,6 +99,11 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	referenceDAAScore = flag.Uint64("referencedaascore", 0, "the DAA score the -balancecheck "+
+		"reference snapshot was taken at. When zero it is estimated from the snapshot's timestamp and "+
+		"the network's target block rate, which is only as good as the network having run at its "+
+		"target rate. Supply it when you know it and the expected-emission figure becomes exact")
+
 	balanceCheck = flag.String("balancecheck", "", "path to a reference balance snapshot CSV "+
 		"(script_public_key_address,balance) and compare this node's UTXO set against it per address. "+
 		"Answers how far a datadir has drifted from a known-good point in time, which is how you pick "+
@@ -1793,9 +1800,8 @@ func balanceComparison(s *stores, sa *model.StagingArea, csvPath string) {
 	} else {
 		fmt.Printf("  shrinkage       : -%d sompi\n", referenceTotal-currentTotal)
 	}
-	fmt.Printf("  Growth is expected - coinbase emission adds supply continuously. This number is\n")
-	fmt.Printf("  informative COMPARED BETWEEN NODES at a similar DAA score, not on its own. Run it on\n")
-	fmt.Printf("  each candidate datadir and prefer the one closest to its peers.\n")
+
+	reportExpectedEmission(s, sa, referenceTotal, currentTotal, newBalance)
 
 	if len(growers) > 0 {
 		shown := len(growers)
@@ -1849,4 +1855,136 @@ func readReferenceBalances(path string) (map[string]uint64, uint64, error) {
 		return nil, 0, err
 	}
 	return balances, total, nil
+}
+
+// reportExpectedEmission works out how much supply the network should have emitted since the
+// reference snapshot was taken, so growth can be judged against expectation instead of only against
+// other nodes.
+//
+// Emission is a pure function of DAA score: every block pays coinbasemanager.BlockSubsidy for its
+// own score, and DAA score advances about one per block. So the supply added between two scores is
+// the sum of the subsidy over that range - which is computed here from the same function consensus
+// uses, not a copy of the schedule.
+//
+// Two honest limits on the result, both stated in the output rather than buried here. The reference
+// DAA score is estimated from the snapshot's timestamp and the target block rate unless the operator
+// supplies it, and a network running above or below its target rate moves that estimate. And the
+// whole range is priced at the CURRENT block version's target time per block; a range spanning a
+// version change that altered the block rate is priced at today's rate throughout.
+//
+// What the comparison is for: a node whose actual growth materially EXCEEDS expected emission holds
+// coins that were never emitted, which is inflation from duplicated or mis-stamped entries. One that
+// falls materially short has lost coins the network has. Both are reasons to prefer a different
+// datadir to rebaseline from.
+func reportExpectedEmission(s *stores, sa *model.StagingArea, referenceTotal, currentTotal,
+	heldByAddressesAbsentFromReference uint64,
+) {
+	tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa)
+	if err != nil {
+		fmt.Printf("\n  expected emission: cannot read the selected tip (%v)\n", err)
+		return
+	}
+	tipHeader, err := s.headers.BlockHeader(s.db, sa, tipHash)
+	if err != nil {
+		fmt.Printf("\n  expected emission: cannot read the tip header (%v)\n", err)
+		return
+	}
+	currentDAAScore := tipHeader.DAAScore()
+	blockVersion := tipHeader.Version()
+	params := &dagconfig.MainnetParams
+	targetSecondsPerBlock := params.TargetTimePerBlock[currentBlockVersionIndex(len(params.TargetTimePerBlock),
+		blockVersion)].Seconds()
+
+	estimated := false
+	referenceScore := *referenceDAAScore
+	if referenceScore == 0 {
+		estimated = true
+		elapsedSeconds := float64(tipHeader.TimeInMilliseconds()-
+			constants.ReferenceSupplyTimeUnixMilliseconds) / 1000
+		if elapsedSeconds <= 0 || targetSecondsPerBlock <= 0 {
+			fmt.Printf("\n  expected emission: the tip predates the reference snapshot; nothing to compare\n")
+			return
+		}
+		blocksSince := uint64(elapsedSeconds / targetSecondsPerBlock)
+		if blocksSince >= currentDAAScore {
+			fmt.Printf("\n  expected emission: the estimated block count exceeds the tip's DAA score; " +
+				"pass -referencedaascore\n")
+			return
+		}
+		referenceScore = currentDAAScore - blocksSince
+	}
+
+	var expected uint64
+	for score := referenceScore + 1; score <= currentDAAScore; score++ {
+		expected += coinbasemanager.BlockSubsidy(params, score, blockVersion)
+	}
+
+	fmt.Printf("\n  reference DAA score : %d%s\n", referenceScore,
+		map[bool]string{true: "  (estimated from the snapshot timestamp and the target block rate)",
+			false: "  (supplied)"}[estimated])
+	fmt.Printf("  tip DAA score       : %d  (block version %d, %.3fs target per block)\n",
+		currentDAAScore, blockVersion, targetSecondsPerBlock)
+	fmt.Printf("  blocks in between   : %d\n", currentDAAScore-referenceScore)
+	fmt.Printf("  expected emission   : %d sompi\n", expected)
+
+	if currentTotal < referenceTotal {
+		fmt.Printf("  actual growth       : NEGATIVE (%d sompi below the reference)\n",
+			referenceTotal-currentTotal)
+		fmt.Printf("  This node holds less than the snapshot did AND should have gained %d. It is\n", expected)
+		fmt.Printf("  missing coins the network has.\n")
+		return
+	}
+	actual := currentTotal - referenceTotal
+	fmt.Printf("  actual growth       : %d sompi\n", actual)
+	switch {
+	case actual > expected:
+		excess := actual - expected
+		fmt.Printf("  EXCESS              : +%d sompi (%.4f%% of expected)\n", excess,
+			100*float64(excess)/float64(expected))
+		// Before reading that as inflation, rule out the reference. This whole comparison assumes the
+		// snapshot is a COMPLETE picture of the UTXO set at its moment - every address, every coin. If
+		// it omits addresses that already held balances, its total understates the supply of that
+		// moment and every excess computed from it is overstated by however much it left out.
+		//
+		// The measurable symptom of that is coins sitting at addresses the reference has never heard
+		// of. Some of those are genuinely new since the snapshot, so their presence is not proof; but
+		// when they account for a large share of the excess, the reference is the more likely
+		// explanation than the network having issued coins it did not issue.
+		if heldByAddressesAbsentFromReference*2 >= excess {
+			fmt.Printf("  BUT %d sompi of this node's supply sits at addresses the reference does not\n",
+				heldByAddressesAbsentFromReference)
+			fmt.Printf("  list at all - that is %.1f%% of the excess. A reference that omits addresses\n",
+				100*float64(heldByAddressesAbsentFromReference)/float64(excess))
+			fmt.Printf("  which already held coins understates the supply of its own moment, and every\n")
+			fmt.Printf("  excess measured against it is overstated by exactly that much. Establish that\n")
+			fmt.Printf("  the snapshot is a COMPLETE UTXO set before reading this as inflation.\n")
+			break
+		}
+		fmt.Printf("  This node gained more than the network emitted. Coins it holds were never issued.\n")
+	case expected > actual:
+		shortfall := expected - actual
+		fmt.Printf("  SHORTFALL           : -%d sompi (%.4f%% of expected)\n", shortfall,
+			100*float64(shortfall)/float64(expected))
+		fmt.Printf("  This node gained less than the network emitted. Either it is missing coins, or\n")
+		fmt.Printf("  the reference DAA score is off - pass -referencedaascore to remove that doubt.\n")
+	default:
+		fmt.Printf("  Actual growth matches expected emission exactly.\n")
+	}
+	if estimated {
+		fmt.Printf("  The reference DAA score was ESTIMATED, so treat a small difference either way as\n")
+		fmt.Printf("  noise in that estimate rather than as a finding.\n")
+	}
+}
+
+// currentBlockVersionIndex bounds a block version to a per-version parameter slice, the way
+// dagconfig does internally.
+func currentBlockVersionIndex(length int, blockVersion uint16) int {
+	index := int(blockVersion) - 1
+	if index < 0 {
+		index = 0
+	}
+	if index >= length {
+		index = length - 1
+	}
+	return index
 }

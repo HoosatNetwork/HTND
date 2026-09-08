@@ -1,6 +1,7 @@
 package coinbasemanager
 
 import (
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 	"math"
 	"sort"
 	"time"
@@ -526,11 +527,34 @@ func (c *coinbaseManager) CalcBlockSubsidy(stagingArea *model.StagingArea, block
 	return blockSubsidy, nil
 }
 
+// BlockSubsidy is the coinbase subsidy a block at the given DAA score pays, as a pure function of
+// the network parameters. It is the same calculation CalcBlockSubsidy performs, without needing a
+// consensus instance or a database, so tools can compute expected emission over a range of DAA
+// scores rather than reimplementing the schedule and drifting from it.
+//
+// blockVersion matters: the per-year figures in subsidyByDeflationaryYearTable are per SECOND, and
+// are scaled by that version's target time per block. A version targeting 200ms therefore pays a
+// fifth of what a version targeting one second pays, for the same emission rate.
+func BlockSubsidy(params *dagconfig.Params, blockDAAScore uint64, blockVersion uint16) uint64 {
+	if blockDAAScore < params.DeflationaryPhaseDaaScore {
+		return params.PreDeflationaryPhaseBaseSubsidy
+	}
+	return deflationaryPeriodBlockSubsidy(params.TargetTimePerBlock, params.DeflationaryPhaseDaaScore,
+		blockDAAScore, blockVersion)
+}
+
 func (c *coinbaseManager) calcDeflationaryPeriodBlockSubsidy(blockDaaScore uint64, blockVersion uint16) uint64 {
+	return deflationaryPeriodBlockSubsidy(c.targetTimePerBlock, c.deflationaryPhaseDaaScore,
+		blockDaaScore, blockVersion)
+}
+
+func deflationaryPeriodBlockSubsidy(targetTimePerBlock []time.Duration, deflationaryPhaseDaaScore uint64,
+	blockDaaScore uint64, blockVersion uint16,
+) uint64 {
 	// We define a year as 365.25 days and a month as 365.25 / 12 = 30.4375
 	// secondsPerMonth = 30.4375 * 24 * 60 * 60 = 2629800
 	// blocksPerYear = 2629800 * 12 / 0.20s (5BPS) = 157788000
-	blocksPerYear := uint64(31557600 / c.targetTimePerBlock[blockVersion-1].Seconds())
+	blocksPerYear := uint64(31557600 / targetTimePerBlock[blockVersion-1].Seconds())
 	// var blocksPerYear = uint64(31557600)
 	// Note that this calculation implicitly assumes that block per second = 1 (by assuming daa score diff is in second units).
 	var yearsSinceDeflationStarted uint64
@@ -545,13 +569,19 @@ func (c *coinbaseManager) calcDeflationaryPeriodBlockSubsidy(blockDaaScore uint6
 		blockDaaScore += nocturneHfScore * 4
 	}
 
-	yearsSinceDeflationStarted += (blockDaaScore - c.deflationaryPhaseDaaScore) / blocksPerYear
+	yearsSinceDeflationStarted += (blockDaaScore - deflationaryPhaseDaaScore) / blocksPerYear
 
 	// Return the pre-calculated value from subsidy-per-month table
-	return c.getDeflationaryPeriodBlockSubsidyFromTable(yearsSinceDeflationStarted, blockVersion)
+	return deflationaryPeriodBlockSubsidyFromTable(yearsSinceDeflationStarted, targetTimePerBlock, blockVersion)
 }
 
 func (c *coinbaseManager) getDeflationaryPeriodBlockSubsidyFromTable(year uint64, blockVersion uint16) uint64 {
+	return deflationaryPeriodBlockSubsidyFromTable(year, c.targetTimePerBlock, blockVersion)
+}
+
+func deflationaryPeriodBlockSubsidyFromTable(year uint64, targetTimePerBlock []time.Duration,
+	blockVersion uint16,
+) uint64 {
 	if year >= uint64(len(subsidyByDeflationaryYearTable)) {
 		maxIdx := len(subsidyByDeflationaryYearTable) - 1
 		if maxIdx < 0 {
@@ -561,7 +591,7 @@ func (c *coinbaseManager) getDeflationaryPeriodBlockSubsidyFromTable(year uint64
 		// Defensive: check only for negative (already checked), so this branch is unreachable
 		year = uint64(maxIdx)
 	}
-	return uint64(float64(subsidyByDeflationaryYearTable[year]) * c.targetTimePerBlock[blockVersion-1].Seconds())
+	return uint64(float64(subsidyByDeflationaryYearTable[year]) * targetTimePerBlock[blockVersion-1].Seconds())
 }
 
 /*

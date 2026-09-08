@@ -18,3 +18,9 @@ const ReferenceSupplySompi uint64 = 640111049839169443
 // ReferenceSupplyDescription names the snapshot the figure above came from, for anyone reading a
 // GetInfo response without the source to hand.
 const ReferenceSupplyDescription = "balances-20260801-00 (2026-08-01 00:00 UTC)"
+
+// ReferenceSupplyTimeUnixMilliseconds is when the snapshot above was taken: 2026-08-01 00:00:00 UTC.
+// Used to work out how many blocks the network should have produced since, and therefore how much
+// supply it should have emitted, so a node's growth can be compared against what is expected rather
+// than only against other nodes.
+const ReferenceSupplyTimeUnixMilliseconds int64 = 1785542400000
