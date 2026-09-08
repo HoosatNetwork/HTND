@@ -99,6 +99,7 @@ func findTransactionAcceptance(context *rpccontext.Context, containingBlock *ext
 		return &transactionAcceptance{}, nil
 	}
 
+	var firstRejection *externalapi.DomainHash
 	for i, chainBlock := range chainPath.Added {
 		if i >= maxChainBlocksSearchedForAcceptance {
 			// Out of room, not out of chain. Say so rather than implying the transaction is unmerged.
@@ -112,11 +113,30 @@ func findTransactionAcceptance(context *rpccontext.Context, containingBlock *ext
 		}
 
 		mergedHere, acceptedHere := verdictForTransaction(acceptanceData, transactionID)
-		if mergedHere {
-			return &transactionAcceptance{acceptingBlock: chainBlock, accepted: acceptedHere}, nil
+		if !mergedHere {
+			continue
+		}
+		if acceptedHere {
+			return &transactionAcceptance{acceptingBlock: chainBlock, accepted: true}, nil
+		}
+		// Merged and rejected here - but that is not yet the answer. The same transaction is carried
+		// by several blocks on a DAG, and once one chain block accepts it every later chain block
+		// that merges another copy rejects that copy. Stopping at the first mention therefore
+		// reported a transaction as invalid whenever the walk happened to reach a later copy first,
+		// and which copy is reached first depends on which containing block the block-store scan
+		// returned - an arbitrary order that differs between nodes. Two nodes were observed
+		// disagreeing on thirty of forty-one transactions this way.
+		//
+		// So remember the rejection and keep looking. Acceptance anywhere on the chain settles it;
+		// only a walk that finishes having seen nothing but rejections reports one.
+		if firstRejection == nil {
+			firstRejection = chainBlock
 		}
 	}
 
+	if firstRejection != nil {
+		return &transactionAcceptance{acceptingBlock: firstRejection, accepted: false}, nil
+	}
 	return &transactionAcceptance{}, nil
 }
 
