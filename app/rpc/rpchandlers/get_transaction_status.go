@@ -66,14 +66,19 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 
 	blockHash := consensushashing.BlockHash(block)
 
-	_, blockChildren, err := context.Domain.Consensus().GetBlockRelations(blockHash)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(blockChildren) == 0 {
-		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusPending, emptyHash, 0), nil
-	}
+	// Note what is deliberately NOT done here: concluding anything from the containing block having
+	// no children.
+	//
+	// GetBlockByTransactionID scans the whole block store and returns whichever copy it meets first,
+	// in an order that is arbitrary and differs between nodes. On a DAG the same transaction sits in
+	// several blocks, so that scan can easily return a childless tip copy of a transaction the chain
+	// merged and accepted long ago. Returning "pending, 0 confirmations" on that basis reported an
+	// accepted transaction as unmerged - and did it before the acceptance search ever ran, so the
+	// answer came from block topology rather than from any verdict.
+	//
+	// A transaction that genuinely has not been merged still reports pending: findTransactionAcceptance
+	// finds no accepting block and the branch below says so. The difference is that it now says so
+	// having looked.
 
 	// Get confirmation info
 	selectedParent, err := context.Domain.Consensus().GetVirtualSelectedParent()
