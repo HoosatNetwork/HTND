@@ -2,7 +2,6 @@ package utxo
 
 import (
 	"fmt"
-	"maps"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
@@ -133,21 +132,28 @@ func resolveConflicts(funcName string, collectionA, collectionB utxoCollection,
 }
 
 // intersectionWithRemainderHavingDAAScoreInPlace calculates an intersection between two utxoCollections
-// having same DAA score, puts it into result and into remainder from collection1
+// having same DAA score, puts it into result and adds the rest of collection1 into remainder.
+//
+// remainder is added to, never emptied. That matters because withDiffInPlace passes this.toRemove as
+// remainder, and it is not empty: it already holds removals accumulated by the composition so far.
+//
+// There used to be a second, "fast" path taken when collection2 was smaller: it copied all of
+// collection1 into remainder and then deleted the matched outpoints. For an outpoint that was
+// already in remainder AND matched, that delete took the pre-existing entry with it, while the loop
+// below leaves it untouched. So composing two diffs could silently drop a pending removal, and which
+// behaviour you got depended on the relative sizes of two maps - meaning two nodes composing the
+// same diffs could reach different UTXO sets.
+//
+// A dropped removal leaves the old coin in place carrying its old BlockDAAScore. That is the
+// wrong-stamp signature measured on mainnet: 23 coins whose stamp contradicted the node's own
+// acceptance data, every one of them too high and never too low, which is what you get when a coin
+// merged by virtual (whose DAA score runs ahead) is never restamped by the block that really merged
+// it. BlockDAAScore is part of the SerializeUTXO preimage, so each such coin puts the node's UTXO
+// commitment permanently out of agreement with the network.
+//
+// The path was not faster in any case: maps.Copy over collection1 is the same O(len(collection1))
+// the loop below pays.
 func intersectionWithRemainderHavingDAAScoreInPlace(collection1, collection2, result, remainder utxoCollection) {
-	// FAST PATH: If collection2 is smaller, iterate over collection2 instead of collection1
-	if len(collection2) < len(collection1) {
-		maps.Copy(remainder, collection1)
-		for outpoint, entry2 := range collection2 {
-			if entry1, ok := collection1[outpoint]; ok && entry1.BlockDAAScore() == entry2.BlockDAAScore() {
-				result[outpoint] = entry1
-				delete(remainder, outpoint)
-			}
-		}
-		return
-	}
-
-	// STANDARD PATH: collection1 is smaller or equal
 	for outpoint, entry1 := range collection1 {
 		if entry2, ok := collection2[outpoint]; ok && entry2.BlockDAAScore() == entry1.BlockDAAScore() {
 			result[outpoint] = entry1
