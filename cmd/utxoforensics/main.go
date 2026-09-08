@@ -43,6 +43,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/daablocksstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/ghostdagdatastore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/headersselectedchainstore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/headersselectedtipstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/multisetstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/pruningstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/utxodiffstore"
@@ -91,6 +92,14 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	stampCheck = flag.Bool("stampcheck", false, "compare every unspent coin's BlockDAAScore against "+
+		"the DAA score of the chain block this node's own acceptance data says accepted it. "+
+		"AcceptedUTXOBlockDAAScore is the identity, so the two must be equal by definition - a "+
+		"disagreement is the node contradicting itself, with no reorg or cross-node explanation "+
+		"available. BlockDAAScore is part of the SerializeUTXO preimage, so each disagreement is a "+
+		"coin whose commitment contribution is permanently wrong")
+	stampCheckDepth = flag.Int("stampdepth", 400000, "chain blocks back from the tip for -stampcheck")
+
 	virtualCheck = flag.Bool("virtualcheck", false, "hash virtual's materialised UTXO table and compare it to "+
 		"virtual's own stored multiset - the same quantity maintained by two different mechanisms, so a "+
 		"mismatch localises the drift to the materialised table rather than to the multiset chain")
@@ -106,17 +115,18 @@ var (
 )
 
 type stores struct {
-	db      model.DBManager
-	headers model.BlockHeaderStore
-	blocks  model.BlockStore
-	accept  model.AcceptanceDataStore
-	ms      model.MultisetStore
-	gd      model.GHOSTDAGDataStore
-	daa     model.DAABlocksStore
-	chain   model.HeadersSelectedChainStore
-	pruning model.PruningStore
-	state   model.ConsensusStateStore
-	diffs   model.UTXODiffStore
+	db         model.DBManager
+	headers    model.BlockHeaderStore
+	blocks     model.BlockStore
+	accept     model.AcceptanceDataStore
+	ms         model.MultisetStore
+	gd         model.GHOSTDAGDataStore
+	daa        model.DAABlocksStore
+	chain      model.HeadersSelectedChainStore
+	pruning    model.PruningStore
+	state      model.ConsensusStateStore
+	diffs      model.UTXODiffStore
+	headersTip model.HeaderSelectedTipStore
 }
 
 func main() {
@@ -189,6 +199,10 @@ func main() {
 
 	if *virtualCheck {
 		virtualTableCheck(s, sa)
+	}
+
+	if *stampCheck {
+		stampConsistencyCheck(s, sa, *stampCheckDepth)
 	}
 
 	if *reconstruct {
@@ -814,14 +828,15 @@ func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
 	}
 	return &stores{
 		db: dbManager, headers: bhs, blocks: bs,
-		accept:  acceptancedatastore.New(pb, 100, false),
-		ms:      multisetstore.New(pb, 100, false),
-		gd:      ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
-		daa:     daablocksstore.New(pb, 100, 100, false),
-		chain:   headersselectedchainstore.New(pb, 100, false),
-		pruning: pruningstore.New(pb, 2, false),
-		state:   consensusstatestore.New(pb, 100, false),
-		diffs:   utxodiffstore.New(pb, 100, false),
+		accept:     acceptancedatastore.New(pb, 100, false),
+		ms:         multisetstore.New(pb, 100, false),
+		gd:         ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
+		daa:        daablocksstore.New(pb, 100, 100, false),
+		chain:      headersselectedchainstore.New(pb, 100, false),
+		pruning:    pruningstore.New(pb, 2, false),
+		state:      consensusstatestore.New(pb, 100, false),
+		diffs:      utxodiffstore.New(pb, 100, false),
+		headersTip: headersselectedtipstore.New(pb),
 	}, nil
 }
 
@@ -1416,4 +1431,99 @@ func lookUpOutpoints(s *stores, path string) {
 		}
 		fmt.Printf("    absent here too: %s\n", outpoint)
 	}
+}
+
+// stampConsistencyCheck compares what virtual holds against what this node's own acceptance data
+// says it should hold.
+//
+// Every coin an accepted transaction creates is stamped with the DAA score of the chain block that
+// merged it - utxo.AcceptedUTXOBlockDAAScore is the identity function on that score. So for any
+// unspent coin, virtual's BlockDAAScore must equal the DAA score of the chain block whose acceptance
+// data accepted its creating transaction. There is no reorg, branch or timing story that makes a
+// difference legitimate: both values come out of one node's own database.
+//
+// It matters because BlockDAAScore is part of the SerializeUTXO preimage. A coin carrying the wrong
+// score hashes to something no other node will reproduce, so the node's UTXO commitment is
+// permanently wrong by that coin's contribution - and lookups keyed on (outpoint, DAA score), which
+// is how mutableUTXODiff.removeEntry matches a spend, stop finding it.
+func stampConsistencyCheck(s *stores, sa *model.StagingArea, depth int) {
+	fmt.Printf("\n=== stamp consistency: virtual's BlockDAAScore vs this node's own acceptance data\n")
+
+	tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa)
+	if err != nil {
+		fmt.Printf("  headers selected tip: %v\n", err)
+		return
+	}
+	tip, err := s.chain.GetIndexByHash(s.db, sa, tipHash)
+	if err != nil {
+		fmt.Printf("  tip index: %v\n", err)
+		return
+	}
+
+	scanned, checked, matching, mismatched, notInVirtual := 0, 0, 0, 0, 0
+	shown := 0
+	for i := tip; i > 0 && tip-i < uint64(depth); i-- {
+		chainBlock, err := s.chain.GetHashByIndex(s.db, sa, i)
+		if err != nil {
+			continue
+		}
+		acceptanceData, err := s.accept.Get(s.db, sa, chainBlock)
+		if err != nil {
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, chainBlock)
+		if err != nil {
+			continue
+		}
+		scanned++
+		expected := utxo.AcceptedUTXOBlockDAAScore(header.DAAScore())
+
+		for _, blockAcceptanceData := range acceptanceData {
+			for _, tad := range blockAcceptanceData.TransactionAcceptanceData {
+				if !tad.IsAccepted {
+					continue
+				}
+				transactionID := consensushashing.TransactionID(tad.Transaction)
+				for outputIndex := range tad.Transaction.Outputs {
+					outpoint := externalapi.NewDomainOutpoint(transactionID, uint32(outputIndex))
+					entry, ok, err := s.state.UTXOByOutpoint(s.db, sa, outpoint)
+					if err != nil || !ok {
+						// Spent since, or never reached virtual. Says nothing about the stamp.
+						notInVirtual++
+						continue
+					}
+					checked++
+					if entry.BlockDAAScore() == expected {
+						matching++
+						continue
+					}
+					mismatched++
+					if shown < 10 {
+						shown++
+						fmt.Printf("  %s:%d accepted by chain block %s (DAA %d), so its stamp must be "+
+							"%d - virtual holds %d (delta %d)\n", transactionID, outputIndex, chainBlock,
+							header.DAAScore(), expected, entry.BlockDAAScore(),
+							absDelta(expected, entry.BlockDAAScore()))
+					}
+				}
+			}
+		}
+	}
+
+	fmt.Printf("  chain blocks with acceptance data: %d\n", scanned)
+	fmt.Printf("  unspent created coins checked     : %d\n", checked)
+	fmt.Printf("    stamp agrees with acceptance    : %d\n", matching)
+	fmt.Printf("    stamp CONTRADICTS acceptance    : %d\n", mismatched)
+	fmt.Printf("  outputs not in virtual (skipped)  : %d\n", notInVirtual)
+	if mismatched > 0 {
+		fmt.Printf("  Each of these coins hashes to a preimage no correct node reproduces, so this\n")
+		fmt.Printf("  node's UTXO commitment cannot match however complete its coin set is.\n")
+	}
+}
+
+func absDelta(a, b uint64) uint64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }
