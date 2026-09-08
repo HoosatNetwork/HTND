@@ -99,6 +99,11 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	daaWindow = flag.String("daawindow", "", "\"from-to\" DAA score range. Groups every coin this "+
+		"node holds whose stamp falls in that range by address, largest first - which addresses "+
+		"gained, how much, and in how many coins. Only coins still UNSPENT are visible, so this is "+
+		"what was received and kept, not everything that moved")
+
 	addressUTXOs = flag.String("addressutxos", "", "list the coins one address holds in this node's "+
 		"CONSENSUS UTXO set - amount, DAA score and whether each was minted by a coinbase. Answers "+
 		"where an address's balance actually came from, which -balancecheck can only point at")
@@ -243,6 +248,10 @@ func main() {
 
 	if *addressUTXOs != "" {
 		listAddressUTXOs(s, sa, *addressUTXOs)
+	}
+
+	if *daaWindow != "" {
+		addressesGainingInDAAWindow(s, sa, *daaWindow)
 	}
 
 	if *reconstruct {
@@ -2076,5 +2085,115 @@ func listAddressUTXOs(s *stores, sa *model.StagingArea, target string) {
 	if coins[0].amount*2 > total {
 		fmt.Printf("\n  A single coin is more than half this balance. Whatever created it is the whole\n")
 		fmt.Printf("  story - trace that transaction rather than the address.\n")
+	}
+}
+
+// addressesGainingInDAAWindow groups the coins stamped within a DAA score range by the address
+// holding them, so a burst of activity can be attributed rather than guessed at.
+//
+// A coin's BlockDAAScore is the score of the block that merged it, so filtering on it selects coins
+// that entered the set during that window. What comes back is therefore "received during this window
+// and still unspent". Coins received then and spent since are invisible here, which makes this a
+// lower bound on what moved - fine for finding who gained, useless for auditing flow.
+func addressesGainingInDAAWindow(s *stores, sa *model.StagingArea, window string) {
+	fromText, toText, found := strings.Cut(window, "-")
+	if !found {
+		fmt.Printf("\n  -daawindow wants \"from-to\", got %q\n", window)
+		return
+	}
+	from, err := strconv.ParseUint(strings.TrimSpace(fromText), 10, 64)
+	if err != nil {
+		fmt.Printf("\n  -daawindow: %q is not a DAA score\n", fromText)
+		return
+	}
+	to, err := strconv.ParseUint(strings.TrimSpace(toText), 10, 64)
+	if err != nil {
+		fmt.Printf("\n  -daawindow: %q is not a DAA score\n", toText)
+		return
+	}
+
+	fmt.Printf("\n=== coins stamped between DAA %d and %d, by address\n", from, to)
+
+	iterator, err := s.state.VirtualUTXOSetIterator(s.db, sa)
+	if err != nil {
+		fmt.Printf("  virtual UTXO set iterator: %v\n", err)
+		return
+	}
+	defer iterator.Close()
+
+	type holding struct {
+		amount, coins, coinbaseAmount uint64
+	}
+	byAddress := make(map[string]*holding)
+	var windowTotal, windowCoinbase uint64
+	windowCoins, allCoins := 0, 0
+
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		_, entry, err := iterator.Get()
+		if err != nil {
+			continue
+		}
+		allCoins++
+		if entry.BlockDAAScore() < from || entry.BlockDAAScore() > to {
+			continue
+		}
+		windowCoins++
+		windowTotal += entry.Amount()
+		if entry.IsCoinbase() {
+			windowCoinbase += entry.Amount()
+		}
+		_, address, err := txscript.ExtractScriptPubKeyAddress(entry.ScriptPublicKey(), &dagconfig.MainnetParams)
+		if err != nil {
+			continue
+		}
+		encoded := address.EncodeAddress()
+		held := byAddress[encoded]
+		if held == nil {
+			held = &holding{}
+			byAddress[encoded] = held
+		}
+		held.amount += entry.Amount()
+		held.coins++
+		if entry.IsCoinbase() {
+			held.coinbaseAmount += entry.Amount()
+		}
+	}
+
+	fmt.Printf("  coins in the set: %d, of which stamped in this window: %d\n", allCoins, windowCoins)
+	if windowCoins == 0 {
+		return
+	}
+	fmt.Printf("  held by %d addresses, %d sompi total\n", len(byAddress), windowTotal)
+	fmt.Printf("    minted by a coinbase: %d sompi (%.2f%%)\n", windowCoinbase,
+		100*float64(windowCoinbase)/float64(windowTotal))
+	fmt.Printf("    received by transfer: %d sompi (%.2f%%)\n", windowTotal-windowCoinbase,
+		100*float64(windowTotal-windowCoinbase)/float64(windowTotal))
+
+	type row struct {
+		address string
+		holding
+	}
+	rows := make([]row, 0, len(byAddress))
+	for address, held := range byAddress {
+		rows = append(rows, row{address, *held})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].amount > rows[j].amount })
+
+	shown := len(rows)
+	if shown > 20 {
+		shown = 20
+	}
+	fmt.Printf("\n  largest gainers in this window:\n")
+	for _, r := range rows[:shown] {
+		source := "transfer"
+		if r.coinbaseAmount == r.amount {
+			source = "COINBASE"
+		} else if r.coinbaseAmount > 0 {
+			source = fmt.Sprintf("mixed, %d sompi coinbase", r.coinbaseAmount)
+		}
+		fmt.Printf("    %22d sompi  %6d coins  %s\n      %s\n", r.amount, r.coins, source, r.address)
+	}
+	if len(rows) > shown {
+		fmt.Printf("    ... and %d more addresses\n", len(rows)-shown)
 	}
 }
