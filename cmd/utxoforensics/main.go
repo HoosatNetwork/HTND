@@ -99,6 +99,10 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	addressUTXOs = flag.String("addressutxos", "", "list the coins one address holds in this node's "+
+		"CONSENSUS UTXO set - amount, DAA score and whether each was minted by a coinbase. Answers "+
+		"where an address's balance actually came from, which -balancecheck can only point at")
+
 	referenceDAAScore = flag.Uint64("referencedaascore", 0, "the DAA score the -balancecheck "+
 		"reference snapshot was taken at. When zero it is estimated from the snapshot's timestamp and "+
 		"the network's target block rate, which is only as good as the network having run at its "+
@@ -235,6 +239,10 @@ func main() {
 
 	if *balanceCheck != "" {
 		balanceComparison(s, sa, *balanceCheck)
+	}
+
+	if *addressUTXOs != "" {
+		listAddressUTXOs(s, sa, *addressUTXOs)
 	}
 
 	if *reconstruct {
@@ -1987,4 +1995,86 @@ func currentBlockVersionIndex(length int, blockVersion uint16) int {
 		index = length - 1
 	}
 	return index
+}
+
+// listAddressUTXOs breaks one address's balance down into the individual coins behind it.
+//
+// -balancecheck can say an address grew; it cannot say why. This can: every coin is reported with
+// its amount, the DAA score it was stamped with, and whether a coinbase minted it. A balance made of
+// coinbase outputs was mined into existence; one made of ordinary outputs was received from
+// somewhere, and the transaction ids name where to look next.
+//
+// Read from the consensus UTXO set rather than the utxoindex, for the same reason -balancecheck is:
+// the index is derived and has been wrong in this exact dimension.
+func listAddressUTXOs(s *stores, sa *model.StagingArea, target string) {
+	fmt.Printf("\n=== coins held by %s\n", target)
+
+	iterator, err := s.state.VirtualUTXOSetIterator(s.db, sa)
+	if err != nil {
+		fmt.Printf("  virtual UTXO set iterator: %v\n", err)
+		return
+	}
+	defer iterator.Close()
+
+	type coin struct {
+		outpoint   externalapi.DomainOutpoint
+		amount     uint64
+		daaScore   uint64
+		isCoinbase bool
+	}
+	var coins []coin
+	var total, coinbaseTotal uint64
+	coinbaseCount := 0
+
+	for ok := iterator.First(); ok; ok = iterator.Next() {
+		outpoint, entry, err := iterator.Get()
+		if err != nil {
+			continue
+		}
+		_, address, err := txscript.ExtractScriptPubKeyAddress(entry.ScriptPublicKey(), &dagconfig.MainnetParams)
+		if err != nil || address.EncodeAddress() != target {
+			continue
+		}
+		coins = append(coins, coin{*outpoint, entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase()})
+		total += entry.Amount()
+		if entry.IsCoinbase() {
+			coinbaseCount++
+			coinbaseTotal += entry.Amount()
+		}
+	}
+
+	if len(coins) == 0 {
+		fmt.Printf("  this address holds nothing in the consensus UTXO set\n")
+		return
+	}
+
+	sort.Slice(coins, func(i, j int) bool { return coins[i].amount > coins[j].amount })
+
+	fmt.Printf("  coins: %d, total %d sompi\n", len(coins), total)
+	fmt.Printf("    minted by a coinbase : %d coins, %d sompi (%.2f%% of the balance)\n",
+		coinbaseCount, coinbaseTotal, 100*float64(coinbaseTotal)/float64(total))
+	fmt.Printf("    received from a transaction: %d coins, %d sompi\n",
+		len(coins)-coinbaseCount, total-coinbaseTotal)
+	fmt.Printf("  DAA score range: %d .. %d\n", coins[len(coins)-1].daaScore, coins[0].daaScore)
+
+	shown := len(coins)
+	if shown > 15 {
+		shown = 15
+	}
+	fmt.Printf("\n  largest coins:\n")
+	for _, c := range coins[:shown] {
+		kind := "transaction output"
+		if c.isCoinbase {
+			kind = "COINBASE"
+		}
+		fmt.Printf("    %d sompi  daaScore=%d  %s\n      %s:%d\n",
+			c.amount, c.daaScore, kind, &c.outpoint.TransactionID, c.outpoint.Index)
+	}
+
+	// A balance dominated by one coin is a different story from one accumulated in many, and the
+	// difference decides where to look next.
+	if coins[0].amount*2 > total {
+		fmt.Printf("\n  A single coin is more than half this balance. Whatever created it is the whole\n")
+		fmt.Printf("  story - trace that transaction rather than the address.\n")
+	}
 }
