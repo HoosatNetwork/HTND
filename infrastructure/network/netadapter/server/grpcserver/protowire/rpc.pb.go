@@ -5868,9 +5868,15 @@ type GetInfoResponseMessage struct {
 	ServerVersion string                 `protobuf:"bytes,3,opt,name=serverVersion,proto3" json:"serverVersion,omitempty"`
 	IsUtxoIndexed bool                   `protobuf:"varint,4,opt,name=isUtxoIndexed,proto3" json:"isUtxoIndexed,omitempty"`
 	IsSynced      bool                   `protobuf:"varint,5,opt,name=isSynced,proto3" json:"isSynced,omitempty"`
-	Error         *RPCError              `protobuf:"bytes,1000,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// True only when this node's pruning point UTXO set hashes to the UTXO commitment in the pruning
+	// point's own header. False means the node's UTXO set - and the balances and transaction verdicts
+	// derived from it - may disagree with the network, OR that the node could not check. Both are
+	// reasons not to trust it, so they share an answer. A server too old to know about this field
+	// leaves it false, which is the safe reading.
+	IsUtxoSetVerified bool      `protobuf:"varint,6,opt,name=isUtxoSetVerified,proto3" json:"isUtxoSetVerified,omitempty"`
+	Error             *RPCError `protobuf:"bytes,1000,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetInfoResponseMessage) Reset() {
@@ -5934,6 +5940,13 @@ func (x *GetInfoResponseMessage) GetIsUtxoIndexed() bool {
 func (x *GetInfoResponseMessage) GetIsSynced() bool {
 	if x != nil {
 		return x.IsSynced
+	}
+	return false
+}
+
+func (x *GetInfoResponseMessage) GetIsUtxoSetVerified() bool {
+	if x != nil {
+		return x.IsUtxoSetVerified
 	}
 	return false
 }
@@ -7008,13 +7021,14 @@ const file_rpc_proto_rawDesc = "" +
 	"\x02ip\x18\x01 \x01(\tR\x02ip\"B\n" +
 	"\x14UnbanResponseMessage\x12*\n" +
 	"\x05error\x18\xe8\a \x01(\v2\x13.protowire.RPCErrorR\x05error\"\x17\n" +
-	"\x15GetInfoRequestMessage\"\xe4\x01\n" +
+	"\x15GetInfoRequestMessage\"\x92\x02\n" +
 	"\x16GetInfoResponseMessage\x12\x14\n" +
 	"\x05p2pId\x18\x01 \x01(\tR\x05p2pId\x12 \n" +
 	"\vmempoolSize\x18\x02 \x01(\x04R\vmempoolSize\x12$\n" +
 	"\rserverVersion\x18\x03 \x01(\tR\rserverVersion\x12$\n" +
 	"\risUtxoIndexed\x18\x04 \x01(\bR\risUtxoIndexed\x12\x1a\n" +
-	"\bisSynced\x18\x05 \x01(\bR\bisSynced\x12*\n" +
+	"\bisSynced\x18\x05 \x01(\bR\bisSynced\x12,\n" +
+	"\x11isUtxoSetVerified\x18\x06 \x01(\bR\x11isUtxoSetVerified\x12*\n" +
 	"\x05error\x18\xe8\a \x01(\v2\x13.protowire.RPCErrorR\x05error\"l\n" +
 	",EstimateNetworkHashesPerSecondRequestMessage\x12\x1e\n" +
 	"\n" +

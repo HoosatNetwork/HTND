@@ -25,6 +25,11 @@ type GetInfoResponseMessage struct {
 	ServerVersion string
 	IsUtxoIndexed bool
 	IsSynced      bool
+	// IsUtxoSetVerified is true only when this node's pruning point UTXO set hashes to the UTXO
+	// commitment in the pruning point's own header. IsSynced says the node believes it has caught
+	// up; this says whether what it caught up to can be trusted. They are different questions, and
+	// a node can answer true to the first and false to the second.
+	IsUtxoSetVerified bool
 
 	Error *RPCError
 }
@@ -35,12 +40,15 @@ func (msg *GetInfoResponseMessage) Command() MessageCommand {
 }
 
 // NewGetInfoResponseMessage returns a instance of the message
-func NewGetInfoResponseMessage(p2pID string, mempoolSize uint64, serverVersion string, isUtxoIndexed bool, isSynced bool) *GetInfoResponseMessage {
+func NewGetInfoResponseMessage(p2pID string, mempoolSize uint64, serverVersion string, isUtxoIndexed bool,
+	isSynced bool, isUTXOSetVerified bool,
+) *GetInfoResponseMessage {
 	return &GetInfoResponseMessage{
-		P2PID:         p2pID,
-		MempoolSize:   mempoolSize,
-		ServerVersion: serverVersion,
-		IsUtxoIndexed: isUtxoIndexed,
-		IsSynced:      isSynced,
+		P2PID:             p2pID,
+		MempoolSize:       mempoolSize,
+		ServerVersion:     serverVersion,
+		IsUtxoIndexed:     isUtxoIndexed,
+		IsSynced:          isSynced,
+		IsUtxoSetVerified: isUTXOSetVerified,
 	}
 }

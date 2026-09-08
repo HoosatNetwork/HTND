@@ -60,6 +60,10 @@ type Consensus interface {
 	IsChainBlock(blockHash *DomainHash) (bool, error)
 	VirtualMergeDepthRoot() (*DomainHash, error)
 	IsNearlySynced() (bool, error)
+	// UTXOSetHealth reports whether this node's pruning point UTXO baseline hashes to the UTXO
+	// commitment in the pruning point's own header - i.e. whether this node's UTXO set, and the
+	// balances and transaction verdicts derived from it, can be trusted to agree with the network.
+	UTXOSetHealth() (*UTXOSetHealth, error)
 	ResolveBlockStatus(blockHash *DomainHash, useSeparateStagingAreaPerBlock bool) (BlockStatus, error)
 	RepairBlockStatuses() error
 	ReresolveInvalidBlocks() error

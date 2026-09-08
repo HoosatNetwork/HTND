@@ -411,32 +411,63 @@ func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(staging
 // node is running on an offset UTXO baseline. Memoised against the pruning point hash so it costs a
 // couple of LRU-cached lookups only when the pruning point advances.
 func (csm *consensusStateManager) pruningPointBaselineIsOffset(stagingArea *model.StagingArea) bool {
+	health := csm.UTXOSetHealth(stagingArea)
+	return health.Checked && !health.BaselineVerified
+}
+
+// UTXOSetHealth reports whether the pruning point's stored multiset hashes to the UTXO commitment
+// in the pruning point's own header, along with the three values that answer was derived from.
+//
+// This is the same check pruningPointBaselineIsOffset has always made - the one that decides
+// whether per-block commitment mismatches are tolerated - lifted out so it can also be reported
+// over RPC. A node that tolerates mismatches is a node whose UTXO set may disagree with the
+// network, and until this was exposed there was no way for anything outside the node to find that
+// out.
+func (csm *consensusStateManager) UTXOSetHealth(stagingArea *model.StagingArea) *externalapi.UTXOSetHealth {
+	unchecked := &externalapi.UTXOSetHealth{BaselineVerified: false, Checked: false}
+
 	hasPruningPoint, err := csm.pruningStore.HasPruningPoint(csm.databaseContext, stagingArea)
 	if err != nil || !hasPruningPoint {
-		return false
+		return unchecked
 	}
 	pruningPoint, err := csm.pruningStore.PruningPoint(csm.databaseContext, stagingArea)
-	if err != nil || pruningPoint.Equal(csm.genesisHash) {
-		return false
+	if err != nil {
+		return unchecked
 	}
-	if csm.baselineOffsetPruningPoint != nil && csm.baselineOffsetPruningPoint.Equal(pruningPoint) {
-		return csm.baselineOffset
+	if pruningPoint.Equal(csm.genesisHash) {
+		// Still on genesis: there is no imported baseline to be wrong about yet, so there is nothing
+		// to verify rather than something that failed verification.
+		return unchecked
 	}
 
 	pruningPointMultiset, msErr := csm.multisetStore.Get(csm.databaseContext, stagingArea, pruningPoint)
 	pruningPointHeader, headerErr := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, pruningPoint)
 	if msErr != nil || headerErr != nil {
-		return false
+		return unchecked
 	}
-	offset := !pruningPointMultiset.Hash().Equal(pruningPointHeader.UTXOCommitment())
-	csm.baselineOffsetPruningPoint = pruningPoint
-	csm.baselineOffset = offset
-	if offset {
-		log.Warnf("Pruning point %s stored multiset (%s) does not match its header UTXO commitment (%s) - "+
-			"this node is on an offset UTXO baseline; inherited per-block commitment mismatches are tolerated",
-			pruningPoint, pruningPointMultiset.Hash(), pruningPointHeader.UTXOCommitment())
+	storedMultiset := pruningPointMultiset.Hash()
+	headerCommitment := pruningPointHeader.UTXOCommitment()
+	verified := storedMultiset.Equal(headerCommitment)
+
+	// The warn line fires once per pruning point, not once per call: this is on the per-block
+	// toleration path, so logging every time would drown the log.
+	if csm.baselineOffsetPruningPoint == nil || !csm.baselineOffsetPruningPoint.Equal(pruningPoint) {
+		csm.baselineOffsetPruningPoint = pruningPoint
+		csm.baselineOffset = !verified
+		if !verified {
+			log.Warnf("Pruning point %s stored multiset (%s) does not match its header UTXO commitment (%s) - "+
+				"this node is on an offset UTXO baseline; inherited per-block commitment mismatches are tolerated",
+				pruningPoint, storedMultiset, headerCommitment)
+		}
 	}
-	return offset
+
+	return &externalapi.UTXOSetHealth{
+		BaselineVerified: verified,
+		Checked:          true,
+		PruningPoint:     pruningPoint,
+		StoredMultiset:   storedMultiset,
+		HeaderCommitment: headerCommitment,
+	}
 }
 
 func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.AcceptanceData) *externalapi.DomainHash {

@@ -1505,6 +1505,17 @@ func (s *consensus) IsNearlySynced() (bool, error) {
 	return s.isNearlySyncedNoLock()
 }
 
+// UTXOSetHealth reports whether this node's UTXO baseline hashes to the commitment it is supposed
+// to hash to. See externalapi.UTXOSetHealth: "is this node synced" and "is this node's data
+// correct" are different questions, and this answers the second one.
+func (s *consensus) UTXOSetHealth() (*externalapi.UTXOSetHealth, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+	return s.consensusStateManager.UTXOSetHealth(stagingArea), nil
+}
+
 // expectedDAAWindowDurationInMilliseconds returns how far behind the wall clock this node's selected
 // tip may fall before it stops considering itself nearly synced.
 //

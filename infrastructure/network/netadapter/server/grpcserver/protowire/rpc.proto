@@ -746,6 +746,12 @@ message GetInfoResponseMessage{
   string serverVersion = 3;
   bool isUtxoIndexed = 4;
   bool isSynced = 5;
+  // True only when this node's pruning point UTXO set hashes to the UTXO commitment in the pruning
+  // point's own header. False means the node's UTXO set - and the balances and transaction verdicts
+  // derived from it - may disagree with the network, OR that the node could not check. Both are
+  // reasons not to trust it, so they share an answer. A server too old to know about this field
+  // leaves it false, which is the safe reading.
+  bool isUtxoSetVerified = 6;
   RPCError error = 1000;
 }
 

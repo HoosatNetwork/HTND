@@ -21,6 +21,10 @@ type ConsensusStateManager interface {
 	// consensus.repairCollapsedVirtualIfRequired.
 	RecomputeVirtual() error
 	ValidateUTXODiffChildChains() error
+	// UTXOSetHealth reports whether this node's pruning point UTXO baseline hashes to the commitment
+	// in the pruning point's own header - i.e. whether the node's UTXO set can be trusted to agree
+	// with the network's.
+	UTXOSetHealth(stagingArea *StagingArea) *externalapi.UTXOSetHealth
 	ResolveBlockStatus(stagingArea *StagingArea, blockHash *externalapi.DomainHash, useSeparateStagingAreaPerBlock bool) (externalapi.BlockStatus, *UTXODiffReversalData, error)
 	// ResolveBlockStatusCacheLen returns the number of entries in the ResolveBlockStatus cache
 	ResolveBlockStatusCacheLen() int

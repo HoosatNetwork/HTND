@@ -2148,6 +2148,7 @@ func (m *GetInfoResponseMessage) CloneVT() *GetInfoResponseMessage {
 	r.ServerVersion = m.ServerVersion
 	r.IsUtxoIndexed = m.IsUtxoIndexed
 	r.IsSynced = m.IsSynced
+	r.IsUtxoSetVerified = m.IsUtxoSetVerified
 	r.Error = m.Error.CloneVT()
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
@@ -5167,6 +5168,9 @@ func (this *GetInfoResponseMessage) EqualVT(that *GetInfoResponseMessage) bool {
 		return false
 	}
 	if this.IsSynced != that.IsSynced {
+		return false
+	}
+	if this.IsUtxoSetVerified != that.IsUtxoSetVerified {
 		return false
 	}
 	if !this.Error.EqualVT(that.Error) {
@@ -11001,6 +11005,16 @@ func (m *GetInfoResponseMessage) MarshalToSizedBufferVT(dAtA []byte) (int, error
 		dAtA[i] = 0x3e
 		i--
 		dAtA[i] = 0xc2
+	}
+	if m.IsUtxoSetVerified {
+		i--
+		if m.IsUtxoSetVerified {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
 	}
 	if m.IsSynced {
 		i--
@@ -17172,6 +17186,16 @@ func (m *GetInfoResponseMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int,
 		i--
 		dAtA[i] = 0xc2
 	}
+	if m.IsUtxoSetVerified {
+		i--
+		if m.IsUtxoSetVerified {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
+	}
 	if m.IsSynced {
 		i--
 		if m.IsSynced {
@@ -19848,6 +19872,9 @@ func (m *GetInfoResponseMessage) SizeVT() (n int) {
 		n += 2
 	}
 	if m.IsSynced {
+		n += 2
+	}
+	if m.IsUtxoSetVerified {
 		n += 2
 	}
 	if m.Error != nil {
@@ -31981,6 +32008,26 @@ func (m *GetInfoResponseMessage) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.IsSynced = bool(v != 0)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsUtxoSetVerified", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsUtxoSetVerified = bool(v != 0)
 		case 1000:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
@@ -45588,6 +45635,26 @@ func (m *GetInfoResponseMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 				}
 			}
 			m.IsSynced = bool(v != 0)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsUtxoSetVerified", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsUtxoSetVerified = bool(v != 0)
 		case 1000:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
