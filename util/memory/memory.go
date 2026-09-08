@@ -3,6 +3,7 @@ package memory
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -13,6 +14,57 @@ type Block[T any] struct {
 	ptr unsafe.Pointer // derived pointer — only valid while mem exists
 	len int            // number of T elements
 	id  uint64
+
+	// managed backs the block with an ordinary Go slice instead of mmap'ed memory, for element
+	// types that contain pointers. mem is nil in that case and ptr is unused.
+	//
+	// This is not an optimisation choice, it is a correctness one. The mmap'ed region is invisible
+	// to the garbage collector: it is neither a GC root nor scanned for references. Storing a Go
+	// pointer there means the object it points at has no reference the collector can see, so the
+	// collector is free to reclaim it while the block still "holds" it. Reading the block later
+	// then yields a pointer into reclaimed memory.
+	//
+	// That is not theoretical. A node crashed with a nil pointer dereference deep inside
+	// DbUtxoDiff.MarshalVT, at a line guarded by an explicit nil check one frame up - the classic
+	// signature of an object that was valid when it was stored and was collected before it was
+	// read. The buffer held []*DbUtxoCollectionItem: pointers, in unscanned memory.
+	//
+	// Pointer-free element types (plain numeric structs) stay on mmap, where none of this applies.
+	managed []T
+}
+
+// pointerful caches, per element type, whether values of that type contain anything the garbage
+// collector must be able to see. Strings, slices, maps, channels, funcs and interfaces all carry
+// pointers, so they count too - not just declared pointer types.
+var pointerful sync.Map // reflect.Type -> bool
+
+func containsPointers[T any]() bool {
+	typ := reflect.TypeOf((*T)(nil)).Elem()
+	if cached, ok := pointerful.Load(typ); ok {
+		return cached.(bool)
+	}
+	result := typeContainsPointers(typ)
+	pointerful.Store(typ, result)
+	return result
+}
+
+func typeContainsPointers(typ reflect.Type) bool {
+	switch typ.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Chan, reflect.Map, reflect.Func,
+		reflect.Slice, reflect.String, reflect.Interface:
+		return true
+	case reflect.Array:
+		return typeContainsPointers(typ.Elem())
+	case reflect.Struct:
+		for i := 0; i < typ.NumField(); i++ {
+			if typeContainsPointers(typ.Field(i).Type) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 type allocationInfo struct {
@@ -33,6 +85,14 @@ var (
 func Malloc[T any](n int) *Block[T] {
 	if n <= 0 {
 		return nil
+	}
+
+	if containsPointers[T]() {
+		// Go-managed, so the collector can see the pointers this block will hold. See Block.managed.
+		id := atomic.AddUint64(&allocationSeq, 1)
+		block := &Block[T]{managed: make([]T, n), len: n, id: id}
+		log.Debugf("Malloc (Go-managed, element type contains pointers) id=%d type=%T len=%d", id, *new(T), n)
+		return block
 	}
 
 	elemSize := int(unsafe.Sizeof(*new(T)))
@@ -61,7 +121,13 @@ func Malloc[T any](n int) *Block[T] {
 }
 
 func (b *Block[T]) Slice() []T {
-	if b == nil || b.mem == nil {
+	if b == nil {
+		return nil
+	}
+	if b.managed != nil {
+		return b.managed
+	}
+	if b.mem == nil {
 		return nil
 	}
 	// Re-derive slice every time — safest
@@ -81,7 +147,7 @@ func Realloc[T any](b *Block[T], n int) *Block[T] {
 		Free(b)
 		return nil
 	}
-	if b == nil || b.mem == nil {
+	if b == nil || (b.mem == nil && b.managed == nil) {
 		return Malloc[T](n)
 	}
 	if n == b.len {
@@ -98,7 +164,17 @@ func Realloc[T any](b *Block[T], n int) *Block[T] {
 }
 
 func Free[T any](b *Block[T]) {
-	if b == nil || b.mem == nil {
+	if b == nil {
+		return
+	}
+	if b.managed != nil {
+		// Nothing to unmap: dropping the reference is what frees it, and the collector does the
+		// rest. Zeroing still matters, so a use-after-free reads as empty rather than as live data.
+		log.Debugf("Free (Go-managed) id=%d type=%T len=%d", b.id, *new(T), b.len)
+		*b = Block[T]{}
+		return
+	}
+	if b.mem == nil {
 		return
 	}
 	ptr := b.ptr
