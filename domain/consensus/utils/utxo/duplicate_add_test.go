@@ -29,22 +29,40 @@ func TestAddEntryToleratesDuplicateOfTheSameCoin(t *testing.T) {
 		if err := diff.addEntry(outpoint, NewUTXOEntry(500, script, isCoinbase, 100)); err != nil {
 			t.Fatalf("isCoinbase=%t: first add: %v", isCoinbase, err)
 		}
-		// Same coin, different DAA score - which is what a different merging block produces.
-		if err := diff.addEntry(outpoint, NewUTXOEntry(500, script, isCoinbase, 200)); err != nil {
-			t.Fatalf("isCoinbase=%t: duplicate add of the same coin should be a no-op, got: %v",
+		// Adding the identical entry again is a no-op: a set holds a coin once.
+		if err := diff.addEntry(outpoint, NewUTXOEntry(500, script, isCoinbase, 100)); err != nil {
+			t.Fatalf("isCoinbase=%t: re-adding the identical entry should be a no-op, got: %v",
 				isCoinbase, err)
 		}
 		if diff.toAdd.Len() != 1 {
 			t.Fatalf("isCoinbase=%t: expected the set to hold the coin once, got %d entries",
 				isCoinbase, diff.toAdd.Len())
 		}
-		// First add wins, matching ApplyAcceptanceDataToMultiset's skipDuplicate tie-break.
+
+		// Same coin at a DIFFERENT DAA score is a restamp, and the INCOMING score wins.
+		//
+		// This assertion was the other way round when the tolerance was first widened, on the
+		// reasoning that a set holds a coin once so the first record of it should stand. That was
+		// wrong, and a live node showed why within hours: a coin's stamp is the DAA score of the
+		// block that merged it, and a block's own acceptance data is authoritative for its own past.
+		// Keeping the stale score left the diff describing the coin differently from the acceptance
+		// data beside it, blockOnlyCarriesTheInheritedOffset refused to tolerate a block whose two
+		// records of itself disagreed, and the node wedged on it - "output 0 is in the block's past
+		// UTXO set with different contents than its acceptance data describes", on every retry.
+		if err := diff.addEntry(outpoint, NewUTXOEntry(500, script, isCoinbase, 200)); err != nil {
+			t.Fatalf("isCoinbase=%t: a restamp should be applied, not refused, got: %v",
+				isCoinbase, err)
+		}
+		if diff.toAdd.Len() != 1 {
+			t.Fatalf("isCoinbase=%t: a restamp must replace, not add a second entry; got %d",
+				isCoinbase, diff.toAdd.Len())
+		}
 		entry, ok := diff.toAdd.Get(outpoint)
 		if !ok {
 			t.Fatalf("isCoinbase=%t: coin vanished from toAdd", isCoinbase)
 		}
-		if entry.BlockDAAScore() != 100 {
-			t.Fatalf("isCoinbase=%t: expected the first add to win (daaScore 100), got %d",
+		if entry.BlockDAAScore() != 200 {
+			t.Fatalf("isCoinbase=%t: expected the incoming score to win (daaScore 200), got %d",
 				isCoinbase, entry.BlockDAAScore())
 		}
 	}

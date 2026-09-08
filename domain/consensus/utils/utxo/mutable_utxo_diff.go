@@ -208,6 +208,14 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 // share both and still be different coins carrying different amounts or scripts. Cancelling one
 // against the other on that partial match is what silently loses coins from a diff - and, once that
 // diff is applied to the materialised UTXO set, from the node's UTXO set permanently.
+// sameDAAScore reports whether two entries at one outpoint agree on the block that merged the coin.
+// Kept separate from sameCoin because they answer different questions: sameCoin asks whether this is
+// the same coin at all, and this asks whether the two records of it agree on when it came into the
+// set - which is part of the commitment preimage and therefore not a detail.
+func sameDAAScore(a, b externalapi.UTXOEntry) bool {
+	return a != nil && b != nil && a.BlockDAAScore() == b.BlockDAAScore()
+}
+
 func sameCoin(a, b externalapi.UTXOEntry) bool {
 	return a != nil && b != nil && a.Amount() == b.Amount() && a.IsCoinbase() == b.IsCoinbase() &&
 		a.ScriptPublicKey().Equal(b.ScriptPublicKey())
@@ -249,9 +257,30 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 				// re-requested, fails identically, and the node retries forever without ever
 				// advancing. One such coin stalled a node's IBD 61 times against six different peers.
 				//
-				// Note this deliberately does not compare BlockDAAScore. Two adds of one coin can
-				// carry different scores when different blocks merge it, and the first one wins - the
-				// same tie-break ApplyAcceptanceDataToMultiset makes by skipping the later add.
+				// When the two carry DIFFERENT BlockDAAScores, the incoming one wins rather than the
+				// one already pending.
+				//
+				// Keeping the first looks like the safe choice and is not. A coin's stamp is the DAA
+				// score of the block that merged it, and a block's own acceptance data is authoritative
+				// for its own past: within one accumulated diff, every entry acceptance creates is
+				// stamped with that block's score. So an incoming entry whose score differs from a
+				// pending one is a RESTAMP - the diff was seeded with the coin at an older merging
+				// block's score, and this block is now the one merging it.
+				//
+				// Discarding that left the diff describing the coin differently from the acceptance
+				// data beside it, and blockOnlyCarriesTheInheritedOffset correctly refuses to tolerate
+				// a block whose two records of itself disagree. The block is then disqualified, and a
+				// node hits it on every retry: "output 0 is in the block's past UTXO set with different
+				// contents than its acceptance data describes", forever.
+				if !sameDAAScore(existing, entry) {
+					log.Warnf("[UTXO-DEBUG] addEntry: outpoint %s is pending in toAdd at daaScore=%d and "+
+						"is being added again at daaScore=%d with the same value - taking the incoming "+
+						"score, because this block's acceptance data is what its commitment is computed "+
+						"from", outpoint, existing.BlockDAAScore(), entry.BlockDAAScore())
+					mud.toAdd.remove(outpoint)
+					mud.toAdd.add(outpoint, entry)
+					return nil
+				}
 				if entry.IsCoinbase() {
 					log.Debugf("[UTXO-DEBUG] addEntry: coinbase outpoint %s (amount=%d daaScore=%d) already "+
 						"present in toAdd with the same value - treated as a legitimate duplicate, not "+
