@@ -172,10 +172,22 @@ func (uis *utxoIndexStore) add(scriptPublicKey *externalapi.ScriptPublicKey, out
 	// Invalidate the per-script cache for this key
 	// uis.scriptCache.Delete(string(key))
 
-	// If the outpoint exists in `toRemove` simply remove it from there and return
+	// A staged removal and a new addition of the same outpoint cancel only when they describe the
+	// SAME coin. If they differ, this is a replacement rather than a cancellation, and cancelling it
+	// leaves the old value in the database untouched.
+	//
+	// That is not hypothetical: a coin's BlockDAAScore is the DAA score of the block that merged it,
+	// and it changes when a different block takes over merging. The change arrives here as a removal
+	// of the old entry followed by an addition of the new one - Update always applies ToRemove before
+	// ToAdd - so cancelling the pair discarded the new score and kept the stale one. On mainnet that
+	// left 130,857 of 18,276,121 index entries carrying a BlockDAAScore the consensus UTXO set did
+	// not agree with, all of them stale-high. The index is what GetUtxosByAddresses answers from, so
+	// those are the numbers wallets and explorers were shown.
+	//
+	// When they differ, both stay staged: commit deletes before it puts, so the new value lands.
 	if toRemoveOutpointsOfKey, ok := uis.toRemove[key]; ok {
-		if _, ok := toRemoveOutpointsOfKey[*outpoint]; ok {
-			log.Tracef("Outpoint %s:%d exists in `toRemove`. Deleting it from there",
+		if existing, ok := toRemoveOutpointsOfKey[*outpoint]; ok && existing.Equal(utxoEntry) {
+			log.Tracef("Outpoint %s:%d exists in `toRemove` with the same entry. Deleting it from there",
 				outpoint.TransactionID, outpoint.Index)
 			delete(toRemoveOutpointsOfKey, *outpoint)
 			return nil
@@ -212,10 +224,11 @@ func (uis *utxoIndexStore) remove(scriptPublicKey *externalapi.ScriptPublicKey, 
 	// Invalidate the per-script cache for this key
 	// uis.scriptCache.Delete(string(key))
 
-	// If the outpoint exists in `toAdd` simply remove it from there and return
+	// The mirror of the rule in add: a staged addition and a new removal cancel only when they
+	// describe the same coin. Cancelling a differing pair would drop a removal that was asked for.
 	if toAddPairsOfKey, ok := uis.toAdd[key]; ok {
-		if _, ok := toAddPairsOfKey[*outpoint]; ok {
-			log.Tracef("Outpoint %s:%d exists in `toAdd`. Deleting it from there",
+		if existing, ok := toAddPairsOfKey[*outpoint]; ok && existing.Equal(utxoEntry) {
+			log.Tracef("Outpoint %s:%d exists in `toAdd` with the same entry. Deleting it from there",
 				outpoint.TransactionID, outpoint.Index)
 			delete(toAddPairsOfKey, *outpoint)
 			return nil

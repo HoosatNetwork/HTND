@@ -36,6 +36,7 @@ import (
 	"strings"
 
 	consensusdatabase "github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/acceptancedatastore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockheaderstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstore"
@@ -54,6 +55,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
 	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
+	infradatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
 	"github.com/pkg/errors"
 )
@@ -92,6 +94,12 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	indexCheck = flag.Bool("indexcheck", false, "compare every entry in this node's utxoindex "+
+		"against the consensus UTXO set in the same database. The index is what GetUtxosByAddresses "+
+		"answers from - wallet balances, explorer pages - and it is derived from consensus, so any "+
+		"disagreement is the index being wrong about the node's own state. Reports entries whose "+
+		"amount or BlockDAAScore differ, and entries the index holds that consensus does not")
+
 	stampCheck = flag.Bool("stampcheck", false, "compare every unspent coin's BlockDAAScore against "+
 		"the DAA score of the chain block this node's own acceptance data says accepted it. "+
 		"AcceptedUTXOBlockDAAScore is the identity, so the two must be equal by definition - a "+
@@ -203,6 +211,10 @@ func main() {
 
 	if *stampCheck {
 		stampConsistencyCheck(s, sa, *stampCheckDepth)
+	}
+
+	if *indexCheck {
+		utxoIndexConsistencyCheck(db, s, sa)
 	}
 
 	if *reconstruct {
@@ -1526,4 +1538,131 @@ func absDelta(a, b uint64) uint64 {
 		return a - b
 	}
 	return b - a
+}
+
+// utxoIndexConsistencyCheck compares the utxoindex against the consensus UTXO set in the same
+// database.
+//
+// The index is derived from consensus and is what GetUtxosByAddresses answers from, so it is what
+// wallets and explorers see. It has no independent authority: any disagreement is the index being
+// wrong about its own node's state. On a node carrying the diff-composition bug fixed in 6df1cdaa4,
+// one address alone showed 4,242 entries with the wrong BlockDAAScore and 21,443 entries the
+// consensus set did not hold at all - the latter being coins a wallet would offer to spend and a
+// balance would count, that do not exist.
+//
+// It reads the index bucket directly rather than over RPC, so it needs no running node and is not
+// capped by the RPC result limit.
+func utxoIndexConsistencyCheck(db *pebble.DB, s *stores, sa *model.StagingArea) {
+	fmt.Printf("\n=== utxoindex consistency: the index against the consensus UTXO set\n")
+
+	cursor, err := db.Cursor(infradatabase.MakeBucket([]byte("utxo-index")))
+	if err != nil {
+		fmt.Printf("  utxo-index cursor: %v (is this node running with --utxoindex?)\n", err)
+		return
+	}
+	defer cursor.Close()
+
+	entries, agree, daaDiff, amountDiff, notInConsensus, unreadable := 0, 0, 0, 0, 0, 0
+	shown := 0
+	for cursor.Next() {
+		key, err := cursor.Key()
+		if err != nil {
+			unreadable++
+			continue
+		}
+		outpoint, ok := outpointFromIndexKey(key.Suffix())
+		if !ok {
+			unreadable++
+			continue
+		}
+		value, err := cursor.Value()
+		if err != nil {
+			unreadable++
+			continue
+		}
+		dbEntry := &serialization.DbUtxoEntry{}
+		if err := dbEntry.UnmarshalVT(value); err != nil {
+			unreadable++
+			continue
+		}
+		indexEntry, err := serialization.DBUTXOEntryToUTXOEntry(dbEntry)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		entries++
+
+		consensusEntry, ok, err := s.state.UTXOByOutpoint(s.db, sa, outpoint)
+		if err != nil || !ok {
+			notInConsensus++
+			if shown < 10 {
+				shown++
+				fmt.Printf("  %s:%d is in the index but NOT in the consensus set "+
+					"(amount=%d daaScore=%d)\n", &outpoint.TransactionID, outpoint.Index,
+					indexEntry.Amount(), indexEntry.BlockDAAScore())
+			}
+			continue
+		}
+		sameAmount := indexEntry.Amount() == consensusEntry.Amount()
+		sameDAA := indexEntry.BlockDAAScore() == consensusEntry.BlockDAAScore()
+		if sameAmount && sameDAA {
+			agree++
+			continue
+		}
+		if !sameAmount {
+			amountDiff++
+		}
+		if !sameDAA {
+			daaDiff++
+		}
+		if shown < 10 {
+			shown++
+			fmt.Printf("  %s:%d index says amount=%d daaScore=%d, consensus says amount=%d daaScore=%d\n",
+				&outpoint.TransactionID, outpoint.Index, indexEntry.Amount(), indexEntry.BlockDAAScore(),
+				consensusEntry.Amount(), consensusEntry.BlockDAAScore())
+		}
+	}
+
+	fmt.Printf("  index entries read                        : %d\n", entries)
+	fmt.Printf("    agree with consensus on amount and stamp: %d\n", agree)
+	fmt.Printf("    differing BlockDAAScore                 : %d\n", daaDiff)
+	fmt.Printf("    differing amount                        : %d\n", amountDiff)
+	fmt.Printf("    held by the index, absent from consensus: %d\n", notInConsensus)
+	if unreadable > 0 {
+		fmt.Printf("  entries that could not be decoded         : %d\n", unreadable)
+	}
+	if notInConsensus > 0 {
+		fmt.Printf("  Entries absent from consensus are coins a wallet would offer to spend and a\n")
+		fmt.Printf("  balance would count, which do not exist.\n")
+	}
+}
+
+// outpointFromIndexKey recovers the outpoint from a utxoindex key.
+//
+// The index stores entries at utxo-index/<scriptPublicKeyBytes>/<serializedOutpoint>, and a cursor
+// opened on the parent bucket hands back everything after "utxo-index/" as the suffix. The script
+// bytes cannot simply be split off: a script is arbitrary bytes and may itself contain the '/'
+// separator, so splitting on it lands in the middle of a script often enough to matter.
+//
+// The outpoint is a protobuf DbOutpoint - a 32-byte hash plus a varint index - so its encoding is a
+// short, bounded tail. Trying each plausible tail length and keeping the one that both decodes and
+// is preceded by a separator identifies it without needing to understand the script at all.
+func outpointFromIndexKey(suffix []byte) (*externalapi.DomainOutpoint, bool) {
+	const minTail, maxTail = 34, 48
+	for tail := minTail; tail <= maxTail && tail <= len(suffix); tail++ {
+		start := len(suffix) - tail
+		if start == 0 || suffix[start-1] != '/' {
+			continue
+		}
+		dbOutpoint := &serialization.DbOutpoint{}
+		if err := dbOutpoint.UnmarshalVT(suffix[start:]); err != nil {
+			continue
+		}
+		outpoint, err := serialization.DbOutpointToDomainOutpoint(dbOutpoint)
+		if err != nil {
+			continue
+		}
+		return outpoint, true
+	}
+	return nil, false
 }
