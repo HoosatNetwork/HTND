@@ -156,11 +156,22 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	// acceptance of it - and only ever happens on a chain already known to be offset from the true
 	// UTXO set.
 	//
-	// It does NOT extend to a double spend. ErrMissingTxOut covers two unrelated findings - an input
-	// this node does not hold, and an input this block's own past has already spent - and only the
-	// first is excused by an incomplete UTXO set. Tolerating the second would mean a node on an offset
-	// baseline silently accepting blocks that spend the same coin twice, which is the one thing this
-	// check exists to prevent and has nothing to do with the gap. See ErrMissingTxOut.HasDoubleSpend.
+	// It deliberately does NOT consult ErrMissingTxOut.HasDoubleSpend here, though it used to.
+	//
+	// That flag means "the outpoint was in the diff's toRemove", which is a statement about double
+	// spending only when the diff is the accumulated one being built during acceptance - there
+	// toRemove records spends this very pass made. The diff handed to THIS function is different: it
+	// is the block's past relative to virtual, where toRemove means "virtual holds this coin and this
+	// block's past does not". That covers coins created after the block as much as coins spent before
+	// it, so reading it as a double spend convicts blocks that never spent anything twice.
+	//
+	// The cost was not theoretical. A node syncing mainnet refused 150 blocks this way, started block
+	// body sync eight times, and accepted zero blocks - IBD reached 99% of headers and then made no
+	// further progress at all, because every attempt met a block it refused on this evidence.
+	//
+	// A block whose own records genuinely disagree with each other is still refused: that is what
+	// blockOnlyCarriesTheInheritedOffset above decides, by comparing the block's acceptance data
+	// against its own UTXO diff, and it needs no guess about what a toRemove entry means.
 	tolerateMissingTxOut := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 	if tolerateMissingTxOut {
 		// Same verdict as verifyUTXO's: a block whose own arithmetic is broken gets no leniency from
@@ -178,16 +189,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 			return false
 		}
 		var missingTxOut ruleerrors.ErrMissingTxOut
-		if !errors.As(err, &missingTxOut) {
-			return false
-		}
-		if missingTxOut.HasDoubleSpend() {
-			log.Warnf("Block %s: refusing to tolerate a transaction that spends already-spent outputs "+
-				"(%v). An incomplete UTXO set excuses an input this node does not hold; it does not "+
-				"excuse spending the same coin twice.", blockHash, missingTxOut.SpentOutpoints)
-			return false
-		}
-		return true
+		return errors.As(err, &missingTxOut)
 	}
 
 	var wg sync.WaitGroup
