@@ -99,6 +99,12 @@ var (
 		"pruning point up to virtual onto the pruning point UTXO set, and diff the result against virtual's "+
 		"materialised UTXO table - both are enumerable sets built from the same starting point, so the "+
 		"starting point's own errors cancel and what remains is the materialised table's drift")
+	commitmentScan = flag.Int("commitmentscan", 0, "walk this many selected-chain blocks back from "+
+		"the tip comparing each block's STORED multiset against its own header UTXO commitment, and "+
+		"report where they start to disagree. One hash comparison per block, no UTXO iteration, so "+
+		"the whole retained chain can be scanned. The newest block that still AGREES is the newest "+
+		"point this node can derive a bundle for that the chain will accept")
+
 	supplyByDAA = flag.Uint64("supplybydaa", 0, "bucket size in DAA scores. Reports how much of this "+
 		"node's supply carries a stamp in each bucket, with a running total, so growth since a point "+
 		"in time can be accounted for rather than guessed at")
@@ -260,6 +266,10 @@ func main() {
 
 	if *supplyByDAA > 0 {
 		supplyHistogramByDAAScore(s, sa, *supplyByDAA)
+	}
+
+	if *commitmentScan > 0 {
+		scanCommitmentAgreement(s, sa, *commitmentScan)
 	}
 
 	if *reconstruct {
@@ -2316,4 +2326,120 @@ func supplyHistogramByDAAScore(s *stores, sa *model.StagingArea, bucketSize uint
 		fmt.Printf("  %-14d %22d %10d %8.2f%% %11.2f%%\n", key, held.amount, held.coins,
 			100*float64(held.coinbase)/float64(held.amount), 100*float64(running)/float64(total))
 	}
+}
+
+// scanCommitmentAgreement reports where this node's stored per-block multisets stop matching the
+// commitments in the blocks' own headers.
+//
+// Every block header carries the UTXO commitment its miner computed, and every block this node
+// resolved has a multiset this node computed for the same thing. Agreement means this node
+// reproduced, at that block, the commitment the chain published.
+//
+// It is deliberately cheap - one stored hash against one header field per block, no UTXO set
+// iteration - so it can sweep an entire archival chain rather than sampling it.
+//
+// What it does NOT tell you, tested rather than assumed: whether a bundle can be built at an
+// agreeing block. On mainnet this scan found 18,122 agreeing blocks, and htnexodus create at the
+// newest of them still produced a set that did not match that block's header. A block's stored
+// multiset and the set re-derived from acceptance data are two different computations, and they
+// can disagree - so an agreeing multiset is not a promise of a publishable candidate. The only way
+// to know is to run htnexodus create and let its own header check answer.
+//
+// Read this as "where did this node's bookkeeping stop matching the chain", which is a real and
+// useful question, and not as "build the candidate here".
+func scanCommitmentAgreement(s *stores, sa *model.StagingArea, depth int) {
+	fmt.Printf("\n=== per-block commitment agreement: this node's multiset vs each block's header\n")
+
+	tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa)
+	if err != nil {
+		fmt.Printf("  headers selected tip: %v\n", err)
+		return
+	}
+	tip, err := s.chain.GetIndexByHash(s.db, sa, tipHash)
+	if err != nil {
+		fmt.Printf("  tip index: %v\n", err)
+		return
+	}
+
+	var scanned, agreeing, diverging, unreadable int
+	var newestAgreeing, oldestAgreeing *externalapi.DomainHash
+	var newestAgreeingIndex, oldestAgreeingIndex uint64
+	var newestAgreeingDAA, oldestAgreeingDAA uint64
+	var firstDivergence *externalapi.DomainHash
+	var firstDivergenceIndex, firstDivergenceDAA uint64
+	var firstStored, firstHeader *externalapi.DomainHash
+
+	for i := tip; i > 0 && tip-i < uint64(depth); i-- {
+		blockHash, err := s.chain.GetHashByIndex(s.db, sa, i)
+		if err != nil {
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, blockHash)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		multiset, err := s.ms.Get(s.db, sa, blockHash)
+		if err != nil {
+			// Not resolved, or its multiset has been pruned away. Says nothing either way.
+			unreadable++
+			continue
+		}
+		scanned++
+		stored := multiset.Hash()
+		if stored.Equal(header.UTXOCommitment()) {
+			agreeing++
+			if newestAgreeing == nil || i > newestAgreeingIndex {
+				newestAgreeing, newestAgreeingIndex, newestAgreeingDAA = blockHash, i, header.DAAScore()
+			}
+			if oldestAgreeing == nil || i < oldestAgreeingIndex {
+				oldestAgreeing, oldestAgreeingIndex, oldestAgreeingDAA = blockHash, i, header.DAAScore()
+			}
+			continue
+		}
+		diverging++
+		// Walking backwards, so the last mismatch seen is the oldest one in the window.
+		firstDivergence, firstDivergenceIndex, firstDivergenceDAA = blockHash, i, header.DAAScore()
+		firstStored, firstHeader = stored, header.UTXOCommitment()
+	}
+
+	fmt.Printf("  chain blocks examined : %d (of %d requested, %d unreadable)\n", scanned, depth, unreadable)
+	fmt.Printf("    multiset MATCHES its header : %d\n", agreeing)
+	fmt.Printf("    multiset DIFFERS            : %d\n", diverging)
+
+	if scanned == 0 {
+		fmt.Printf("  Nothing to compare - no block in this window has both a header and a multiset.\n")
+		return
+	}
+
+	if agreeing == 0 {
+		fmt.Printf("\n  Not one block in this window reproduces its own header commitment. This node\n")
+		fmt.Printf("  cannot derive a bundle that htnexodus will publish at ANY height here: the offset\n")
+		fmt.Printf("  predates the window, so it came in with the pruning point rather than arising in it.\n")
+		fmt.Printf("  A usable candidate has to come from a node whose history reaches back past the\n")
+		fmt.Printf("  point where agreement was lost.\n")
+		if firstDivergence != nil {
+			fmt.Printf("\n  oldest block examined that differs: %s\n", firstDivergence)
+			fmt.Printf("    chain index %d, DAA %d\n", firstDivergenceIndex, firstDivergenceDAA)
+			fmt.Printf("    this node computed %s\n", firstStored)
+			fmt.Printf("    its header commits to %s\n", firstHeader)
+		}
+		return
+	}
+
+	fmt.Printf("\n  newest agreeing block: %s\n    chain index %d, DAA %d\n",
+		newestAgreeing, newestAgreeingIndex, newestAgreeingDAA)
+	fmt.Printf("  oldest agreeing block: %s\n    chain index %d, DAA %d\n",
+		oldestAgreeing, oldestAgreeingIndex, oldestAgreeingDAA)
+	if diverging > 0 && firstDivergence != nil {
+		fmt.Printf("\n  oldest divergence in this window: %s\n", firstDivergence)
+		fmt.Printf("    chain index %d, DAA %d\n", firstDivergenceIndex, firstDivergenceDAA)
+		fmt.Printf("    this node computed %s\n", firstStored)
+		fmt.Printf("    its header commits to %s\n", firstHeader)
+	}
+	fmt.Printf("\n  An agreeing multiset does NOT mean a bundle can be built at that block: the stored\n")
+	fmt.Printf("  multiset and the set re-derived from acceptance data are different computations and\n")
+	fmt.Printf("  can disagree. Only htnexodus create's own header check settles that. To try:\n")
+	fmt.Printf("    htnexodus create --db-path <copy>/datadir2 --network mainnet \\\n")
+	fmt.Printf("      --block %s --out ./candidate\n", newestAgreeing)
 }
