@@ -429,18 +429,14 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		if isNewSelectedTip {
 			log.Debugf("Block %s is the new selected tip, therefore setting it as old selected tip's diffChild", blockHash)
 
-			// pastUTXOSet and oldSelectedTipUTXOSet were reconstructed by independently walking two
-			// competing chain branches, so they can disagree on the BlockDAAScore of an
-			// outpoint they both otherwise agree on (see reconcileWinningBranchUTXO). blockHash is
-			// becoming canonical here, so its own reconstruction (pastUTXOSet) wins that
-			// disagreement.
-			reconciledOldSelectedTipUTXOSet, err := reconcileWinningBranchUTXO(pastUTXOSet, oldSelectedTipUTXOSet)
-			if err != nil {
-				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to reconcile old selected tip "+
-					"%s against new selected tip %s", oldSelectedTip, blockHash)
-			}
-
-			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(reconciledOldSelectedTipUTXOSet)
+			// The two pasts belong to competing branches and may hold the same coin with different DAA
+			// stamps: a coin's stamp is the DAA score of the block that merged its transaction, and the
+			// branches can merge it at different heights. That difference is part of what this diff has to
+			// record. Overwriting the old tip's stamps with the new tip's before diffing - which is what
+			// reconcileWinningBranchUTXO used to do here - erased it, so every later reconstruction of the
+			// old tip's past carried the new branch's stamps, and a block built on the old tip that spent
+			// such a coin was disqualified by this node while the node that mined it accepted it.
+			updatedOldSelectedTipUTXOSet, err := pastUTXOSet.DiffFrom(oldSelectedTipUTXOSet)
 			if err != nil {
 				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff new selected tip %s "+
 					"against old selected tip %s (this=pastUTXOSet of %s, other=oldSelectedTipUTXOSet of %s)",
@@ -455,15 +451,9 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		} else {
 			log.Debugf("Block %s is the tip of currently resolved chain, but not the new selected tip,"+
 				"therefore setting it's utxoDiffChild to be the current selectedTip %s", blockHash, oldSelectedTip)
-			// oldSelectedTip remains canonical here (blockHash lost the tip race), so its
-			// reconstruction wins any BlockDAAScore-only disagreement with pastUTXOSet - see
-			// reconcileWinningBranchUTXO and the comment in the isNewSelectedTip branch above.
-			reconciledPastUTXOSet, err := reconcileWinningBranchUTXO(oldSelectedTipUTXOSet, pastUTXOSet)
-			if err != nil {
-				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to reconcile resolved-chain tip "+
-					"%s against current selected tip %s", blockHash, oldSelectedTip)
-			}
-			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(reconciledPastUTXOSet)
+			// Diffed as-is, for the same reason as in the isNewSelectedTip branch above: a stamp that
+			// differs between the two branches is part of the difference between their pasts.
+			utxoDiff, err := oldSelectedTipUTXOSet.DiffFrom(pastUTXOSet)
 			if err != nil {
 				return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff resolved-chain tip %s "+
 					"against current selected tip %s (this=oldSelectedTipUTXOSet of %s, other=pastUTXOSet of %s)",
