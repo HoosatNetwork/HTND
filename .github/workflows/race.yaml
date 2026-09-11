@@ -8,6 +8,9 @@ on:
 jobs:
   race_test:
     runs-on: ubuntu-latest
+    # Without this the job inherits the 6-hour default, so anything that kills the run - the race
+    # detector's memory use above all - surfaces as a bare SIGTERM hours later instead of a timeout.
+    timeout-minutes: 90
     env:
       GOFLAGS: -tags=ci
     strategy:
@@ -36,7 +39,10 @@ jobs:
             echo "run_on=master" >> $GITHUB_ENV
           fi
           if [ "${{ matrix.branch }}" == "latest" ]; then
-            branch=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin | grep -E '^origin/v[0-9]+\.[0-9]+\.[0-9]+-dev$' | sed 's#^origin/##' | sort -V | tail -n1)
+            # || true because this step runs under `bash -eo pipefail`: with no vX.Y.Z-dev branch on
+            # origin, grep exits 1, pipefail promotes that to the whole pipeline, and -e kills the
+            # step - before the fallback below, which exists for precisely that case, can run.
+            branch=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin | grep -E '^origin/v[0-9]+\.[0-9]+\.[0-9]+-dev$' | sed 's#^origin/##' | sort -V | tail -n1 || true)
             if [ -n "${branch}" ]; then
               echo "run_on=${branch}" >> $GITHUB_ENV
             else
@@ -54,4 +60,7 @@ jobs:
         run: |
           git checkout "${{ env.run_on }}"
           git status
-          go test -timeout 20m -race ./...
+          # -p 2 rather than the default one test binary per core. A race-instrumented binary costs
+          # roughly ten times the memory of a plain one, and several of this repo's consensus
+          # packages hold a full DAG in memory, so four of them at once is what exhausts the runner.
+          go test -timeout 20m -race -p 2 ./...
