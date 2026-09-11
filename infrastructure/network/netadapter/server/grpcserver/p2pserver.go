@@ -74,9 +74,8 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	}()
 
 	client := protowire.NewP2PClient(gRPCClientConnection)
-	stream, err := client.MessageStream(context.Background(), grpc.UseCompressor(gzip.Name),
-		grpc.MaxCallRecvMsgSize(p2pMaxMessageSize), grpc.MaxCallSendMsgSize(p2pMaxMessageSize))
-
+	compress := p.compressionFallback.shouldCompress(address)
+	stream, err := client.MessageStream(context.Background(), p2pStreamCallOptions(compress)...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s error getting client stream for %s", p.name, address)
 	}
@@ -92,6 +91,8 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	}
 
 	connection := newConnection(&p.gRPCServer, tcpAddress, stream, gRPCClientConnection)
+	connection.dialAddress = address
+	connection.compressed = compress
 
 	err = p.onConnectedHandler(connection)
 	if err != nil {
@@ -101,4 +102,18 @@ func (p *p2pServer) Connect(address string) (server.Connection, error) {
 	log.Debugf("%s Connected to %s", p.name, address)
 
 	return connection, nil
+}
+
+// p2pStreamCallOptions returns the call options for an outbound P2P stream. compress requests gzip;
+// without it the stream is plain. Either way the gzip codec stays registered, so compressed messages
+// from peers that declare gzip are still decoded.
+func p2pStreamCallOptions(compress bool) []grpc.CallOption {
+	options := []grpc.CallOption{
+		grpc.MaxCallRecvMsgSize(p2pMaxMessageSize),
+		grpc.MaxCallSendMsgSize(p2pMaxMessageSize),
+	}
+	if compress {
+		options = append(options, grpc.UseCompressor(gzip.Name))
+	}
+	return options
 }

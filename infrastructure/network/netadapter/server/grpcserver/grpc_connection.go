@@ -34,6 +34,12 @@ type gRPCConnection struct {
 	onInvalidMessageHandler server.OnInvalidMessageHandler
 
 	isConnected uint32
+
+	// dialAddress is the address an outbound connection was dialed with, exactly as passed to
+	// Connect, so a compression fallback is recorded under the key the next dial looks up. Empty for
+	// inbound connections. compressed says whether that outbound stream requested gzip.
+	dialAddress string
+	compressed  bool
 }
 
 type grpcStream interface {
@@ -65,6 +71,10 @@ func (c *gRPCConnection) Start(router *router.Router) {
 	spawn("gRPCConnection.Start-connectionLoops", func() {
 		err := c.connectionLoops()
 		if err != nil {
+			if isCompressionFramingError(err) {
+				c.handleCompressionFramingError(err)
+				return
+			}
 			status, isStatus := status.FromError(err)
 			if isStatus {
 				switch status.Code() {
@@ -84,6 +94,28 @@ func (c *gRPCConnection) Start(router *router.Router) {
 			}
 		}
 	})
+}
+
+// handleCompressionFramingError deals with a stream that grpc-go ended because a message's
+// compressed flag contradicted the stream's declared encoding. connectionLoops has already
+// disconnected; what is left is making the next connection to this peer work.
+func (c *gRPCConnection) handleCompressionFramingError(err error) {
+	switch {
+	case !c.IsOutbound():
+		// The peer dialed us and chose the encoding itself; there is nothing to change on this side.
+		log.Warnf("Inbound peer %s sent a message whose compression contradicts its stream's declared "+
+			"encoding, which ends the stream: %s", c.address, err)
+	case c.compressed:
+		c.server.compressionFallback.disableFor(c.dialAddress)
+		log.Warnf("gzip stream to %s failed on compression framing (%s). Connections to it will not "+
+			"request compression for the next %s", c.dialAddress, err, compressionFallbackDuration)
+	default:
+		// This stream did not request compression, so this node sent nothing compressed and gave the
+		// peer no reason to compress. The flagged message was the peer's own.
+		log.Warnf("Stream to %s failed on compression framing even though it did not request "+
+			"compression (%s) - that peer sends malformed messages regardless of what this node asks for",
+			c.dialAddress, err)
+	}
 }
 
 func (c *gRPCConnection) String() string {

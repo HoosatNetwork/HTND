@@ -35,6 +35,10 @@ type gRPCServer struct {
 	maxInboundConnections      int
 	inboundConnectionCount     int
 	inboundConnectionCountLock *sync.Mutex
+
+	// compressionFallback is a pointer, like inboundConnectionCountLock, because NewP2PServer embeds
+	// gRPCServer by value and every connection refers back to that copy.
+	compressionFallback *compressionFallback
 }
 
 // newGRPCServer creates a gRPC server
@@ -70,6 +74,7 @@ func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundCo
 		maxInboundConnections:      maxInboundConnections,
 		inboundConnectionCount:     0,
 		inboundConnectionCountLock: &sync.Mutex{},
+		compressionFallback:        newCompressionFallback(),
 	}
 }
 
