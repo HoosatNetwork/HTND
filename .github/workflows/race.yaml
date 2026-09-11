@@ -60,7 +60,28 @@ jobs:
         run: |
           git checkout "${{ env.run_on }}"
           git status
+          free -m
           # -p 2 rather than the default one test binary per core. A race-instrumented binary costs
           # roughly ten times the memory of a plain one, and several of this repo's consensus
           # packages hold a full DAG in memory, so four of them at once is what exhausts the runner.
-          go test -timeout 20m -race -p 2 ./...
+          #
+          # Each line is stamped with the wall-clock time it was printed. `go test` reports how long
+          # each package took but nothing about when, so a run that ends in a bare SIGTERM gives no
+          # way to tell a job that died ten minutes in from one that sat stuck for hours - which is
+          # the first thing worth knowing about this job's exit 143. pipefail is on, so the loop does
+          # not swallow a test failure.
+          go test -timeout 20m -race -p 2 ./... 2>&1 \
+            | while IFS= read -r line; do printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$line"; done
+
+      # The 20m -timeout above only covers running a test binary. It does not cover compiling and
+      # linking them, which under -race is where this job spends most of its memory, and a runner
+      # deep into swap can stall there for hours with no timeout of any kind applying. If the kernel
+      # killed something, this says so; if it did not, the stall was not memory and the timestamps
+      # above say where it was.
+      - name: Report memory pressure and any OOM kills
+        if: always()
+        shell: bash
+        run: |
+          free -m || true
+          sudo dmesg 2>/dev/null | grep -iE 'out of memory|oom-kill|killed process' | tail -20 \
+            || echo "no OOM kills recorded in dmesg"
