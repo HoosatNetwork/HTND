@@ -46,10 +46,21 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// Tolerating the inherited offset must not mean tolerating everything. A block whose own
 	// acceptance data and UTXO diff disagree has created or destroyed something its own record does
 	// not account for, and no baseline offset can explain that - waving it through lets new corruption
-	// arrive on top of the old under the same log line. Checked once per block, only when something
-	// has actually failed and toleration is on the table.
-	carriesOffsetOnly, arithmeticProblem := true, ""
-	if tolerate {
+	// arrive on top of the old under the same log line.
+	//
+	// Answered on the first failure and then remembered, which is what "only when something has
+	// actually failed and toleration is on the table" was always meant to mean. It used to be
+	// computed as soon as tolerate was true - so on a node with an offset baseline, which is the only
+	// kind this engages on, every block that passed every check still paid for a full walk of its
+	// merge set's acceptance data to answer a question no failure had asked. stop() below runs
+	// sequentially, so this needs no synchronisation of its own.
+	offsetVerdictKnown, carriesOffsetOnly := false, true
+	blockCarriesOffsetOnly := func() bool {
+		if offsetVerdictKnown {
+			return carriesOffsetOnly
+		}
+		offsetVerdictKnown = true
+		var arithmeticProblem string
 		carriesOffsetOnly, arithmeticProblem = blockOnlyCarriesTheInheritedOffset(
 			acceptanceData, pastUTXODiff, block.Header.DAAScore(),
 			func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
@@ -61,6 +72,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 				"it does not explain a block whose own acceptance data and UTXO diff disagree.",
 				blockHash, arithmeticProblem)
 		}
+		return carriesOffsetOnly
 	}
 
 	var firstError error
@@ -69,7 +81,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 			return false
 		}
 		survey.noteFailure(step, err)
-		if tolerate && carriesOffsetOnly && errors.As(err, &ruleerrors.RuleError{}) {
+		if tolerate && errors.As(err, &ruleerrors.RuleError{}) && blockCarriesOffsetOnly() {
 			csm.logToleratedIssue(step, blockHash, err)
 			return false
 		}
@@ -173,30 +185,45 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	// blockOnlyCarriesTheInheritedOffset above decides, by comparing the block's acceptance data
 	// against its own UTXO diff, and it needs no guess about what a toRemove entry means.
 	tolerateMissingTxOut := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
-	if tolerateMissingTxOut {
-		// Same verdict as verifyUTXO's: a block whose own arithmetic is broken gets no leniency from
-		// a baseline that only explains commitments it cannot reproduce.
-		if carriesOffsetOnly, _ := blockOnlyCarriesTheInheritedOffset(
-			acceptanceData, pastUTXODiff, block.Header.DAAScore(),
-			func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
-				return csm.virtualUTXOEntry(stagingArea, outpoint)
-			}); !carriesOffsetOnly {
-			tolerateMissingTxOut = false
-		}
-	}
-	tolerable := func(err error) bool {
-		if !tolerateMissingTxOut {
-			return false
-		}
-		var missingTxOut ruleerrors.ErrMissingTxOut
-		return errors.As(err, &missingTxOut)
-	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var stagingMu sync.Mutex
 	var firstErr error
 	done := make(chan struct{}) // Signal to stop other goroutines on first error
+
+	// Same verdict as verifyUTXO's: a block whose own arithmetic is broken gets no leniency from a
+	// baseline that only explains commitments it cannot reproduce.
+	//
+	// Reached only once a transaction has actually failed with a missing input, and computed once
+	// per block when it is. Running it up front meant every clean block on an offset node walked its
+	// whole merge set here as well as in verifyUTXO - two full scans per block, neither of which any
+	// failure had asked for.
+	var offsetVerdictOnce sync.Once
+	carriesOffsetOnly := true
+	tolerable := func(err error) bool {
+		if !tolerateMissingTxOut {
+			return false
+		}
+		var missingTxOut ruleerrors.ErrMissingTxOut
+		if !errors.As(err, &missingTxOut) {
+			return false
+		}
+		offsetVerdictOnce.Do(func() {
+			// Unlike verifyUTXO's, this can be reached from any of the per-transaction goroutines
+			// below, and the virtual lookup it passes reads the consensus state store - so it takes
+			// the same lock those goroutines use for store access. Callers reach here having released
+			// it, so there is nothing to deadlock against.
+			stagingMu.Lock()
+			defer stagingMu.Unlock()
+			carriesOffsetOnly, _ = blockOnlyCarriesTheInheritedOffset(
+				acceptanceData, pastUTXODiff, block.Header.DAAScore(),
+				func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
+					return csm.virtualUTXOEntry(stagingArea, outpoint)
+				})
+		})
+		return carriesOffsetOnly
+	}
 
 	for i, transaction := range block.Transactions {
 		if i == transactionhelper.CoinbaseTransactionIndex {

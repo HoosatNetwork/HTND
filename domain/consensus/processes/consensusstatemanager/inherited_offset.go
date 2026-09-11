@@ -60,24 +60,43 @@ func blockOnlyCarriesTheInheritedOffset(acceptanceData externalapi.AcceptanceDat
 		return lookupVirtual(outpoint)
 	}
 
-	// Outpoints that this same past both creates and spends. Such a coin nets to nothing and leaves
-	// no trace in the diff at all: mutableUTXODiff.removeEntry cancels the pending toAdd rather than
-	// recording a removal, so the coin appears in neither toAdd nor toRemove, and it was never in
-	// virtual either. Without this set, every block carrying a transaction that spends another
-	// transaction merged alongside it is convicted of losing a coin it never lost - and a chain of
-	// compounding transactions is exactly that shape.
-	spentInThisPast := make(map[externalapi.DomainOutpoint]struct{})
-	for _, blockAcceptanceData := range acceptanceData {
-		for _, transactionAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
-			if !transactionAcceptance.IsAccepted {
-				continue
-			}
-			for _, input := range transactionAcceptance.Transaction.Inputs {
-				spentInThisPast[input.PreviousOutpoint] = struct{}{}
+	// spentInThisPast holds the outpoints this same past both creates and spends. Such a coin nets
+	// to nothing and leaves no trace in the diff at all: mutableUTXODiff.removeEntry cancels the
+	// pending toAdd rather than recording a removal, so the coin appears in neither toAdd nor
+	// toRemove, and it was never in virtual either. Without it, every block carrying a transaction
+	// that spends another transaction merged alongside it is convicted of losing a coin it never
+	// lost - and a chain of compounding transactions is exactly that shape.
+	//
+	// It is built on first use, not up front, because it is read in exactly one place: the branch
+	// below that handles a created coin absent from the block's past view. That branch does not fire
+	// on a block whose own records agree, which is the overwhelming majority of the blocks this runs
+	// on. Building it eagerly meant a map keyed on 40-byte outpoints, sized by every input in the
+	// merge set and grown from nothing on every call - measured at two thirds of this function's
+	// runtime and of its allocated bytes, allocated and discarded without a single lookup.
+	var spentInThisPast map[externalapi.DomainOutpoint]struct{}
+	spentInThisPastHolds := func(outpoint *externalapi.DomainOutpoint) bool {
+		if spentInThisPast == nil {
+			spentInThisPast = make(map[externalapi.DomainOutpoint]struct{})
+			for _, blockAcceptanceData := range acceptanceData {
+				for _, transactionAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
+					if !transactionAcceptance.IsAccepted {
+						continue
+					}
+					for _, input := range transactionAcceptance.Transaction.Inputs {
+						spentInThisPast[input.PreviousOutpoint] = struct{}{}
+					}
+				}
 			}
 		}
+		_, spentHere := spentInThisPast[*outpoint]
+		return spentHere
 	}
 
+	// One outpoint, rewritten per output rather than allocated per output. Everything it is handed to
+	// indexes by value and none of them retain it: utxoCollection and the staged diff dereference it
+	// for a map lookup, and consensusStateStore's virtual UTXO cache stores entries under *key. A
+	// merge set is thousands of outputs, and this ran on every block.
+	outpoint := &externalapi.DomainOutpoint{}
 	for _, blockAcceptanceData := range acceptanceData {
 		for i, transactionAcceptance := range blockAcceptanceData.TransactionAcceptanceData {
 			if !transactionAcceptance.IsAccepted {
@@ -86,12 +105,11 @@ func blockOnlyCarriesTheInheritedOffset(acceptanceData externalapi.AcceptanceDat
 			transaction := transactionAcceptance.Transaction
 			transactionID := consensushashing.TransactionID(transaction)
 			isCoinbase := utxo.IsAcceptedCoinbase(transaction, i)
+			expectedDAAScore := utxo.AcceptedUTXOBlockDAAScore(daaScore)
 
 			for outputIndex, output := range transaction.Outputs {
-				outpoint := &externalapi.DomainOutpoint{
-					TransactionID: *transactionID,
-					Index:         uint32(outputIndex),
-				}
+				outpoint.TransactionID = *transactionID
+				outpoint.Index = uint32(outputIndex)
 				entry, present := inPastView(outpoint)
 				if !present {
 					// Absent from the block's past view entirely. Correct only when this same past also
@@ -100,7 +118,7 @@ func blockOnlyCarriesTheInheritedOffset(acceptanceData externalapi.AcceptanceDat
 					if pastUTXODiff.ToRemove().Contains(outpoint) {
 						continue
 					}
-					if _, spentHere := spentInThisPast[*outpoint]; spentHere {
+					if spentInThisPastHolds(outpoint) {
 						// Created and destroyed inside this same past. It nets to nothing in the diff
 						// and nets to nothing in the multiset, so its absence is correct.
 						continue
@@ -108,9 +126,13 @@ func blockOnlyCarriesTheInheritedOffset(acceptanceData externalapi.AcceptanceDat
 					return false, fmt.Sprintf("accepted transaction %s output %d is absent from the "+
 						"block's own past UTXO set", transactionID, outputIndex)
 				}
-				expected := utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, isCoinbase,
-					utxo.AcceptedUTXOBlockDAAScore(daaScore))
-				if !entry.Equal(expected) {
+				// Field by field against what acceptance says the coin is, rather than against a
+				// utxo.NewUTXOEntry built for the comparison. It is the same comparison utxoEntry.Equal
+				// makes - amount, script, DAA stamp, coinbase flag - without an entry and a copied
+				// script public key per output, both discarded on the next iteration.
+				if entry == nil || entry.Amount() != output.Value || entry.IsCoinbase() != isCoinbase ||
+					entry.BlockDAAScore() != expectedDAAScore ||
+					!entry.ScriptPublicKey().Equal(output.ScriptPublicKey) {
 					return false, fmt.Sprintf("accepted transaction %s output %d is in the block's past "+
 						"UTXO set with different contents than its acceptance data describes", transactionID,
 						outputIndex)

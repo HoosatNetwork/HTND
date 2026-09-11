@@ -5,6 +5,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 )
 
@@ -212,5 +213,82 @@ func TestCoinCreatedAndSpentInTheSamePastLeavesNoDiffEntry(t *testing.T) {
 	if !tolerable {
 		t.Errorf("a coin created and spent in the same past nets to nothing and must not be treated "+
 			"as a block losing a coin, got: %s", reason)
+	}
+}
+
+// BenchmarkBlockOnlyCarriesTheInheritedOffset guards the cost of this scan, because the cost is the
+// whole reason its shape is what it is.
+//
+// On a node with an offset baseline this runs for every block that resolves, and it used to run
+// twice per block whether or not anything had failed. Two earlier versions of it allocated per call
+// in ways that did not show up in any test: a spentInThisPast map built up front over every input in
+// the merge set, and a fresh outpoint plus a fresh UTXO entry for every output compared. Together
+// they were ~611 KB and ~6,000 allocations for the merge set below, all of it garbage by the time
+// the function returned - which at a few hundred blocks a second during IBD is hundreds of megabytes
+// a second of pure GC pressure.
+//
+// Run it with -benchmem. A jump in B/op here is the regression this is for.
+func BenchmarkBlockOnlyCarriesTheInheritedOffset(b *testing.B) {
+	const (
+		mergedBlocks = 20
+		txsPerBlock  = 50
+		daaScore     = 900
+	)
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
+	toAdd := map[externalapi.DomainOutpoint]externalapi.UTXOEntry{}
+	acceptanceData := make(externalapi.AcceptanceData, 0, mergedBlocks)
+
+	var counter byte
+	for blockIndex := 0; blockIndex < mergedBlocks; blockIndex++ {
+		acceptances := make([]*externalapi.TransactionAcceptanceData, 0, txsPerBlock)
+		for txIndex := 0; txIndex < txsPerBlock; txIndex++ {
+			counter++
+			kind := subnetworks.SubnetworkIDNative
+			var inputs []*externalapi.DomainOutpoint
+			if txIndex == 0 {
+				kind = subnetworks.SubnetworkIDCoinbase
+			} else {
+				for i := 0; i < 2; i++ {
+					spent := externalapi.NewDomainHashFromByteArray(
+						&[externalapi.DomainHashSize]byte{counter, byte(blockIndex), byte(i)})
+					inputs = append(inputs, &externalapi.DomainOutpoint{
+						TransactionID: externalapi.DomainTransactionID(*spent),
+						Index:         uint32(i),
+					})
+				}
+			}
+			transaction := acceptedTransactionOfKind(kind, inputs, 100, 200)
+			// Distinct payloads so every transaction gets a distinct ID, as in a real merge set.
+			transaction.Payload = []byte{counter, byte(blockIndex), byte(txIndex)}
+			transactionID := consensushashing.TransactionID(transaction)
+			for outputIndex, output := range transaction.Outputs {
+				toAdd[externalapi.DomainOutpoint{TransactionID: *transactionID, Index: uint32(outputIndex)}] =
+					utxo.NewUTXOEntry(output.Value, script, txIndex == 0, daaScore)
+			}
+			acceptances = append(acceptances, &externalapi.TransactionAcceptanceData{
+				Transaction: transaction,
+				IsAccepted:  true,
+			})
+		}
+		acceptanceData = append(acceptanceData, &externalapi.BlockAcceptanceData{
+			BlockHash: externalapi.NewDomainHashFromByteArray(
+				&[externalapi.DomainHashSize]byte{byte(blockIndex)}),
+			TransactionAcceptanceData: acceptances,
+		})
+	}
+
+	diff, err := utxo.NewUTXODiffFromCollections(utxo.NewUTXOCollection(toAdd),
+		utxo.NewUTXOCollection(map[externalapi.DomainOutpoint]externalapi.UTXOEntry{}))
+	if err != nil {
+		b.Fatalf("NewUTXODiffFromCollections: %+v", err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		carries, reason := blockOnlyCarriesTheInheritedOffset(acceptanceData, diff, daaScore, nil)
+		if !carries {
+			b.Fatalf("a merge set whose diff matches its acceptance data must be tolerable: %s", reason)
+		}
 	}
 }
