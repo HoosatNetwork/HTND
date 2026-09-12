@@ -10,6 +10,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -80,12 +81,42 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string) (uin
 		return 0, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 	}
 
-	balance, err := context.UTXOIndex.GetBalance(scriptPublicKey)
+	// Summed from the coins themselves rather than from the index's own total, because each one has to
+	// be checked against consensus first. A balance that counts coins consensus does not hold tells the
+	// wallet it can spend what it cannot, and then disagrees with the coins this same node serves it.
+	buffer := memory.Malloc[utxoindex.UTXOPair](1000)
+	if buffer == nil {
+		return 0, appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
+	}
+	pairs, buffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
 	if err != nil {
+		memory.Free(buffer)
 		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
 			return 0, appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
 		}
 		return 0, err
 	}
-	return balance, nil
+	defer memory.Free(buffer)
+
+	pairs, withheld, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs)
+	if err != nil {
+		return 0, err
+	}
+	if withheld > 0 {
+		log.Warnf("Left %d UTXO(s) of address %s out of its balance: the UTXO index lists them but virtual's "+
+			"UTXO set does not hold them. The index has drifted from consensus.", withheld, addressString)
+	}
+
+	return sumUTXOPairs(pairs), nil
+}
+
+// sumUTXOPairs adds up the coins as consensus describes them. FilterUTXOPairsAgainstVirtual has
+// already dropped the coins consensus does not hold and replaced the entries of the ones it does, so
+// the amounts summed here are consensus's, not the index's.
+func sumUTXOPairs(pairs []utxoindex.UTXOPair) uint64 {
+	var balance uint64
+	for _, pair := range pairs {
+		balance += pair.Entry.Amount()
+	}
+	return balance
 }

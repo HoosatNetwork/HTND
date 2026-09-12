@@ -29,6 +29,10 @@ type Consensus interface {
 	GetMissingBlockBodyHashes(highHash *DomainHash) ([]*DomainHash, error)
 	GetPruningPointUTXOs(expectedPruningPointHash *DomainHash, fromOutpoint *DomainOutpoint, limit int) ([]*OutpointAndUTXOEntryPair, error)
 	GetVirtualUTXOs(expectedVirtualParents []*DomainHash, fromOutpoint *DomainOutpoint, limit int) ([]*OutpointAndUTXOEntryPair, error)
+	// GetVirtualUTXOEntries returns, for each outpoint, the entry virtual's UTXO set holds for it, or
+	// nil where it holds none. It is the authoritative answer to "does this coin exist, and what is
+	// it", for callers that serve coins to spenders from a secondary index.
+	GetVirtualUTXOEntries(outpoints []*DomainOutpoint) ([]UTXOEntry, error)
 	PruningPoint() (*DomainHash, error)
 	PruningPointHeaders() ([]BlockHeader, error)
 	PruningPointAndItsAnticone() ([]*DomainHash, error)

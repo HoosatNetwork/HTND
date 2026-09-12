@@ -10,6 +10,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -54,13 +55,34 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	}
 	usableAddressesCacheMutex.Unlock()
 
-	hasUTXOs, err := context.UTXOIndex.HasUTXOs(scriptPublicKey)
+	// "Usable" has to mean the address holds a coin that can actually be spent, so the index's own
+	// answer - which is only that it has entries for this address - is checked against consensus. An
+	// address whose every listed coin is one consensus does not hold is not usable: every transaction
+	// built on it is refused. The 30 second cache above keeps this off the hot path for repeat asks.
+	buffer := memory.Malloc[utxoindex.UTXOPair](1000)
+	if buffer == nil {
+		return false, appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
+	}
+	pairs, buffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
 	if err != nil {
+		memory.Free(buffer)
 		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
 			return false, appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
 		}
 		return false, err
 	}
+	defer memory.Free(buffer)
+
+	pairs, withheld, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs)
+	if err != nil {
+		return false, err
+	}
+	if withheld > 0 {
+		log.Warnf("Ignored %d UTXO(s) of address %s when deciding whether it is usable: the UTXO index lists "+
+			"them but virtual's UTXO set does not hold them. The index has drifted from consensus.",
+			withheld, addressString)
+	}
+	hasUTXOs := len(pairs) > 0
 
 	usableAddressesCacheMutex.Lock()
 	// Simple safety bound: if the cache grows too big (e.g. scanning huge ranges), clear it.

@@ -808,6 +808,35 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	return pruningPointUTXOs, nil
 }
 
+// GetVirtualUTXOEntries looks each outpoint up in virtual's UTXO set - the set this node itself
+// spends from - and returns its entry, or nil where the set does not hold the coin.
+//
+// The batch exists for the sake of the callers: the UTXO-serving RPCs have hundreds of outpoints to
+// check per address, and taking the consensus lock once for all of them is the difference between a
+// usable check and one nobody can afford to run.
+func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint) ([]externalapi.UTXOEntry, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+	entries := make([]externalapi.UTXOEntry, len(outpoints))
+	for i, outpoint := range outpoints {
+		hasEntry, err := s.consensusStateStore.HasUTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
+		if err != nil {
+			return nil, err
+		}
+		if !hasEntry {
+			continue
+		}
+		entry, _, err := s.consensusStateStore.UTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = entry
+	}
+	return entries, nil
+}
+
 func (s *consensus) GetVirtualUTXOs(expectedVirtualParents []*externalapi.DomainHash,
 	fromOutpoint *externalapi.DomainOutpoint, limit int,
 ) ([]*externalapi.OutpointAndUTXOEntryPair, error) {
