@@ -29,8 +29,9 @@ var (
 	// re-run their full multi-minute scan on every single boot when the underlying data - the
 	// current pruning point, or the root of any disqualification cascade - hasn't actually changed
 	// since the last time they ran.
-	lastUTXODebugCheckedPruningPointKeyName = []byte("last-utxo-debug-checked-pruning-point")
-	lastUTXODebugReproducedRootHashKeyName  = []byte("last-utxo-debug-reproduced-root-disqualified-block")
+	lastUTXODebugCheckedPruningPointKeyName   = []byte("last-utxo-debug-checked-pruning-point")
+	lastUTXODebugReproducedRootHashKeyName    = []byte("last-utxo-debug-reproduced-root-disqualified-block")
+	lastAutoExodusExportedPruningPointKeyName = []byte("last-auto-exodus-exported-pruning-point")
 )
 
 // pruningStore represents a store for the current pruning state
@@ -50,8 +51,9 @@ type pruningStore struct {
 	pruningPointByIndexBucket       model.DBBucket
 	lastPruningTimeKey              model.DBKey
 
-	lastUTXODebugCheckedPruningPointKey model.DBKey
-	lastUTXODebugReproducedRootHashKey  model.DBKey
+	lastUTXODebugCheckedPruningPointKey   model.DBKey
+	lastUTXODebugReproducedRootHashKey    model.DBKey
+	lastAutoExodusExportedPruningPointKey model.DBKey
 }
 
 // New instantiates a new PruningStore
@@ -68,8 +70,9 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.Pru
 		pruningPointByIndexBucket:       prefixBucket.Bucket(pruningPointByIndexBucketName),
 		lastPruningTimeKey:              prefixBucket.Key(lastPruningTimeKeyName),
 
-		lastUTXODebugCheckedPruningPointKey: prefixBucket.Key(lastUTXODebugCheckedPruningPointKeyName),
-		lastUTXODebugReproducedRootHashKey:  prefixBucket.Key(lastUTXODebugReproducedRootHashKeyName),
+		lastUTXODebugCheckedPruningPointKey:   prefixBucket.Key(lastUTXODebugCheckedPruningPointKeyName),
+		lastUTXODebugReproducedRootHashKey:    prefixBucket.Key(lastUTXODebugReproducedRootHashKeyName),
+		lastAutoExodusExportedPruningPointKey: prefixBucket.Key(lastAutoExodusExportedPruningPointKeyName),
 	}
 }
 
@@ -227,6 +230,22 @@ func (ps *pruningStore) PruningPointByIndex(dbContext model.DBReader, stagingAre
 	}
 	ps.pruningPointByIndexCache.Add(index, pruningPointDeserialized)
 	return pruningPointDeserialized, nil
+}
+
+func (ps *pruningStore) SetLastAutoExodusExportedPruningPoint(dbContext model.DBWriter, pruningPoint *externalapi.DomainHash) error {
+	hashBytes, err := ps.serializeHash(pruningPoint)
+	if err != nil {
+		return err
+	}
+	return dbContext.Put(ps.lastAutoExodusExportedPruningPointKey, hashBytes)
+}
+
+func (ps *pruningStore) LastAutoExodusExportedPruningPoint(dbContext model.DBReader) (*externalapi.DomainHash, error) {
+	hashBytes, err := dbContext.Get(ps.lastAutoExodusExportedPruningPointKey)
+	if err != nil {
+		return nil, err
+	}
+	return ps.deserializePruningPoint(hashBytes)
 }
 
 func (ps *pruningStore) serializeHash(hash *externalapi.DomainHash) ([]byte, error) {

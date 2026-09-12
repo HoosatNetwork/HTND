@@ -79,6 +79,23 @@ The node must be stopped before running `htnexodus create`, `htnexodus diff --li
 running node for the same database files. `htnexodus verify` and a `htnexodus diff` between two
 already-generated bundles do not touch a node's database at all and can be run at any time.
 
+### Automatic export at the next pruning-point movement
+
+For operator investigations, start `htnd` with `--enable-auto-exodus-export-on-pruning`. The
+next (and every subsequent) pruning-point movement schedules one best-effort asynchronous bundle
+export using the `acceptance-data` derivation. It is disabled by default and does not alter
+consensus decisions or make pruning fail when an export fails.
+
+Bundles are written under `<AppDir>/exodus-auto-export` by default, in a
+`pruning-point-<daa-score>-<block-hash>` directory. Override the parent directory with
+`--auto-exodus-export-dir=/path/to/exports`.
+
+Look for the `[AUTO-EXODUS] PASS` or `[AUTO-EXODUS] FAIL` line. It records the pruning-point
+hash and DAA score, exported entry count, computed commitment, header commitment, and bundle
+path. `PASS` means that node's acceptance-data export reproduced the pruning-point header
+commitment; `FAIL` leaves the bundle available for `htnexodus diff` but means it must not be
+treated as a candidate without further investigation.
+
 ### Generate a candidate
 
 By block hash:

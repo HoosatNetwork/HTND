@@ -161,6 +161,8 @@ type Flags struct {
 	AllowSubmitBlockWhenNotSynced   bool          `long:"allow-submit-block-when-not-synced" hidden:"true" description:"Allow the node to accept blocks from RPC while not synced (this flag is mainly used for testing)"`
 	EnableSanityCheckPruningUTXOSet bool          `long:"enable-sanity-check-pruning-utxo" hidden:"true" description:"When moving the pruning point - check that the utxo set matches the utxo commitment"`
 	EnableUTXODebugDiagnostics      bool          `long:"enable-utxo-debug-diagnostics" hidden:"true" description:"At startup, run the expensive [UTXO-DEBUG] pruning-point/virtual-UTXO-set self-consistency checks and root-disqualification bisection (each pass can take 15-20+ minutes on a mature chain). Off by default - only for actively investigating a UTXO commitment mismatch."`
+	EnableAutoExodusExportOnPruning bool          `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
+	AutoExodusExportDir             string        `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
 
 	// Compound transaction rate limiting flags
@@ -426,6 +428,10 @@ func LoadConfig() (*Config, error) {
 	// means each individual piece of serialized data does not have to
 	// worry about changing names per network and such.
 	cfg.AppDir = filepath.Join(cfg.AppDir, cfg.NetParams().Name)
+	if cfg.AutoExodusExportDir == "" {
+		cfg.AutoExodusExportDir = filepath.Join(cfg.AppDir, "exodus-auto-export")
+	}
+	cfg.AutoExodusExportDir = cleanAndExpandPath(cfg.AutoExodusExportDir)
 
 	// Logs directory is usually under the home directory, unless otherwise specified
 	if cfg.LogDir == "" {
