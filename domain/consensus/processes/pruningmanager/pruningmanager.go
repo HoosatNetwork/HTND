@@ -232,6 +232,20 @@ func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.Staging
 			}
 		}
 
+		// Report the parameters this selection was made with, not just its outcome. pruningDepth and
+		// finalityInterval are captured once, when this consensus object is constructed, from
+		// version-gated functions reading the constants.GetBlockVersion() process-global - which starts
+		// at 1 and is only raised later as blocks arrive. A consensus built at startup therefore holds
+		// version 1's numbers, while one built mid-run (a staging consensus during a pruning-point IBD,
+		// which CommitStagingConsensus then promotes to be the live consensus) holds the current
+		// version's. finalityInterval is the divisor in finalityScore, which is what decides when the
+		// point advances, so two nodes holding different values pick different pruning points from
+		// identical chain data. Logging all three together makes that visible on a running node: a line
+		// whose activeBlockVersion is >= 5 while pruningDepth still reads the version-1 value is a node
+		// selecting with stale parameters.
+		log.Infof("Pruning point selection parameters: pruningDepth=%d finalityInterval=%d "+
+			"(both frozen at consensus construction) activeBlockVersion=%d",
+			pm.pruningDepth, pm.finalityInterval, constants.GetBlockVersion())
 		log.Infof("Moving pruning point from %s to %s", currentPruningPoint, newPruningPoint)
 		err = pm.savePruningPoint(stagingArea, newPruningPoint)
 		if err != nil {

@@ -20,6 +20,10 @@
 //	-reconstruct    Rebuild the pruning point's absolute UTXO set from virtual's UTXO table plus the
 //	                stored diff chain and diff it entry-by-entry against the served bucket, which
 //	                separates "the set has the wrong members" from "the set has the wrong values".
+//	-depthaudit N   Bracket the pruning depth the NETWORK selected with, by reading it out of mined
+//	                headers, and report which finality interval the stored pruning point sequence is
+//	                consistent with. Use it to tell whether this node picks pruning points with the
+//	                same parameters as its peers.
 //
 // A node whose per-block multisets match their headers but whose served bucket does not is serving a
 // broken pruning point UTXO set to every peer that syncs from it, and -reconstruct names the
@@ -175,6 +179,14 @@ var (
 	baseTest = flag.Bool("basecheck", false, "hash the stored pruning point UTXO set, compare it to the pruning "+
 		"point's header commitment, and - if it matches - use it as a network-sourced base to discriminate the "+
 		"two DAA-stamp rules on the next selected-chain blocks")
+
+	depthAudit = flag.Int("depthaudit", 0, "chain blocks back from the headers-selected tip to use when "+
+		"bracketing the pruning depth the network actually selected with. Every mined header commits the "+
+		"deepest pruning point satisfying blueScore(block) >= blueScore(pruningPoint) + pruningDepth, so each "+
+		"header bounds the depth from both sides; intersecting them over many headers pins it to a narrow "+
+		"range that can be compared against the candidate depths. Also reports which candidate finality "+
+		"interval the stored pruning point sequence is consistent with. Answers whether this node selects "+
+		"pruning points with the same parameters as its peers.")
 )
 
 type stores struct {
@@ -303,6 +315,10 @@ func main() {
 
 	if *baseTest {
 		baseCheck(s, sa)
+	}
+
+	if *depthAudit > 0 {
+		pruningDepthAudit(s, sa, *depthAudit)
 	}
 
 	if *hasOutpoints != "" {
@@ -2836,5 +2852,210 @@ func dumpBlockAcceptance(s *stores, sa *model.StagingArea, blockHashString, tran
 					"transaction was refused too.\n", missing, len(entry.inputs))
 			}
 		}
+	}
+}
+
+// pruningDepthAudit determines, from stored data alone, which pruning depth and finality interval the
+// chain's pruning points were actually selected with.
+//
+// This exists because those two numbers are not reliably the same on every node. pruningDepth and
+// finalityInterval are read once, when a consensus object is constructed, from version-gated functions
+// (dagconfig's PruningDepth/FinalityDepth) that consult the constants.GetBlockVersion() process-global.
+// That global starts at 1 and is only raised at runtime as blocks arrive, so a consensus built at
+// startup freezes version 1's numbers while one built mid-run - a staging consensus during a
+// pruning-point IBD, which CommitStagingConsensus then promotes to be the live consensus - freezes the
+// current version's. finalityInterval is the divisor in the pruning manager's finalityScore, which is
+// what decides when the point advances, so nodes holding different values pick different pruning
+// points from identical chain data.
+//
+// Two independent readings are reported, because neither depends on trusting this node's own
+// parameters:
+//
+// 1. The depth bracket, from mined headers. ExpectedHeaderPruningPoint commits, in every header, the
+// DEEPEST pruning point satisfying blueScore(block) >= blueScore(pruningPoint) + pruningDepth. So a
+// header naming point P bounds the depth from above (P qualified: depth <= blueScore(B)-blueScore(P))
+// and, when the next point P+1 already existed in B's past, from below (P+1 did NOT qualify:
+// depth > blueScore(B)-blueScore(P+1)). Intersecting those bounds over many headers pins the depth the
+// network validated, independently of what this node would compute.
+//
+// 2. The interval, from the pruning point sequence. A point becomes the pruning point when its
+// finality score crosses a boundary, so its blue score lands just above a multiple of the interval that
+// produced it. The true interval therefore leaves small residuals modulo itself; a wrong one leaves
+// residuals scattered across its whole range.
+func pruningDepthAudit(s *stores, sa *model.StagingArea, depth int) {
+	fmt.Printf("\n=== pruning depth audit: which parameters produced this chain's pruning points\n")
+
+	type candidate struct {
+		version  uint
+		depth    uint64
+		interval uint64
+	}
+
+	// Enumerate the distinct (depth, interval) pairs the version table can produce. Mainnet and
+	// testnet yield the same numbers, so no network selection is needed here.
+	originalVersion := constants.GetBlockVersion()
+	var candidates []candidate
+	seen := make(map[[2]uint64]bool)
+	for _, version := range []uint{1, 5} {
+		constants.ForceSetBlockVersion(version)
+		c := candidate{
+			version:  version,
+			depth:    dagconfig.MainnetParams.PruningDepth(),
+			interval: dagconfig.MainnetParams.FinalityDepth(),
+		}
+		key := [2]uint64{c.depth, c.interval}
+		if !seen[key] {
+			seen[key] = true
+			candidates = append(candidates, c)
+		}
+	}
+	constants.ForceSetBlockVersion(uint(originalVersion))
+
+	for _, c := range candidates {
+		fmt.Printf("  candidate: block version %d => pruningDepth=%d finalityInterval=%d\n",
+			c.version, c.depth, c.interval)
+	}
+
+	currentIndex, err := s.pruning.CurrentPruningPointIndex(s.db, sa)
+	if err != nil {
+		fmt.Printf("  current pruning point index: %v\n", err)
+		return
+	}
+
+	type ppEntry struct {
+		index               uint64
+		hash                *externalapi.DomainHash
+		blueScore, daaScore uint64
+	}
+	var table []ppEntry
+	for i := uint64(0); i <= currentIndex; i++ {
+		hash, err := s.pruning.PruningPointByIndex(s.db, sa, i)
+		if err != nil {
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, hash)
+		if err != nil {
+			// Headers below the retained history are gone; the remaining points still bracket.
+			fmt.Printf("    [%d] %s  <header unavailable>\n", i, hash)
+			continue
+		}
+		table = append(table, ppEntry{index: i, hash: hash, blueScore: header.BlueScore(), daaScore: header.DAAScore()})
+	}
+
+	fmt.Printf("\n  -- stored pruning point sequence (current index %d, %d with headers available)\n",
+		currentIndex, len(table))
+	for _, e := range table {
+		fmt.Printf("    [%d] %s blueScore=%d daaScore=%d", e.index, e.hash, e.blueScore, e.daaScore)
+		for _, c := range candidates {
+			fmt.Printf("  mod%d=%d", c.interval, e.blueScore%c.interval)
+		}
+		fmt.Println()
+	}
+
+	fmt.Printf("\n  -- finality interval discrimination\n")
+	fmt.Printf("     A pruning point lands just above a multiple of the interval that produced it, so the\n")
+	fmt.Printf("     true interval leaves residuals near zero. Genesis (blue score 0) is excluded because it\n")
+	fmt.Printf("     is divisible by everything and would favour every candidate equally.\n")
+	for _, c := range candidates {
+		var maxResidual, total uint64
+		counted := 0
+		for _, e := range table {
+			if e.blueScore == 0 {
+				continue
+			}
+			residual := e.blueScore % c.interval
+			if residual > maxResidual {
+				maxResidual = residual
+			}
+			total += residual
+			counted++
+		}
+		if counted == 0 {
+			fmt.Printf("     interval %-7d: no usable pruning points\n", c.interval)
+			continue
+		}
+		fmt.Printf("     interval %-7d: max residual %d, mean %d over %d point(s) - chance would average %d\n",
+			c.interval, maxResidual, total/uint64(counted), counted, c.interval/2)
+	}
+
+	// The header bracket.
+	tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa)
+	if err != nil {
+		fmt.Printf("\n  headers selected tip: %v\n", err)
+		return
+	}
+	tipIndex, err := s.chain.GetIndexByHash(s.db, sa, tipHash)
+	if err != nil {
+		fmt.Printf("\n  tip index: %v\n", err)
+		return
+	}
+
+	position := make(map[externalapi.DomainHash]int, len(table))
+	for i, e := range table {
+		position[*e.hash] = i
+	}
+
+	var lowerExclusive uint64
+	upperInclusive := uint64(math.MaxUint64)
+	bracketed, unknownPoint, inconsistent := 0, 0, 0
+	for i := tipIndex; i > 0 && tipIndex-i < uint64(depth); i-- {
+		blockHash, err := s.chain.GetHashByIndex(s.db, sa, i)
+		if err != nil {
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, blockHash)
+		if err != nil {
+			continue
+		}
+		pos, ok := position[*header.PruningPoint()]
+		if !ok {
+			// A committed point whose header this node no longer has, so it cannot be scored.
+			unknownPoint++
+			continue
+		}
+		if header.BlueScore() < table[pos].blueScore {
+			inconsistent++
+			continue
+		}
+
+		// The committed point qualified, so the depth is at most this far back.
+		if upper := header.BlueScore() - table[pos].blueScore; upper < upperInclusive {
+			upperInclusive = upper
+		}
+		// The next point did not qualify - but only counts as evidence if it already existed in this
+		// block's past, which its lower blue score establishes.
+		if pos+1 < len(table) && table[pos+1].blueScore < header.BlueScore() {
+			if lower := header.BlueScore() - table[pos+1].blueScore; lower > lowerExclusive {
+				lowerExclusive = lower
+			}
+		}
+		bracketed++
+	}
+
+	fmt.Printf("\n  -- depth bracket from mined headers\n")
+	fmt.Printf("     scanned back %d chain block(s) from the headers selected tip; %d usable, %d with a\n",
+		depth, bracketed, unknownPoint)
+	fmt.Printf("     committed point this node cannot score, %d internally inconsistent\n", inconsistent)
+	if bracketed == 0 {
+		fmt.Printf("     => no header evidence in this range; try a larger -depthaudit\n")
+		return
+	}
+
+	if upperInclusive == math.MaxUint64 {
+		fmt.Printf("     => no upper bound established\n")
+		return
+	}
+
+	fmt.Printf("     network pruningDepth lies in (%d, %d]\n", lowerExclusive, upperInclusive)
+	if lowerExclusive >= upperInclusive {
+		fmt.Printf("     => the bracket is EMPTY, which means the headers in this range were NOT all produced\n")
+		fmt.Printf("        with a single pruning depth - direct evidence of the disparity itself\n")
+	}
+	for _, c := range candidates {
+		verdict := "RULED OUT by these headers"
+		if c.depth > lowerExclusive && c.depth <= upperInclusive {
+			verdict = "CONSISTENT with these headers"
+		}
+		fmt.Printf("     candidate depth %-7d (block version %d): %s\n", c.depth, c.version, verdict)
 	}
 }
