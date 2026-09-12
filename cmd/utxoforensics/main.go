@@ -40,6 +40,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/acceptancedatastore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockheaderstore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstatusstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/consensusstatestore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/daablocksstore"
@@ -55,6 +56,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
@@ -146,6 +148,24 @@ var (
 	virtualCheck = flag.Bool("virtualcheck", false, "hash virtual's materialised UTXO table and compare it to "+
 		"virtual's own stored multiset - the same quantity maintained by two different mechanisms, so a "+
 		"mismatch localises the drift to the materialised table rather than to the multiset chain")
+	outpointAudit = flag.String("outpointaudit", "", "\"txid:index\" outpoints to audit - a comma-separated "+
+		"list, or a path to a file with one per line. For each one: whether virtual's UTXO table holds it (the "+
+		"set block acceptance resolves inputs against), whether the pruning point set holds it, and what this "+
+		"node's own acceptance data says - which chain block created the coin and which transaction spent it. "+
+		"Answers directly whether a coin is missing, instead of inferring it from a rejection")
+
+	auditDepth = flag.Int("auditdepth", 200000, "chain blocks back from the tip that -outpointaudit scans "+
+		"for the creation and spend of each coin")
+
+	blockAcceptance = flag.String("blockacceptance", "", "chain block hash whose stored acceptance data to "+
+		"dump: the block's own status, whether it is on the selected chain, and for each merged transaction "+
+		"whether this node accepted it. For a refused transaction, every input is listed with whether virtual's "+
+		"UTXO table or the pruning point set still holds the coin - which names the coin whose absence caused "+
+		"the refusal")
+
+	txFilter = flag.String("tx", "", "with -blockacceptance, report only this transaction id (default: every "+
+		"refused transaction in the block)")
+
 	hasOutpoints = flag.String("hasoutpoints", "", "path to a file of \"txid:index\" lines; report which of "+
 		"them the pruning point UTXO set of -db holds. Answers whether two nodes' gaps are the SAME coins "+
 		"without needing them at the same pruning point: take the coins one node found missing and ask "+
@@ -167,6 +187,7 @@ type stores struct {
 	daa        model.DAABlocksStore
 	chain      model.HeadersSelectedChainStore
 	pruning    model.PruningStore
+	status     model.BlockStatusStore
 	state      model.ConsensusStateStore
 	diffs      model.UTXODiffStore
 	headersTip model.HeaderSelectedTipStore
@@ -286,6 +307,14 @@ func main() {
 
 	if *hasOutpoints != "" {
 		lookUpOutpoints(s, *hasOutpoints)
+	}
+
+	if *outpointAudit != "" {
+		auditOutpoints(s, sa, *outpointAudit, *auditDepth)
+	}
+
+	if *blockAcceptance != "" {
+		dumpBlockAcceptance(s, sa, *blockAcceptance, *txFilter)
 	}
 
 	if *scanN > 0 {
@@ -901,6 +930,7 @@ func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
 		daa:        daablocksstore.New(pb, 100, 100, false),
 		chain:      headersselectedchainstore.New(pb, 100, false),
 		pruning:    pruningstore.New(pb, 2, false),
+		status:     blockstatusstore.New(pb, 100, false),
 		state:      consensusstatestore.New(pb, 100, false),
 		diffs:      utxodiffstore.New(pb, 100, false),
 		headersTip: headersselectedtipstore.New(pb),
@@ -2442,4 +2472,369 @@ func scanCommitmentAgreement(s *stores, sa *model.StagingArea, depth int) {
 	fmt.Printf("  can disagree. Only htnexodus create's own header check settles that. To try:\n")
 	fmt.Printf("    htnexodus create --db-path <copy>/datadir2 --network mainnet \\\n")
 	fmt.Printf("      --block %s --out ./candidate\n", newestAgreeing)
+}
+
+// coinHistory is what this node's own acceptance data records about one coin.
+type coinHistory struct {
+	createdIn    *externalapi.DomainHash
+	createdDAA   uint64
+	createdValue uint64
+	refusedIn    *externalapi.DomainHash // a chain block that merged the creating transaction and refused it
+	refusedDAA   uint64
+	refusals     int
+	spentIn      *externalapi.DomainHash
+	spentBy      *externalapi.DomainTransactionID
+	spentDAA     uint64
+}
+
+// auditOutpoints answers, for each given outpoint, whether this node actually holds the coin - rather
+// than inferring it from a transaction this node refused.
+//
+// Block acceptance resolves a transaction's inputs against virtual's materialised UTXO table (see
+// populateTransactionWithUTXOEntriesFromVirtualOrDiff), so that table is the set that decides whether
+// an input is "missing", and it is the first thing checked here. A coin absent from it is only a gap
+// if the node also has no record of it being spent: the node's own acceptance data says when the coin
+// was created and when it was spent, and a coin that was spent is absent for the ordinary reason.
+func auditOutpoints(s *stores, sa *model.StagingArea, spec string, depth int) {
+	outpoints, err := parseOutpointSpec(spec)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "outpoint audit: %v\n", err)
+		return
+	}
+	fmt.Printf("\n=== auditing %d outpoint(s)\n", len(outpoints))
+
+	key := func(outpoint *externalapi.DomainOutpoint) string {
+		return fmt.Sprintf("%s:%d", outpoint.TransactionID, outpoint.Index)
+	}
+
+	// 1. Virtual's UTXO table - the set acceptance actually consults.
+	inVirtual := map[string]externalapi.UTXOEntry{}
+	for _, outpoint := range outpoints {
+		entry, ok, err := s.state.UTXOByOutpoint(s.db, sa, outpoint)
+		if err != nil || !ok {
+			continue
+		}
+		inVirtual[key(outpoint)] = entry
+	}
+
+	// 2. The pruning point set, which is where an inherited gap would show.
+	inPruningPoint := map[string]struct{}{}
+	if iterator, err := s.pruning.PruningPointUTXOIterator(s.db); err == nil {
+		for ok := iterator.First(); ok; ok = iterator.Next() {
+			outpoint, _, err := iterator.Get()
+			if err != nil {
+				break
+			}
+			candidate := key(outpoint)
+			for _, wanted := range outpoints {
+				if key(wanted) == candidate {
+					inPruningPoint[candidate] = struct{}{}
+				}
+			}
+		}
+		iterator.Close()
+	}
+
+	// 3. This node's own acceptance data: when each coin was created, and when it was spent.
+	history := map[string]*coinHistory{}
+	wanted := map[string]*externalapi.DomainOutpoint{}
+	for _, outpoint := range outpoints {
+		wanted[key(outpoint)] = outpoint
+		history[key(outpoint)] = &coinHistory{}
+	}
+	scanned := 0
+	if tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa); err == nil {
+		if tip, err := s.chain.GetIndexByHash(s.db, sa, tipHash); err == nil {
+			for i := tip; i > 0 && tip-i < uint64(depth); i-- {
+				chainBlock, err := s.chain.GetHashByIndex(s.db, sa, i)
+				if err != nil {
+					continue
+				}
+				acceptanceData, err := s.accept.Get(s.db, sa, chainBlock)
+				if err != nil {
+					continue
+				}
+				header, err := s.headers.BlockHeader(s.db, sa, chainBlock)
+				if err != nil {
+					continue
+				}
+				scanned++
+				for _, blockAcceptanceData := range acceptanceData {
+					for _, tad := range blockAcceptanceData.TransactionAcceptanceData {
+						transactionID := consensushashing.TransactionID(tad.Transaction)
+						if !tad.IsAccepted {
+							// Merged and refused. Recorded too: a coin whose creating transaction the chain
+							// refused never existed here, and a transaction refused in one chain block while
+							// accepted in another is the duplicate case - both need to be visible.
+							for outputIndex := range tad.Transaction.Outputs {
+								candidate := fmt.Sprintf("%s:%d", transactionID, outputIndex)
+								if record, ok := history[candidate]; ok {
+									record.refusals++
+									if record.refusedIn == nil {
+										record.refusedIn = chainBlock
+										record.refusedDAA = header.DAAScore()
+									}
+								}
+							}
+							continue
+						}
+						for outputIndex, output := range tad.Transaction.Outputs {
+							candidate := fmt.Sprintf("%s:%d", transactionID, outputIndex)
+							if record, ok := history[candidate]; ok && record.createdIn == nil {
+								record.createdIn = chainBlock
+								record.createdDAA = utxo.AcceptedUTXOBlockDAAScore(header.DAAScore())
+								record.createdValue = output.Value
+							}
+						}
+						for _, input := range tad.Transaction.Inputs {
+							candidate := key(&input.PreviousOutpoint)
+							if record, ok := history[candidate]; ok && record.spentIn == nil {
+								record.spentIn = chainBlock
+								record.spentBy = transactionID
+								record.spentDAA = header.DAAScore()
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	fmt.Printf("  scanned %d chain blocks of acceptance data (depth limit %d)\n", scanned, depth)
+
+	for _, outpoint := range outpoints {
+		candidate := key(outpoint)
+		record := history[candidate]
+		entry, held := inVirtual[candidate]
+		_, atPruningPoint := inPruningPoint[candidate]
+
+		fmt.Printf("\n  %s\n", candidate)
+		if held {
+			fmt.Printf("    virtual UTXO table : HELD (amount=%d stamp=%d coinbase=%t)\n",
+				entry.Amount(), entry.BlockDAAScore(), entry.IsCoinbase())
+		} else {
+			fmt.Printf("    virtual UTXO table : absent\n")
+		}
+		fmt.Printf("    pruning point set  : %s\n", map[bool]string{true: "present", false: "absent"}[atPruningPoint])
+		if record.createdIn != nil {
+			fmt.Printf("    created            : ACCEPTED by chain block %s, stamp %d, amount %d\n",
+				record.createdIn, record.createdDAA, record.createdValue)
+		} else {
+			fmt.Printf("    created            : no chain block accepted its creating transaction within the scanned depth\n")
+		}
+		if record.refusedIn != nil {
+			fmt.Printf("    refused            : its creating transaction was merged and REFUSED by chain block %s "+
+				"(DAA %d)%s\n", record.refusedIn, record.refusedDAA,
+				map[bool]string{true: fmt.Sprintf(", %d refusal(s) in all", record.refusals), false: ""}[record.refusals > 1])
+		}
+		if record.spentIn != nil {
+			fmt.Printf("    spent              : by %s in chain block %s (DAA %d)\n",
+				record.spentBy, record.spentIn, record.spentDAA)
+		} else {
+			fmt.Printf("    spent              : no record within the scanned depth\n")
+		}
+
+		switch {
+		case held:
+			fmt.Println("    => this node HOLDS the coin. A rejection naming it was not about this node lacking it.")
+		case record.createdIn != nil && record.refusedIn != nil:
+			fmt.Println("    => the chain ACCEPTED the creating transaction in one block and refused another copy " +
+				"of it in a later one, which is ordinary duplicate handling. GetTransactionStatus can report the " +
+				"later refusal instead of the earlier acceptance, so treat its INVALID with suspicion here.")
+		case record.refusedIn != nil:
+			fmt.Println("    => the coin never existed here: this node's chain merged its creating transaction and " +
+				"REFUSED it. Dump that block with -blockacceptance -tx to see which of that transaction's own " +
+				"inputs it could not find - that is where the gap starts.")
+		case record.spentIn != nil:
+			fmt.Println("    => absent for the ordinary reason: this node accepted the transaction that spent it.")
+		case record.createdIn != nil:
+			fmt.Println("    => MISSING: this node accepted the coin's creation, has no record of it being spent, " +
+				"and virtual's table does not hold it. That is a real gap in this node's UTXO set.")
+		case atPruningPoint:
+			fmt.Println("    => the coin is in the pruning point set but not in virtual's table, and no spend was " +
+				"found within the scanned depth - raise -auditdepth to find the spend.")
+		default:
+			fmt.Println("    => no trace: not held, and neither its creation nor its spend is within the scanned " +
+				"depth. It may predate the pruning point (raise -auditdepth), or this node never had it.")
+		}
+	}
+}
+
+// parseOutpointSpec accepts either a path to a file of "txid:index" lines or a comma-separated list.
+func parseOutpointSpec(spec string) ([]*externalapi.DomainOutpoint, error) {
+	var lines []string
+	if contents, err := os.ReadFile(spec); err == nil {
+		lines = strings.Split(string(contents), "\n")
+	} else {
+		lines = strings.Split(spec, ",")
+	}
+	var outpoints []*externalapi.DomainOutpoint
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ":")
+		if len(parts) != 2 {
+			return nil, errors.Errorf("%q is not of the form txid:index", line)
+		}
+		transactionID, err := transactionid.FromString(parts[0])
+		if err != nil {
+			return nil, errors.Wrapf(err, "%q has a malformed transaction id", line)
+		}
+		index, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 32)
+		if err != nil {
+			return nil, errors.Wrapf(err, "%q has a malformed output index", line)
+		}
+		outpoints = append(outpoints, externalapi.NewDomainOutpoint(transactionID, uint32(index)))
+	}
+	if len(outpoints) == 0 {
+		return nil, errors.Errorf("no outpoints given")
+	}
+	return outpoints, nil
+}
+
+// dumpBlockAcceptance shows what a chain block's stored acceptance data says, and - for transactions
+// it refused - which of their inputs this node no longer holds.
+//
+// A refusal is where a UTXO gap spreads: a transaction whose input this node cannot find is not
+// accepted, so the outputs it would have created never enter the set either, and every later
+// transaction spending them is refused in turn. The acceptance data records only accepted/refused,
+// not the reason, so the reason is reconstructed here from the inputs themselves.
+func dumpBlockAcceptance(s *stores, sa *model.StagingArea, blockHashString, transactionFilter string) {
+	blockHash, err := externalapi.NewDomainHashFromString(blockHashString)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "block acceptance: %q is not a block hash: %v\n", blockHashString, err)
+		return
+	}
+	var wantedTransaction *externalapi.DomainTransactionID
+	if transactionFilter != "" {
+		wantedTransaction, err = transactionid.FromString(transactionFilter)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "block acceptance: %q is not a transaction id: %v\n", transactionFilter, err)
+			return
+		}
+	}
+
+	fmt.Printf("\n=== acceptance data stored for block %s\n", blockHash)
+	if status, err := s.status.Get(s.db, sa, blockHash); err == nil {
+		fmt.Printf("  block status: %s\n", status)
+	} else {
+		fmt.Printf("  block status: unavailable (%v)\n", err)
+	}
+	if index, err := s.chain.GetIndexByHash(s.db, sa, blockHash); err == nil {
+		fmt.Printf("  on the selected chain at index %d\n", index)
+	} else {
+		fmt.Printf("  NOT on this node's selected chain (%v) - only chain blocks merge and accept transactions\n", err)
+	}
+	if header, err := s.headers.BlockHeader(s.db, sa, blockHash); err == nil {
+		fmt.Printf("  DAA score %d, so coins it accepts are stamped %d\n", header.DAAScore(),
+			utxo.AcceptedUTXOBlockDAAScore(header.DAAScore()))
+	}
+
+	acceptanceData, err := s.accept.Get(s.db, sa, blockHash)
+	if err != nil {
+		fmt.Printf("  no stored acceptance data (%v)\n", err)
+		return
+	}
+
+	// Collect the inputs to look up, so the pruning point set is scanned once for all of them.
+	type reported struct {
+		mergedBlock   *externalapi.DomainHash
+		transactionID *externalapi.DomainTransactionID
+		accepted      bool
+		inputs        []externalapi.DomainOutpoint
+		outputs       int
+	}
+	var toReport []reported
+	wantedInputs := map[externalapi.DomainOutpoint]struct{}{}
+	merged, accepted, refused := 0, 0, 0
+	for _, blockAcceptanceData := range acceptanceData {
+		for _, tad := range blockAcceptanceData.TransactionAcceptanceData {
+			merged++
+			if tad.IsAccepted {
+				accepted++
+			} else {
+				refused++
+			}
+			transactionID := consensushashing.TransactionID(tad.Transaction)
+			if wantedTransaction != nil {
+				if !transactionID.Equal(wantedTransaction) {
+					continue
+				}
+			} else if tad.IsAccepted {
+				continue
+			}
+			entry := reported{mergedBlock: blockAcceptanceData.BlockHash, transactionID: transactionID,
+				accepted: tad.IsAccepted, outputs: len(tad.Transaction.Outputs)}
+			for _, input := range tad.Transaction.Inputs {
+				entry.inputs = append(entry.inputs, input.PreviousOutpoint)
+				wantedInputs[input.PreviousOutpoint] = struct{}{}
+			}
+			toReport = append(toReport, entry)
+		}
+	}
+	fmt.Printf("  merged %d transaction(s): %d accepted, %d refused\n", merged, accepted, refused)
+
+	inPruningPoint := map[externalapi.DomainOutpoint]struct{}{}
+	if len(wantedInputs) > 0 {
+		if iterator, err := s.pruning.PruningPointUTXOIterator(s.db); err == nil {
+			for ok := iterator.First(); ok; ok = iterator.Next() {
+				outpoint, _, err := iterator.Get()
+				if err != nil {
+					break
+				}
+				if _, want := wantedInputs[*outpoint]; want {
+					inPruningPoint[*outpoint] = struct{}{}
+				}
+			}
+			iterator.Close()
+		}
+	}
+
+	if len(toReport) == 0 {
+		fmt.Println("  nothing to report: no refused transactions (or the requested one is not in this block)")
+		return
+	}
+	for _, entry := range toReport {
+		verdict := "REFUSED"
+		if entry.accepted {
+			verdict = "accepted"
+		}
+		fmt.Printf("\n  %s %s (carried by merged block %s, %d output(s))\n", verdict, entry.transactionID,
+			entry.mergedBlock, entry.outputs)
+		if len(entry.inputs) == 0 {
+			fmt.Println("    coinbase - it has no inputs; a coinbase is accepted only for the selected parent")
+			continue
+		}
+		missing := 0
+		for _, outpoint := range entry.inputs {
+			held := "absent from virtual's UTXO table"
+			if entry, ok, err := s.state.UTXOByOutpoint(s.db, sa, &outpoint); err == nil && ok {
+				held = fmt.Sprintf("held by virtual (amount=%d stamp=%d coinbase=%t)", entry.Amount(),
+					entry.BlockDAAScore(), entry.IsCoinbase())
+			} else {
+				missing++
+			}
+			atPruningPoint := ""
+			if _, ok := inPruningPoint[outpoint]; ok {
+				atPruningPoint = ", present in the pruning point set"
+			}
+			fmt.Printf("    spends %s:%d - %s%s\n", outpoint.TransactionID, outpoint.Index, held, atPruningPoint)
+		}
+		if !entry.accepted {
+			switch {
+			case missing == 0:
+				fmt.Println("    => every input is in virtual's table now. The refusal was not a missing coin at " +
+					"this point in the chain: most likely a duplicate of a transaction already accepted, or a " +
+					"spend this node had already seen spent here.")
+			case missing == len(entry.inputs):
+				fmt.Println("    => none of its inputs are in virtual's table. Consistent with the transaction " +
+					"having been accepted earlier on the chain (its inputs spent then), rather than with a gap.")
+			default:
+				fmt.Printf("    => %d of %d inputs are missing while the rest are held. That is the shape of a "+
+					"gap: audit the missing ones with -outpointaudit to see whether their own creating "+
+					"transaction was refused too.\n", missing, len(entry.inputs))
+			}
+		}
+	}
 }
