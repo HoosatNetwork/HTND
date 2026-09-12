@@ -23,6 +23,11 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 	// Populate mass in the beginning, it will be used in multiple places throughout the validation and insertion.
 	mp.consensusReference.Consensus().PopulateMass(transaction)
 
+	// A replacement of a compound transaction is itself compound, and is kept for the same reason.
+	// The no-conflict branch below delegates to validateAndInsertTransaction, which decides this
+	// again; raising the flag is idempotent, so both paths agree.
+	isHighPriority = mp.raisePriorityIfCompound(transaction, isHighPriority)
+
 	// Validate in isolation (but do not reject double-spends here; those are handled by replacement policy).
 	err = mp.validateTransactionInIsolation(transaction)
 	if err != nil {

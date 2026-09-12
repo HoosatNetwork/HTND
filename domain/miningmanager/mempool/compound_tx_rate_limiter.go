@@ -61,10 +61,26 @@ func newCompoundTxRateLimiter(config *Config) *compoundTxRateLimiter {
 	}
 }
 
-// isCompoundTransaction determines if a transaction should be considered a compound transaction
-// based on the number of inputs and transaction characteristics
+// isCompoundTransaction determines whether the rate limiter should count this transaction against its
+// sender's budget: it looks like a compound transaction, and throttling is switched on.
 func (rtl *compoundTxRateLimiter) isCompoundTransaction(transaction *externalapi.DomainTransaction) bool {
 	if !rtl.config.CompoundTxRateLimitEnabled {
+		return false
+	}
+
+	return rtl.looksLikeCompoundTransaction(transaction)
+}
+
+// looksLikeCompoundTransaction determines if a transaction should be considered a compound transaction
+// based on the number of inputs and transaction characteristics, regardless of whether throttling is
+// switched on.
+//
+// The shape and the throttle are separate questions. Whether to charge a transaction against a sender's
+// budget depends on CompoundTxRateLimitEnabled; whether a transaction IS a compound transaction does
+// not, and callers asking the second question must not have their answer changed by an operator
+// turning the first one off.
+func (rtl *compoundTxRateLimiter) looksLikeCompoundTransaction(transaction *externalapi.DomainTransaction) bool {
+	if transaction == nil {
 		return false
 	}
 
