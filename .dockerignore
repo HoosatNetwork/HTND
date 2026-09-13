@@ -4,3 +4,34 @@ vendor/
 # NOTE: .git must stay in the build context. The Go toolchain stamps the commit
 # hash into the binaries at build time (see version/version.go); excluding .git
 # here would silently drop the commit from the reported version.
+.dockerignore
+Dockerfile*
+*.md
+LICENSE*
+
+# local node / wallet state (this is usually the 13GB)
+.htnd
+**/.htnd
+datadir
+data
+*.ldb
+*.sst
+*.log
+*.wal
+
+# build outputs
+HTND
+htnd
+htnwallet
+htnminer
+htnctl
+genkeypair
+/out
+/bin
+/dist
+
+# editor / OS
+.idea
+.vscode
+*.swp
+.DS_Store
