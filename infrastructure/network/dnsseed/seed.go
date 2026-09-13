@@ -32,6 +32,11 @@ const (
 
 	// SubnetworkIDPrefixChar is the prefix of subnetworkID, when building a DNS seed request
 	SubnetworkIDPrefixChar byte = 'n'
+
+	// grpcSeedRequestTimeout bounds one GetPeersList call. The connection manager re-seeds every
+	// loop iteration while it is short of outbound peers, so a seed that accepts the call and never
+	// answers would otherwise pin a goroutine and a connection per attempt, indefinitely.
+	grpcSeedRequestTimeout = 30 * time.Second
 )
 
 // OnSeed is the signature of the callback function which is invoked when DNS
@@ -134,15 +139,6 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 
 	for _, host := range grpcSeeds {
 		spawn("SeedFromGRPC", func() {
-			conn, err := grpc.NewClient(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Warnf("Failed to connect to gRPC server: %s", host)
-				return
-			}
-			defer conn.Close()
-
-			client := pb2.NewPeerServiceClient(conn)
-
 			var subnetID []byte
 			if subnetworkID != nil {
 				subnetID = subnetworkID[:]
@@ -154,7 +150,7 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 				SubnetworkID:          subnetID,
 				IncludeAllSubnetworks: includeAllSubnetworks,
 			}
-			res, err := client.GetPeersList(context.Background(), req)
+			res, err := requestGRPCPeers(host, req, grpcSeedRequestTimeout)
 			if err != nil {
 				log.Infof("gRPC request to get peers failed (host=%s): %s", host, err)
 				return
@@ -183,6 +179,19 @@ func SeedFromGRPC(dagParams *dagconfig.Params, customSeed string, includeAllSubn
 			seedFn(addresses)
 		})
 	}
+}
+
+// requestGRPCPeers asks the gRPC seed at host for peers, giving up after timeout.
+func requestGRPCPeers(host string, req *pb2.GetPeersListRequest, timeout time.Duration) (*pb2.GetPeersListResponse, error) {
+	conn, err := grpc.NewClient(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return pb2.NewPeerServiceClient(conn).GetPeersList(ctx, req)
 }
 
 func fromProtobufAddresses(proto []*pb2.NetAddress) []net.IP {
