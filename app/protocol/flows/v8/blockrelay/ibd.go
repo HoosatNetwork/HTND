@@ -1030,7 +1030,6 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		// so a slow IBD run shows directly whether the bottleneck is waiting on the peer (this
 		// timer) or validating/inserting blocks locally (the processing timer further down).
 		networkPhaseStart := time.Now()
-		retryCount := 0
 
 		// Request blocks
 		err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(hashesToRequest))
@@ -1038,67 +1037,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			return err
 		}
 		// Dequeue all messages for the requested hashes
-		receivedCount := 0
-		for receivedCount < len(hashesToRequest) {
-			message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
-			if err != nil {
-				// Only retry on a genuine timeout. Propagate everything else
-				if !errors.Is(err, router.ErrTimeout) {
-					return err
-				}
-
-				// Find which hashes we still need
-				missingHashes := make([]*externalapi.DomainHash, 0, len(hashesToRequest)-receivedCount)
-				for _, h := range hashesToRequest {
-					if _, exists := receivedBlocks[*h]; !exists {
-						missingHashes = append(missingHashes, h)
-					}
-				}
-				if len(missingHashes) == 0 {
-					// Should be extremely rare (race), but still surface the timeout.
-					return err
-				}
-
-				retryCount++
-				log.Debugf("[UTXO-DEBUG] Timeout (%s) waiting for blocks from %s after %s, re-requesting %d/%d "+
-					"missing blocks (retry #%d for this batch)", flow.Config().IBDDequeueTimeout, flow.peer,
-					time.Since(networkPhaseStart), len(missingHashes), len(hashesToRequest), retryCount)
-				if err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(missingHashes)); err != nil {
-					return err
-				}
-				continue
-			}
-
-			msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
-			if !ok {
-				log.Errorf("Received unexpected message type. expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
-				return protocolerrors.Errorf(false, "received unexpected message type. "+
-					"expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
-			}
-
-			if msgIBDBlock.MsgBlock == nil {
-				log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", receivedCount)
-				return protocolerrors.Errorf(false, "received nil MsgBlock in MsgIBDBlock at index %d", receivedCount)
-			}
-
-			block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
-			if block == nil {
-				log.Errorf("MsgBlockToDomainBlock returned nil at index %d", receivedCount)
-				return protocolerrors.Errorf(false, "MsgBlockToDomainBlock returned nil at index %d", receivedCount)
-			}
-
-			blockHash := consensushashing.BlockHash(block)
-			if blockHash == nil {
-				log.Errorf("BlockHash returned nil for block at index %d", receivedCount)
-				return protocolerrors.Errorf(false, "BlockHash returned nil for block at index %d", receivedCount)
-			}
-
-			// Only count new blocks to avoid incrementing for duplicates
-			if _, exists := receivedBlocks[*blockHash]; !exists {
-				receivedBlocks[*blockHash] = block
-				receivedCount++
-				log.Debugf("Received block %s and stored in cache", blockHash)
-			}
+		retryCount, err := flow.receiveRequestedIBDBlocks(hashesToRequest, receivedBlocks, networkPhaseStart)
+		if err != nil {
+			return err
 		}
 
 		networkPhaseElapsed := time.Since(networkPhaseStart)
@@ -1168,6 +1109,89 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	}
 
 	return flow.OnNewBlockTemplate()
+}
+
+// receiveRequestedIBDBlocks reads MsgIBDBlock responses for hashesToRequest into receivedBlocks until
+// every requested block has arrived, re-requesting the missing ones whenever IBDDequeueTimeout passes
+// with nothing received. networkPhaseStart is only used for logging.
+func (flow *handleIBDFlow) receiveRequestedIBDBlocks(hashesToRequest []*externalapi.DomainHash,
+	receivedBlocks map[externalapi.DomainHash]*externalapi.DomainBlock, networkPhaseStart time.Time,
+) (retryCount int, err error) {
+	requested := make(map[externalapi.DomainHash]struct{}, len(hashesToRequest))
+	for _, hash := range hashesToRequest {
+		requested[*hash] = struct{}{}
+	}
+
+	receivedCount := 0
+	for receivedCount < len(hashesToRequest) {
+		message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
+		if err != nil {
+			// Only retry on a genuine timeout. Propagate everything else
+			if !errors.Is(err, router.ErrTimeout) {
+				return retryCount, err
+			}
+
+			// Find which hashes we still need
+			missingHashes := make([]*externalapi.DomainHash, 0, len(hashesToRequest)-receivedCount)
+			for _, h := range hashesToRequest {
+				if _, exists := receivedBlocks[*h]; !exists {
+					missingHashes = append(missingHashes, h)
+				}
+			}
+			if len(missingHashes) == 0 {
+				// Should be extremely rare (race), but still surface the timeout.
+				return retryCount, err
+			}
+
+			retryCount++
+			log.Debugf("[UTXO-DEBUG] Timeout (%s) waiting for blocks from %s after %s, re-requesting %d/%d "+
+				"missing blocks (retry #%d for this batch)", flow.Config().IBDDequeueTimeout, flow.peer,
+				time.Since(networkPhaseStart), len(missingHashes), len(hashesToRequest), retryCount)
+			if err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(missingHashes)); err != nil {
+				return retryCount, err
+			}
+			continue
+		}
+
+		msgIBDBlock, ok := message.(*appmessage.MsgIBDBlock)
+		if !ok {
+			log.Errorf("Received unexpected message type. expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
+			return retryCount, protocolerrors.Errorf(false, "received unexpected message type. "+
+				"expected: %s, got: %s", appmessage.CmdIBDBlock, message.Command())
+		}
+
+		if msgIBDBlock.MsgBlock == nil {
+			log.Errorf("Received nil MsgBlock in MsgIBDBlock at index %d", receivedCount)
+			return retryCount, protocolerrors.Errorf(false, "received nil MsgBlock in MsgIBDBlock at index %d", receivedCount)
+		}
+
+		block := appmessage.MsgBlockToDomainBlock(msgIBDBlock.MsgBlock)
+		if block == nil {
+			log.Errorf("MsgBlockToDomainBlock returned nil at index %d", receivedCount)
+			return retryCount, protocolerrors.Errorf(false, "MsgBlockToDomainBlock returned nil at index %d", receivedCount)
+		}
+
+		blockHash := consensushashing.BlockHash(block)
+		if blockHash == nil {
+			log.Errorf("BlockHash returned nil for block at index %d", receivedCount)
+			return retryCount, protocolerrors.Errorf(false, "BlockHash returned nil for block at index %d", receivedCount)
+		}
+
+		// Only count blocks this batch asked for, and each only once. A block outside the batch is
+		// typically a late duplicate answering an earlier batch's retry; counting it would end this
+		// loop before every requested block arrived, and the caller skips requested blocks it did
+		// not receive, leaving their bodies missing.
+		if _, isRequested := requested[*blockHash]; !isRequested {
+			log.Debugf("Ignoring IBD block %s, which is not part of the requested batch", blockHash)
+			continue
+		}
+		if _, exists := receivedBlocks[*blockHash]; !exists {
+			receivedBlocks[*blockHash] = block
+			receivedCount++
+			log.Debugf("Received block %s and stored in cache", blockHash)
+		}
+	}
+	return retryCount, nil
 }
 
 func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64) error {
