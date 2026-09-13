@@ -55,7 +55,21 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 		return nil, nil, err
 	}
 
-	totalRemovedFee, totalRemovedMass := mp.replacementRemovalTotals(conflicts)
+	transactionsToRemove := mp.replacementRemovalSet(conflicts)
+
+	// The replacement must not spend an output of a transaction it evicts. Inputs were filled from
+	// parents in the pool before the eviction, so such a replacement used to be admitted as a ready
+	// transaction whose input no longer existed anywhere - relayed and put in templates, and never
+	// valid.
+	for _, input := range transaction.Inputs {
+		if _, ok := transactionsToRemove[input.PreviousOutpoint.TransactionID]; ok {
+			str := fmt.Sprintf("replacement transaction %s spends output %s of a transaction it would evict",
+				consensushashing.TransactionID(transaction), input.PreviousOutpoint)
+			return nil, nil, transactionRuleError(RejectInvalid, str)
+		}
+	}
+
+	totalRemovedFee, totalRemovedMass := replacementRemovalTotals(transactionsToRemove)
 
 	// Replacement policy: new transaction must pay more (and at a higher fee rate) than the transactions it evicts.
 	if transaction.Fee <= totalRemovedFee {
@@ -135,25 +149,25 @@ func (mp *mempool) mempoolConflicts(transaction *externalapi.DomainTransaction) 
 	return conflicts
 }
 
-func (mp *mempool) replacementRemovalTotals(conflicts []*model.MempoolTransaction) (totalRemovedFee uint64, totalRemovedMass uint64) {
+// replacementRemovalSet returns the transactions a replacement evicts: its direct conflicts and all
+// of their redeemers.
+func (mp *mempool) replacementRemovalSet(conflicts []*model.MempoolTransaction) map[externalapi.DomainTransactionID]*model.MempoolTransaction {
 	transactionsToRemove := make(map[externalapi.DomainTransactionID]*model.MempoolTransaction)
-
-	add := func(tx *model.MempoolTransaction) {
-		id := *tx.TransactionID()
-		if _, ok := transactionsToRemove[id]; ok {
-			return
+	for _, conflict := range conflicts {
+		transactionsToRemove[*conflict.TransactionID()] = conflict
+		for _, redeemer := range mp.transactionsPool.getRedeemers(conflict) {
+			transactionsToRemove[*redeemer.TransactionID()] = redeemer
 		}
-		transactionsToRemove[id] = tx
+	}
+	return transactionsToRemove
+}
+
+func replacementRemovalTotals(transactionsToRemove map[externalapi.DomainTransactionID]*model.MempoolTransaction) (
+	totalRemovedFee uint64, totalRemovedMass uint64,
+) {
+	for _, tx := range transactionsToRemove {
 		totalRemovedFee += tx.Transaction().Fee
 		totalRemovedMass += tx.Transaction().Mass
 	}
-
-	for _, conflict := range conflicts {
-		add(conflict)
-		for _, redeemer := range mp.transactionsPool.getRedeemers(conflict) {
-			add(redeemer)
-		}
-	}
-
 	return totalRemovedFee, totalRemovedMass
 }
