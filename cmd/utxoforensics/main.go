@@ -2989,6 +2989,12 @@ func pruningDepthAudit(s *stores, sa *model.StagingArea, depth int) {
 		fmt.Printf("\n  tip index: %v\n", err)
 		return
 	}
+	fmt.Printf("\n  -- headers selected tip %s at selected-chain index %d\n", tipHash, tipIndex)
+	if tipIndex == 0 {
+		fmt.Printf("     => the selected chain index is empty, so there are no chain headers to read a\n")
+		fmt.Printf("        depth out of. This database cannot testify about the network's parameters.\n")
+		return
+	}
 
 	position := make(map[externalapi.DomainHash]int, len(table))
 	for i, e := range table {
@@ -2998,13 +3004,18 @@ func pruningDepthAudit(s *stores, sa *model.StagingArea, depth int) {
 	var lowerExclusive uint64
 	upperInclusive := uint64(math.MaxUint64)
 	bracketed, unknownPoint, inconsistent := 0, 0, 0
+	missingHash, missingHeader := 0, 0
 	for i := tipIndex; i > 0 && tipIndex-i < uint64(depth); i-- {
 		blockHash, err := s.chain.GetHashByIndex(s.db, sa, i)
 		if err != nil {
+			// Counted, not swallowed: a verdict of "no evidence" has to say whether the chain index
+			// was empty or the headers were simply gone, or it is indistinguishable from a bug here.
+			missingHash++
 			continue
 		}
 		header, err := s.headers.BlockHeader(s.db, sa, blockHash)
 		if err != nil {
+			missingHeader++
 			continue
 		}
 		pos, ok := position[*header.PruningPoint()]
@@ -3036,6 +3047,7 @@ func pruningDepthAudit(s *stores, sa *model.StagingArea, depth int) {
 	fmt.Printf("     scanned back %d chain block(s) from the headers selected tip; %d usable, %d with a\n",
 		depth, bracketed, unknownPoint)
 	fmt.Printf("     committed point this node cannot score, %d internally inconsistent\n", inconsistent)
+	fmt.Printf("     skipped: %d chain index gaps, %d missing headers\n", missingHash, missingHeader)
 	if bracketed == 0 {
 		fmt.Printf("     => no header evidence in this range; try a larger -depthaudit\n")
 		return
