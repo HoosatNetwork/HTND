@@ -16,6 +16,10 @@ import (
 func (flow *handleIBDFlow) ibdWithHeadersProof(
 	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash, highBlockDAAScore uint64,
 ) error {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return err
+	}
+
 	flow.updateBlockVersionFromDAAScore(highBlockDAAScore)
 	err := flow.Domain().InitStagingConsensusWithoutGenesis()
 	if err != nil {
@@ -204,6 +208,10 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash,
 	highBlockDAAScore uint64,
 ) error {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return err
+	}
+
 	proofPruningPoint, err := flow.syncAndValidatePruningPointProof()
 	if err != nil {
 		return err
@@ -279,6 +287,10 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 }
 
 func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruningPoint *externalapi.DomainHash) error {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return err
+	}
+
 	// Check if the proof pruning point is the same as the current pruning point
 	// If so, no need to download pruning points and anticone
 	currentPruningPoint, err := flow.Domain().Consensus().PruningPoint()
@@ -334,6 +346,10 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 
 	i := 0
 	for ; ; i++ {
+		if err := flow.checkIfShuttingDown(); err != nil {
+			return err
+		}
+
 		blockWithTrustedData, done, err := flow.receiveBlockWithTrustedData()
 		if err != nil {
 			return err
@@ -366,6 +382,10 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 func (flow *handleIBDFlow) processBlockWithTrustedData(
 	consensus externalapi.Consensus, block *appmessage.MsgBlockWithTrustedDataV4, data *appmessage.MsgTrustedData,
 ) error {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return err
+	}
+
 	blockWithTrustedData := &externalapi.BlockWithTrustedData{
 		Block:        appmessage.MsgBlockToDomainBlock(block.Block),
 		DAAWindow:    make([]*externalapi.TrustedDataDataDAAHeader, 0, len(block.DAAWindowIndices)),
@@ -391,6 +411,10 @@ func (flow *handleIBDFlow) processBlockWithTrustedData(
 }
 
 func (flow *handleIBDFlow) receiveBlockWithTrustedData() (*appmessage.MsgBlockWithTrustedDataV4, bool, error) {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return nil, false, err
+	}
+
 	message, err := flow.incomingRoute.DequeueWithTimeout(common.DefaultTimeout)
 	if err != nil {
 		return nil, false, err
@@ -412,6 +436,10 @@ func (flow *handleIBDFlow) receiveBlockWithTrustedData() (*appmessage.MsgBlockWi
 }
 
 func (flow *handleIBDFlow) receivePruningPoints() (*appmessage.MsgPruningPoints, error) {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return nil, err
+	}
+
 	message, err := flow.incomingRoute.DequeueWithTimeout(common.DefaultTimeout)
 	if err != nil {
 		return nil, err
