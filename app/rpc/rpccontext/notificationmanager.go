@@ -483,19 +483,16 @@ func (nl *NotificationListener) convertUTXOChangesToUTXOsChangedNotification(
 func (nl *NotificationListener) scriptPubKeyStringToAddressString(scriptPublicKeyString utxoindex.ScriptPublicKeyString) (string, error) {
 	scriptPubKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 
-	// ignore error because it is often returned when the script is of unknown type
-	scriptType, address, err := txscript.ExtractScriptPubKeyAddress(scriptPubKey, nl.params)
-	if err != nil {
-		return "", err
+	// A script without a single address is reported with an empty address rather than failing the
+	// notification. That covers nonstandard scripts, bare multisig (a standard class that extracts to a
+	// nil address) and output scripts that do not parse, which consensus does not check until they are
+	// spent. This runs in the consensus events handler, which panics on any error, so both the nil
+	// address and the extraction error used to take the node down for every listener.
+	_, address, err := txscript.ExtractScriptPubKeyAddress(scriptPubKey, nl.params)
+	if err != nil || address == nil {
+		return "", nil
 	}
-
-	var addressString string
-	if scriptType == txscript.NonStandardTy {
-		addressString = ""
-	} else {
-		addressString = address.String()
-	}
-	return addressString, nil
+	return address.String(), nil
 }
 
 // PropagateVirtualSelectedParentBlueScoreChangedNotifications instructs the listener to send
