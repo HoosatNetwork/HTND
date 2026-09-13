@@ -3,17 +3,12 @@ package rpchandlers
 import (
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
 
 // HandleGetMempoolEntry handles the respectively named RPC command
 func HandleGetMempoolEntry(context *rpccontext.Context, _ *router.Router, request appmessage.Message) (appmessage.Message, error) {
-	transaction := &externalapi.DomainTransaction{}
-	var found bool
-	var isOrphan bool
-
 	getMempoolEntryRequest := request.(*appmessage.GetMempoolEntryRequestMessage)
 
 	transactionID, err := transactionid.FromString(getMempoolEntryRequest.TxID)
@@ -36,5 +31,5 @@ func HandleGetMempoolEntry(context *rpccontext.Context, _ *router.Router, reques
 	if err != nil {
 		return nil, err
 	}
-	return appmessage.NewGetMempoolEntryResponseMessage(transaction.Fee, rpcTransaction, isOrphan), nil
+	return appmessage.NewGetMempoolEntryResponseMessage(mempoolTransaction.Fee, rpcTransaction, isOrphan), nil
 }
