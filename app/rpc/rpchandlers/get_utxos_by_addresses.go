@@ -86,7 +86,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -99,17 +99,13 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		// The index says which outpoints belong to the address; consensus says which of them exist and
 		// what they are. Handing out a coin consensus does not hold gives the wallet a transaction every
 		// node will refuse.
-		utxoOutpointEntryPairs, withheld, err := rpccontext.FilterUTXOPairsAgainstVirtual(
-			context.Domain.Consensus(), utxoOutpointEntryPairs)
+		utxoOutpointEntryPairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(
+			context.Domain.Consensus(), utxoOutpointEntryPairs, indexVirtualParents)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return nil, err
 		}
-		if withheld > 0 {
-			log.Warnf("Withheld %d UTXO(s) of address %s: the UTXO index lists them but virtual's UTXO set "+
-				"does not hold them, so spending them would produce a transaction every node refuses. The "+
-				"index has drifted from consensus.", withheld, addressString)
-		}
+		rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the response")
 		if len(utxoOutpointEntryPairs) == 0 {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue

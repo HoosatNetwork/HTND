@@ -66,12 +66,20 @@ func TestGetVirtualUTXOEntries(t *testing.T) {
 			want[position] = pair.UTXOEntry
 		}
 
-		entries, ok, err := tc.GetVirtualUTXOEntries(outpoints, time.Second)
+		entries, virtualParents, ok, err := tc.GetVirtualUTXOEntries(outpoints, time.Second)
 		if err != nil || !ok {
 			t.Fatalf("an uncontended lookup must succeed: ok=%t err=%+v", ok, err)
 		}
 		if len(entries) != count {
 			t.Fatalf("expected %d answers, got %d", count, len(entries))
+		}
+		virtualInfo, err := tc.GetVirtualInfo()
+		if err != nil {
+			t.Fatalf("GetVirtualInfo: %+v", err)
+		}
+		if !externalapi.HashesEqual(virtualParents, virtualInfo.ParentHashes) {
+			t.Fatalf("the lookup must report virtual's parents while it ran: got %v, virtual has %v",
+				virtualParents, virtualInfo.ParentHashes)
 		}
 		for i := range entries {
 			switch {
@@ -82,7 +90,7 @@ func TestGetVirtualUTXOEntries(t *testing.T) {
 			}
 		}
 
-		if entries, ok, err := tc.GetVirtualUTXOEntries(nil, time.Second); err != nil || !ok || len(entries) != 0 {
+		if entries, _, ok, err := tc.GetVirtualUTXOEntries(nil, time.Second); err != nil || !ok || len(entries) != 0 {
 			t.Fatalf("no outpoints must be answered with no entries: %v %t %+v", entries, ok, err)
 		}
 
@@ -90,7 +98,7 @@ func TestGetVirtualUTXOEntries(t *testing.T) {
 		lock := tc.(*testConsensus).consensus.lock
 		lock.Lock()
 		start := time.Now()
-		entries, ok, err = tc.GetVirtualUTXOEntries(outpoints[:1], 50*time.Millisecond)
+		entries, _, ok, err = tc.GetVirtualUTXOEntries(outpoints[:1], 50*time.Millisecond)
 		waited := time.Since(start)
 		lock.Unlock()
 		if err != nil || ok || entries != nil {
@@ -106,7 +114,7 @@ func TestGetVirtualUTXOEntries(t *testing.T) {
 			time.Sleep(20 * time.Millisecond)
 			lock.Unlock()
 		}()
-		if _, ok, err := tc.GetVirtualUTXOEntries(outpoints[:1], 2*time.Second); err != nil || !ok {
+		if _, _, ok, err := tc.GetVirtualUTXOEntries(outpoints[:1], 2*time.Second); err != nil || !ok {
 			t.Fatalf("a lock released within maxWait must be taken: ok=%t err=%+v", ok, err)
 		}
 	}()

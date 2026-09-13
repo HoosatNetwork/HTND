@@ -35,8 +35,9 @@ type Consensus interface {
 	// nil where it holds none. It is the authoritative answer to "does this coin exist, and what is
 	// it", for callers that serve coins to spenders from a secondary index. It never queues behind
 	// block processing: if the consensus lock cannot be taken within maxWait it returns ok=false and
-	// no entries, and the caller decides what to serve instead.
-	GetVirtualUTXOEntries(outpoints []*DomainOutpoint, maxWait time.Duration) (entries []UTXOEntry, ok bool, err error)
+	// no entries, and the caller decides what to serve instead. virtualParents are virtual's parents
+	// while the lookup ran, or nil if virtual moved between the chunks the lookup is split into.
+	GetVirtualUTXOEntries(outpoints []*DomainOutpoint, maxWait time.Duration) (entries []UTXOEntry, virtualParents []*DomainHash, ok bool, err error)
 	PruningPoint() (*DomainHash, error)
 	PruningPointHeaders() ([]BlockHeader, error)
 	PruningPointAndItsAnticone() ([]*DomainHash, error)

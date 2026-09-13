@@ -63,7 +63,7 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	if buffer == nil {
 		return false, appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
 	}
-	pairs, buffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
+	pairs, buffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
 	if err != nil {
 		memory.Free(buffer)
 		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -73,15 +73,11 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	}
 	defer memory.Free(buffer)
 
-	pairs, withheld, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs)
+	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents)
 	if err != nil {
 		return false, err
 	}
-	if withheld > 0 {
-		log.Warnf("Ignored %d UTXO(s) of address %s when deciding whether it is usable: the UTXO index lists "+
-			"them but virtual's UTXO set does not hold them. The index has drifted from consensus.",
-			withheld, addressString)
-	}
+	rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the usable-address check")
 	hasUTXOs := len(pairs) > 0
 
 	usableAddressesCacheMutex.Lock()

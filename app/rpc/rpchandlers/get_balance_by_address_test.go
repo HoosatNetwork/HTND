@@ -13,12 +13,12 @@ import (
 // virtualHolding answers as virtual's UTXO set would: an entry for the coins it holds, nil for the rest.
 type virtualHolding map[externalapi.DomainOutpoint]externalapi.UTXOEntry
 
-func (v virtualHolding) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, _ time.Duration) ([]externalapi.UTXOEntry, bool, error) {
+func (v virtualHolding) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, _ time.Duration) ([]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error) {
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
 	for i, outpoint := range outpoints {
 		entries[i] = v[*outpoint]
 	}
-	return entries, true, nil
+	return entries, nil, true, nil
 }
 
 func balanceTestOutpoint(id byte) externalapi.DomainOutpoint {
@@ -50,7 +50,7 @@ func TestBalanceCountsOnlyCoinsConsensusHolds(t *testing.T) {
 		t.Fatalf("the fixture should add up to 1299 unfiltered, got %d", indexOnly)
 	}
 
-	kept, withheld, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, fromIndex)
+	kept, withheld, _, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, fromIndex, nil)
 	if err != nil {
 		t.Fatalf("FilterUTXOPairsAgainstVirtual: %+v", err)
 	}

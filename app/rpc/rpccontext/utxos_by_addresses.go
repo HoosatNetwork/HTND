@@ -17,7 +17,8 @@ import (
 
 // virtualUTXOSource is the part of consensus this file needs: what virtual's UTXO set holds.
 type virtualUTXOSource interface {
-	GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) ([]externalapi.UTXOEntry, bool, error)
+	GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) (
+		[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error)
 }
 
 // virtualCheckMaxLockWait is how long the check waits for the consensus lock before serving the
@@ -44,28 +45,36 @@ const virtualCheckMaxLockWait = 2 * time.Second
 // virtualCheckMaxLockWait, the pairs are returned exactly as the index gave them - what these RPCs
 // served before the check existed - so a client asking during a pruning point update gets an answer
 // promptly instead of a DeadlineExceeded minutes later.
-func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.UTXOPair) ([]utxoindex.UTXOPair, int, error) {
+//
+// A withheld coin is not by itself drift. The index applies consensus's changes after consensus has
+// committed them, so for a moment after a block spends a coin, or after the tip moves to a sibling and
+// takes its coinbase outputs with it, the index still lists coins virtual no longer holds. drifted is
+// true only when coins were withheld and indexVirtualParents - those of the last change the index
+// applied, read together with pairs - equal virtual's parents during the lookup, so both described the
+// same virtual state.
+func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.UTXOPair,
+	indexVirtualParents []*externalapi.DomainHash,
+) (kept []utxoindex.UTXOPair, withheld int, drifted bool, err error) {
 	if len(pairs) == 0 {
-		return pairs, 0, nil
+		return pairs, 0, false, nil
 	}
 	outpoints := make([]*externalapi.DomainOutpoint, len(pairs))
 	for i := range pairs {
 		outpoints[i] = &pairs[i].Outpoint
 	}
-	entries, checked, err := source.GetVirtualUTXOEntries(outpoints, virtualCheckMaxLockWait)
+	entries, virtualParents, checked, err := source.GetVirtualUTXOEntries(outpoints, virtualCheckMaxLockWait)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	if !checked {
 		logServedUnchecked(len(pairs))
-		return pairs, 0, nil
+		return pairs, 0, false, nil
 	}
 	if len(entries) != len(pairs) {
-		return nil, 0, errors.Errorf("consensus answered for %d outpoints, %d were asked about", len(entries), len(pairs))
+		return nil, 0, false, errors.Errorf("consensus answered for %d outpoints, %d were asked about", len(entries), len(pairs))
 	}
 
-	kept := pairs[:0]
-	withheld := 0
+	kept = pairs[:0]
 	for i, entry := range entries {
 		if entry == nil {
 			withheld++
@@ -75,7 +84,25 @@ func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.U
 		pair.Entry = entry
 		kept = append(kept, pair)
 	}
-	return kept, withheld, nil
+	drifted = withheld > 0 && indexVirtualParents != nil && virtualParents != nil &&
+		externalapi.HashesEqual(indexVirtualParents, virtualParents)
+	return kept, withheld, drifted, nil
+}
+
+// LogWithheldUTXOs reports the coins FilterUTXOPairsAgainstVirtual withheld from what, e.g. "the
+// response". Only drift is a warning; an index that had not yet caught up with virtual is routine.
+func LogWithheldUTXOs(withheld int, drifted bool, address string, what string) {
+	if withheld == 0 {
+		return
+	}
+	if drifted {
+		log.Warnf("Left %d UTXO(s) of address %s out of %s: the UTXO index lists them but virtual's UTXO set "+
+			"does not hold them, and both describe the same virtual state. The index has drifted from consensus.",
+			withheld, address, what)
+		return
+	}
+	log.Debugf("Left %d UTXO(s) of address %s out of %s: virtual no longer holds them and the UTXO index had "+
+		"not yet applied that change", withheld, address, what)
 }
 
 // lastUncheckedLog rate-limits logServedUnchecked, so a busy stretch produces one Info line per

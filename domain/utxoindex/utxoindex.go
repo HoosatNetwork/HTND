@@ -22,6 +22,9 @@ type UTXOIndex struct {
 
 	mutex   sync.RWMutex
 	syncing atomic.Bool
+	// virtualParents are those of the last virtual change the index applied, nil while unknown.
+	// Guarded by mutex.
+	virtualParents []*externalapi.DomainHash
 	// utxoIndexCache *utxoIndexLRUCache
 	// maxCacheSize   int
 }
@@ -150,6 +153,11 @@ func New(domain domain.Domain, database database.Database) (*UTXOIndex, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		utxoIndex.virtualParents, err = utxoIndex.store.getVirtualParents()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return utxoIndex, nil
@@ -166,6 +174,7 @@ func (ui *UTXOIndex) Reset() error {
 	defer ui.mutex.Unlock()
 
 	log.Infof("Starting UTXO index reset")
+	ui.virtualParents = nil
 
 	err := ui.store.deleteAll()
 	if err != nil {
@@ -216,6 +225,7 @@ func (ui *UTXOIndex) Reset() error {
 	if err != nil {
 		return err
 	}
+	ui.virtualParents = externalapi.CloneHashes(virtualInfo.ParentHashes)
 
 	log.Infof("Finished UTXO index reset")
 	return nil
@@ -318,6 +328,7 @@ func (ui *UTXOIndex) Update(virtualChangeSet *externalapi.VirtualChangeSet) (*UT
 	if err != nil {
 		return nil, err
 	}
+	ui.virtualParents = externalapi.CloneHashes(virtualChangeSet.VirtualParents)
 
 	log.Tracef("UTXO index updated with the UTXOChanged: %+v", utxoIndexChanges)
 	return utxoIndexChanges, nil
@@ -361,11 +372,14 @@ func (ui *UTXOIndex) removeUTXOs(toRemove externalapi.UTXOCollection) error {
 	return nil
 }
 
-// UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
+// UTXOs returns all the UTXOs for the given scriptPublicKey, together with the virtual parents of the
+// last change the index applied, read under the same lock (see rpccontext.FilterUTXOPairsAgainstVirtual)
+func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) (
+	[]UTXOPair, *memory.Block[UTXOPair], []*externalapi.DomainHash, error,
+) {
 	unlock, err := ui.readLockOrSyncingError()
 	if err != nil {
-		return nil, buffer, err
+		return nil, buffer, nil, err
 	}
 	defer unlock()
 
@@ -375,14 +389,17 @@ func (ui *UTXOIndex) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit u
 
 	pair, updatedBuffer, err := ui.store.UTXOs(scriptPublicKey, limit, buffer)
 	// ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
-	return pair, updatedBuffer, err
+	return pair, updatedBuffer, externalapi.CloneHashes(ui.virtualParents), err
 }
 
-// UTXOs returns all the UTXOs for the given scriptPublicKey
-func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
+// PaginatedUTXOs returns a page of the UTXOs for the given scriptPublicKey, together with the virtual
+// parents of the last change the index applied, read under the same lock
+func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) (
+	[]UTXOPair, *memory.Block[UTXOPair], []*externalapi.DomainHash, error,
+) {
 	unlock, err := ui.readLockOrSyncingError()
 	if err != nil {
-		return nil, buffer, err
+		return nil, buffer, nil, err
 	}
 	defer unlock()
 
@@ -392,7 +409,7 @@ func (ui *UTXOIndex) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey
 
 	pair, updatedBuffer, err := ui.store.PaginatedUTXOs(scriptPublicKey, offset, limit, buffer)
 	// ui.utxoIndexCache.Put(scriptPublicKey.String(), pair)
-	return pair, updatedBuffer, err
+	return pair, updatedBuffer, externalapi.CloneHashes(ui.virtualParents), err
 }
 
 // UTXOs returns all the UTXOs for the given scriptPublicKey

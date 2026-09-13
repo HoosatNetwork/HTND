@@ -908,42 +908,61 @@ const virtualUTXOEntriesChunkSize = 1024
 // returns ok=false and the caller serves what it would have without the check. Each chunk is checked
 // against virtual as it stands when that chunk runs, so a block accepted between chunks can show in
 // later chunks and not earlier ones - but every answer is one virtual actually gave.
+//
+// It also returns virtual's parents as they stood during the lookup, or nil if they changed between
+// chunks. A caller comparing the answers with a secondary index can tell from them whether the index
+// described the same virtual state: an index that has not yet applied virtual's latest change still
+// lists coins virtual has just removed, which is the index catching up, not drift.
 func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) (
-	[]externalapi.UTXOEntry, bool, error,
+	[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error,
 ) {
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
+	var virtualParents []*externalapi.DomainHash
 	for start := 0; start < len(outpoints); start += virtualUTXOEntriesChunkSize {
 		end := min(start+virtualUTXOEntriesChunkSize, len(outpoints))
 		if !tryLockFor(s.lock, maxWait) {
-			return nil, false, nil
+			return nil, nil, false, nil
 		}
-		err := s.virtualUTXOEntriesNoLock(outpoints[start:end], entries[start:end])
+		chunkVirtualParents, err := s.virtualUTXOEntriesNoLock(outpoints[start:end], entries[start:end])
 		s.lock.Unlock()
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
+		}
+		switch {
+		case start == 0:
+			virtualParents = chunkVirtualParents
+		case !externalapi.HashesEqual(virtualParents, chunkVirtualParents):
+			virtualParents = nil
 		}
 	}
-	return entries, true, nil
+	return entries, virtualParents, true, nil
 }
 
-// virtualUTXOEntriesNoLock fills entries with virtual's entry for each outpoint. One lookup answers
-// both "is it there" and "what is it": asking HasUTXOByOutpoint first doubled the database reads -
-// Has never consults the UTXO cache - for a question the lookup's not-found already answers.
-func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) error {
+// virtualUTXOEntriesNoLock fills entries with virtual's entry for each outpoint and returns virtual's
+// parents. One lookup answers both "is it there" and "what is it": asking HasUTXOByOutpoint first
+// doubled the database reads - Has never consults the UTXO cache - for a question the lookup's
+// not-found already answers.
+func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) (
+	[]*externalapi.DomainHash, error,
+) {
 	stagingArea := model.NewStagingArea()
+	virtualParents, err := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
+	if err != nil {
+		return nil, err
+	}
 	for i, outpoint := range outpoints {
 		entry, found, err := s.consensusStateStore.UTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
 		if database.IsNotFoundError(err) {
 			continue
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if found {
 			entries[i] = entry
 		}
 	}
-	return nil
+	return externalapi.CloneHashes(virtualParents), nil
 }
 
 // tryLockFor takes mu if it becomes free within maxWait, polling rather than queueing: Lock() waits

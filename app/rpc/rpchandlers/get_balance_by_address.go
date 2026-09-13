@@ -88,7 +88,7 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string) (uin
 	if buffer == nil {
 		return 0, appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
 	}
-	pairs, buffer, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
+	pairs, buffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
 	if err != nil {
 		memory.Free(buffer)
 		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -98,14 +98,11 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string) (uin
 	}
 	defer memory.Free(buffer)
 
-	pairs, withheld, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs)
+	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents)
 	if err != nil {
 		return 0, err
 	}
-	if withheld > 0 {
-		log.Warnf("Left %d UTXO(s) of address %s out of its balance: the UTXO index lists them but virtual's "+
-			"UTXO set does not hold them. The index has drifted from consensus.", withheld, addressString)
-	}
+	rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "its balance")
 
 	return sumUTXOPairs(pairs), nil
 }
