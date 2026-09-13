@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
@@ -59,15 +60,21 @@ func (db *DB) Compact() error {
 
 // Close closes the Pebble instance and all associated cursors.
 func (db *DB) Close() error {
-	// Close all tracked cursors
-	for _, cursor := range db.cursors {
+	// Close all tracked cursors. Iterate over a snapshot: each cursor's Close deregisters it from
+	// db.cursors, and ranging over the live slice while it shrank skipped every other cursor.
+	db.mu.Lock()
+	cursors := slices.Clone(db.cursors)
+	db.mu.Unlock()
+	for _, cursor := range cursors {
 		if !cursor.isClosed {
 			if err := cursor.Close(); err != nil {
 				log.Warnf("Failed to close cursor: %v", err)
 			}
 		}
 	}
+	db.mu.Lock()
 	db.cursors = nil // Clear cursors
+	db.mu.Unlock()
 
 	// Close the database
 	err := db.db.Close()
