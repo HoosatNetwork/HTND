@@ -156,7 +156,7 @@ func (x *RpcTransactionInput) toAppMessage() (*appmessage.RPCTransactionInput, e
 		return nil, err
 	}
 	var verboseData *appmessage.RPCTransactionInputVerboseData
-	for x.VerboseData != nil {
+	if x.VerboseData != nil {
 		appMessageVerboseData, err := x.VerboseData.toAppMessage()
 		if err != nil {
 			return nil, err
