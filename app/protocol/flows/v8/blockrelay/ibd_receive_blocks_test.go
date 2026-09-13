@@ -1,10 +1,12 @@
 package blockrelay
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
@@ -73,5 +75,40 @@ func TestReceiveRequestedIBDBlocksIgnoresUnrequestedBlocks(t *testing.T) {
 	}
 	if _, ok := receivedBlocks[*strayHash]; ok {
 		t.Fatalf("unrequested block %s should not be kept", strayHash)
+	}
+}
+
+// TestReceiveRequestedIBDBlocksGivesUpOnSilentPeer pins that a peer which never answers is eventually
+// abandoned with a protocol error, so the peer is disconnected and IBD can move on to another one,
+// rather than being re-asked forever.
+func TestReceiveRequestedIBDBlocksGivesUpOnSilentPeer(t *testing.T) {
+	flow := newReceiveBlocksTestFlow(10 * time.Millisecond)
+	hashesToRequest := []*externalapi.DomainHash{consensushashing.BlockHash(dagconfig.MainnetParams.GenesisBlock)}
+
+	type result struct {
+		retryCount int
+		err        error
+	}
+	done := make(chan result, 1)
+	go func() {
+		retryCount, err := flow.receiveRequestedIBDBlocks(hashesToRequest,
+			make(map[externalapi.DomainHash]*externalapi.DomainBlock), time.Now())
+		done <- result{retryCount, err}
+	}()
+
+	select {
+	case res := <-done:
+		var protocolErr protocolerrors.ProtocolError
+		if !errors.As(res.err, &protocolErr) {
+			t.Fatalf("expected a protocol error, got %v", res.err)
+		}
+		if res.retryCount != maxIBDBlockRequestRetries {
+			t.Fatalf("expected %d retries, got %d", maxIBDBlockRequestRetries, res.retryCount)
+		}
+		if got := flow.outgoingRoute.Length(); got != maxIBDBlockRequestRetries {
+			t.Fatalf("expected %d re-requests to be sent, got %d", maxIBDBlockRequestRetries, got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("receiveRequestedIBDBlocks kept waiting on a peer that never answers")
 	}
 }

@@ -1111,6 +1111,11 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	return flow.OnNewBlockTemplate()
 }
 
+// maxIBDBlockRequestRetries bounds how many times one IBD body batch is re-requested from a peer that
+// has stopped answering. Each attempt waits IBDDequeueTimeout, so the default gives a peer four chances
+// over twenty minutes; after that the peer is dropped and IBD can continue with another one.
+const maxIBDBlockRequestRetries = 3
+
 // receiveRequestedIBDBlocks reads MsgIBDBlock responses for hashesToRequest into receivedBlocks until
 // every requested block has arrived, re-requesting the missing ones whenever IBDDequeueTimeout passes
 // with nothing received. networkPhaseStart is only used for logging.
@@ -1141,6 +1146,11 @@ func (flow *handleIBDFlow) receiveRequestedIBDBlocks(hashesToRequest []*external
 			if len(missingHashes) == 0 {
 				// Should be extremely rare (race), but still surface the timeout.
 				return retryCount, err
+			}
+			if retryCount >= maxIBDBlockRequestRetries {
+				return retryCount, protocolerrors.Errorf(false, "peer %s did not deliver %d of %d requested "+
+					"IBD blocks after %d requests, each given %s", flow.peer, len(missingHashes),
+					len(hashesToRequest), retryCount+1, flow.Config().IBDDequeueTimeout)
 			}
 
 			retryCount++
