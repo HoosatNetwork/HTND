@@ -37,6 +37,8 @@ type handleRelayedTransactionsFlow struct {
 	// yet able to process them, in arrival order. pendingTransactionIDs indexes it for deduplication.
 	pendingTransactions   []*externalapi.DomainTransaction
 	pendingTransactionIDs map[externalapi.DomainTransactionID]struct{}
+	// pendingTransactionBytes is the heldTransactionSize total of pendingTransactions.
+	pendingTransactionBytes uint64
 }
 
 // HandleRelayedTransactions listens to appmessage.MsgInvTransaction messages, requests their corresponding transactions if they
@@ -60,7 +62,42 @@ const pendingRetryInterval = 1 * time.Second
 // A long IBD can outlast a great many relayed transactions, and they are held as full transactions
 // rather than as ids, so this cannot be unbounded. On overflow the OLDEST held transaction is
 // dropped: the newest are the likeliest to still be valid by the time the node catches up.
-const maxPendingRelayedTransactions = 2_000_000
+const maxPendingRelayedTransactions = 50_000
+
+// maxPendingRelayedTransactionBytes bounds the same buffer by size. A count alone does not bound
+// memory: held transactions are not validated, and a peer can serve arbitrarily large ones (a P2P
+// message may be gigabytes), so under a count-only cap one peer could fill a syncing node's memory.
+// The budget is per peer and a node accepts hundreds of inbound peers by default, so it is kept
+// small; it still holds dozens of maximum-size standard transactions, or thousands of typical ones.
+const maxPendingRelayedTransactionBytes = 8 << 20
+
+// Approximate in-memory overheads of a held transaction, its inputs and its outputs, beyond their
+// variable-length byte slices.
+const (
+	heldTransactionOverhead = 128
+	heldInputOverhead       = 96
+	heldOutputOverhead      = 64
+)
+
+// heldTransactionSize estimates the memory a held transaction occupies. Unlike the mass estimate it
+// counts every transaction the same way, whatever its version or subnetwork, since a held transaction
+// has not been validated and could claim to be anything.
+func heldTransactionSize(transaction *externalapi.DomainTransaction) uint64 {
+	size := uint64(heldTransactionOverhead) + uint64(len(transaction.Payload))
+	for _, input := range transaction.Inputs {
+		size += heldInputOverhead
+		if input != nil {
+			size += uint64(len(input.SignatureScript))
+		}
+	}
+	for _, output := range transaction.Outputs {
+		size += heldOutputOverhead
+		if output != nil && output.ScriptPublicKey != nil {
+			size += uint64(len(output.ScriptPublicKey.Script))
+		}
+	}
+	return size
+}
 
 func (flow *handleRelayedTransactionsFlow) start() error {
 	for {
@@ -119,9 +156,20 @@ func (flow *handleRelayedTransactionsFlow) holdTransaction(transaction *external
 		return
 	}
 
-	if len(flow.pendingTransactions) >= maxPendingRelayedTransactions {
+	size := heldTransactionSize(transaction)
+	if size > maxPendingRelayedTransactionBytes {
+		// Evicting everything held to make room for one transaction this large would let a single
+		// response wipe the buffer; no standard transaction comes close to it.
+		log.Debugf("Not holding transaction %s: its size %d exceeds the held-transaction budget %d",
+			transactionID, size, maxPendingRelayedTransactionBytes)
+		return
+	}
+
+	for len(flow.pendingTransactions) > 0 && (len(flow.pendingTransactions) >= maxPendingRelayedTransactions ||
+		flow.pendingTransactionBytes+size > maxPendingRelayedTransactionBytes) {
 		oldest := flow.pendingTransactions[0]
 		delete(flow.pendingTransactionIDs, *consensushashing.TransactionID(oldest))
+		flow.pendingTransactionBytes -= heldTransactionSize(oldest)
 		// Clear the slot before re-slicing so the dropped transaction can be collected even while the
 		// backing array is still alive.
 		flow.pendingTransactions[0] = nil
@@ -130,6 +178,7 @@ func (flow *handleRelayedTransactionsFlow) holdTransaction(transaction *external
 
 	flow.pendingTransactions = append(flow.pendingTransactions, transaction)
 	flow.pendingTransactionIDs[*transactionID] = struct{}{}
+	flow.pendingTransactionBytes += size
 }
 
 // processPendingTransactions feeds the held transactions to the mempool, once this node can accept
@@ -155,6 +204,7 @@ func (flow *handleRelayedTransactionsFlow) processPendingTransactions() error {
 	pending := flow.pendingTransactions
 	flow.pendingTransactions = nil
 	flow.pendingTransactionIDs = make(map[externalapi.DomainTransactionID]struct{})
+	flow.pendingTransactionBytes = 0
 
 	log.Infof("Node is ready to process transactions again - handling %d transaction(s) that were "+
 		"fetched and held while it was syncing.", len(pending))

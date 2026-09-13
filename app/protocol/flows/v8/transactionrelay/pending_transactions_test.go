@@ -76,3 +76,73 @@ func TestHoldTransactionEvictsOldestAtCapacity(t *testing.T) {
 		t.Fatalf("the newest held transaction should have been kept")
 	}
 }
+
+// bulkyTestTransaction builds a transaction whose payload is the given shared slice, made unique by
+// its lock time, so a test can hold many large transactions without allocating each payload.
+func bulkyTestTransaction(n int, payload []byte) (*externalapi.DomainTransaction, *externalapi.DomainTransactionID) {
+	transaction := &externalapi.DomainTransaction{
+		Inputs:   []*externalapi.DomainTransactionInput{},
+		Outputs:  []*externalapi.DomainTransactionOutput{},
+		LockTime: uint64(n),
+		Payload:  payload,
+	}
+	return transaction, consensushashing.TransactionID(transaction)
+}
+
+func heldPayloadBytes(flow *handleRelayedTransactionsFlow) int {
+	total := 0
+	for _, transaction := range flow.pendingTransactions {
+		total += len(transaction.Payload)
+	}
+	return total
+}
+
+// TestHoldTransactionIsBoundedByBytes pins that the held buffer is bounded by size, not only by
+// count: a peer serving large transactions while this node syncs must not be able to grow it without
+// limit. Overflow still drops the oldest.
+func TestHoldTransactionIsBoundedByBytes(t *testing.T) {
+	const ceiling = 64 << 20
+	flow := newTestFlow()
+	payload := make([]byte, 1<<20)
+
+	first, firstID := bulkyTestTransaction(0, payload)
+	flow.holdTransaction(first, firstID)
+	var lastID *externalapi.DomainTransactionID
+	for i := 1; i < 1024; i++ {
+		transaction, transactionID := bulkyTestTransaction(i, payload)
+		flow.holdTransaction(transaction, transactionID)
+		lastID = transactionID
+	}
+
+	if held := heldPayloadBytes(flow); held > ceiling {
+		t.Fatalf("held %d payload bytes, more than %d", held, ceiling)
+	}
+	if flow.isKnownTransactionHeld(firstID) {
+		t.Fatalf("the oldest held transaction should have been evicted")
+	}
+	if !flow.isKnownTransactionHeld(lastID) {
+		t.Fatalf("the newest held transaction should have been kept")
+	}
+	if len(flow.pendingTransactionIDs) != len(flow.pendingTransactions) {
+		t.Fatalf("index and buffer disagree: %d ids, %d transactions",
+			len(flow.pendingTransactionIDs), len(flow.pendingTransactions))
+	}
+}
+
+// TestHoldTransactionDropsOversized pins that a single transaction too large for the whole budget is
+// not held at all, rather than evicting everything else to make room for it.
+func TestHoldTransactionDropsOversized(t *testing.T) {
+	flow := newTestFlow()
+	small, smallID := testTransaction(1)
+	flow.holdTransaction(small, smallID)
+
+	huge, hugeID := bulkyTestTransaction(2, make([]byte, 65<<20))
+	flow.holdTransaction(huge, hugeID)
+
+	if flow.isKnownTransactionHeld(hugeID) {
+		t.Fatalf("an oversized transaction should not be held")
+	}
+	if !flow.isKnownTransactionHeld(smallID) {
+		t.Fatalf("holding an oversized transaction should not evict what is already held")
+	}
+}
