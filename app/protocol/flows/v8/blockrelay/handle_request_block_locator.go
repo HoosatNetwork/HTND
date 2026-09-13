@@ -2,10 +2,10 @@ package blockrelay
 
 import (
 	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/domain"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
-	"github.com/cockroachdb/errors"
 )
 
 // RequestBlockLocatorContext is the interface for the context needed for the HandleRequestBlockLocator flow.
@@ -40,8 +40,17 @@ func (flow *handleRequestBlockLocatorFlow) start() error {
 
 		locator, err := flow.Domain().Consensus().CreateBlockLocatorFromPruningPoint(highHash, limit)
 		if err != nil || len(locator) == 0 {
-			return errors.Wrapf(err, "couldn't build a block "+
-				"locator between the pruning point and %s with limit %d", highHash, limit)
+			// A protocol error, so the peer is disconnected and retries elsewhere. This used to return
+			// errors.Wrapf(err, ...), which is nil for an empty locator, ending the flow while the
+			// connection stayed up and the peer waited out its 10-minute timeout. The cause is formatted
+			// rather than wrapped: HandleError silently drops errors that unwrap to database not-found,
+			// which would leave the flow just as dead.
+			reason := "the locator is empty"
+			if err != nil {
+				reason = err.Error()
+			}
+			return protocolerrors.Errorf(false, "couldn't build a block locator between the pruning point "+
+				"and %s with limit %d: %s", highHash, limit, reason)
 		}
 
 		err = flow.sendBlockLocator(locator)
