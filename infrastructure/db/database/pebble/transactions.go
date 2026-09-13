@@ -88,10 +88,16 @@ func (tx *DBTransaction) Put(key *database.Key, value []byte) error {
 }
 
 func (tx *DBTransaction) BatchPut(pairs map[*database.Key][]byte) error {
+	if tx.isClosed {
+		return errors.New("cannot put into a closed transaction")
+	}
 	for key, value := range pairs {
-		if err := tx.batch.Set(key.Bytes(), value, pebble.NoSync); err != nil {
+		if err := tx.batch.Set(key.Bytes(), value, nil); err != nil {
 			return errors.Wrapf(err, "failed to set key %s in batch", key)
 		}
+		// Track the key as Put does: Get and Has only consult the batch for tracked keys, so an
+		// untracked one read back the committed value, or "deleted" if this transaction deleted it.
+		tx.keyModifications[string(key.Bytes())] = true
 	}
 	return nil
 }
