@@ -94,6 +94,10 @@ func (a *ComponentManager) Stop() {
 	rpc.RPCStats.Stop()
 	log.Infof("RPC statistics tracking stopped")
 
+	log.Infof("Stopping RPC background handlers")
+	a.rpcManager.Stop()
+	log.Infof("RPC background handlers stopped")
+
 	type stopResult struct {
 		component string
 		err       error
@@ -129,10 +133,6 @@ func (a *ComponentManager) Stop() {
 	log.Infof("Waiting for protocol flows to stop")
 	a.protocolManager.Close()
 	log.Infof("Protocol flows stopped")
-
-	log.Infof("Closing consensus event channel")
-	close(a.protocolManager.Context().Domain().ConsensusEventsChannel())
-	log.Infof("Consensus event channel closed")
 }
 
 // NewComponentManager returns a new ComponentManager instance.

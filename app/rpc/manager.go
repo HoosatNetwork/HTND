@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"sync"
+
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/protocol"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
@@ -18,6 +20,10 @@ import (
 // Manager is an RPC manager
 type Manager struct {
 	context *rpccontext.Context
+
+	stopConsensusEventsHandler chan struct{}
+	consensusEventsHandlerDone chan struct{}
+	stopOnce                   sync.Once
 }
 
 // NewManager creates a new RPC Manager
@@ -43,6 +49,8 @@ func NewManager(
 			utxoIndex,
 			shutDownChan,
 		),
+		stopConsensusEventsHandler: make(chan struct{}),
+		consensusEventsHandlerDone: make(chan struct{}),
 	}
 	netAdapter.SetRPCRouterInitializer(manager.routerInitializer)
 
@@ -56,26 +64,39 @@ func NewManager(
 
 func (m *Manager) initConsensusEventsHandler(consensusEventsChan chan externalapi.ConsensusEvent) {
 	spawn("consensusEventsHandler", func() {
+		defer close(m.consensusEventsHandlerDone)
 		for {
-			consensusEvent, ok := <-consensusEventsChan
-			if !ok {
+			select {
+			case <-m.stopConsensusEventsHandler:
 				return
-			}
-			switch event := consensusEvent.(type) {
-			case *externalapi.VirtualChangeSet:
-				err := m.notifyVirtualChange(event)
-				if err != nil {
-					panic(err)
+			case consensusEvent, ok := <-consensusEventsChan:
+				if !ok {
+					return
 				}
-			case *externalapi.BlockAdded:
-				err := m.notifyBlockAddedToDAG(event.Block)
-				if err != nil {
-					panic(err)
+				switch event := consensusEvent.(type) {
+				case *externalapi.VirtualChangeSet:
+					err := m.notifyVirtualChange(event)
+					if err != nil {
+						panic(err)
+					}
+				case *externalapi.BlockAdded:
+					err := m.notifyBlockAddedToDAG(event.Block)
+					if err != nil {
+						panic(err)
+					}
+				default:
+					panic(errors.Errorf("Got event of unsupported type %T", consensusEvent))
 				}
-			default:
-				panic(errors.Errorf("Got event of unsupported type %T", consensusEvent))
 			}
 		}
+	})
+}
+
+// Stop shuts down RPC background goroutines that are not tied to network routes.
+func (m *Manager) Stop() {
+	m.stopOnce.Do(func() {
+		close(m.stopConsensusEventsHandler)
+		<-m.consensusEventsHandlerDone
 	})
 }
 
