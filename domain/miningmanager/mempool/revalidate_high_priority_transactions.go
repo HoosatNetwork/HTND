@@ -7,6 +7,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool/model"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/pkg/errors"
 )
 
 func (mp *mempool) revalidateHighPriorityTransactions() ([]*externalapi.DomainTransaction, error) {
@@ -99,7 +100,22 @@ func (mp *mempool) revalidateTransaction(transaction *model.MempoolTransaction) 
 
 	_, missingParents, err := mp.fillInputsAndGetMissingParents(transaction.Transaction())
 	if err != nil {
-		return false, err
+		if !errors.As(err, &RuleError{}) {
+			return false, err
+		}
+		// Consensus now rejects a transaction it accepted earlier - its lock time or sequence lock no
+		// longer holds, or a reorg made a spent coinbase immature. That is a verdict on this one
+		// transaction, not a failure of revalidation. Returning it used to abort the whole pass and
+		// leave the transaction in the pool with the inputs clearInputs had just emptied, where block
+		// template building dereferences them; and the error failed the new-block handling that
+		// triggered revalidation, again every rebroadcast interval.
+		log.Warnf("Removing locally submitted transaction %s from the mempool: it is no longer valid "+
+			"against this node's UTXO set: %s", transaction.TransactionID(), err)
+		err := mp.removeTransaction(transaction.TransactionID(), false)
+		if err != nil {
+			return false, err
+		}
+		return false, nil
 	}
 	if len(missingParents) > 0 {
 		// Warn, not debug. These are high-priority transactions, which on this node means locally
