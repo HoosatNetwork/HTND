@@ -79,6 +79,9 @@ type consensus struct {
 
 	consensusEventsChan chan externalapi.ConsensusEvent
 	virtualNotUpdated   bool
+	// virtualChangeSetDropped is set when a change set describing an already committed virtual
+	// change was not delivered, and reported on the next one that is. Guarded by lock.
+	virtualChangeSetDropped bool
 }
 
 func (s *consensus) exportPruningPointExodusBundle(pruningPoint *externalapi.DomainHash, exportRoot, network string) {
@@ -499,6 +502,8 @@ func (s *consensus) validateAndInsertBlockNoLock(block *externalapi.DomainBlock,
 
 	err = s.sendBlockAddedEvent(block, blockStatus)
 	if err != nil {
+		// Virtual is already committed, and returning here means its change set is never sent either
+		s.noteVirtualChangeSetDropped(virtualChangeSet, updateVirtual)
 		return nil, err
 	}
 
@@ -524,10 +529,24 @@ func (s *consensus) sendBlockAddedEvent(block *externalapi.DomainBlock, blockSta
 	return nil
 }
 
-func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.VirtualChangeSet, wasVirtualUpdated bool) error {
+// noteVirtualChangeSetDropped records that a change set was not delivered. Virtual is committed before
+// its change set is sent, so an undelivered one is a diff lost to every consumer that replays diffs -
+// the UTXO index - and the next delivered change set must say so.
+func (s *consensus) noteVirtualChangeSetDropped(virtualChangeSet *externalapi.VirtualChangeSet, wasVirtualUpdated bool) {
+	if wasVirtualUpdated && s.consensusEventsChan != nil && virtualChangeSet != nil {
+		s.virtualChangeSetDropped = true
+	}
+}
+
+func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.VirtualChangeSet, wasVirtualUpdated bool) (err error) {
 	if !wasVirtualUpdated || s.consensusEventsChan == nil || virtualChangeSet == nil {
 		return nil
 	}
+	defer func() {
+		if err != nil {
+			s.noteVirtualChangeSetDropped(virtualChangeSet, wasVirtualUpdated)
+		}
+	}()
 
 	if len(s.consensusEventsChan) == cap(s.consensusEventsChan) {
 		return errors.Errorf("consensusEventsChan is full")
@@ -556,8 +575,10 @@ func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.Virtua
 	// Populate the change set with additional data before sending
 	virtualChangeSet.VirtualSelectedParentBlueScore = virtualSelectedParentGHOSTDAGData.BlueScore()
 	virtualChangeSet.VirtualDAAScore = virtualDAAScore
+	virtualChangeSet.EarlierChangeSetsDropped = s.virtualChangeSetDropped
 
 	s.consensusEventsChan <- virtualChangeSet
+	s.virtualChangeSetDropped = false
 	return nil
 }
 

@@ -20,6 +20,11 @@ var (
 	virtualParentsKey        = database.MakeBucket([]byte("")).Key([]byte("utxo-index-virtual-parents"))
 	circulatingSupplyKey     = database.MakeBucket([]byte("")).Key([]byte("utxo-index-circulating-supply"))
 	utxoCountsInitializedKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-counts-initialized"))
+
+	// needsResetKey is written when the index learns it missed a virtual UTXO diff. The stored
+	// virtual parents keep advancing with every later diff, so without it the startup check would
+	// call the index synced.
+	needsResetKey = database.MakeBucket([]byte("")).Key([]byte("utxo-index-needs-reset"))
 )
 
 func checkedLimitToInt(limit uint32) (int, error) {
@@ -678,6 +683,14 @@ func (uis *utxoIndexStore) GetBalance(scriptPublicKey *externalapi.ScriptPublicK
 	return balance, nil
 }
 
+func (uis *utxoIndexStore) markNeedsReset() error {
+	return uis.database.Put(needsResetKey, []byte{1})
+}
+
+func (uis *utxoIndexStore) needsReset() (bool, error) {
+	return uis.database.Has(needsResetKey)
+}
+
 func (uis *utxoIndexStore) getVirtualParents() ([]*externalapi.DomainHash, error) {
 	if uis.isAnythingStaged() {
 		return nil, errors.Errorf("cannot get the virtual parents while staging isn't empty")
@@ -699,6 +712,12 @@ func (uis *utxoIndexStore) deleteAll() error {
 	// First we delete the virtual parents, so if anything goes wrong, the UTXO index will be marked as "not synced"
 	// and will be reset.
 	err := uis.database.Delete(virtualParentsKey)
+	if err != nil {
+		return err
+	}
+
+	// Safe to clear now: with the virtual parents gone, an interrupted reset is retried anyway.
+	err = uis.database.Delete(needsResetKey)
 	if err != nil {
 		return err
 	}

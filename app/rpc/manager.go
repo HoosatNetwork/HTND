@@ -17,7 +17,8 @@ import (
 
 // Manager is an RPC manager
 type Manager struct {
-	context *rpccontext.Context
+	context             *rpccontext.Context
+	consensusEventsChan chan externalapi.ConsensusEvent
 }
 
 // NewManager creates a new RPC Manager
@@ -43,6 +44,7 @@ func NewManager(
 			utxoIndex,
 			shutDownChan,
 		),
+		consensusEventsChan: consensusEventsChan,
 	}
 	netAdapter.SetRPCRouterInitializer(manager.routerInitializer)
 
@@ -72,6 +74,8 @@ func (m *Manager) initConsensusEventsHandler(consensusEventsChan chan externalap
 				if err != nil {
 					panic(err)
 				}
+			case *externalapi.PruningPointUTXOSetOverride:
+				event.Done <- m.notifyPruningPointUTXOSetOverride()
 			default:
 				panic(errors.Errorf("Got event of unsupported type %T", consensusEvent))
 			}
@@ -158,7 +162,14 @@ func (m *Manager) NotifyPruningPointUTXOSetOverride() error {
 	defer onEnd()
 
 	if m.context.Config.UTXOIndex {
-		err := m.notifyPruningPointUTXOSetOverride()
+		// The reset runs on the events handler, not here. Events the replaced consensus raised can
+		// still be queued; had the reset run first, they would be replayed onto the rebuilt index,
+		// adding coins whose removal could only have come from the consensus that was just replaced.
+		// Queued behind them, the reset wipes whatever they wrote. Waiting keeps virtual still while
+		// the reset pages through it, as calling Reset directly did.
+		done := make(chan error, 1)
+		m.consensusEventsChan <- &externalapi.PruningPointUTXOSetOverride{Done: done}
+		err := <-done
 		if err != nil {
 			return err
 		}

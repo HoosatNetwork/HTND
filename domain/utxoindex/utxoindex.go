@@ -248,6 +248,15 @@ func (ui *UTXOIndex) readLockOrSyncingError() (func(), error) {
 }
 
 func (ui *UTXOIndex) isSynced() (bool, error) {
+	needsReset, err := ui.store.needsReset()
+	if err != nil {
+		return false, err
+	}
+	if needsReset {
+		log.Infof("The UTXO index missed a virtual UTXO diff while the node was running; rebuilding it")
+		return false, nil
+	}
+
 	utxoIndexVirtualParents, err := ui.store.getVirtualParents()
 	if err != nil {
 		if database.IsNotFoundError(err) {
@@ -271,6 +280,20 @@ func (ui *UTXOIndex) Update(virtualChangeSet *externalapi.VirtualChangeSet) (*UT
 
 	ui.mutex.Lock()
 	defer ui.mutex.Unlock()
+
+	if virtualChangeSet.EarlierChangeSetsDropped {
+		// A diff never reached the index, so it holds coins consensus has spent or lacks coins
+		// consensus created, and no later diff corrects that. Rebuilding right here is not an option:
+		// Reset pages through virtual's UTXO set and gives up as soon as virtual moves, which on a
+		// running node it does every block. Mark the index so the next start rebuilds it; until then
+		// the UTXO RPCs keep checking what they serve against virtual.
+		log.Errorf("The UTXO index missed a virtual UTXO diff (the consensus events channel was full), " +
+			"so it no longer matches consensus. It will be rebuilt on the next start")
+		err := ui.store.markNeedsReset()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	log.Tracef("Updating UTXO index with VirtualUTXODiff: %+v", virtualChangeSet.VirtualUTXODiff)
 	err := ui.removeUTXOs(virtualChangeSet.VirtualUTXODiff.ToRemove())
