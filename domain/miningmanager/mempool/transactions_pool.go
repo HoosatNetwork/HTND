@@ -201,15 +201,26 @@ func (tp *transactionsPool) getParentTransactionsInPool(
 	return parentsTransactionsInPool
 }
 
+// getRedeemers returns every in-pool descendant of transaction, each exactly once.
+//
+// A transaction spending outputs of two siblings is a child of both, so without the visited set it
+// was reached once per path: each such diamond doubled the walk below it, making it exponential in
+// chain length while holding the mempool lock, and callers removed the same transaction repeatedly.
 func (tp *transactionsPool) getRedeemers(transaction *model.MempoolTransaction) []*model.MempoolTransaction {
 	stack := []*model.MempoolTransaction{transaction}
 	redeemers := []*model.MempoolTransaction{}
+	visited := map[externalapi.DomainTransactionID]struct{}{*transaction.TransactionID(): {}}
 	for len(stack) > 0 {
 		var current *model.MempoolTransaction
 		last := len(stack) - 1
 		current, stack = stack[last], stack[:last]
 
 		for _, redeemerTransaction := range tp.chainedTransactionsByParentID[*current.TransactionID()] {
+			redeemerID := *redeemerTransaction.TransactionID()
+			if _, ok := visited[redeemerID]; ok {
+				continue
+			}
+			visited[redeemerID] = struct{}{}
 			stack = append(stack, redeemerTransaction)
 			redeemers = append(redeemers, redeemerTransaction)
 		}
