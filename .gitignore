@@ -70,3 +70,7 @@ coverage.tmp
 esscapes_summary.txt
 .release-notes
 /utxoforensics
+
+
+ISSUES.md
+AGENT_STATE.md
