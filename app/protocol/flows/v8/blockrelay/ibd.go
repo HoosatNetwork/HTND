@@ -44,6 +44,7 @@ type IBDContext interface {
 	UnsetIBDRunning()
 	IsRecoverableError(err error) bool
 	AddressManager() *addressmanager.AddressManager
+	ShutdownChan() <-chan struct{}
 }
 
 type handleIBDFlow struct {
@@ -74,14 +75,22 @@ func HandleIBD(context IBDContext, incomingRoute *router.Route, outgoingRoute *r
 
 func (flow *handleIBDFlow) start() error {
 	for {
-		// Wait for IBD requests triggered by other flows
-		block, ok := <-flow.peer.IBDRequestChannel()
-		if !ok {
-			return nil
-		}
-		err := flow.runIBDIfNotRunning(block)
-		if err != nil {
+		if err := flow.checkIfShuttingDown(); err != nil {
 			return err
+		}
+
+		// Wait for IBD requests triggered by other flows
+		select {
+		case <-flow.ShutdownChan():
+			return flow.checkIfShuttingDown()
+		case block, ok := <-flow.peer.IBDRequestChannel():
+			if !ok {
+				return nil
+			}
+			err := flow.runIBDIfNotRunning(block)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -136,12 +145,16 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 	}()
 
 	// Wait for IBD to complete or timeout
+	timeoutTimer := time.NewTimer(timeout)
+	defer timeoutTimer.Stop()
 	select {
+	case <-flow.ShutdownChan():
+		err = flow.checkIfShuttingDown()
 	case err = <-ibdDone:
 		if err == nil {
 			isFinishedSuccessfully = true
 		}
-	case <-time.After(timeout):
+	case <-timeoutTimer.C:
 		if !flow.Config().DisableIBDTimeout || timeout == 0 {
 			log.Warnf("IBD with peer %s timed out after %v, disconnecting and trying to ban the peer depending on --enablebanning setting", flow.peer, timeout)
 			// Disconnect & Remove the peer from address manager to prevent immediate reconnection
@@ -179,6 +192,10 @@ func (flow *handleIBDFlow) getIBDTimeout() time.Duration {
 }
 
 func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return err
+	}
+
 	relayBlockHash := consensushashing.BlockHash(block)
 
 	log.Infof("IBD started with peer %s and relayBlockHash %s", flow.peer, relayBlockHash)
@@ -187,6 +204,9 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 
 	syncerHeaderSelectedTipHash, highestKnownSyncerChainHash, err := flow.negotiateMissingSyncerChainSegment(nil, nil)
 	if err != nil {
+		return err
+	}
+	if err := flow.checkIfShuttingDown(); err != nil {
 		return err
 	}
 
@@ -203,6 +223,9 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 		log.Infof("Starting IBD with headers proof")
 		err = flow.ibdWithHeadersProof(syncerHeaderSelectedTipHash, relayBlockHash, block.Header.DAAScore())
 		if err != nil {
+			return err
+		}
+		if err := flow.checkIfShuttingDown(); err != nil {
 			return err
 		}
 	} else {
@@ -318,10 +341,17 @@ func (flow *handleIBDFlow) negotiateMissingSyncerChainSegment(highHash *external
 	}
 
 	for {
+		if err := flow.checkIfShuttingDown(); err != nil {
+			return nil, nil, err
+		}
+
 		var lowestUnknownSyncerChainHash, currentHighestKnownSyncerChainHash *externalapi.DomainHash
 		var lowestUnknownIsDisqualified bool
 		headerOnlyInWindow := 0
 		for i := 0; i < len(locatorHashes); i++ {
+			if err := flow.checkIfShuttingDown(); err != nil {
+				return nil, nil, err
+			}
 			info, err := flow.Domain().Consensus().GetBlockInfo(locatorHashes[i])
 			if err != nil {
 				return nil, nil, err
@@ -583,6 +613,10 @@ func (flow *handleIBDFlow) logIBDFinished(isFinishedSuccessfully bool, err error
 func (flow *handleIBDFlow) getSyncerChainBlockLocator(
 	highHash, lowHash *externalapi.DomainHash, _ time.Duration,
 ) ([]*externalapi.DomainHash, error) {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return nil, err
+	}
+
 	requestIbdChainBlockLocatorMessage := appmessage.NewMsgIBDRequestChainBlockLocator(highHash, lowHash)
 	err := flow.outgoingRoute.Enqueue(requestIbdChainBlockLocatorMessage)
 	if err != nil {
@@ -630,6 +664,10 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 	progressReporter := newIBDProgressReporter(highestSharedBlockHeader.DAAScore(), highBlockDAAScoreHint, "block headers")
 
 	for {
+		if err := flow.checkIfShuttingDown(); err != nil {
+			return err
+		}
+
 		// Receive next batch of headers (this call blocks)
 		blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
 		if err != nil {
@@ -649,6 +687,9 @@ func (flow *handleIBDFlow) syncPruningPointFutureHeaders(
 
 		// Process all headers in this batch
 		for _, header := range blockHeadersMessage.BlockHeaders {
+			if err := flow.checkIfShuttingDown(); err != nil {
+				return err
+			}
 			// log.Infof("Processing header %s", header.BlockHash())
 			err = flow.processHeader(consensus, header)
 			if err != nil {
@@ -751,6 +792,10 @@ func (flow *handleIBDFlow) sendRequestHeaders(
 }
 
 func (flow *handleIBDFlow) receiveHeaders() (msgIBDBlock *appmessage.BlockHeadersMessage, doneHeaders bool, err error) {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return nil, false, err
+	}
+
 	message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
 	if err != nil {
 		return nil, false, err
@@ -928,6 +973,10 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 	domainPairsBuffer := make([]*externalapi.OutpointAndUTXOEntryPair, 0, 1000)
 
 	for {
+		if err := flow.checkIfShuttingDown(); err != nil {
+			return false, err
+		}
+
 		message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
 		if err != nil {
 			return false, err
@@ -980,6 +1029,10 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 }
 
 func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHash) error {
+	if err := flow.checkIfShuttingDown(); err != nil {
+		return err
+	}
+
 	hashes, err := flow.Domain().Consensus().GetMissingBlockBodyHashes(highHash)
 	log.Infof("Found %d missing block bodies to sync.", len(hashes))
 	if err != nil {
@@ -1013,6 +1066,10 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	// This prevents the map from having to dynamically grow and wait for the damn GC to arrive
 	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
 	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
+		if err := flow.checkIfShuttingDown(); err != nil {
+			return err
+		}
+
 		// Re-check if we're nearly synced at the start of each batch to update the updateVirtual flag
 		// This allows the node to transition from non-nearly-synced to nearly-synced during IBD
 
@@ -1040,6 +1097,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		// Dequeue all messages for the requested hashes
 		receivedCount := 0
 		for receivedCount < len(hashesToRequest) {
+			if err := flow.checkIfShuttingDown(); err != nil {
+				return err
+			}
 			message, err := flow.incomingRoute.DequeueWithTimeout(flow.Config().IBDDequeueTimeout)
 			if err != nil {
 				// Only retry on a genuine timeout. Propagate everything else
@@ -1109,6 +1169,9 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 
 		// Process blocks in the order of expected hashes
 		for _, expectedHash := range hashesToRequest {
+			if err := flow.checkIfShuttingDown(); err != nil {
+				return err
+			}
 			updateVirtual, err := flow.Domain().Consensus().IsNearlySynced()
 			if err != nil {
 				return err
@@ -1247,4 +1310,13 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 	}
 	flow.peer.Connection().Disconnect()
 	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
+}
+
+func (flow *handleIBDFlow) checkIfShuttingDown() error {
+	select {
+	case <-flow.ShutdownChan():
+		return errors.Wrap(router.ErrRouteClosed, "ibd flow shutting down")
+	default:
+		return nil
+	}
 }

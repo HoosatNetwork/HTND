@@ -64,6 +64,7 @@ type FlowContext struct {
 	transactionIDPropagationLock     sync.Mutex
 
 	shutdownChan chan struct{}
+	shutdownOnce sync.Once
 }
 
 // New returns a new instance of FlowContext.
@@ -89,7 +90,9 @@ func New(cfg *config.Config, domain domain.Domain, addressManager *addressmanage
 
 // Close signals to all flows the the protocol manager is closed.
 func (f *FlowContext) Close() {
-	close(f.shutdownChan)
+	f.shutdownOnce.Do(func() {
+		close(f.shutdownChan)
+	})
 }
 
 // ShutdownChan is a chan where flows can subscribe to shutdown

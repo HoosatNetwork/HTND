@@ -101,11 +101,27 @@ func (na *NetAdapter) Stop() error {
 	if na.stop.Add(1) != 1 {
 		return errors.New("net adapter stopped more than once")
 	}
+
+	na.disconnectAllP2PConnections()
+
 	err := na.p2pServer.Stop()
 	if err != nil {
 		return err
 	}
 	return na.rpcServer.Stop()
+}
+
+func (na *NetAdapter) disconnectAllP2PConnections() {
+	na.p2pConnectionsLock.RLock()
+	connections := make([]*NetConnection, 0, len(na.p2pConnections))
+	for connection := range na.p2pConnections {
+		connections = append(connections, connection)
+	}
+	na.p2pConnectionsLock.RUnlock()
+
+	for _, connection := range connections {
+		connection.Disconnect()
+	}
 }
 
 // P2PConnect tells the NetAdapter's underlying p2p server to initiate a connection

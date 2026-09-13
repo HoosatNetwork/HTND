@@ -48,8 +48,13 @@ func (m *Manager) Close() {
 	}
 
 	m.isClosed.Store(1)
-	m.context.Close()
+	m.SignalShutdown()
 	m.routersWaitGroup.Wait()
+}
+
+// SignalShutdown broadcasts shutdown to all flows without waiting for them.
+func (m *Manager) SignalShutdown() {
+	m.context.Close()
 }
 
 // Peers returns the currently active peers

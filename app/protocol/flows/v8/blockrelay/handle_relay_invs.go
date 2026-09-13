@@ -59,6 +59,7 @@ type RelayInvsContext interface {
 	IsIBDRunning() bool
 	IsRecoverableError(err error) bool
 	IsNearlySynced() (bool, error)
+	ShutdownChan() <-chan struct{}
 }
 
 type invRelayBlock struct {
@@ -125,6 +126,12 @@ func (flow *handleRelayInvsFlow) startIncomingReader() {
 		}()
 
 		for {
+			select {
+			case <-flow.ShutdownChan():
+				return
+			default:
+			}
+
 			msg, err := flow.incomingRoute.Dequeue()
 			if err != nil {
 				flow.setIncomingErr(err)
@@ -222,6 +229,9 @@ func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 
 func (flow *handleRelayInvsFlow) start() error {
 	for {
+		if err := flow.checkIfShuttingDown(); err != nil {
+			return err
+		}
 		log.Debugf("Waiting for inv")
 		inv, err := flow.readInv()
 		if err != nil {
@@ -468,11 +478,15 @@ func (flow *handleRelayInvsFlow) readInv() (invRelayBlock, error) {
 		return inv, nil
 	}
 
-	inv, ok := <-flow.invChan
-	if !ok {
-		return invRelayBlock{}, flow.getIncomingErr()
+	select {
+	case <-flow.ShutdownChan():
+		return invRelayBlock{}, flow.checkIfShuttingDown()
+	case inv, ok := <-flow.invChan:
+		if !ok {
+			return invRelayBlock{}, flow.getIncomingErr()
+		}
+		return inv, nil
 	}
-	return inv, nil
 }
 
 // func (flow *handleRelayInvsFlow) unreadInv(inv invRelayBlock) {
@@ -524,6 +538,8 @@ func (flow *handleRelayInvsFlow) readMsgBlock() (msgBlock *appmessage.MsgBlock, 
 	const maxInvQueueLen = 5000
 	for {
 		select {
+		case <-flow.ShutdownChan():
+			return nil, flow.checkIfShuttingDown()
 		case <-timer.C:
 			return nil, errors.Wrapf(router.ErrTimeout, "timed out waiting for block")
 		case <-flow.incomingDone:
@@ -541,6 +557,15 @@ func (flow *handleRelayInvsFlow) readMsgBlock() (msgBlock *appmessage.MsgBlock, 
 			}
 			return blk, nil
 		}
+	}
+}
+
+func (flow *handleRelayInvsFlow) checkIfShuttingDown() error {
+	select {
+	case <-flow.ShutdownChan():
+		return errors.Wrap(router.ErrRouteClosed, "relay invs flow shutting down")
+	default:
+		return nil
 	}
 }
 

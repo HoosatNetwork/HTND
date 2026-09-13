@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -78,23 +79,60 @@ func (a *ComponentManager) Stop() {
 
 	log.Warnf("htnd shutting down")
 
-	// Stop the auto-updater first
+	log.Infof("Signaling protocol shutdown to all active flows")
+	a.protocolManager.SignalShutdown()
+
+	log.Infof("Stopping auto-updater")
 	if a.updater != nil {
 		a.updater.Stop()
+		log.Infof("Auto-updater stopped")
+	} else {
+		log.Infof("Auto-updater not enabled")
 	}
 
-	// Stop RPC statistics tracking
+	log.Infof("Stopping RPC statistics tracking")
 	rpc.RPCStats.Stop()
+	log.Infof("RPC statistics tracking stopped")
 
-	a.connectionManager.Stop()
+	log.Infof("Stopping RPC background handlers")
+	a.rpcManager.Stop()
+	log.Infof("RPC background handlers stopped")
 
-	err := a.netAdapter.Stop()
-	if err != nil {
-		log.Errorf("Error stopping the net adapter: %+v", err)
+	type stopResult struct {
+		component string
+		err       error
+	}
+	results := make(chan stopResult, 2)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(2)
+
+	go func() {
+		defer waitGroup.Done()
+		log.Infof("Stopping connection manager (force-disconnecting peers)")
+		a.connectionManager.Stop()
+		results <- stopResult{component: "connection manager"}
+	}()
+
+	go func() {
+		defer waitGroup.Done()
+		log.Infof("Stopping net adapter (closing P2P/RPC servers)")
+		err := a.netAdapter.Stop()
+		results <- stopResult{component: "net adapter", err: err}
+	}()
+
+	waitGroup.Wait()
+	close(results)
+	for result := range results {
+		if result.err != nil {
+			log.Errorf("Error stopping the %s: %+v", result.component, result.err)
+			continue
+		}
+		log.Infof("%s stopped", result.component)
 	}
 
+	log.Infof("Waiting for protocol flows to stop")
 	a.protocolManager.Close()
-	close(a.protocolManager.Context().Domain().ConsensusEventsChannel())
+	log.Infof("Protocol flows stopped")
 }
 
 // NewComponentManager returns a new ComponentManager instance.

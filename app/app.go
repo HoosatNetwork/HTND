@@ -40,6 +40,9 @@ var serviceDescription = &winservice.ServiceDescription{
 		"provides DAG services to applications.",
 }
 
+const shutdownTimeout = 2 * time.Minute
+const shutdownTimeoutExitCode = 2
+
 type htndApp struct {
 	cfg *config.Config
 }
@@ -146,15 +149,14 @@ func (app *htndApp) main(startedChan chan<- struct{}) error {
 		shutdownDone := make(chan struct{})
 		go func() {
 			componentManager.Stop()
-			shutdownDone <- struct{}{}
+			close(shutdownDone)
 		}()
-
-		const shutdownTimeout = 2 * time.Minute
 
 		select {
 		case <-shutdownDone:
 		case <-time.After(shutdownTimeout):
-			log.Criticalf("Graceful shutdown timed out %s. Terminating...", shutdownTimeout)
+			log.Criticalf("Graceful shutdown timed out after %s. Forcing immediate process termination to avoid closing the database while shutdown is still in progress.", shutdownTimeout)
+			os.Exit(shutdownTimeoutExitCode)
 		}
 		log.Infof("htnd shutdown complete")
 	}()
