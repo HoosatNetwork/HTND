@@ -377,8 +377,17 @@ func (nm *NotificationManager) StopPropagatingUTXOsChangedNotifications(nl *Noti
 		return
 	}
 
+	hadAddresses := len(nl.propagateUTXOsChangedNotificationAddresses) > 0
 	for _, address := range addresses {
 		delete(nl.propagateUTXOsChangedNotificationAddresses, address.ScriptPublicKeyString)
+	}
+
+	// An empty address set means "every change" to convertUTXOChangesToUTXOsChangedNotification. A
+	// listener that subscribed for specific addresses and has now removed the last of them asked for
+	// less, not for the whole network, so its subscription ends here instead of widening. A
+	// subscription made without addresses has nothing to remove and keeps receiving every change.
+	if hadAddresses && len(nl.propagateUTXOsChangedNotificationAddresses) == 0 {
+		nl.propagateUTXOsChangedNotifications = false
 	}
 }
 
