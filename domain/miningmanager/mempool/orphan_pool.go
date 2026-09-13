@@ -201,6 +201,15 @@ func (op *orphansPool) unorphanTransaction(transaction *model.OrphanTransaction)
 		return err
 	}
 
+	// A transaction spending one of this orphan's inputs may have entered the pool while it waited:
+	// the pool's double-spend check only runs for arriving transactions, and the orphan pool only
+	// compares orphans with each other. Promoting it anyway put two pool transactions on the same
+	// outpoint and overwrote the pool's record of who spends it.
+	err = op.mempool.mempoolUTXOSet.checkDoubleSpends(transaction.Transaction())
+	if err != nil {
+		return err
+	}
+
 	err = op.mempool.consensusReference.Consensus().ValidateTransactionAndPopulateWithConsensusData(transaction.Transaction())
 	if err != nil {
 		if errors.Is(err, ruleerrors.ErrImmatureSpend) {
