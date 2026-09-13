@@ -480,6 +480,18 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 				"data does not fully reconcile here; skipping body sync for this segment", pruningPoint, highHash, err)
 			return []*externalapi.DomainHash{}, nil
 		}
+		// VirtualGenesis is the reachability root, so it is "on" every block's selected parent chain
+		// and the slide always stops there once the pruning point's chain has no real overlap with
+		// highHash's. It is not a shared ancestor: anchoring on it filters nothing out, so every
+		// header-only block in highHash's past is requested - including pruning-proof headers below
+		// the pruning point that no pruned peer has a body for. The peer answers with the bare header,
+		// the body fails validation and IBD aborts, then repeats against the next peer.
+		if lowAnchor.Equal(model.VirtualGenesisBlockHash) {
+			log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain and the "+
+				"two chains only meet at virtual genesis - the network's pruning-point/chain data does not "+
+				"fully reconcile here; skipping body sync for this segment", pruningPoint, highHash)
+			return []*externalapi.DomainHash{}, nil
+		}
 		log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain (the "+
 			"network's pruning-point/chain data does not fully reconcile here) - syncing bodies from shared "+
 			"ancestor %s", pruningPoint, highHash, lowAnchor)
