@@ -176,6 +176,8 @@ func (op *orphansPool) processOrphansAfterAcceptedTransaction(acceptedTransactio
 					return nil, err
 				}
 				acceptedOrphans = append(acceptedOrphans, orphan.Transaction().Clone()) // these pointers leave the mempool, hence the clone
+				// The promoted transaction may itself be the missing parent of further orphans.
+				queue = append(queue, orphan.Transaction())
 			}
 		}
 	}
