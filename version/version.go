@@ -11,7 +11,7 @@ const validCharacters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
 
 const (
 	appMajor uint = 2
-	appMinor uint = 16
+	appMinor uint = 17
 	appPatch uint = 0
 )
 
