@@ -288,39 +288,57 @@ func (uis *utxoIndexStore) commit() error {
 	}
 	defer func() { _ = dbTransaction.RollbackUnlessClosed() }()
 
+	// The per-address counts and the circulating supply follow what the database holds, not what the
+	// staged changes say. A change can describe a state the index already has: after a rebuild, the
+	// changes queued behind it are applied on top, and the rebuild read virtual after some of them had
+	// happened. Such a change adds a coin already stored or removes one already gone, and counting it
+	// again pushed the counts - even below zero - and the supply away from the coins actually stored.
 	countDeltas := make(map[ScriptPublicKeyString]int64, len(uis.toAdd)+len(uis.toRemove))
-
+	toAddSompiSupply := uint64(0)
 	toRemoveSompiSupply := uint64(0)
 
 	for scriptPublicKeyString, toRemoveUTXOOutpointEntryPairs := range uis.toRemove {
-		countDeltas[scriptPublicKeyString] -= int64(len(toRemoveUTXOOutpointEntryPairs))
 		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 		bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
+		toAddUTXOOutpointEntryPairs := uis.toAdd[scriptPublicKeyString]
 		// Invalidate per-script cache for this key
 		// uis.scriptCache.Delete(string(scriptPublicKeyString))
-		for outpointToRemove, utxoEntryToRemove := range toRemoveUTXOOutpointEntryPairs {
+		for outpointToRemove := range toRemoveUTXOOutpointEntryPairs {
+			if _, isReplaced := toAddUTXOOutpointEntryPairs[outpointToRemove]; isReplaced {
+				// The addition below overwrites it, and accounts for the stored coin there
+				continue
+			}
 			key, err := uis.convertOutpointToKey(bucket, &outpointToRemove)
 			if err != nil {
 				return err
+			}
+			storedAmount, isStored, err := storedUTXOAmount(dbTransaction, key)
+			if err != nil {
+				return err
+			}
+			if !isStored {
+				continue
 			}
 			err = dbTransaction.Delete(key)
 			if err != nil {
 				return err
 			}
-			toRemoveSompiSupply += utxoEntryToRemove.Amount()
+			countDeltas[scriptPublicKeyString]--
+			toRemoveSompiSupply += storedAmount
 		}
 	}
 
-	toAddSompiSupply := uint64(0)
-
 	for scriptPublicKeyString, toAddUTXOOutpointEntryPairs := range uis.toAdd {
-		countDeltas[scriptPublicKeyString] += int64(len(toAddUTXOOutpointEntryPairs))
 		scriptPublicKey := externalapi.NewScriptPublicKeyFromString(string(scriptPublicKeyString))
 		bucket := uis.bucketForScriptPublicKey(scriptPublicKey)
 		// Invalidate per-script cache for this key
 		// uis.scriptCache.Delete(string(scriptPublicKeyString))
 		for outpointToAdd, utxoEntryToAdd := range toAddUTXOOutpointEntryPairs {
 			key, err := uis.convertOutpointToKey(bucket, &outpointToAdd)
+			if err != nil {
+				return err
+			}
+			storedAmount, isStored, err := storedUTXOAmount(dbTransaction, key)
 			if err != nil {
 				return err
 			}
@@ -331,6 +349,11 @@ func (uis *utxoIndexStore) commit() error {
 			err = dbTransaction.Put(key, serializedUTXOEntry)
 			if err != nil {
 				return err
+			}
+			if isStored {
+				toRemoveSompiSupply += storedAmount
+			} else {
+				countDeltas[scriptPublicKeyString]++
 			}
 			toAddSompiSupply += utxoEntryToAdd.Amount()
 		}
@@ -364,6 +387,22 @@ func (uis *utxoIndexStore) commit() error {
 
 	uis.discard()
 	return nil
+}
+
+// storedUTXOAmount returns the amount of the coin stored under key, and whether one is stored.
+func storedUTXOAmount(accessor database.DataAccessor, key *database.Key) (uint64, bool, error) {
+	serializedUTXOEntry, err := accessor.Get(key)
+	if database.IsNotFoundError(err) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	amount, err := deserializeUTXOAmount(serializedUTXOEntry)
+	if err != nil {
+		return 0, false, err
+	}
+	return amount, true, nil
 }
 
 func (uis *utxoIndexStore) addAndCommitOutpointsWithoutTransaction(utxoPairs []*externalapi.OutpointAndUTXOEntryPair) error {
