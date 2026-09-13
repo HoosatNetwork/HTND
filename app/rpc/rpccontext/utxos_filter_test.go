@@ -2,6 +2,7 @@ package rpccontext
 
 import (
 	"testing"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
@@ -10,25 +11,30 @@ import (
 )
 
 // virtualHolding answers as virtual's UTXO set would: an entry for the coins it holds, nil for the
-// rest. answerCount, when set, makes it return the wrong number of answers.
+// rest. answerCount, when set, makes it return the wrong number of answers; busy makes it report that
+// the consensus lock could not be taken.
 type virtualHolding struct {
 	held        map[externalapi.DomainOutpoint]externalapi.UTXOEntry
 	answerCount int
 	err         error
+	busy        bool
 }
 
-func (v *virtualHolding) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint) ([]externalapi.UTXOEntry, error) {
+func (v *virtualHolding) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, _ time.Duration) ([]externalapi.UTXOEntry, bool, error) {
 	if v.err != nil {
-		return nil, v.err
+		return nil, false, v.err
+	}
+	if v.busy {
+		return nil, false, nil
 	}
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
 	for i, outpoint := range outpoints {
 		entries[i] = v.held[*outpoint]
 	}
 	if v.answerCount != 0 {
-		return entries[:v.answerCount], nil
+		return entries[:v.answerCount], true, nil
 	}
-	return entries, nil
+	return entries, true, nil
 }
 
 func testOutpoint(id byte) externalapi.DomainOutpoint {
@@ -92,5 +98,30 @@ func TestFilterUTXOPairsAgainstVirtualEdgeCases(t *testing.T) {
 	short := &virtualHolding{answerCount: 1}
 	if _, _, err := FilterUTXOPairsAgainstVirtual(short, append(pairs, utxoindex.UTXOPair{Outpoint: testOutpoint(2), Entry: pairs[0].Entry})); err == nil {
 		t.Error("an answer that does not cover every outpoint must be an error, not a silent withholding")
+	}
+}
+
+// While block processing holds the consensus lock - a pruning point UTXO set update holds it for 15
+// seconds to nearly 4 minutes on mainnet - the check cannot run, and the RPC must not wait it out:
+// waiting is what turned GetUtxosByAddresses into DeadlineExceeded for clients. The index's coins are
+// served as they were before the check existed.
+func TestFilterUTXOPairsAgainstVirtualServesIndexWhenConsensusIsBusy(t *testing.T) {
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
+	pairs := []utxoindex.UTXOPair{
+		{Outpoint: testOutpoint(1), Entry: utxo.NewUTXOEntry(100, script, false, 500)},
+		{Outpoint: testOutpoint(2), Entry: utxo.NewUTXOEntry(200, script, false, 600)},
+	}
+
+	// It holds nothing: had the check run, both coins would have been withheld.
+	kept, withheld, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{busy: true}, pairs)
+	if err != nil {
+		t.Fatalf("a busy consensus is not an error: %+v", err)
+	}
+	if withheld != 0 || len(kept) != 2 {
+		t.Fatalf("a busy consensus must leave the index's answer as it is: kept %d, withheld %d", len(kept), withheld)
+	}
+	if kept[0].Entry.BlockDAAScore() != 500 || kept[1].Entry.BlockDAAScore() != 600 {
+		t.Errorf("unchecked coins must carry the index's own entries, got stamps %d and %d",
+			kept[0].Entry.BlockDAAScore(), kept[1].Entry.BlockDAAScore())
 	}
 }

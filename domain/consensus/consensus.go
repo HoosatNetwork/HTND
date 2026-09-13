@@ -866,33 +866,81 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	return pruningPointUTXOs, nil
 }
 
+// virtualUTXOEntriesChunkSize bounds how long GetVirtualUTXOEntries holds the consensus lock at a
+// stretch. A lookup costs about 10µs against mainnet's UTXO set, so a chunk holds the lock for
+// roughly 10ms, and block processing gets the lock back between chunks however many coins an
+// address has.
+const virtualUTXOEntriesChunkSize = 1024
+
 // GetVirtualUTXOEntries looks each outpoint up in virtual's UTXO set - the set this node itself
 // spends from - and returns its entry, or nil where the set does not hold the coin.
 //
-// The batch exists for the sake of the callers: the UTXO-serving RPCs have hundreds of outpoints to
-// check per address, and taking the consensus lock once for all of them is the difference between a
-// usable check and one nobody can afford to run.
-func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint) ([]externalapi.UTXOEntry, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	stagingArea := model.NewStagingArea()
+// It is called from RPC handlers, so it must neither stall behind block processing nor stall it. It
+// used to take the consensus lock with Lock() and hold it for the whole batch. Block processing holds
+// that lock through a pruning point UTXO set update - measured at 15 seconds to nearly 4 minutes on
+// mainnet nodes, every few hours - so a GetUtxosByAddresses arriving then queued for the whole update
+// and reached its client as DeadlineExceeded, where before the check existed the same call answered
+// from the UTXO index at once. And an address with 100,000 coins held the lock for 1.4 seconds,
+// pausing block processing for that long.
+//
+// So the lock is taken per chunk, and only if it can be had within maxWait; when it cannot, the call
+// returns ok=false and the caller serves what it would have without the check. Each chunk is checked
+// against virtual as it stands when that chunk runs, so a block accepted between chunks can show in
+// later chunks and not earlier ones - but every answer is one virtual actually gave.
+func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) (
+	[]externalapi.UTXOEntry, bool, error,
+) {
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
-	for i, outpoint := range outpoints {
-		hasEntry, err := s.consensusStateStore.HasUTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
-		if err != nil {
-			return nil, err
+	for start := 0; start < len(outpoints); start += virtualUTXOEntriesChunkSize {
+		end := min(start+virtualUTXOEntriesChunkSize, len(outpoints))
+		if !tryLockFor(s.lock, maxWait) {
+			return nil, false, nil
 		}
-		if !hasEntry {
+		err := s.virtualUTXOEntriesNoLock(outpoints[start:end], entries[start:end])
+		s.lock.Unlock()
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return entries, true, nil
+}
+
+// virtualUTXOEntriesNoLock fills entries with virtual's entry for each outpoint. One lookup answers
+// both "is it there" and "what is it": asking HasUTXOByOutpoint first doubled the database reads -
+// Has never consults the UTXO cache - for a question the lookup's not-found already answers.
+func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) error {
+	stagingArea := model.NewStagingArea()
+	for i, outpoint := range outpoints {
+		entry, found, err := s.consensusStateStore.UTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
+		if database.IsNotFoundError(err) {
 			continue
 		}
-		entry, _, err := s.consensusStateStore.UTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		entries[i] = entry
+		if found {
+			entries[i] = entry
+		}
 	}
-	return entries, nil
+	return nil
+}
+
+// tryLockFor takes mu if it becomes free within maxWait, polling rather than queueing: Lock() waits
+// for as long as the holder keeps the lock, and this gives up so the caller can answer without it.
+func tryLockFor(mu *sync.Mutex, maxWait time.Duration) bool {
+	if mu.TryLock() {
+		return true
+	}
+	deadline := time.Now().Add(maxWait)
+	sleep := 50 * time.Microsecond
+	for time.Now().Before(deadline) {
+		time.Sleep(min(sleep, time.Until(deadline)))
+		if mu.TryLock() {
+			return true
+		}
+		sleep = min(sleep*2, 5*time.Millisecond)
+	}
+	return false
 }
 
 func (s *consensus) GetVirtualUTXOs(expectedVirtualParents []*externalapi.DomainHash,

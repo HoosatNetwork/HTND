@@ -1,5 +1,7 @@
 package externalapi
 
+import "time"
+
 // Consensus maintains the current core state of the node
 type Consensus interface {
 	Init(skipAddingGenesis bool) error
@@ -31,8 +33,10 @@ type Consensus interface {
 	GetVirtualUTXOs(expectedVirtualParents []*DomainHash, fromOutpoint *DomainOutpoint, limit int) ([]*OutpointAndUTXOEntryPair, error)
 	// GetVirtualUTXOEntries returns, for each outpoint, the entry virtual's UTXO set holds for it, or
 	// nil where it holds none. It is the authoritative answer to "does this coin exist, and what is
-	// it", for callers that serve coins to spenders from a secondary index.
-	GetVirtualUTXOEntries(outpoints []*DomainOutpoint) ([]UTXOEntry, error)
+	// it", for callers that serve coins to spenders from a secondary index. It never queues behind
+	// block processing: if the consensus lock cannot be taken within maxWait it returns ok=false and
+	// no entries, and the caller decides what to serve instead.
+	GetVirtualUTXOEntries(outpoints []*DomainOutpoint, maxWait time.Duration) (entries []UTXOEntry, ok bool, err error)
 	PruningPoint() (*DomainHash, error)
 	PruningPointHeaders() ([]BlockHeader, error)
 	PruningPointAndItsAnticone() ([]*DomainHash, error)

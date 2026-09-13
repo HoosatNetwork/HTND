@@ -2,6 +2,7 @@ package rpchandlers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -12,12 +13,12 @@ import (
 // virtualHolding answers as virtual's UTXO set would: an entry for the coins it holds, nil for the rest.
 type virtualHolding map[externalapi.DomainOutpoint]externalapi.UTXOEntry
 
-func (v virtualHolding) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint) ([]externalapi.UTXOEntry, error) {
+func (v virtualHolding) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, _ time.Duration) ([]externalapi.UTXOEntry, bool, error) {
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
 	for i, outpoint := range outpoints {
 		entries[i] = v[*outpoint]
 	}
-	return entries, nil
+	return entries, true, nil
 }
 
 func balanceTestOutpoint(id byte) externalapi.DomainOutpoint {

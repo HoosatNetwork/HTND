@@ -3,6 +3,8 @@ package rpccontext
 import (
 	"encoding/hex"
 	"math"
+	"sync/atomic"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/util"
@@ -15,8 +17,14 @@ import (
 
 // virtualUTXOSource is the part of consensus this file needs: what virtual's UTXO set holds.
 type virtualUTXOSource interface {
-	GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint) ([]externalapi.UTXOEntry, error)
+	GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) ([]externalapi.UTXOEntry, bool, error)
 }
+
+// virtualCheckMaxLockWait is how long the check waits for the consensus lock before serving the
+// index's answer unchecked. Ordinary block processing releases the lock within milliseconds; what holds
+// it longer is work such as a pruning point UTXO set update, which runs for minutes - longer than any
+// client waits for a UTXO list.
+const virtualCheckMaxLockWait = 2 * time.Second
 
 // FilterUTXOPairsAgainstVirtual withholds index entries whose coin virtual's UTXO set does not hold,
 // and returns the rest carrying virtual's own entry. It reports how many were withheld.
@@ -31,6 +39,11 @@ type virtualUTXOSource interface {
 //
 // So consensus answers both questions here, and the index is left to do the one thing only it can:
 // say which outpoints belong to an address.
+//
+// The check gives way when consensus is busy. If the consensus lock is not free within
+// virtualCheckMaxLockWait, the pairs are returned exactly as the index gave them - what these RPCs
+// served before the check existed - so a client asking during a pruning point update gets an answer
+// promptly instead of a DeadlineExceeded minutes later.
 func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.UTXOPair) ([]utxoindex.UTXOPair, int, error) {
 	if len(pairs) == 0 {
 		return pairs, 0, nil
@@ -39,9 +52,13 @@ func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.U
 	for i := range pairs {
 		outpoints[i] = &pairs[i].Outpoint
 	}
-	entries, err := source.GetVirtualUTXOEntries(outpoints)
+	entries, checked, err := source.GetVirtualUTXOEntries(outpoints, virtualCheckMaxLockWait)
 	if err != nil {
 		return nil, 0, err
+	}
+	if !checked {
+		logServedUnchecked(len(pairs))
+		return pairs, 0, nil
 	}
 	if len(entries) != len(pairs) {
 		return nil, 0, errors.Errorf("consensus answered for %d outpoints, %d were asked about", len(entries), len(pairs))
@@ -59,6 +76,22 @@ func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.U
 		kept = append(kept, pair)
 	}
 	return kept, withheld, nil
+}
+
+// lastUncheckedLog rate-limits logServedUnchecked, so a busy stretch produces one Info line per
+// interval rather than one per request.
+var lastUncheckedLog atomic.Int64
+
+func logServedUnchecked(coins int) {
+	const interval = 30 * time.Second
+	now := time.Now().UnixNano()
+	last := lastUncheckedLog.Load()
+	if now-last >= int64(interval) && lastUncheckedLog.CompareAndSwap(last, now) {
+		log.Infof("Consensus has held its lock for longer than %s, so UTXO RPCs are serving the UTXO "+
+			"index's coins without checking them against virtual's UTXO set until it is free", virtualCheckMaxLockWait)
+		return
+	}
+	log.Debugf("Served %d coin(s) from the UTXO index unchecked: consensus is busy", coins)
 }
 
 // ConvertUTXOOutpointEntryPairToUTXOsByAddressesEntry converts
