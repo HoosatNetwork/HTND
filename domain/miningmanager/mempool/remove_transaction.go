@@ -7,7 +7,9 @@ import (
 
 func (mp *mempool) removeTransaction(transactionID *externalapi.DomainTransactionID, removeRedeemers bool) error {
 	if _, ok := mp.orphansPool.allOrphans[*transactionID]; ok {
-		return mp.orphansPool.removeOrphan(transactionID, true)
+		// Honour removeRedeemers here too: a mined orphan is removed with false, and its orphan
+		// children must survive so processOrphansAfterAcceptedTransaction can promote them.
+		return mp.orphansPool.removeOrphan(transactionID, removeRedeemers)
 	}
 
 	mempoolTransaction, ok := mp.transactionsPool.allTransactions[*transactionID]
