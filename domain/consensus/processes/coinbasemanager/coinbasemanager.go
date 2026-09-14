@@ -36,6 +36,10 @@ type coinbaseManager struct {
 	blockStore          model.BlockStore
 	pruningStore        model.PruningStore
 	blockHeaderStore    model.BlockHeaderStore
+
+	// powScores derives the version of a block that has no stored header yet - the block being built - from its
+	// staged DAA score (see blockVersion).
+	powScores []uint64
 }
 
 // ExpectedCoinbaseTransactionWithAcceptanceData implements model.CoinbaseManager. blockHash always
@@ -303,6 +307,18 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 func (c *coinbaseManager) blockVersion(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint16, error) {
 	header, err := c.blockHeaderStore.BlockHeader(c.databaseContext, stagingArea, blockHash)
 	if database.IsNotFoundError(err) {
+		// The block being built: its version is the one its DAA score gives, which is what the block builder writes
+		// into its header and what validation will check. The process-global version this used to return can be
+		// ahead of the chain (after IBD, or raised by a relayed header) and made the node build coinbases it rejects.
+		if len(c.powScores) > 0 {
+			daaScore, daaErr := c.daaBlocksStore.DAAScore(c.databaseContext, stagingArea, blockHash)
+			if daaErr == nil {
+				return constants.BlockVersionForDAAScore(c.powScores, daaScore), nil
+			}
+			if !database.IsNotFoundError(daaErr) {
+				return 0, daaErr
+			}
+		}
 		return constants.GetBlockVersion(), nil
 	}
 	if err != nil {
@@ -665,6 +681,7 @@ func New(
 	blockStore model.BlockStore,
 	pruningStore model.PruningStore,
 	blockHeaderStore model.BlockHeaderStore,
+	powScores []uint64,
 ) model.CoinbaseManager {
 	return &coinbaseManager{
 		databaseContext: databaseContext,
@@ -685,5 +702,6 @@ func New(
 		blockStore:          blockStore,
 		pruningStore:        pruningStore,
 		blockHeaderStore:    blockHeaderStore,
+		powScores:           powScores,
 	}
 }

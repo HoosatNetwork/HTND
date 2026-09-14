@@ -32,7 +32,7 @@ func TestCalcDeflationaryPeriodBlockSubsidy(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil)
+		nil, nil)
 	coinbaseManagerInstance := coinbaseManagerInterface.(*coinbaseManager)
 
 	tests := []struct {
@@ -118,7 +118,7 @@ func TestBuildSubsidyTable(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil)
+		nil, nil)
 	coinbaseManagerInstance := coinbaseManagerInterface.(*coinbaseManager)
 
 	var subsidyTable []uint64
