@@ -2233,9 +2233,14 @@ func (pm *pruningManager) updatePruningPoint() error {
 	var newPruningTime *time.Time
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
 		log.Infof("Pruning point advanced, but block deletion deferred (data retention/interval not met)")
+	} else if shouldDelete, deletionPoint := pm.CheckIfShouldDeletePastBlocks(stagingArea, pruningPoint); !shouldDelete {
+		// --deletion-depth keeps the blocks of the most recent pruning points: deletion runs below the pruning point
+		// that many advancements back, once that point is at least a pruning depth below the new one. With the
+		// default of 0 the deletion point is the new pruning point itself.
+		log.Infof("Pruning point advanced, but block deletion waits for --deletion-depth=%d", pm.deletionDepth)
 	} else {
-		log.Infof("Deletion of past blocks")
-		err = pm.deletePastBlocks(stagingArea, pruningPoint)
+		log.Infof("Deletion of past blocks below %s", deletionPoint)
+		err = pm.deletePastBlocks(stagingArea, deletionPoint)
 		if err != nil {
 			return err
 		}
