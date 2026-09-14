@@ -278,7 +278,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.DisableDifficultyAdjustment,
 		config.TargetTimePerBlock,
 		config.GenesisHash,
-		config.GenesisBlock.Header.Bits())
+		config.GenesisBlock.Header.Bits(),
+		config.POWScores)
 	coinbaseManager := coinbasemanager.New(
 		dbManager,
 		config.SubsidyGenesisReward,

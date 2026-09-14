@@ -24,7 +24,7 @@ type GHOSTDAGManagerConstructor func(
 // DifficultyManagerConstructor is the function signature for a constructor of a type implementing model.DifficultyManager
 type DifficultyManagerConstructor func(model.DBReader, model.GHOSTDAGManager, model.GHOSTDAGDataStore,
 	model.BlockHeaderStore, model.DAABlocksStore, model.DAGTopologyManager, model.DAGTraversalManager, *big.Int, []int, bool, []time.Duration,
-	*externalapi.DomainHash, uint32) model.DifficultyManager
+	*externalapi.DomainHash, uint32, []uint64) model.DifficultyManager
 
 // PastMedianTimeManagerConstructor is the function signature for a constructor of a type implementing model.PastMedianTimeManager
 type PastMedianTimeManagerConstructor func(int, model.DBReader, model.DAGTraversalManager, model.BlockHeaderStore,

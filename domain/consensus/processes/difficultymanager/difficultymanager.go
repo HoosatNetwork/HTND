@@ -32,6 +32,8 @@ type difficultyManager struct {
 	disableDifficultyAdjustment    bool
 	targetTimePerBlock             []time.Duration
 	genesisBits                    uint32
+	// powScores derives the version whose window size and target time apply to a block (see blockVersion).
+	powScores []uint64
 }
 
 // New instantiates a new DifficultyManager
@@ -49,6 +51,7 @@ func New(databaseContext model.DBReader,
 	targetTimePerBlock []time.Duration,
 	genesisHash *externalapi.DomainHash,
 	genesisBits uint32,
+	powScores []uint64,
 ) model.DifficultyManager {
 	return &difficultyManager{
 		databaseContext:                databaseContext,
@@ -64,6 +67,7 @@ func New(databaseContext model.DBReader,
 		targetTimePerBlock:             targetTimePerBlock,
 		genesisHash:                    genesisHash,
 		genesisBits:                    genesisBits,
+		powScores:                      powScores,
 	}
 }
 
@@ -82,7 +86,11 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 	onEnd := logger.LogAndMeasureExecutionTime(log, "StageDAADataAndReturnRequiredDifficulty")
 	defer onEnd()
 
-	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	blockVersion, err := dm.blockVersion(stagingArea, blockHash)
+	if err != nil {
+		return 0, err
+	}
+	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.windowSize(blockVersion))
 	defer targetsWindow.free()
 	if err != nil {
 		return 0, err
@@ -93,7 +101,7 @@ func (dm *difficultyManager) StageDAADataAndReturnRequiredDifficulty(
 		return 0, err
 	}
 
-	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockHash)
+	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockVersion)
 }
 
 func (dm *difficultyManager) StageDAAData(
@@ -104,7 +112,11 @@ func (dm *difficultyManager) StageDAAData(
 	onEnd := logger.LogAndMeasureExecutionTime(log, "StageDAADataAndReturnRequiredDifficulty")
 	defer onEnd()
 
-	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	blockVersion, err := dm.blockVersion(stagingArea, blockHash)
+	if err != nil {
+		return err
+	}
+	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.windowSize(blockVersion))
 	defer targetsWindow.free()
 	if err != nil {
 		return err
@@ -120,17 +132,20 @@ func (dm *difficultyManager) StageDAAData(
 
 // RequiredDifficulty returns the difficulty required for some block
 func (dm *difficultyManager) RequiredDifficulty(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint32, error) {
-	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	blockVersion, err := dm.blockVersion(stagingArea, blockHash)
+	if err != nil {
+		return 0, err
+	}
+	targetsWindow, err := dm.blockWindow(stagingArea, blockHash, dm.windowSize(blockVersion))
 	defer targetsWindow.free()
 	if err != nil {
 		return 0, err
 	}
-	defer targetsWindow.free()
 
-	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockHash)
+	return dm.requiredDifficultyFromTargetsWindow(targetsWindow, blockVersion)
 }
 
-func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow blockWindow, _ *externalapi.DomainHash) (uint32, error) {
+func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow blockWindow, blockVersion uint16) (uint32, error) {
 	if dm.disableDifficultyAdjustment {
 		return dm.genesisBits, nil
 	}
@@ -142,7 +157,7 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 	// We could instead clamp the timestamp difference to `targetTimePerBlock`,
 	// but then everything will cancel out and we'll get the target from the last block, which will be the same as genesis.
 	// We add 64 as a safety margin
-	if targetsWindow.len() < 2 || targetsWindow.len() < dm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1] {
+	if targetsWindow.len() < 2 || targetsWindow.len() < dm.windowSize(blockVersion) {
 		return dm.genesisBits, nil
 	}
 
@@ -159,7 +174,7 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 	newTarget.
 		// We need to clamp the timestamp difference to 1 so that we'll never get a 0 target.
 		Mul(newTarget, div.SetInt64(math.MaxInt64(windowMaxTimeStamp-windowMinTimestamp, 1))).
-		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[constants.GetBlockVersion()-1].Milliseconds()))
+		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[versionIndex(blockVersion, len(dm.targetTimePerBlock))].Milliseconds()))
 	l := max(targetsWindow.len(), 0)
 	windowLength, err := strconv.ParseUint(strconv.Itoa(l), 10, 64)
 	if err != nil {
@@ -260,4 +275,49 @@ func (dm *difficultyManager) calculateDaaScoreAndAddedBlocks(stagingArea *model.
 	}
 
 	return daaScore, daaAddedBlocks, nil
+}
+
+// blockVersion returns the block version whose difficulty window size and target time apply to blockHash.
+//
+// It is derived from the selected parent's DAA score as this node computed it: the block's own DAA score is computed
+// from this very window, so it cannot choose it. Activation scores are far apart, so the selected parent's version
+// equals the block's own except at an activation boundary, and it is the same on every node - unlike the
+// process-global version this used to read, which depends on the node's uptime and IBD. The global remains only for
+// managers built without an activation table and while nothing is known (genesis, trusted-data bootstrap).
+func (dm *difficultyManager) blockVersion(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (uint16, error) {
+	if len(dm.powScores) == 0 {
+		return constants.GetBlockVersion(), nil
+	}
+	ghostdagData, err := dm.ghostdagStore.Get(dm.databaseContext, stagingArea, blockHash, false)
+	if database.IsNotFoundError(err) {
+		return constants.GetBlockVersion(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	selectedParent := ghostdagData.SelectedParent()
+	if selectedParent == nil {
+		return 1, nil
+	}
+	daaScore, err := dm.daaBlocksStore.DAAScore(dm.databaseContext, stagingArea, selectedParent)
+	if database.IsNotFoundError(err) {
+		return constants.GetBlockVersion(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return constants.BlockVersionForDAAScore(dm.powScores, daaScore), nil
+}
+
+func (dm *difficultyManager) windowSize(blockVersion uint16) int {
+	return dm.difficultyAdjustmentWindowSize[versionIndex(blockVersion, len(dm.difficultyAdjustmentWindowSize))]
+}
+
+// versionIndex returns the per-version table index for blockVersion, using the last entry for a shorter table.
+func versionIndex(blockVersion uint16, length int) int {
+	index := max(int(blockVersion)-1, 0)
+	if index >= length {
+		index = length - 1
+	}
+	return index
 }
