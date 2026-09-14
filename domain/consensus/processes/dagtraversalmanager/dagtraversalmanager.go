@@ -20,6 +20,9 @@ type dagTraversalManager struct {
 	genesisHash                    *externalapi.DomainHash
 	difficultyAdjustmentWindowSize []int
 	windowHeapSliceStore           model.WindowHeapSliceStore
+	// daaBlocksStore and powScores select the window size of a block's own version (see DAABlockWindow).
+	daaBlocksStore model.DAABlocksStore
+	powScores      []uint64
 }
 
 // New instantiates a new DAGTraversalManager
@@ -33,6 +36,8 @@ func New(
 	windowHeapSliceStore model.WindowHeapSliceStore,
 	genesisHash *externalapi.DomainHash,
 	difficultyAdjustmentWindowSize []int,
+	daaBlocksStore model.DAABlocksStore,
+	powScores []uint64,
 ) model.DAGTraversalManager {
 	return &dagTraversalManager{
 		databaseContext:     databaseContext,
@@ -45,6 +50,8 @@ func New(
 		genesisHash:                    genesisHash,
 		difficultyAdjustmentWindowSize: difficultyAdjustmentWindowSize,
 		windowHeapSliceStore:           windowHeapSliceStore,
+		daaBlocksStore:                 daaBlocksStore,
+		powScores:                      powScores,
 	}
 }
 

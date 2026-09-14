@@ -5,12 +5,20 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 )
 
+// DAABlockWindow returns highHash's DAA window, sized for highHash's own block version rather than the process-global
+// version: the window is served to IBD peers as trusted data, and must not depend on the serving node's uptime.
 func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-	return dtm.BlockWindow(stagingArea, highHash, dtm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+	blockVersion, err := blockversion.OfSelectedParent(dtm.databaseContext, stagingArea, dtm.ghostdagDataStore,
+		dtm.daaBlocksStore, dtm.powScores, highHash)
+	if err != nil {
+		return nil, err
+	}
+	windowSize := dtm.difficultyAdjustmentWindowSize[blockversion.Index(blockVersion, len(dtm.difficultyAdjustmentWindowSize))]
+	return dtm.BlockWindow(stagingArea, highHash, windowSize)
 }
 
 // BlockWindowHeapSlice returns the cached or computed heap slice for the given

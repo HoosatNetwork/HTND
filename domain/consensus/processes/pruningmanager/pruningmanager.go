@@ -10,7 +10,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/virtual"
@@ -514,7 +513,15 @@ func (pm *pruningManager) calculateBlocksToKeep(stagingArea *model.StagingArea,
 	blocksToKeep := make(map[externalapi.DomainHash]struct{})
 	for _, blockHash := range pruningPointAndItsAnticone {
 		blocksToKeep[*blockHash] = struct{}{}
-		blockWindow, err := pm.dagTraversalManager.BlockWindow(stagingArea, blockHash, pm.difficultyAdjustmentWindowSize[constants.GetBlockVersion()-1])
+		// Keep the window of the block's own version - the window DAABlockWindow serves for it - not one sized by the
+		// process-global version, which could delete blocks a later trusted-data request needs.
+		blockVersion, err := blockversion.OfSelectedParent(pm.databaseContext, stagingArea, pm.ghostdagDataStore,
+			pm.daaBlocksStore, pm.powScores, blockHash)
+		if err != nil {
+			return nil, err
+		}
+		windowSize := pm.difficultyAdjustmentWindowSize[blockversion.Index(blockVersion, len(pm.difficultyAdjustmentWindowSize))]
+		blockWindow, err := pm.dagTraversalManager.BlockWindow(stagingArea, blockHash, windowSize)
 		if err != nil {
 			return nil, err
 		}
@@ -2463,10 +2470,14 @@ func (pm *pruningManager) isPruningPointInPruningDepth(stagingArea *model.Stagin
 }
 
 func (pm *pruningManager) TrustedBlockAssociatedGHOSTDAGDataBlockHashes(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
-	blockHashes := make([]*externalapi.DomainHash, 0, pm.k[constants.GetBlockVersion()-1])
+	k, err := pm.coloringK(stagingArea, blockHash)
+	if err != nil {
+		return nil, err
+	}
+	blockHashes := make([]*externalapi.DomainHash, 0, k+1)
 	current := blockHash
 	isTrustedData := false
-	for i := externalapi.KType(0); i <= pm.k[constants.GetBlockVersion()-1]; i++ {
+	for i := externalapi.KType(0); i <= k; i++ {
 		ghostdagData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, current, isTrustedData)
 		if database.IsNotFoundError(err) {
 			log.Infof("TrustedBlockAssociatedGHOSTDAGDataBlockHashes failed to retrieve with %s\n", current)
@@ -2498,4 +2509,29 @@ func (pm *pruningManager) TrustedBlockAssociatedGHOSTDAGDataBlockHashes(stagingA
 	}
 
 	return blockHashes, nil
+}
+
+// coloringK returns the K blockHash was colored with, which bounds the selected parent chain a peer needs GHOSTDAG
+// data for to color it again: the stored DAGKnight dynamic K when there is one (from version 6 it is not capped by
+// the configured table), otherwise the configured K of the block's own version. It used to be the configured K of the
+// process-global version, which depends on the serving node's uptime and can be smaller than the K actually used.
+func (pm *pruningManager) coloringK(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (externalapi.KType, error) {
+	blockVersion, err := blockversion.OfSelectedParent(pm.databaseContext, stagingArea, pm.ghostdagDataStore,
+		pm.daaBlocksStore, pm.powScores, blockHash)
+	if err != nil {
+		return 0, err
+	}
+	k := pm.k[blockversion.Index(blockVersion, len(pm.k))]
+
+	ghostdagData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, blockHash, false)
+	if database.IsNotFoundError(err) {
+		ghostdagData, err = pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, blockHash, true)
+	}
+	if err != nil && !database.IsNotFoundError(err) {
+		return 0, err
+	}
+	if err == nil && ghostdagData.DynamicK() > k {
+		k = ghostdagData.DynamicK()
+	}
+	return k, nil
 }

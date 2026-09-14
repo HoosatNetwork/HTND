@@ -66,3 +66,45 @@ func Current(databaseContext model.DBReader, stagingArea *model.StagingArea,
 	}
 	return version, nil
 }
+
+// OfSelectedParent returns the block version derived from the DAA score, as this node computed it, of blockHash's
+// selected parent. That is the version whose window size and GHOSTDAG parameters govern blockHash: the block's own DAA
+// score is computed from its window, so it cannot choose it. Activation scores are far apart, so this equals the
+// block's own version except at an activation boundary, and it is the same on every node. The process-global version
+// is returned only without an activation table or while the needed data is missing (genesis, trusted-data bootstrap).
+func OfSelectedParent(databaseContext model.DBReader, stagingArea *model.StagingArea,
+	ghostdagDataStore model.GHOSTDAGDataStore, daaBlocksStore model.DAABlocksStore, powScores []uint64,
+	blockHash *externalapi.DomainHash,
+) (uint16, error) {
+	if len(powScores) == 0 || ghostdagDataStore == nil || daaBlocksStore == nil {
+		return constants.GetBlockVersion(), nil
+	}
+	ghostdagData, err := ghostdagDataStore.Get(databaseContext, stagingArea, blockHash, false)
+	if database.IsNotFoundError(err) {
+		return constants.GetBlockVersion(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if ghostdagData.SelectedParent() == nil {
+		return 1, nil
+	}
+	daaScore, err := daaBlocksStore.DAAScore(databaseContext, stagingArea, ghostdagData.SelectedParent())
+	if database.IsNotFoundError(err) {
+		return constants.GetBlockVersion(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return constants.BlockVersionForDAAScore(powScores, daaScore), nil
+}
+
+// Index returns the index into a per-version parameter table of the given length for blockVersion, using the last
+// entry when the table is shorter.
+func Index(blockVersion uint16, length int) int {
+	index := max(int(blockVersion)-1, 0)
+	if index >= length {
+		index = length - 1
+	}
+	return index
+}

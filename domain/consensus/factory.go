@@ -870,7 +870,9 @@ func (f *factory) dagProcesses(config *Config,
 			daaWindowStore,
 			windowHeapSliceStore,
 			config.GenesisHash,
-			config.DifficultyAdjustmentWindowSize)
+			config.DifficultyAdjustmentWindowSize,
+			daaBlocksStore,
+			config.POWScores)
 		// Set the DAG traversal manager in the ghostdag manager to resolve circular dependency
 		ghostdagManagers[i].SetDAGTraversalManager(dagTraversalManagers[i])
 	}
