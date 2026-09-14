@@ -99,9 +99,9 @@ func (f *FlowContext) broadcastTransactionsAfterBlockAdded(
 
 	txIDsToBroadcast = append(txIDsToBroadcast, txIDsToRebroadcast...)
 
-	if len(txIDsToBroadcast) == 0 {
-		return nil
-	}
+	// Enqueue even when this block brought nothing new: that is what sends IDs held back for arriving
+	// within TransactionIDPropagationInterval of the previous propagation. Returning early here left them
+	// unsent until some later transaction was enqueued, which on a quiet network could be never.
 	return f.EnqueueTransactionIDsForPropagation(txIDsToBroadcast)
 }
 

@@ -79,6 +79,11 @@ func (f *FlowContext) EnqueueTransactionIDsForPropagation(transactionIDs []*exte
 }
 
 func (f *FlowContext) maybePropagateTransactions() error {
+	// Nothing sent is not a propagation, so it must not restart the interval. Every new block calls this,
+	// and restarting it there would hold back the next transaction for up to a block.
+	if len(f.transactionIDsToPropagate) == 0 {
+		return nil
+	}
 	if time.Since(f.lastTransactionIDPropagationTime) < TransactionIDPropagationInterval &&
 		len(f.transactionIDsToPropagate) < appmessage.MaxInvPerTxInvMsg {
 		return nil
