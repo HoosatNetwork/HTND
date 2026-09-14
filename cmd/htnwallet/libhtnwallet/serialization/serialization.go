@@ -104,9 +104,19 @@ func SerializeDomainTransaction(tx *externalapi.DomainTransaction) ([]byte, erro
 }
 
 func partiallySignedTransactionFromProto(protoPartiallySignedTransaction *protoserialization.PartiallySignedTransaction) (*PartiallySignedTransaction, error) {
+	// These bytes come from wallet clients and cosigners. Missing nested messages and a partially signed
+	// input without a matching transaction input used to be dereferenced or indexed unchecked, crashing
+	// the wallet daemon, which does not recover RPC handler panics.
+	if protoPartiallySignedTransaction.Tx == nil {
+		return nil, errors.New("partially signed transaction has no transaction")
+	}
 	tx, err := transactionFromProto(protoPartiallySignedTransaction.Tx)
 	if err != nil {
 		return nil, err
+	}
+	if len(protoPartiallySignedTransaction.PartiallySignedInputs) != len(tx.Inputs) {
+		return nil, errors.Errorf("partially signed transaction has %d partially signed inputs for %d transaction inputs",
+			len(protoPartiallySignedTransaction.PartiallySignedInputs), len(tx.Inputs))
 	}
 
 	inputs := make([]*PartiallySignedInput, len(protoPartiallySignedTransaction.PartiallySignedInputs))
@@ -136,6 +146,9 @@ func partiallySignedTransactionToProto(partiallySignedTransaction *PartiallySign
 }
 
 func partiallySignedInputFromProto(protoPartiallySignedInput *protoserialization.PartiallySignedInput) (*PartiallySignedInput, error) {
+	if protoPartiallySignedInput.PrevOutput == nil {
+		return nil, errors.New("partially signed input has no previous output")
+	}
 	output, err := transactionOutputFromProto(protoPartiallySignedInput.PrevOutput)
 	if err != nil {
 		return nil, err
@@ -183,6 +196,12 @@ func pubKeySignaturePairToProto(pubKeySignaturePair *PubKeySignaturePair) *proto
 }
 
 func transactionFromProto(protoTransaction *protoserialization.TransactionMessage) (*externalapi.DomainTransaction, error) {
+	if protoTransaction == nil {
+		return nil, errors.New("transaction is nil")
+	}
+	if protoTransaction.SubnetworkId == nil {
+		return nil, errors.New("transaction has no subnetwork id")
+	}
 	if protoTransaction.Version > math.MaxUint16 {
 		return nil, errors.Errorf("protoTransaction.Version is %d and is too big to be a uint16", protoTransaction.Version)
 	}
@@ -271,6 +290,9 @@ func transactionInputToProto(input *externalapi.DomainTransactionInput) *protose
 }
 
 func outpointFromProto(protoOutpoint *protoserialization.Outpoint) (*externalapi.DomainOutpoint, error) {
+	if protoOutpoint == nil {
+		return nil, errors.New("transaction input has no previous outpoint")
+	}
 	txID, err := transactionIDFromProto(protoOutpoint.TransactionId)
 	if err != nil {
 		return nil, err
@@ -297,6 +319,9 @@ func transactionIDFromProto(protoTxID *protoserialization.TransactionId) (*exter
 }
 
 func transactionOutputFromProto(protoOutput *protoserialization.TransactionOutput) (*externalapi.DomainTransactionOutput, error) {
+	if protoOutput == nil {
+		return nil, errors.New("transaction output is nil")
+	}
 	scriptPublicKey, err := scriptPublicKeyFromProto(protoOutput.ScriptPublicKey)
 	if err != nil {
 		return nil, err
@@ -316,6 +341,9 @@ func transactionOutputToProto(output *externalapi.DomainTransactionOutput) *prot
 }
 
 func scriptPublicKeyFromProto(protoScriptPublicKey *protoserialization.ScriptPublicKey) (*externalapi.ScriptPublicKey, error) {
+	if protoScriptPublicKey == nil {
+		return nil, errors.New("transaction output has no script public key")
+	}
 	if protoScriptPublicKey.Version > math.MaxUint16 {
 		return nil, errors.Errorf("protoOutput.ScriptPublicKey.Version is %d and is too big to be a uint16", protoScriptPublicKey.Version)
 	}
