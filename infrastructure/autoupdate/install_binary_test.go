@@ -3,6 +3,7 @@ package autoupdate
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -57,7 +58,9 @@ func TestInstallBinaryReplacesCurrentBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %+v", err)
 	}
-	if info.Mode()&0o111 == 0 {
+	// Windows has no execute permission bits: Chmod only toggles read-only, and a writable file always reports
+	// -rw-rw-rw-, so the bits can only be checked elsewhere.
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
 		t.Fatalf("installed binary is not executable: %v", info.Mode())
 	}
 	entries, err := os.ReadDir(dir)
