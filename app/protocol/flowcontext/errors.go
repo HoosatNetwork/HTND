@@ -24,20 +24,21 @@ var ErrPingTimeout = protocolerrors.New(false, "timeout expired on ping")
 func (*FlowContext) HandleError(err error, flowName string, isStopping *uint32, errChan chan<- error) {
 	isErrRouteClosed := errors.Is(err, router.ErrRouteClosed)
 	if !isErrRouteClosed {
-		// Treat database not-found errors as recoverable/non-fatal for flows.
-		// Returning such an error from a flow would otherwise cause HandleError to panic
-		// because it's not a ProtocolError. In practice missing DB entries can appear
-		// due to races / partial state while processing P2P messages; handle them
-		// gracefully by logging and NOT escalating them to the protocol manager.
-		if database.IsNotFoundError(err) {
-			log.Debugf("Non-fatal DB not found in %s: %v", flowName, err)
-			return
-		}
-
-		// Check if this is a wire-format parsing error and treat it as a protocol error
-		// instead of panicking. This allows graceful disconnection from peers sending
-		// malformed data.
-		if isWireFormatError(err) {
+		// A database not-found that a flow returns ends that flow, so it must disconnect the peer. It
+		// used to be dropped here without reaching errChan: the flow goroutine had already exited, the
+		// peer stayed connected (and counted toward outbound targets), and nothing read that flow's
+		// route again - requests to it timed out on the peer's side, and a dead relay flow meant no
+		// more blocks from that peer. It is not grounds for banning: missing entries can come from
+		// races with pruning or partial local state. An explicit protocol error that wraps a not-found
+		// keeps its own ban decision, and the cause is formatted rather than wrapped so it is not
+		// mistaken for a not-found again downstream.
+		if protocolErr := (protocolerrors.ProtocolError{}); !errors.As(err, &protocolErr) && database.IsNotFoundError(err) {
+			log.Warnf("Database entry not found in %s, disconnecting the peer: %v", flowName, err)
+			err = protocolerrors.Errorf(false, "database entry not found in %s: %s", flowName, err.Error())
+		} else if isWireFormatError(err) {
+			// Check if this is a wire-format parsing error and treat it as a protocol error
+			// instead of panicking. This allows graceful disconnection from peers sending
+			// malformed data.
 			log.Errorf("Wire format error from peer in %s, disconnecting: %v", flowName, err)
 			// Convert to a ProtocolError that should ban the peer
 			err = protocolerrors.Errorf(true, "invalid wire-format data: %s", err.Error())
