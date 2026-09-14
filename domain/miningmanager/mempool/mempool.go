@@ -262,7 +262,11 @@ func (mp *mempool) BlockCandidateTransactions() []*externalapi.DomainTransaction
 			continue
 		}
 
-		if hasCoinbaseInput || readyTxs[i].LoadFee() > checkedUint64FromExtraOutputs(numExtraOuts)*constants.SompiPerHoosat {
+		// More inputs than outputs means no extra outputs. checkedUint64FromExtraOutputs panics on a negative
+		// count, and this runs while building a block template, so a relayed transaction with three or more
+		// outputs and more inputs than outputs crashed the node on its next GetBlockTemplate.
+		extraOuts := max(numExtraOuts, 0)
+		if hasCoinbaseInput || readyTxs[i].LoadFee() > checkedUint64FromExtraOutputs(extraOuts)*constants.SompiPerHoosat {
 			candidateTxs = append(candidateTxs, readyTxs[i])
 		} else {
 			txNewestUTXODaaScore := readyTxs[i].Inputs[0].UTXOEntry.BlockDAAScore()
