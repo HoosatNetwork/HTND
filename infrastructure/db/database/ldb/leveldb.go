@@ -1,6 +1,9 @@
 package ldb
 
 import (
+	"os"
+	"strings"
+
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -14,8 +17,37 @@ type LevelDB struct {
 	ldb *leveldb.DB
 }
 
+// isPebbleDirectory reports whether path holds a pebble database. Pebble always writes OPTIONS-<n> files and a
+// marker.format-version file; goleveldb never creates either.
+func isPebbleDirectory(path string) (bool, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.WithStack(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "OPTIONS-") || strings.HasPrefix(entry.Name(), "marker.") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // NewLevelDB opens a leveldb instance defined by the given path.
 func NewLevelDB(path string, cacheSizeMiB int) (*LevelDB, error) {
+	// Refuse a pebble datadir before goleveldb touches it. goleveldb reports it as corrupted, and the recovery
+	// below then rebuilds a LevelDB manifest in place, destroying the pebble database - ldbtool fuse/copy and
+	// --dbtype=leveldb reach this with whatever path they are given, including copy sources.
+	isPebble, err := isPebbleDirectory(path)
+	if err != nil {
+		return nil, err
+	}
+	if isPebble {
+		return nil, errors.Errorf("%s is a pebble database; refusing to open it with LevelDB, which would destroy it", path)
+	}
+
 	// Open leveldb. If it doesn't exist, create it.
 	options := Options()
 	if cacheSizeMiB > 0 {
