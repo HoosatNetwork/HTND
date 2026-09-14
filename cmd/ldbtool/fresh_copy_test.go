@@ -15,9 +15,8 @@ func TestCheckFreshCopyKeepsSource(t *testing.T) {
 		t.Fatalf("MkdirAll: %s", err)
 	}
 	link := filepath.Join(root, "db-link")
-	if err := os.Symlink(src, link); err != nil {
-		t.Fatalf("Symlink: %s", err)
-	}
+	// Creating symlinks needs extra privileges on Windows; without them only the symlink case is skipped.
+	symlinkErr := os.Symlink(src, link)
 	t.Chdir(filepath.Join(root, "data"))
 
 	refused := map[string]string{
@@ -28,6 +27,10 @@ func TestCheckFreshCopyKeepsSource(t *testing.T) {
 		"parent directory":   filepath.Join(root, "data"),
 		"grandparent":        root,
 		"symlink to source":  link,
+	}
+	if symlinkErr != nil {
+		t.Logf("not checking the symlink case, symlinks are unavailable: %s", symlinkErr)
+		delete(refused, "symlink to source")
 	}
 	for name, dest := range refused {
 		if err := checkFreshCopyKeepsSource(src, dest); err == nil {
