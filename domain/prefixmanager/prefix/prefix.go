@@ -34,7 +34,8 @@ func (p *Prefix) Flip() *Prefix {
 
 // Deserialize deserializes a prefix from a byte slice
 func Deserialize(prefixBytes []byte) (*Prefix, error) {
-	if len(prefixBytes) > 1 {
+	// Exactly one byte: an empty value used to pass this check and panic on the index below.
+	if len(prefixBytes) != 1 {
 		return nil, errors.Errorf("invalid length %d for prefix", len(prefixBytes))
 	}
 
