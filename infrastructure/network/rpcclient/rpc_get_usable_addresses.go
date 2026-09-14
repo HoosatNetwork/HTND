@@ -8,12 +8,14 @@ func (c *RPCClient) GetUsableAddresses(addresses []string) (*appmessage.GetUsabl
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Enqueued NewGetUsableAddressesRequest")
-	response, err := c.route(appmessage.CmdGetUsableAddressesResponseMessage).Dequeue()
+	log.Debugf("Enqueued NewGetUsableAddressesRequest")
+	// Wait with the client's timeout like every other call. htnwallet makes this call while holding its
+	// server lock, so waiting without one let a node that never answered hang the wallet entirely.
+	response, err := c.route(appmessage.CmdGetUsableAddressesResponseMessage).DequeueWithTimeout(c.timeout)
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Got GetUsableAddressesResponseMessage response")
+	log.Debugf("Got GetUsableAddressesResponseMessage response")
 	getUsableAddressesResponse := response.(*appmessage.GetUsableAddressesResponseMessage)
 	if getUsableAddressesResponse.Error != nil {
 		return nil, c.convertRPCError(getUsableAddressesResponse.Error)
