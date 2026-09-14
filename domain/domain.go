@@ -153,17 +153,27 @@ func (d *domain) CommitStagingConsensus() error {
 		return err
 	}
 
-	// We delete anything associated with the old prefix outside
-	// of the transaction in order to save memory.
-	err = prefixmanager.DeleteInactivePrefix(d.db)
-	if err != nil {
-		return err
-	}
-
+	// The database now names the staging prefix as active, so the domain has to serve that consensus
+	// from here on. The swap used to come after deleting the old prefix's data, so a failure there
+	// returned with the node still running on the old consensus instance, whose prefix the database
+	// had just marked inactive, while the committed instance was still held as staging.
 	tempConsensusPointer := unsafe.Pointer(d.stagingConsensus)
 	consensusPointer := (*unsafe.Pointer)(unsafe.Pointer(&d.consensus))
 	atomic.StorePointer(consensusPointer, tempConsensusPointer)
 	d.stagingConsensus = nil
+
+	// We delete anything associated with the old prefix outside
+	// of the transaction in order to save memory.
+	//
+	// A failure here does not fail the commit. What is left behind is marked as the inactive prefix,
+	// which New deletes on the next start and InitStagingConsensusWithoutGenesis callers clear before
+	// creating a new staging consensus; returning the error would make IBD skip the UTXO set override
+	// for a consensus that is already in use.
+	err = prefixmanager.DeleteInactivePrefix(d.db)
+	if err != nil {
+		log.Errorf("Committed the staging consensus, but failed to delete the previous consensus data; "+
+			"it will be deleted on the next start: %s", err)
+	}
 	return nil
 }
 
