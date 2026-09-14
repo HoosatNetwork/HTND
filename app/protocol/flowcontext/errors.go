@@ -20,7 +20,8 @@ var ErrPingTimeout = protocolerrors.New(false, "timeout expired on ping")
 //
 // If this is ErrRouteClosed - forward it to errChan
 // If this is ProtocolError - logs the error, and forward it to errChan
-// Otherwise - panics
+// Otherwise - converts it to a ProtocolError (banning only for rule violations and malformed wire data) and
+// forwards it to errChan
 func (*FlowContext) HandleError(err error, flowName string, isStopping *uint32, errChan chan<- error) {
 	isErrRouteClosed := errors.Is(err, router.ErrRouteClosed)
 	if !isErrRouteClosed {
@@ -50,8 +51,11 @@ func (*FlowContext) HandleError(err error, flowName string, isStopping *uint32, 
 			} else {
 				// For any other unexpected error, log it as a critical error but don't panic.
 				// Panicking would crash the entire node, which is disproportionate to a peer error.
+				// Disconnect, but do not ban: this catch-all is mostly this node's own failures - a database
+				// I/O error, a full disk - which recur with every peer. Banning here made a local fault ban
+				// the node's honest peers one after another.
 				log.Errorf("Unexpected error in %s (not a protocol or rule error): %+v", flowName, err)
-				err = protocolerrors.Errorf(true, "unexpected error in %s: %s", flowName, err.Error())
+				err = protocolerrors.Errorf(false, "unexpected error in %s: %s", flowName, err.Error())
 			}
 		}
 		if errors.Is(err, ErrPingTimeout) {
