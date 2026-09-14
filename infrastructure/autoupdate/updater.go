@@ -623,28 +623,35 @@ func restoreBackup(src, dest string) error {
 func installBinary(src, dest string) error {
 	log.Infof("Installing binary: %s -> %s", src, dest)
 
-	// Remove existing binary if it exists
-	if _, err := os.Stat(dest); err == nil {
-		// On Unix, we need to make sure the file is writable
-		if runtime.GOOS != "windows" {
-			if err := os.Chmod(dest, 0755); err != nil {
-				log.Warnf("Failed to make existing binary writable: %v", err)
-			}
-		}
-		if err := os.Remove(dest); err != nil {
-			return errors.Wrap(err, "failed to remove existing binary")
-		}
+	// Write the new binary next to the current one and rename it into place. Removing the current binary
+	// first, as this used to, left the node without a binary whenever the copy then failed: an unreadable
+	// replacement, a full disk, or a crash mid-copy. A rename within one directory replaces it atomically.
+	tmpFile, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".update-*")
+	if err != nil {
+		return errors.Wrap(err, "failed to create a temporary file for the new binary")
 	}
+	tmpPath := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return errors.Wrap(err, "failed to close the temporary file for the new binary")
+	}
+	installed := false
+	defer func() {
+		if !installed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	// Copy the new binary
-	if err := copyFile(src, dest); err != nil {
+	if err := copyFile(src, tmpPath); err != nil {
 		return errors.Wrap(err, "failed to copy new binary")
 	}
-
-	// Set permissions
-	if err := os.Chmod(dest, 0755); err != nil {
+	if err := os.Chmod(tmpPath, 0755); err != nil {
 		return errors.Wrap(err, "failed to set executable permissions on new binary")
 	}
+	if err := os.Rename(tmpPath, dest); err != nil {
+		return errors.Wrap(err, "failed to move the new binary into place")
+	}
+	installed = true
 
 	return nil
 }
