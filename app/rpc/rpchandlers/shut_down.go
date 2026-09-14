@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
 )
 
 const pauseBeforeShutDown = time.Second
@@ -21,10 +22,16 @@ func HandleShutDown(context *rpccontext.Context, _ *router.Router, _ appmessage.
 
 	log.Warn("ShutDown RPC called.")
 
-	// Wait a second before shutting down, to allow time to return the response to the caller
+	// Wait a second before shutting down, to allow time to return the response to the caller.
+	//
+	// The shutdown is requested through the interrupt listener, as any subsystem requests one, rather
+	// than by closing context.ShutDownChan. That channel is the listener's own, which it closes itself on
+	// SIGINT, so closing it here panicked with "close of closed channel" after Ctrl+C or a second
+	// ShutDown call - exiting through the panic handler instead of shutting down. The listener accepts
+	// repeated requests.
 	spawn("HandleShutDown-pauseAndShutDown", func() {
 		<-time.After(pauseBeforeShutDown)
-		close(context.ShutDownChan)
+		signal.ShutdownRequestChannel <- struct{}{}
 	})
 
 	response := appmessage.NewShutDownResponseMessage()
