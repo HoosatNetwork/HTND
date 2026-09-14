@@ -53,6 +53,10 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 		consensusConfig.FinalityDuration = []time.Duration{time.Duration(finalityDepth) * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}
 		consensusConfig.K[constants.GetBlockVersion()-1] = 0
 		consensusConfig.PruningProofM = 1
+		// The overrides above only shrink the version-1 parameters, and pruning depth follows the chain's current
+		// block version. Keep every block at version 1 (testnet would otherwise activate version 5 at DAA score 200,
+		// where K and the target time differ and the pruning depth is thousands of blocks).
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
 
 		syncConsensuses := func(tcSyncerRef, tcSynceeRef *testapi.TestConsensus, updatePruningPointJustAfterImportingPruningPoint bool) {
 			tcSyncer, tcSyncee := *tcSyncerRef, *tcSynceeRef

@@ -307,8 +307,11 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		finalityStore,
 		ghostdagDataStore,
 		pruningStore,
+		headersSelectedTipStore,
+		daaBlocksStore,
 		genesisHash,
-		config.FinalityDepth())
+		config.POWScores,
+		config.FinalityDepthForBlockVersion)
 	mergeDepthManager := mergedepthmanager.New(
 		dbManager,
 		dagTopologyManager,
@@ -391,8 +394,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 		config.IsArchival,
 		genesisHash,
-		config.FinalityDepth(),
-		config.PruningDepth(),
+		config.POWScores,
+		config.FinalityDepthForBlockVersion,
+		config.PruningDepthForBlockVersion,
 		config.DeletionDepth,
 		config.DataRetentionDuration,
 		config.PruningInterval,

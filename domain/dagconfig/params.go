@@ -199,11 +199,15 @@ func (p *Params) NormalizeRPCServerAddress(addr string) (string, error) {
 }
 
 func currentBlockVersionIndexForSlice(length int) int {
+	return blockVersionIndexForSlice(length, constants.GetBlockVersion())
+}
+
+func blockVersionIndexForSlice(length int, blockVersion uint16) int {
 	if length <= 0 {
 		panic("dagconfig: attempted to index empty per-version parameter slice")
 	}
 
-	index := max(int(constants.GetBlockVersion())-1, 0)
+	index := max(int(blockVersion)-1, 0)
 	if index >= length {
 		index = length - 1
 	}
@@ -224,18 +228,6 @@ func (p *Params) TargetTimePerBlockForCurrentVersion() time.Duration {
 	return p.targetTimePerBlockForCurrentVersion()
 }
 
-func (p *Params) finalityDurationForCurrentVersion() time.Duration {
-	return p.FinalityDuration[currentBlockVersionIndexForSlice(len(p.FinalityDuration))]
-}
-
-func (p *Params) ghostdagKForCurrentVersion() externalapi.KType {
-	return p.K[currentBlockVersionIndexForSlice(len(p.K))]
-}
-
-func (p *Params) pruningMultiplierForCurrentVersion() uint64 {
-	return p.PruningMultiplier[currentBlockVersionIndexForSlice(len(p.PruningMultiplier))]
-}
-
 /*
 	Block version index must be -1 because blockVersions start at 1 and index from 0.
 	blockVersion = index
@@ -245,11 +237,17 @@ func (p *Params) pruningMultiplierForCurrentVersion() uint64 {
 	4 = 3
 	5 = 4
 */
-// FinalityDepth returns the finality duration represented in blocks
+// FinalityDepth returns the finality duration represented in blocks, for the process-global block version. Consensus
+// code must use FinalityDepthForBlockVersion with the chain's current version instead (see blockversion.Current).
 func (p *Params) FinalityDepth() uint64 {
-	finalityDuration := p.finalityDurationForCurrentVersion()
-	targetTimePerBlock := p.targetTimePerBlockForCurrentVersion()
-	if constants.GetBlockVersion() < 5 {
+	return p.FinalityDepthForBlockVersion(constants.GetBlockVersion())
+}
+
+// FinalityDepthForBlockVersion returns the finality duration represented in blocks for the given block version.
+func (p *Params) FinalityDepthForBlockVersion(blockVersion uint16) uint64 {
+	finalityDuration := p.FinalityDuration[blockVersionIndexForSlice(len(p.FinalityDuration), blockVersion)]
+	targetTimePerBlock := p.TargetTimePerBlock[blockVersionIndexForSlice(len(p.TargetTimePerBlock), blockVersion)]
+	if blockVersion < 5 {
 		val := finalityDuration / targetTimePerBlock
 		if val < 0 {
 			panic("finalityDuration / targetTimePerBlock is negative, cannot convert to uint64")
@@ -263,13 +261,21 @@ func (p *Params) FinalityDepth() uint64 {
 	return uint64(finalityDuration.Seconds() / targetTimePerBlock.Seconds())
 }
 
-// PruningDepth returns the pruning duration represented in blocks
+// PruningDepth returns the pruning duration represented in blocks, for the process-global block version. Consensus
+// code must use PruningDepthForBlockVersion with the chain's current version instead (see blockversion.Current).
 func (p *Params) PruningDepth() uint64 {
-	k := uint64(p.ghostdagKForCurrentVersion())
-	if constants.GetBlockVersion() < 5 {
-		return 2*p.FinalityDepth() + 4*p.MergeSetSizeLimit*k + 2*k + 2
+	return p.PruningDepthForBlockVersion(constants.GetBlockVersion())
+}
+
+// PruningDepthForBlockVersion returns the pruning duration represented in blocks for the given block version.
+func (p *Params) PruningDepthForBlockVersion(blockVersion uint16) uint64 {
+	k := uint64(p.K[blockVersionIndexForSlice(len(p.K), blockVersion)])
+	finalityDepth := p.FinalityDepthForBlockVersion(blockVersion)
+	if blockVersion < 5 {
+		return 2*finalityDepth + 4*p.MergeSetSizeLimit*k + 2*k + 2
 	}
-	return 2*p.FinalityDepth()*p.pruningMultiplierForCurrentVersion() + 4*p.MergeSetSizeLimit*k + 2*k + 2
+	pruningMultiplier := p.PruningMultiplier[blockVersionIndexForSlice(len(p.PruningMultiplier), blockVersion)]
+	return 2*finalityDepth*pruningMultiplier + 4*p.MergeSetSizeLimit*k + 2*k + 2
 }
 
 // MainnetParams defines the network parameters for the main Hoosat network.

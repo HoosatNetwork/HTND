@@ -6,16 +6,21 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockversion"
 )
 
 type finalityManager struct {
-	databaseContext    model.DBReader
-	dagTopologyManager model.DAGTopologyManager
-	finalityStore      model.FinalityStore
-	ghostdagDataStore  model.GHOSTDAGDataStore
-	pruningStore       model.PruningStore
-	genesisHash        *externalapi.DomainHash
-	finalityDepth      uint64
+	databaseContext         model.DBReader
+	dagTopologyManager      model.DAGTopologyManager
+	finalityStore           model.FinalityStore
+	ghostdagDataStore       model.GHOSTDAGDataStore
+	pruningStore            model.PruningStore
+	headersSelectedTipStore model.HeaderSelectedTipStore
+	daaBlocksStore          model.DAABlocksStore
+	genesisHash             *externalapi.DomainHash
+	powScores               []uint64
+	// finalityDepthForBlockVersion is evaluated with the chain's current block version on every use, never cached.
+	finalityDepthForBlockVersion func(blockVersion uint16) uint64
 }
 
 // New instantiates a new FinalityManager
@@ -24,18 +29,34 @@ func New(databaseContext model.DBReader,
 	finalityStore model.FinalityStore,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	pruningStore model.PruningStore,
+	headersSelectedTipStore model.HeaderSelectedTipStore,
+	daaBlocksStore model.DAABlocksStore,
 	genesisHash *externalapi.DomainHash,
-	finalityDepth uint64,
+	powScores []uint64,
+	finalityDepthForBlockVersion func(blockVersion uint16) uint64,
 ) model.FinalityManager {
 	return &finalityManager{
-		databaseContext:    databaseContext,
-		genesisHash:        genesisHash,
-		dagTopologyManager: dagTopologyManager,
-		finalityStore:      finalityStore,
-		ghostdagDataStore:  ghostdagDataStore,
-		pruningStore:       pruningStore,
-		finalityDepth:      finalityDepth,
+		databaseContext:              databaseContext,
+		genesisHash:                  genesisHash,
+		dagTopologyManager:           dagTopologyManager,
+		finalityStore:                finalityStore,
+		ghostdagDataStore:            ghostdagDataStore,
+		pruningStore:                 pruningStore,
+		headersSelectedTipStore:      headersSelectedTipStore,
+		daaBlocksStore:               daaBlocksStore,
+		powScores:                    powScores,
+		finalityDepthForBlockVersion: finalityDepthForBlockVersion,
 	}
+}
+
+// finalityDepth returns the finality depth for the chain's current block version.
+func (fm *finalityManager) finalityDepth(stagingArea *model.StagingArea) (uint64, error) {
+	blockVersion, err := blockversion.Current(fm.databaseContext, stagingArea, fm.ghostdagDataStore,
+		fm.headersSelectedTipStore, fm.daaBlocksStore, fm.powScores)
+	if err != nil {
+		return 0, err
+	}
+	return fm.finalityDepthForBlockVersion(blockVersion), nil
 }
 
 func (fm *finalityManager) VirtualFinalityPoint(stagingArea *model.StagingArea) (*externalapi.DomainHash, error) {
@@ -98,7 +119,11 @@ func (fm *finalityManager) calculateFinalityPoint(stagingArea *model.StagingArea
 		return nil, err
 	}
 
-	if ghostdagData.BlueScore() < fm.finalityDepth {
+	finalityDepth, err := fm.finalityDepth(stagingArea)
+	if err != nil {
+		return nil, err
+	}
+	if ghostdagData.BlueScore() < finalityDepth {
 		log.Debugf("%s blue score lower then finality depth - returning genesis as finality point", blockHash)
 		return fm.genesisHash, nil
 	}
@@ -115,7 +140,7 @@ func (fm *finalityManager) calculateFinalityPoint(stagingArea *model.StagingArea
 	if err != nil {
 		return nil, err
 	}
-	if ghostdagData.BlueScore() < pruningPointGhostdagData.BlueScore()+fm.finalityDepth {
+	if ghostdagData.BlueScore() < pruningPointGhostdagData.BlueScore()+finalityDepth {
 		log.Debugf("%s blue score less than finality distance over pruning point - returning virtual genesis as finality point", blockHash)
 		return model.VirtualGenesisBlockHash, nil
 	}
@@ -143,7 +168,7 @@ func (fm *finalityManager) calculateFinalityPoint(stagingArea *model.StagingArea
 		current = pruningPoint
 	}
 
-	requiredBlueScore := ghostdagData.BlueScore() - fm.finalityDepth
+	requiredBlueScore := ghostdagData.BlueScore() - finalityDepth
 	log.Debugf("%s's finality point is the one having the highest blue score lower then %d", blockHash, requiredBlueScore)
 
 	var next *externalapi.DomainHash

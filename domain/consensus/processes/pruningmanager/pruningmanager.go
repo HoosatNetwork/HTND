@@ -8,6 +8,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
@@ -42,10 +43,13 @@ type pruningManager struct {
 	daaBlocksStore                      model.DAABlocksStore
 	reachabilityDataStore               model.ReachabilityDataStore
 
-	isArchivalNode                  bool
-	genesisHash                     *externalapi.DomainHash
-	finalityInterval                uint64
-	pruningDepth                    uint64
+	isArchivalNode bool
+	genesisHash    *externalapi.DomainHash
+	powScores      []uint64
+	// finalityDepthForBlockVersion and pruningDepthForBlockVersion are evaluated with the chain's current block
+	// version on every use (see currentDepths), never cached.
+	finalityDepthForBlockVersion    func(blockVersion uint16) uint64
+	pruningDepthForBlockVersion     func(blockVersion uint16) uint64
 	deletionDepth                   uint64
 	dataRetentionDuration           time.Duration
 	pruningInterval                 time.Duration
@@ -86,8 +90,9 @@ func New(
 
 	isArchivalNode bool,
 	genesisHash *externalapi.DomainHash,
-	finalityInterval uint64,
-	pruningDepth uint64,
+	powScores []uint64,
+	finalityDepthForBlockVersion func(blockVersion uint16) uint64,
+	pruningDepthForBlockVersion func(blockVersion uint16) uint64,
 	deletionDepth uint64,
 	dataRetentionDuration time.Duration,
 	pruningInterval time.Duration,
@@ -120,11 +125,12 @@ func New(
 
 		isArchivalNode:                  isArchivalNode,
 		genesisHash:                     genesisHash,
-		pruningDepth:                    pruningDepth,
+		powScores:                       powScores,
+		finalityDepthForBlockVersion:    finalityDepthForBlockVersion,
+		pruningDepthForBlockVersion:     pruningDepthForBlockVersion,
 		deletionDepth:                   deletionDepth,
 		dataRetentionDuration:           dataRetentionDuration,
 		pruningInterval:                 pruningInterval,
-		finalityInterval:                finalityInterval,
 		shouldSanityCheckPruningUTXOSet: shouldSanityCheckPruningUTXOSet,
 		autoExodusExport:                autoExodusExport,
 		k:                               k,
@@ -220,7 +226,11 @@ func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.Staging
 	}
 
 	if !newPruningPoint.Equal(currentPruningPoint) {
-		if constants.GetBlockVersion() < 5 {
+		blockVersion, finalityInterval, pruningDepth, err := pm.currentDepths(stagingArea)
+		if err != nil {
+			return err
+		}
+		if blockVersion < 5 {
 			currentPruningPointGHOSTDAGData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, currentPruningPoint, false)
 			if err != nil {
 				return err
@@ -230,25 +240,16 @@ func (pm *pruningManager) UpdatePruningPointByVirtual(stagingArea *model.Staging
 			if err != nil {
 				return err
 			}
-			if pm.finalityScore(newPruningPointGHOSTDAGData.BlueScore()) > pm.finalityScore(currentPruningPointGHOSTDAGData.BlueScore())+1 {
+			if pm.finalityScore(newPruningPointGHOSTDAGData.BlueScore(), finalityInterval) > pm.finalityScore(currentPruningPointGHOSTDAGData.BlueScore(), finalityInterval)+1 {
 				return errors.Errorf("cannot advance pruning point by more than one finality interval at once")
 			}
 		}
 
-		// Report the parameters this selection was made with, not just its outcome. pruningDepth and
-		// finalityInterval are captured once, when this consensus object is constructed, from
-		// version-gated functions reading the constants.GetBlockVersion() process-global - which starts
-		// at 1 and is only raised later as blocks arrive. A consensus built at startup therefore holds
-		// version 1's numbers, while one built mid-run (a staging consensus during a pruning-point IBD,
-		// which CommitStagingConsensus then promotes to be the live consensus) holds the current
-		// version's. finalityInterval is the divisor in finalityScore, which is what decides when the
-		// point advances, so two nodes holding different values pick different pruning points from
-		// identical chain data. Logging all three together makes that visible on a running node: a line
-		// whose activeBlockVersion is >= 5 while pruningDepth still reads the version-1 value is a node
-		// selecting with stale parameters.
-		log.Infof("Pruning point selection parameters: pruningDepth=%d finalityInterval=%d "+
-			"(both frozen at consensus construction) activeBlockVersion=%d",
-			pm.pruningDepth, pm.finalityInterval, constants.GetBlockVersion())
+		// Both depths follow the chain's current block version (see currentDepths). They used to be captured when
+		// this consensus object was built, so a node that had just started and one that built its consensus during
+		// IBD selected with different values and picked different pruning points from identical blocks.
+		log.Infof("Pruning point selection parameters: pruningDepth=%d finalityInterval=%d blockVersion=%d",
+			pruningDepth, finalityInterval, blockVersion)
 		log.Infof("Moving pruning point from %s to %s", currentPruningPoint, newPruningPoint)
 		err = pm.savePruningPoint(stagingArea, newPruningPoint)
 		if err != nil {
@@ -354,9 +355,14 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 		return nil, nil, err
 	}
 
+	_, finalityInterval, pruningDepth, err := pm.currentDepths(stagingArea)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// We iterate until the selected parent of the given block, in order to allow a situation where the given block hash
 	// belongs to the virtual. This shouldn't change anything since the max blue score difference between a block and its
-	// selected parent is K, and K << pm.pruningDepth.
+	// selected parent is K, and K << the pruning depth.
 	var iterator model.BlockIterator
 	if blockHash.Equal(lowHash) {
 		iterator = &blockIteratorFromOneBlock{hash: lowHash}
@@ -384,15 +390,15 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 
 	// Finding the next pruning point candidate: look for the latest
 	// selected child of the current candidate that is in depth of at
-	// least pm.pruningDepth blocks from the virtual selected parent.
+	// least the pruning depth blocks from the virtual selected parent.
 	//
-	// Note: Sometimes the current candidate is less than pm.pruningDepth
+	// Note: Sometimes the current candidate is less than the pruning depth
 	// from the virtual. This can happen only if the virtual blue score
 	// got smaller, because virtual blue score is not guaranteed to always
 	// increase (because sometimes a block with higher blue work can have
 	// lower blue score).
 	// In such cases we still keep the same candidate because it's guaranteed
-	// that a block that was once in depth of pm.pruningDepth cannot be
+	// that a block that was once in depth of the pruning depth cannot be
 	// reorged without causing a finality conflict first.
 	newCandidate := currentCandidate
 
@@ -407,8 +413,8 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 		if err != nil {
 			return nil, nil, err
 		}
-		// log.Infof("ghostdagData.BlueScore()-selectedChildGHOSTDAGData.BlueScore() %d < pm.pruningDepth %d", ghostdagData.BlueScore()-selectedChildGHOSTDAGData.BlueScore(), pm.pruningDepth)
-		if ghostdagData.BlueScore()-selectedChildGHOSTDAGData.BlueScore() < pm.pruningDepth {
+		// log.Infof("ghostdagData.BlueScore()-selectedChildGHOSTDAGData.BlueScore() %d < pruningDepth %d", ghostdagData.BlueScore()-selectedChildGHOSTDAGData.BlueScore(), pruningDepth)
+		if ghostdagData.BlueScore()-selectedChildGHOSTDAGData.BlueScore() < pruningDepth {
 			break
 		}
 
@@ -418,7 +424,7 @@ func (pm *pruningManager) nextPruningPointAndCandidateByBlockHash(stagingArea *m
 		// We move the pruning point every time the candidate's finality score is
 		// bigger than the current pruning point finality score.
 		// log.Infof("pm.finalityScore(newCandidateGHOSTDAGData.BlueScore()) %d > pm.finalityScore(newPruningPointGHOSTDAGData.BlueScore()) %d", pm.finalityScore(newCandidateGHOSTDAGData.BlueScore()), pm.finalityScore(newPruningPointGHOSTDAGData.BlueScore()))
-		if pm.finalityScore(newCandidateGHOSTDAGData.BlueScore()) > pm.finalityScore(newPruningPointGHOSTDAGData.BlueScore()) {
+		if pm.finalityScore(newCandidateGHOSTDAGData.BlueScore(), finalityInterval) > pm.finalityScore(newPruningPointGHOSTDAGData.BlueScore(), finalityInterval) {
 			newPruningPoint = newCandidate
 			newPruningPointGHOSTDAGData = newCandidateGHOSTDAGData
 		}
@@ -670,10 +676,14 @@ func (pm *pruningManager) IsValidPruningPoint(stagingArea *model.StagingArea, bl
 		return false, err
 	}
 
-	// A pruning point has to be at depth of at least pm.pruningDepth
+	_, _, pruningDepth, err := pm.currentDepths(stagingArea)
+	if err != nil {
+		return false, err
+	}
+	// A pruning point has to be at depth of at least pruningDepth
 	// For imported pruning points, we allow the depth to be at least pruningDepth - 1
 	// to account for slight differences in chain structure during IBD
-	if headersSelectedTipGHOSTDAGData.BlueScore()-ghostdagData.BlueScore() < pm.pruningDepth-1 {
+	if headersSelectedTipGHOSTDAGData.BlueScore()-ghostdagData.BlueScore() < pruningDepth-1 {
 		return false, nil
 	}
 
@@ -1092,11 +1102,25 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPointsUsi
 
 // finalityScore is the number of finality intervals passed since
 // the given block.
-func (pm *pruningManager) finalityScore(blueScore uint64) uint64 {
-	if pm.finalityInterval == 0 {
+func (pm *pruningManager) finalityScore(blueScore, finalityInterval uint64) uint64 {
+	if finalityInterval == 0 {
 		return 0
 	}
-	return blueScore / pm.finalityInterval
+	return blueScore / finalityInterval
+}
+
+// currentDepths returns the chain's current block version together with the finality interval and pruning depth
+// for it. They are read at every use rather than captured when this consensus object is built: captured values
+// depended on the process-global block version at construction, which made the pruning point depend on uptime.
+func (pm *pruningManager) currentDepths(stagingArea *model.StagingArea) (
+	blockVersion uint16, finalityInterval uint64, pruningDepth uint64, err error,
+) {
+	blockVersion, err = blockversion.Current(pm.databaseContext, stagingArea, pm.ghostdagDataStore,
+		pm.headerSelectedTipStore, pm.daaBlocksStore, pm.powScores)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return blockVersion, pm.finalityDepthForBlockVersion(blockVersion), pm.pruningDepthForBlockVersion(blockVersion), nil
 }
 
 // FindAndReproduceRootDisqualification walks back from a current DAG tip via SelectedParent looking
@@ -1829,7 +1853,11 @@ func (pm *pruningManager) CheckIfShouldDeletePastBlocks(stagingArea *model.Stagi
 	if err != nil {
 		return false, nil
 	}
-	if currentPruningPointHeader.BlueScore()-previousDeletionPointHeader.BlueScore() < pm.pruningDepth {
+	_, _, pruningDepth, err := pm.currentDepths(stagingArea)
+	if err != nil {
+		return false, nil
+	}
+	if currentPruningPointHeader.BlueScore()-previousDeletionPointHeader.BlueScore() < pruningDepth {
 		return false, nil
 	}
 	return true, previousDeletionPoint
@@ -2339,14 +2367,18 @@ func (pm *pruningManager) ExpectedHeaderPruningPoint(stagingArea *model.StagingA
 		return nil, err
 	}
 
-	// Note: the pruning point from the POV of the current block is the first block in its chain that is in depth of pm.pruningDepth and
+	// Note: the pruning point from the POV of the current block is the first block in its chain that is in depth of the pruning depth and
 	// its finality score is greater than the previous pruning point. This is why the diff between finalityScore(selectedParent.blueScore + 1) * finalityInterval
-	// and the current block blue score is less than pm.pruningDepth we can know for sure that this block didn't trigger a pruning point change.
+	// and the current block blue score is less than the pruning depth we can know for sure that this block didn't trigger a pruning point change.
 
-	minRequiredBlueScoreForNextPruningPoint := (pm.finalityScore(selectedParentPruningPointHeader.BlueScore()) + 1) * pm.finalityInterval
+	_, finalityInterval, pruningDepth, err := pm.currentDepths(stagingArea)
+	if err != nil {
+		return nil, err
+	}
+	minRequiredBlueScoreForNextPruningPoint := (pm.finalityScore(selectedParentPruningPointHeader.BlueScore(), finalityInterval) + 1) * finalityInterval
 
 	if hasPruningPointInItsSelectedChain &&
-		minRequiredBlueScoreForNextPruningPoint+pm.pruningDepth <= ghostdagData.BlueScore() {
+		minRequiredBlueScoreForNextPruningPoint+pruningDepth <= ghostdagData.BlueScore() {
 		var suggestedLowHash *externalapi.DomainHash
 		hasReachabilityData, err := pm.reachabilityDataStore.HasReachabilityData(pm.databaseContext, stagingArea, selectedParentHeader.PruningPoint())
 		if err != nil {
@@ -2423,7 +2455,11 @@ func (pm *pruningManager) isPruningPointInPruningDepth(stagingArea *model.Stagin
 		return false, err
 	}
 
-	return blockGHOSTDAGData.BlueScore() >= pruningPointHeader.BlueScore()+pm.pruningDepth, nil
+	_, _, pruningDepth, err := pm.currentDepths(stagingArea)
+	if err != nil {
+		return false, err
+	}
+	return blockGHOSTDAGData.BlueScore() >= pruningPointHeader.BlueScore()+pruningDepth, nil
 }
 
 func (pm *pruningManager) TrustedBlockAssociatedGHOSTDAGDataBlockHashes(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
