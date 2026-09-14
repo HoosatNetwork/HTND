@@ -298,6 +298,14 @@ func DefaultConfig() *Config {
 // The above results in htnd functioning properly without any config settings
 // while still allowing the user to override settings with config files and
 // command line options. Command line options always take precedence.
+// minRelayTxFeeIsValid reports whether --minrelaytxfee, as given and as converted, is usable. util.Amount is
+// unsigned: util.NewAmount rejects only NaN and infinities and converts a negative fee into a huge amount, so
+// checking the converted amount - the old check refused only zero - cannot catch a negative flag. A positive
+// flag too small to be a whole sompi converts to zero and is refused as well.
+func minRelayTxFeeIsValid(flag float64, fee util.Amount) bool {
+	return flag > 0 && fee > 0
+}
+
 func LoadConfig() (*Config, error) {
 	cfgFlags := defaultFlags()
 
@@ -574,9 +582,9 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Disallow 0 and negative min tx fees.
-	if cfg.MinRelayTxFee == 0 {
-		str := "%s: The minrelaytxfee option must be greater than 0 -- parsed [%d]"
-		err := errors.Errorf(str, funcName, cfg.MinRelayTxFee)
+	if !minRelayTxFeeIsValid(cfg.Flags.MinRelayTxFee, cfg.MinRelayTxFee) {
+		str := "%s: The minrelaytxfee option must be greater than 0 -- parsed [%v]"
+		err := errors.Errorf(str, funcName, cfg.Flags.MinRelayTxFee)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, err
