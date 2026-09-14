@@ -16,6 +16,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+// pathInside returns destDir joined with name, or an error when the cleaned result is not destDir itself or a
+// path below it. Archive entry names were joined unchecked, so an entry named ../../x was written outside the
+// extraction directory.
+func pathInside(destDir, name string) (string, error) {
+	cleanDest := filepath.Clean(destDir)
+	joined := filepath.Join(cleanDest, name)
+	if joined != cleanDest && !strings.HasPrefix(joined, cleanDest+string(os.PathSeparator)) {
+		return "", errors.Errorf("archive entry %q would be extracted outside %s", name, destDir)
+	}
+	return joined, nil
+}
+
 // extractTarGz extracts a .tar.gz archive
 func extractTarGz(archivePath, destDir string) (string, error) {
 	log.Infof("Extracting tar.gz archive: %s", archivePath)
@@ -58,7 +70,10 @@ func extractZip(archivePath, destDir string) (string, error) {
 		}
 
 		// Create the full path for the file
-		fullPath := filepath.Join(destDir, f.Name)
+		fullPath, err := pathInside(destDir, f.Name)
+		if err != nil {
+			return "", err
+		}
 
 		// Create parent directory if needed
 		if f.FileInfo().IsDir() {
@@ -127,7 +142,10 @@ func extractTarReader(tr *tar.Reader, destDir string) (string, error) {
 		}
 
 		// Create the full path for the file
-		target := filepath.Join(destDir, header.Name)
+		target, err := pathInside(destDir, header.Name)
+		if err != nil {
+			return "", err
+		}
 
 		// Check for directory
 		switch header.Typeflag {
@@ -164,8 +182,15 @@ func extractTarReader(tr *tar.Reader, destDir string) (string, error) {
 			}
 
 		case tar.TypeSymlink:
-			// Handle symbolic links
-			linkTarget := filepath.Join(destDir, header.Linkname)
+			// Handle symbolic links. A link resolves relative to its own directory, and it must not lead out of
+			// the extraction directory: later entries written through it would land wherever it points.
+			if filepath.IsAbs(header.Linkname) {
+				return "", errors.Errorf("archive symlink %q points to an absolute path %q", header.Name, header.Linkname)
+			}
+			linkTarget, err := pathInside(destDir, filepath.Join(filepath.Dir(strings.TrimPrefix(header.Name, "./")), header.Linkname))
+			if err != nil {
+				return "", err
+			}
 			if err := os.Symlink(linkTarget, target); err != nil {
 				log.Warnf("Failed to create symlink %s -> %s: %v", target, linkTarget, err)
 			}
