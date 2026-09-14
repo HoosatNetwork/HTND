@@ -19,6 +19,9 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 
 	now := time.Now()
 
+	// Renames are applied after the range: Go may visit a key added while ranging over a map, and the renamed
+	// request's connection has already been removed from connSet by then, so it would be dropped as disconnected.
+	renamedRequests := make(map[string]*connectionRequest)
 	for address, connReq := range c.activeRequested {
 		connection, matchedAddress, ok, err := c.findRequestedConnectionInSet(connSet, address)
 		if err != nil {
@@ -38,11 +41,14 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 
 		if matchedAddress != address {
 			delete(c.activeRequested, address)
-			c.activeRequested[matchedAddress] = connReq
+			renamedRequests[matchedAddress] = connReq
 			connReq.address = matchedAddress
 		}
 
 		connSet.remove(connection)
+	}
+	for address, connReq := range renamedRequests {
+		c.activeRequested[address] = connReq
 	}
 
 	for address, connReq := range c.pendingRequested {
