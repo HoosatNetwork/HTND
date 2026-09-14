@@ -53,8 +53,19 @@ func HandleIBDBlockLocator(context HandleIBDBlockLocatorContext, incomingRoute *
 				"with an unknown targetHash %s", targetHash)
 		}
 
+		// The hash count is not limited on the wire, and each hash below costs a full block read and a selected-chain
+		// check under the consensus lock, so a peer repeating a known off-chain block made one message cost millions
+		// of block reads. Honest locators are logarithmic in the chain length, so only the first
+		// MaxBlockLocatorsPerMsg hashes are considered; the message itself is still accepted.
+		blockLocatorHashes := ibdBlockLocatorMessage.BlockLocatorHashes
+		if len(blockLocatorHashes) > appmessage.MaxBlockLocatorsPerMsg {
+			log.Debugf("IBDBlockLocator from %s has %d hashes, considering the first %d", peer,
+				len(blockLocatorHashes), appmessage.MaxBlockLocatorsPerMsg)
+			blockLocatorHashes = blockLocatorHashes[:appmessage.MaxBlockLocatorsPerMsg]
+		}
+
 		foundHighestHashInTheSelectedParentChainOfTargetHash := false
-		for _, blockLocatorHash := range ibdBlockLocatorMessage.BlockLocatorHashes {
+		for _, blockLocatorHash := range blockLocatorHashes {
 			block, found, err := context.Domain().Consensus().GetBlock(blockLocatorHash)
 			if err != nil {
 				return err
