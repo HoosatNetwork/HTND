@@ -150,7 +150,7 @@ func (bb *testBlockBuilder) buildHeaderWithParents(stagingArea *model.StagingAre
 	}
 
 	hashMerkleRoot := bb.newBlockHashMerkleRoot(transactions)
-	acceptedIDMerkleRoot, err := bb.calculateAcceptedIDMerkleRoot(acceptanceData)
+	acceptedIDMerkleRoot, err := bb.calculateAcceptedIDMerkleRoot(acceptanceData, header.Version())
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
@@ -312,7 +311,7 @@ func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalap
 	log.Tracef("validateAcceptedIDMerkleRoot start for block %s", blockHash)
 	defer log.Tracef("validateAcceptedIDMerkleRoot end for block %s", blockHash)
 
-	calculatedAcceptedIDMerkleRoot := calculateAcceptedIDMerkleRoot(acceptanceData)
+	calculatedAcceptedIDMerkleRoot := calculateAcceptedIDMerkleRoot(acceptanceData, block.Header.Version())
 	if !block.Header.AcceptedIDMerkleRoot().Equal(calculatedAcceptedIDMerkleRoot) {
 		return errors.Wrapf(ruleerrors.ErrBadMerkleRoot, "block %s accepted ID merkle root is invalid - block "+
 			"header indicates %s, but calculated value is %s",
@@ -498,7 +497,9 @@ func (csm *consensusStateManager) UTXOSetHealth(stagingArea *model.StagingArea) 
 	}
 }
 
-func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.AcceptanceData) *externalapi.DomainHash {
+// calculateAcceptedIDMerkleRoot computes the accepted-ID merkle root of a block of the given version. The sort order
+// follows the block's own version, not the process-global one, which depends on the node's uptime and IBD.
+func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.AcceptanceData, blockVersion uint16) *externalapi.DomainHash {
 	log.Tracef("calculateAcceptedIDMerkleRoot start")
 	defer log.Tracef("calculateAcceptedIDMerkleRoot end")
 
@@ -513,7 +514,7 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 		}
 	}
 	// In block version 4 and below, the accepted transactions are sorted by their IDs, in Block Version 5 and above, the order is not important
-	if constants.GetBlockVersion() < 5 {
+	if blockVersion < 5 {
 		sort.Slice(acceptedTransactions, func(i, j int) bool {
 			return consensushashing.TransactionID(acceptedTransactions[i]).Less(
 				consensushashing.TransactionID(acceptedTransactions[j]))

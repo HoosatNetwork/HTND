@@ -233,7 +233,8 @@ func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions
 		return nil, err
 	}
 	hashMerkleRoot := bb.newBlockHashMerkleRoot(transactions)
-	acceptedIDMerkleRoot, err := bb.newBlockAcceptedIDMerkleRoot(stagingArea)
+	blockVersion := bb.blockVersionForDAAScore(daaScore)
+	acceptedIDMerkleRoot, err := bb.newBlockAcceptedIDMerkleRoot(stagingArea, blockVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +251,6 @@ func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions
 		return nil, err
 	}
 
-	blockVersion := bb.blockVersionForDAAScore(daaScore)
 	constants.SetBlockVersion(blockVersion)
 
 	return blockheader.NewImmutableBlockHeader(
@@ -326,7 +326,7 @@ func (bb *blockBuilder) newBlockHashMerkleRoot(transactions []*externalapi.Domai
 	return merkle.CalculateHashMerkleRoot(transactions)
 }
 
-func (bb *blockBuilder) newBlockAcceptedIDMerkleRoot(stagingArea *model.StagingArea) (*externalapi.DomainHash, error) {
+func (bb *blockBuilder) newBlockAcceptedIDMerkleRoot(stagingArea *model.StagingArea, blockVersion uint16) (*externalapi.DomainHash, error) {
 	newBlockAcceptanceData, err := bb.acceptanceDataStore.Get(bb.databaseContext, stagingArea, model.VirtualBlockHash)
 	if database.IsNotFoundError(err) {
 		log.Infof("newBlockAcceptedIDMerkleRoot failed to retrieve with %s\n", model.VirtualBlockHash)
@@ -336,10 +336,10 @@ func (bb *blockBuilder) newBlockAcceptedIDMerkleRoot(stagingArea *model.StagingA
 		return nil, err
 	}
 
-	return bb.calculateAcceptedIDMerkleRoot(newBlockAcceptanceData)
+	return bb.calculateAcceptedIDMerkleRoot(newBlockAcceptanceData, blockVersion)
 }
 
-func (bb *blockBuilder) calculateAcceptedIDMerkleRoot(acceptanceData externalapi.AcceptanceData) (*externalapi.DomainHash, error) {
+func (bb *blockBuilder) calculateAcceptedIDMerkleRoot(acceptanceData externalapi.AcceptanceData, blockVersion uint16) (*externalapi.DomainHash, error) {
 	var acceptedTransactions []*externalapi.DomainTransaction
 	for i := range acceptanceData {
 		for x := 0; x < len(acceptanceData[i].TransactionAcceptanceData); x++ {
@@ -350,7 +350,7 @@ func (bb *blockBuilder) calculateAcceptedIDMerkleRoot(acceptanceData externalapi
 		}
 	}
 	// In block version 4 and below, the accepted transactions are sorted by their IDs, in Block Version 5 and above, the order is not important
-	if constants.GetBlockVersion() < 5 {
+	if blockVersion < 5 {
 		sort.Slice(acceptedTransactions, func(i, j int) bool {
 			acceptedTransactionIID := consensushashing.TransactionID(acceptedTransactions[i])
 			acceptedTransactionJID := consensushashing.TransactionID(acceptedTransactions[j])

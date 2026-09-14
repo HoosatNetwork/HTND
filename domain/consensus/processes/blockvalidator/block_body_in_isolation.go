@@ -5,7 +5,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/merkle"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
@@ -220,17 +219,24 @@ func (v *blockValidator) validateGasLimit(_ *externalapi.DomainBlock) error {
 }
 
 func (v *blockValidator) checkBlockMass(block *externalapi.DomainBlock) error {
+	// The limit of the block's own version. checkBlockVersion has already tied the header version to the header's DAA
+	// score, so every node applies the same limit to the same block; the process-global version this used to read
+	// depends on the node's uptime and IBD.
+	index := max(int(block.Header.Version())-1, 0)
+	if index >= len(v.maxBlockMass) {
+		index = len(v.maxBlockMass) - 1
+	}
+	maxBlockMass := v.maxBlockMass[index]
+
 	mass := uint64(0)
 	for _, transaction := range block.Transactions {
 		v.transactionValidator.PopulateMass(transaction)
 
 		massBefore := mass
 		mass += transaction.LoadMass()
-		// log.Infof("Adding transaction %s with mass %d, max mass is now %d",
-		// 	consensushashing.TransactionID(transaction), transaction.LoadMass(), v.maxBlockMass[constants.GetBlockVersion()-1])
-		if mass > v.maxBlockMass[constants.GetBlockVersion()-1] || mass < massBefore {
+		if mass > maxBlockMass || mass < massBefore {
 			return errors.Wrapf(ruleerrors.ErrBlockMassTooHigh, "block exceeded the mass limit of %d",
-				v.maxBlockMass)
+				maxBlockMass)
 		}
 	}
 
