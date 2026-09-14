@@ -372,11 +372,21 @@ func (flow *handleIBDFlow) processBlockWithTrustedData(
 		GHOSTDAGData: make([]*externalapi.BlockGHOSTDAGDataHashPair, 0, len(block.GHOSTDAGDataIndices)),
 	}
 
+	// The indices come from the peer and point into the trusted data the same peer sent earlier. Used
+	// unchecked, an index past its end panicked the IBD flow, which took the node down.
 	for _, index := range block.DAAWindowIndices {
+		if index >= uint64(len(data.DAAWindow)) {
+			return protocolerrors.Errorf(true, "block with trusted data references DAA window entry %d, "+
+				"but only %d were sent", index, len(data.DAAWindow))
+		}
 		blockWithTrustedData.DAAWindow = append(blockWithTrustedData.DAAWindow, appmessage.TrustedDataDataDAABlockV4ToTrustedDataDataDAAHeader(data.DAAWindow[index]))
 	}
 
 	for _, index := range block.GHOSTDAGDataIndices {
+		if index >= uint64(len(data.GHOSTDAGData)) {
+			return protocolerrors.Errorf(true, "block with trusted data references GHOSTDAG data entry %d, "+
+				"but only %d were sent", index, len(data.GHOSTDAGData))
+		}
 		blockWithTrustedData.GHOSTDAGData = append(blockWithTrustedData.GHOSTDAGData, appmessage.GHOSTDAGHashPairToDomainGHOSTDAGHashPair(data.GHOSTDAGData[index]))
 	}
 
