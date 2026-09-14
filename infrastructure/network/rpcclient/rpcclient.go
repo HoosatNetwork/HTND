@@ -32,6 +32,10 @@ type RPCClient struct {
 	lastDisconnectedTime time.Time
 	isConnecting         atomic.Uint32
 
+	// activeClient is the connection whose callbacks are acted on. A replaced connection's loops keep
+	// reporting errors after it is closed, and those must not tear down the connection that replaced it.
+	activeClient atomic.Pointer[grpcclient.GRPCClient]
+
 	timeout time.Duration
 }
 
@@ -57,14 +61,24 @@ func (c *RPCClient) connect() error {
 	if err != nil {
 		return errors.Wrapf(err, "error connecting to address %s", c.rpcAddress)
 	}
-	rpcClient.SetOnDisconnectedHandler(c.handleClientDisconnected)
-	rpcClient.SetOnErrorHandler(c.handleClientError)
+	rpcClient.SetOnDisconnectedHandler(func() {
+		if c.activeClient.Load() == rpcClient {
+			c.handleClientDisconnected()
+		}
+	})
+	rpcClient.SetOnErrorHandler(func(err error) {
+		if c.activeClient.Load() == rpcClient {
+			c.handleClientError(err)
+		}
+	})
 	rpcRouter, err := buildRPCRouter()
 	if err != nil {
+		_ = rpcClient.Close()
 		return errors.Wrapf(err, "error creating the RPC router")
 	}
 
 	c.isConnected.Store(1)
+	c.activeClient.Store(rpcClient)
 	rpcClient.AttachRouter(rpcRouter.router)
 
 	c.GRPCClient = rpcClient
@@ -79,6 +93,7 @@ func (c *RPCClient) connect() error {
 	getInfoResponse, err := c.GetInfo()
 	c.timeout = originalTimeout
 	if err != nil {
+		c.activeClient.CompareAndSwap(rpcClient, nil)
 		c.rpcRouterMutex.RLock()
 		rpcRouter := c.rpcRouter
 		c.rpcRouterMutex.RUnlock()
@@ -137,8 +152,13 @@ func (c *RPCClient) Reconnect() error {
 		}
 	}
 
+	c.releaseClient()
+
 	// Attempt to connect until we succeed
 	for {
+		if c.isClosed.Load() == 1 {
+			return errors.Errorf("Stopped reconnecting to %s because the client was closed", c.rpcAddress)
+		}
 		const retryDelay = 10 * time.Second
 		if time.Since(c.lastDisconnectedTime) > retryDelay {
 			err := c.connect()
@@ -149,6 +169,27 @@ func (c *RPCClient) Reconnect() error {
 			log.Warnf("Retrying in %s", retryDelay)
 		}
 		time.Sleep(retryDelay)
+	}
+}
+
+// releaseClient closes the current connection and its router. Reconnecting used to only half-close the
+// stream, so every reconnect leaked the gRPC connection with its TCP socket and transport goroutines,
+// and the old send loop stayed blocked on the old router. The connection is detached first, so the
+// errors its loops report once it is closed are ignored.
+func (c *RPCClient) releaseClient() {
+	client := c.activeClient.Swap(nil)
+
+	c.rpcRouterMutex.RLock()
+	if c.rpcRouter != nil {
+		c.rpcRouter.router.Close()
+	}
+	c.rpcRouterMutex.RUnlock()
+
+	if client != nil {
+		err := client.Close()
+		if err != nil {
+			log.Warnf("Error closing the previous RPC connection to %s: %s", c.rpcAddress, err)
+		}
 	}
 }
 
@@ -194,6 +235,7 @@ func (c *RPCClient) Close() error {
 	if !swapped {
 		return errors.Errorf("Cannot close a client that had already been closed")
 	}
+	c.activeClient.Store(nil)
 	c.rpcRouterMutex.RLock()
 	if c.rpcRouter != nil {
 		c.rpcRouter.router.Close()
