@@ -193,6 +193,14 @@ func (c *gRPCConnection) send(message *protowire.HoosatdMessage) error {
 }
 
 func (c *gRPCConnection) closeSend() {
+	// Close the client connection before taking the stream lock. receive() holds the read lock for
+	// the whole blocking Recv, so waiting for the write lock first blocked until the peer next sent
+	// something - forever for a silent peer, which kept the connection registered and its outbound
+	// slot taken. Closing the connection cancels the stream, so the pending Recv returns.
+	if c.lowLevelClientConnection != nil {
+		_ = c.lowLevelClientConnection.Close()
+	}
+
 	c.streamLock.Lock()
 	defer c.streamLock.Unlock()
 
@@ -204,9 +212,5 @@ func (c *gRPCConnection) closeSend() {
 	if ok {
 		// ignore error because we don't really know what's the status of the connection
 		_ = clientStream.CloseSend()
-	}
-
-	if c.lowLevelClientConnection != nil {
-		_ = c.lowLevelClientConnection.Close()
 	}
 }
