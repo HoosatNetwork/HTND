@@ -101,7 +101,28 @@ func CreateVote(ctx context.Context, client *http.Client, payload CreateVotePayl
 	return &vote, nil
 }
 
+// validateVoteConfig checks the vote flags before anything is read or sent. The checks used to run later and
+// return errors.Wrap(err, ...) with a nil err, which is nil, so an invalid vote exited successfully; and a
+// missing --from-address was indexed before any check, which panicked.
+func validateVoteConfig(conf *voteConfig) error {
+	if len(conf.FromAddresses) == 0 || conf.FromAddresses[0] == "" {
+		return errors.New("You need to specify from address")
+	}
+	if conf.PollID == "" {
+		return errors.New("You need to specify Poll transaction ID")
+	}
+	if len(conf.Votes) == 0 || conf.Votes[0] == -1 {
+		return errors.New("You need to specify at least single vote by index (starting from 0).")
+	}
+	return nil
+}
+
 func vote(conf *voteConfig) error {
+	err := validateVoteConfig(conf)
+	if err != nil {
+		return err
+	}
+
 	keysFile, err := keys.ReadKeysFile(conf.NetParams(), conf.KeysFile)
 	if err != nil {
 		return err
@@ -119,18 +140,6 @@ func vote(conf *voteConfig) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), daemonTimeout)
 	defer cancel()
-
-	if conf.FromAddresses[0] == "" {
-		return errors.Wrap(err, "You need to specify from address")
-	}
-
-	if conf.PollID == "" {
-		return errors.Wrap(err, "You need to specify Poll transaction ID")
-	}
-
-	if conf.Votes[0] == -1 {
-		return errors.Wrap(err, "You need to specify at least single vote by index (starting from 0).")
-	}
 
 	// Fixed voting address
 	votingAddress := "hoosat:qz8hek32xdryqstk6ptvvfzmrsrns95h7nd2r9f55epnxx7eummegyxa7f2lu"
@@ -164,6 +173,8 @@ retry:
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")
+				// Wait before asking again; retrying at once hammered the daemon in a tight loop.
+				time.Sleep(retryDelay)
 				attempt--
 			} else {
 				fmt.Printf("Failed to create unsigned transactions after %d attempts: %s\n", attempt, err)
@@ -247,8 +258,8 @@ retry:
 		}
 
 		fmt.Printf("Vote created successfully! ID: %s\n", vote.ID)
-		break
+		return nil
 	}
 
-	return nil
+	return errors.Errorf("Failed to cast the vote after %d attempts", maxRetries+1)
 }
