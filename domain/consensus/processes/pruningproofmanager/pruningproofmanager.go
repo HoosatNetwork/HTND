@@ -368,6 +368,12 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 	}
 
 	level0Headers := pruningPointProof.Headers[0]
+	// The pruning point is the last level-0 header, so level 0 must hold at least one. The proof comes
+	// straight from an IBD peer and nothing before this checks it; indexing an empty level panicked,
+	// which took the node down instead of rejecting the proof.
+	if len(level0Headers) == 0 {
+		return errors.Wrap(ruleerrors.ErrPruningProofEmpty, "pruning proof has no level 0 headers")
+	}
 	pruningPointHeader := level0Headers[len(level0Headers)-1]
 	// pruningPoint := consensushashing.HeaderHash(pruningPointHeader)
 	pruningPointBlockLevel := pruningPointHeader.BlockLevel(ppm.maxBlockLevel)
