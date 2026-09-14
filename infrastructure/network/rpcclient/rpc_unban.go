@@ -8,7 +8,7 @@ func (c *RPCClient) Unban(ip string) (*appmessage.UnbanResponseMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdUnbanRequestMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdUnbanResponseMessage).DequeueWithTimeout(c.timeout)
 	if err != nil {
 		return nil, err
 	}

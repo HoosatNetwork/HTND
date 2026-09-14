@@ -8,7 +8,7 @@ func (c *RPCClient) Ban(ip string) (*appmessage.BanResponseMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdBanRequestMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdBanResponseMessage).DequeueWithTimeout(c.timeout)
 	if err != nil {
 		return nil, err
 	}
