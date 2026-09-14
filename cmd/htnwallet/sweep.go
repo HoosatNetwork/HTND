@@ -197,10 +197,17 @@ func createSplitTransactionsWithSchnorrPrivteKey(
 			}
 
 			splitTransactions = append(splitTransactions, lastValidTx)
-			totalSplitAmount = 0
-			lastValidTx = newDummyTransaction()
+
+			// Start the next split with the UTXO that did not fit. Skipping it here left one coin per split
+			// boundary unswept at the source address, and dropped the last coin if it was the one that did not fit.
+			totalSplitAmount = currentUTXO.UTXOEntry.Amount()
+			carriedInput := currentTx.Inputs[len(currentTx.Inputs)-1]
 			currentTx = newDummyTransaction()
-			continue
+			currentTx.Inputs = append(currentTx.Inputs, carriedInput)
+			currentTx.Outputs[0] = &externalapi.DomainTransactionOutput{
+				Value:           totalSplitAmount - uint64(uint(feePerInput)),
+				ScriptPublicKey: scriptPublicKey,
+			}
 		}
 
 		// Special case, end of inputs, with no violation, where we can assign currentTX to split and break
