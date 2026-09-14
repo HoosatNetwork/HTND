@@ -8,7 +8,6 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
 )
 
@@ -37,10 +36,18 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	}
 	log.Debugf("The selected parent of the virtual is: %s", virtualSelectedParent)
 
+	// The parents limit of the block these parents will be mined into, not of the process-global version: header
+	// validation applies the block's own version's limit, so a larger global limit built templates nobody accepts.
+	nextBlockVersion, err := csm.versionOfChildOf(stagingArea, virtualSelectedParent)
+	if err != nil {
+		return nil, err
+	}
+	maxBlockParents := csm.maxBlockParentsForVersion(nextBlockVersion)
+
 	// Limit to maxBlockParents*3 candidates, that way we don't go over thousands of tips when the network isn't healthy.
 	// There's no specific reason for a factor of 3, and its not a consensus rule, just an estimation saying we probably
 	// don't want to consider and calculate 3 times the amount of candidates for the set of parents.
-	maxCandidates := int(csm.maxBlockParents[constants.GetBlockVersion()-1]) * 3
+	maxCandidates := int(maxBlockParents) * 3
 	candidateAllocationSize := math.MinInt(maxCandidates, candidatesHeap.Len())
 	candidates := make([]*externalapi.DomainHash, 0, candidateAllocationSize)
 	for len(candidates) < maxCandidates && candidatesHeap.Len() > 0 {
@@ -48,9 +55,9 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	}
 
 	// prioritize half the blocks with highest blueWork and half with lowest, so the network will merge splits faster.
-	if len(candidates) >= int(csm.maxBlockParents[constants.GetBlockVersion()-1]) {
+	if len(candidates) >= int(maxBlockParents) {
 		// We already have the selectedParent, so we're left with csm.maxBlockParents-1.
-		maxParents := csm.maxBlockParents[constants.GetBlockVersion()-1] - 1
+		maxParents := maxBlockParents - 1
 		end := len(candidates) - 1
 		for i := (maxParents) / 2; i < maxParents; i++ {
 			candidates[i], candidates[end] = candidates[end], candidates[i]
@@ -62,7 +69,7 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	mergeSetSize := uint64(1) // starts counting from 1 because selectedParent is already in the mergeSet
 
 	// First condition implies that no point in searching since limit was already reached
-	for mergeSetSize < csm.mergeSetSizeLimit && len(candidates) > 0 && uint64(len(selectedVirtualParents)) < uint64(csm.maxBlockParents[constants.GetBlockVersion()-1]) {
+	for mergeSetSize < csm.mergeSetSizeLimit && len(candidates) > 0 && uint64(len(selectedVirtualParents)) < uint64(maxBlockParents) {
 		candidate := candidates[0]
 		candidates = candidates[1:]
 

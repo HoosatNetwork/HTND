@@ -1,6 +1,8 @@
 package consensusstatemanager
 
 import (
+	"github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"sync"
 	"time"
 
@@ -108,6 +110,10 @@ type consensusStateManager struct {
 	// building the whole node on it. Off by default: on the current network no peer has a matching
 	// set, so refusing every one of them means never syncing at all.
 	refuseMismatchedImportedPruningPointUTXOSet bool
+
+	// powScores derives the version of the block that would be built on a selected parent (see
+	// versionOfChildOf), which governs virtual's parents limit and tip ordering.
+	powScores []uint64
 }
 
 // New instantiates a new ConsensusStateManager
@@ -145,8 +151,10 @@ func New(
 	windowHeapSliceStore model.WindowHeapSliceStore,
 	resolveBlockStatusCacheSize int,
 	refuseMismatchedImportedPruningPointUTXOSet bool,
+	powScores []uint64,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
+		powScores:         powScores,
 		maxBlockParents:   maxBlockParents,
 		mergeSetSizeLimit: mergeSetSizeLimit,
 		genesisHash:       genesisHash,
@@ -212,4 +220,34 @@ func New(
 	csm.multisetStore.Stage(stagingArea, csm.genesisHash, multiset.New())
 
 	return csm, nil
+}
+
+// versionOfChildOf returns the block version a block built on selectedParent has, derived from the selected parent's
+// DAA score as this node computed it. Activation scores are far apart, so this is the child's own version except at an
+// activation boundary, and it is the same on every node - unlike the process-global version, which depends on the
+// node's uptime and IBD. The global remains only without an activation table or while the parent's DAA score is
+// unknown (genesis, trusted-data bootstrap).
+func (csm *consensusStateManager) versionOfChildOf(stagingArea *model.StagingArea,
+	selectedParent *externalapi.DomainHash,
+) (uint16, error) {
+	if len(csm.powScores) == 0 || selectedParent == nil {
+		return constants.GetBlockVersion(), nil
+	}
+	daaScore, err := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, selectedParent)
+	if database.IsNotFoundError(err) {
+		return constants.GetBlockVersion(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return constants.BlockVersionForDAAScore(csm.powScores, daaScore), nil
+}
+
+// maxBlockParentsForVersion returns the parents limit of blockVersion, using the last entry for a shorter table.
+func (csm *consensusStateManager) maxBlockParentsForVersion(blockVersion uint16) externalapi.KType {
+	index := max(int(blockVersion)-1, 0)
+	if index >= len(csm.maxBlockParents) {
+		index = len(csm.maxBlockParents) - 1
+	}
+	return csm.maxBlockParents[index]
 }

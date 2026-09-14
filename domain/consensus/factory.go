@@ -359,7 +359,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		mergeDepthRootStore,
 		windowHeapSliceStore,
 		5000,
-		config.EnableSanityCheckPruningUTXOSet)
+		config.EnableSanityCheckPruningUTXOSet,
+		config.POWScores)
 	if err != nil {
 		return nil, false, err
 	}

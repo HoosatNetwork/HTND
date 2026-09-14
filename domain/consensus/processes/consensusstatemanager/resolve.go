@@ -67,7 +67,20 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 	var orderedTips []*externalapi.DomainHash
 	var err error
 	// DAGKnight TODO: decide DAA Score for hard fork
-	if constants.GetBlockVersion() >= 6 {
+	// The ordering of the version virtual is at - the child of its current selected parent - rather than the
+	// process-global version, which depends on the node's uptime and IBD.
+	virtualVersion := constants.GetBlockVersion()
+	virtualGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, model.VirtualBlockHash, false)
+	if err != nil && !database.IsNotFoundError(err) {
+		return nil, externalapi.StatusInvalid, err
+	}
+	if err == nil {
+		virtualVersion, err = csm.versionOfChildOf(stagingArea, virtualGHOSTDAGData.SelectedParent())
+		if err != nil {
+			return nil, externalapi.StatusInvalid, err
+		}
+	}
+	if virtualVersion >= 6 {
 		orderedTips, err = csm.tipsInDecreasingDAGKnightOrder(stagingArea)
 	} else {
 		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
