@@ -23,13 +23,17 @@ import (
 	"github.com/HoosatNetwork/HTND/version"
 )
 
-func getEnvInt(key string, defaultVal int) int64 {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return int64(n)
-		}
+// defaultMemoryLimit is the soft memory limit htnd uses when GOMEMLIMIT is not set.
+const defaultMemoryLimit = 8_000_000_000
+
+// applyDefaultMemoryLimit sets defaultMemoryLimit unless GOMEMLIMIT is set. The Go runtime has already applied a set
+// GOMEMLIMIT, in every form it accepts ("4GiB", "off", plain bytes); this used to re-parse it as a plain integer and
+// replace anything else with the default, so GOMEMLIMIT=4GiB on a small machine ran with an 8 GB limit.
+func applyDefaultMemoryLimit(lookupEnv func(string) (string, bool), setMemoryLimit func(int64) int64) {
+	if _, isSet := lookupEnv("GOMEMLIMIT"); isSet {
+		return
 	}
-	return int64(defaultVal)
+	setMemoryLimit(defaultMemoryLimit)
 }
 
 func getEnvStr(key string, defaultVal string) string {
@@ -45,7 +49,7 @@ func init() {
 			debug.SetGCPercent(pct)
 		}
 	}
-	debug.SetMemoryLimit(getEnvInt("GOMEMLIMIT", 8_000_000_000))
+	applyDefaultMemoryLimit(os.LookupEnv, debug.SetMemoryLimit)
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
