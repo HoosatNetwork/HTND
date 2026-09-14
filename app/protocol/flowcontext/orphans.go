@@ -179,9 +179,12 @@ func (f *FlowContext) GetOrphanRoots(orphan *externalapi.DomainHash) ([]*externa
 				return nil, false, err
 			}
 
-			if !found || !(block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion) {
+			// Only a block this node does not hold (a header-only block has no body, so GetBlock does not
+			// find it) is a missing ancestor. The previous condition also counted every stored block
+			// that has its PoW hash, so parents this node already had were queued to be requested.
+			if !found {
 				roots = append(roots, current)
-			} else {
+			} else if block.PoWHash == "" && block.Header.Version() >= constants.PoWIntegrityMinVersion {
 				log.Debugf("Block %s was skipped when checking for orphan roots: "+
 					"exists: %t, PoW Hash: %s", current, found, block.PoWHash)
 			}
