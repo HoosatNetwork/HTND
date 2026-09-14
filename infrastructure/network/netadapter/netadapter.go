@@ -238,6 +238,13 @@ func (na *NetAdapter) P2PBroadcast(netConnections []*NetConnection, message appm
 				log.Debugf("Cannot enqueue message to %s: router is closed", netConnection)
 				continue
 			}
+			// A peer too slow to drain its outgoing route only misses this message. Returning here
+			// used to stop the broadcast for every peer after it, and to fail the flow that
+			// broadcast - disconnecting that flow's own peer rather than the saturated one.
+			if errors.Is(err, routerpkg.ErrRouteCapacityReached) {
+				log.Debugf("Cannot enqueue message to %s: outgoing route is full", netConnection)
+				continue
+			}
 			return err
 		}
 	}
