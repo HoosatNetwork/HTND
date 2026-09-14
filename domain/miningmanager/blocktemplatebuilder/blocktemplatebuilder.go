@@ -37,18 +37,21 @@ type blockTemplateBuilder struct {
 	consensusReference consensusreference.ConsensusReference
 	mempool            miningmanagerapi.Mempool
 	policy             policy
+	// powScores derives the version of the block a template is built for (see nextBlockMaxMass).
+	powScores []uint64
 
 	coinbasePayloadScriptPublicKeyMaxLength uint8
 }
 
 // New creates a new blockTemplateBuilder
 func New(consensusReference consensusreference.ConsensusReference, mempool miningmanagerapi.Mempool,
-	blockMaxMass []uint64, coinbasePayloadScriptPublicKeyMaxLength uint8,
+	blockMaxMass []uint64, coinbasePayloadScriptPublicKeyMaxLength uint8, powScores []uint64,
 ) miningmanagerapi.BlockTemplateBuilder {
 	return &blockTemplateBuilder{
 		consensusReference: consensusReference,
 		mempool:            mempool,
 		policy:             policy{BlockMaxMass: blockMaxMass},
+		powScores:          powScores,
 
 		coinbasePayloadScriptPublicKeyMaxLength: coinbasePayloadScriptPublicKeyMaxLength,
 	}
@@ -238,4 +241,23 @@ func (btb *blockTemplateBuilder) calcTxValue(tx *consensusexternalapi.DomainTran
 	// TODO: Replace with real gas once implemented
 	gasLimit := uint64(math.MaxUint64)
 	return float64(fee) / (float64(mass)/float64(massLimit) + float64(tx.Gas)/float64(gasLimit))
+}
+
+// nextBlockMaxMass returns the mass limit of the block a template is being built for. The template block's DAA score
+// is virtual's, so its version follows from that and the activation table - the version validation will check the
+// block's mass against. The process-global version this used to read can be ahead of the chain (raised by IBD or by a
+// relayed header), which filled templates past their real limit so the node rejected its own blocks. The global is
+// used only without an activation table or when the virtual DAA score is unavailable.
+func (btb *blockTemplateBuilder) nextBlockMaxMass() uint64 {
+	blockVersion := constants.GetBlockVersion()
+	if len(btb.powScores) > 0 {
+		if virtualDAAScore, err := btb.consensusReference.Consensus().GetVirtualDAAScore(); err == nil {
+			blockVersion = constants.BlockVersionForDAAScore(btb.powScores, virtualDAAScore)
+		}
+	}
+	index := max(int(blockVersion)-1, 0)
+	if index >= len(btb.policy.BlockMaxMass) {
+		index = len(btb.policy.BlockMaxMass) - 1
+	}
+	return btb.policy.BlockMaxMass[index]
 }

@@ -75,6 +75,7 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		usedP += candidateTx.p
 	}
 
+	maxBlockMass := btb.nextBlockMaxMass()
 	selectedTxs := make([]*candidateTx, 0, len(candidateTxs))
 	for len(candidateTxs)-usedCount > 0 {
 		// Rebalance the candidates if it's required
@@ -106,11 +107,8 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 
 		// Enforce maximum transaction mass per block. Also check
 		// for overflow.
-		// log.Infof("Current total mass %d, candidate tx %s mass %d, max block mass %d",
-		// 	txsForBlockTemplate.totalMass, consensushashing.TransactionID(tx),
-		// 	selectedTx.LoadMass(), btb.policy.BlockMaxMass[constants.GetBlockVersion()-1])
 		if txsForBlockTemplate.totalMass+selectedTx.LoadMass() < txsForBlockTemplate.totalMass ||
-			txsForBlockTemplate.totalMass+selectedTx.LoadMass() > btb.policy.BlockMaxMass[constants.GetBlockVersion()-1] {
+			txsForBlockTemplate.totalMass+selectedTx.LoadMass() > maxBlockMass {
 			log.Tracef("Tx %s would exceed the max block mass. "+
 				"As such, stopping.", consensushashing.TransactionID(tx))
 			break
