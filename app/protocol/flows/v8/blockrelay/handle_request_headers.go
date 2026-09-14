@@ -142,7 +142,13 @@ func receiveRequestHeaders(incomingRoute *router.Route) (lowHash *externalapi.Do
 	if err != nil {
 		return nil, nil, err
 	}
-	msgRequestIBDBlocks := message.(*appmessage.MsgRequestHeaders)
+	// This route also carries RequestNextHeaders, which is only valid inside a header exchange. An
+	// unchecked assertion here panicked on one sent out of turn, and the panic took the node down.
+	msgRequestIBDBlocks, ok := message.(*appmessage.MsgRequestHeaders)
+	if !ok {
+		return nil, nil, protocolerrors.Errorf(true, "received unexpected message type. "+
+			"expected: %s, got: %s", appmessage.CmdRequestHeaders, message.Command())
+	}
 
 	return msgRequestIBDBlocks.LowHash, msgRequestIBDBlocks.HighHash, nil
 }
