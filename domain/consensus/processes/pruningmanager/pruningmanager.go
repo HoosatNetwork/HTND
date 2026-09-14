@@ -2096,18 +2096,39 @@ func (pm *pruningManager) pickConsistentPruningPointDiff(stagingArea *model.Stag
 	return primaryDiff, primaryMethod
 }
 
-func (pm *pruningManager) updatePruningPoint() error {
-	onEnd := logger.LogAndMeasureExecutionTime(log, "updatePruningPoint")
-	defer onEnd()
-
-	logger.LogMemoryStats(log, "updatePruningPoint start")
-	defer logger.LogMemoryStats(log, "updatePruningPoint end")
-
-	stagingArea := model.NewStagingArea()
-	log.Info("Getting the pruning point")
-	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+// pruningPointUTXOSetDiff returns the diff that takes the served pruning point UTXO set from the previous pruning
+// point to pruningPoint, and the method that derived it.
+//
+// An update interrupted after it began writing the set resumes with the method it recorded before the first write.
+// Choosing again is not safe: when the diff does not reproduce the header commitment, pickConsistentPruningPointDiff
+// chooses by checking each method's diff against the served set, and after an interruption that set is already partly
+// or fully updated, so the rerun could apply a different diff than a node that was never interrupted and serve a
+// different set under the same pruning point. Applying the same diff again is harmless: its removals and additions are
+// keyed by outpoint.
+func (pm *pruningManager) pruningPointUTXOSetDiff(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash,
+) (externalapi.UTXODiff, string, error) {
+	recordedMethod, found, err := pm.pruningStore.PruningPointUTXOSetUpdateMethod(pm.databaseContext, pruningPoint)
 	if err != nil {
-		return err
+		return nil, "", err
+	}
+	if found {
+		var recordedDiff externalapi.UTXODiff
+		switch recordedMethod {
+		case "acceptance-data":
+			recordedDiff, err = pm.calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData(stagingArea, pruningPoint)
+		case "diff-chain-walk":
+			recordedDiff, err = pm.calculateDiffBetweenPreviousAndCurrentPruningPoints(stagingArea, pruningPoint)
+		default:
+			err = errors.Errorf("unknown diff method %q", recordedMethod)
+		}
+		if err == nil {
+			log.Infof("Resuming the interrupted update of pruning point %s's UTXO set with the %s diff it chose "+
+				"before the interruption", pruningPoint, recordedMethod)
+			return recordedDiff, recordedMethod, nil
+		}
+		log.Warnf("Pruning point %s: the %s diff recorded before an interrupted UTXO set update can no longer be "+
+			"derived (%s) - choosing again", pruningPoint, recordedMethod, err)
 	}
 
 	log.Info("Restoring the pruning point UTXO set from acceptance data")
@@ -2121,7 +2142,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 		methodUsed = "diff-chain-walk"
 		if err != nil {
 			log.Infof("Calculating pruning points diff failed eitherway %s", err)
-			return err
+			return nil, "", err
 		}
 	}
 
@@ -2144,7 +2165,34 @@ func (pm *pruningManager) updatePruningPoint() error {
 			log.Debugf("[UTXO-DEBUG] could not fetch pruning point index for diff verification: %s", idxErr)
 		}
 	}
+	return utxoSetDiff, methodUsed, nil
+}
+
+func (pm *pruningManager) updatePruningPoint() error {
+	onEnd := logger.LogAndMeasureExecutionTime(log, "updatePruningPoint")
+	defer onEnd()
+
+	logger.LogMemoryStats(log, "updatePruningPoint start")
+	defer logger.LogMemoryStats(log, "updatePruningPoint end")
+
+	stagingArea := model.NewStagingArea()
+	log.Info("Getting the pruning point")
+	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+
+	utxoSetDiff, methodUsed, err := pm.pruningPointUTXOSetDiff(stagingArea, pruningPoint)
+	if err != nil {
+		return err
+	}
 	log.Infof("Restored the pruning point UTXO set (diff method: %s)", methodUsed)
+
+	// Recorded before the set is written, so an interruption from here on resumes with this method.
+	err = pm.pruningStore.StorePruningPointUTXOSetUpdateMethod(pm.databaseContext, pruningPoint, methodUsed)
+	if err != nil {
+		return err
+	}
 
 	log.Info("Updating the pruning point UTXO set")
 	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)

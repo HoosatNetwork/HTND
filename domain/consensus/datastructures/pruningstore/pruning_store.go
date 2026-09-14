@@ -21,8 +21,11 @@ var (
 	candidatePruningPointHashKeyName   = []byte("candidate-pruning-point-hash")
 	pruningPointUTXOSetBucketName      = []byte("pruning-point-utxo-set")
 	updatingPruningPointUTXOSetKeyName = []byte("updating-pruning-point-utxo-set")
-	pruningPointByIndexBucketName      = []byte("pruning-point-by-index")
-	lastPruningTimeKeyName             = []byte("last-pruning-time")
+	// The diff method an update of the pruning point UTXO set chose, recorded before the set is written so an
+	// interrupted update resumes with it. The value is the pruning point hash followed by the method name.
+	pruningPointUTXOSetUpdateMethodKeyName = []byte("pruning-point-utxo-set-update-method")
+	pruningPointByIndexBucketName          = []byte("pruning-point-by-index")
+	lastPruningTimeKeyName                 = []byte("last-pruning-time")
 
 	// Persisted so the expensive --enable-utxo-debug-diagnostics startup checks
 	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) don't unconditionally
@@ -42,14 +45,15 @@ type pruningStore struct {
 	pruningPointCandidateCache    *externalapi.DomainHash
 	lastPruningTimeCache          *time.Time
 
-	currentPruningPointIndexKey     model.DBKey
-	candidatePruningPointHashKey    model.DBKey
-	pruningPointUTXOSetBucket       model.DBBucket
-	updatingPruningPointUTXOSetKey  model.DBKey
-	importedPruningPointUTXOsBucket model.DBBucket
-	importedPruningPointMultisetKey model.DBKey
-	pruningPointByIndexBucket       model.DBBucket
-	lastPruningTimeKey              model.DBKey
+	currentPruningPointIndexKey        model.DBKey
+	candidatePruningPointHashKey       model.DBKey
+	pruningPointUTXOSetBucket          model.DBBucket
+	updatingPruningPointUTXOSetKey     model.DBKey
+	pruningPointUTXOSetUpdateMethodKey model.DBKey
+	importedPruningPointUTXOsBucket    model.DBBucket
+	importedPruningPointMultisetKey    model.DBKey
+	pruningPointByIndexBucket          model.DBBucket
+	lastPruningTimeKey                 model.DBKey
 
 	lastUTXODebugCheckedPruningPointKey   model.DBKey
 	lastUTXODebugReproducedRootHashKey    model.DBKey
@@ -59,16 +63,17 @@ type pruningStore struct {
 // New instantiates a new PruningStore
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.PruningStore {
 	return &pruningStore{
-		shardID:                         staging.GenerateShardingID(),
-		pruningPointByIndexCache:        lrucacheuint64tohash.New(cacheSize, preallocate),
-		currentPruningPointIndexKey:     prefixBucket.Key(currentPruningPointIndexKeyName),
-		candidatePruningPointHashKey:    prefixBucket.Key(candidatePruningPointHashKeyName),
-		pruningPointUTXOSetBucket:       prefixBucket.Bucket(pruningPointUTXOSetBucketName),
-		importedPruningPointUTXOsBucket: prefixBucket.Bucket(importedPruningPointUTXOsBucketName),
-		updatingPruningPointUTXOSetKey:  prefixBucket.Key(updatingPruningPointUTXOSetKeyName),
-		importedPruningPointMultisetKey: prefixBucket.Key(importedPruningPointMultisetKeyName),
-		pruningPointByIndexBucket:       prefixBucket.Bucket(pruningPointByIndexBucketName),
-		lastPruningTimeKey:              prefixBucket.Key(lastPruningTimeKeyName),
+		shardID:                            staging.GenerateShardingID(),
+		pruningPointByIndexCache:           lrucacheuint64tohash.New(cacheSize, preallocate),
+		currentPruningPointIndexKey:        prefixBucket.Key(currentPruningPointIndexKeyName),
+		candidatePruningPointHashKey:       prefixBucket.Key(candidatePruningPointHashKeyName),
+		pruningPointUTXOSetBucket:          prefixBucket.Bucket(pruningPointUTXOSetBucketName),
+		importedPruningPointUTXOsBucket:    prefixBucket.Bucket(importedPruningPointUTXOsBucketName),
+		updatingPruningPointUTXOSetKey:     prefixBucket.Key(updatingPruningPointUTXOSetKeyName),
+		pruningPointUTXOSetUpdateMethodKey: prefixBucket.Key(pruningPointUTXOSetUpdateMethodKeyName),
+		importedPruningPointMultisetKey:    prefixBucket.Key(importedPruningPointMultisetKeyName),
+		pruningPointByIndexBucket:          prefixBucket.Bucket(pruningPointByIndexBucketName),
+		lastPruningTimeKey:                 prefixBucket.Key(lastPruningTimeKeyName),
 
 		lastUTXODebugCheckedPruningPointKey:   prefixBucket.Key(lastUTXODebugCheckedPruningPointKeyName),
 		lastUTXODebugReproducedRootHashKey:    prefixBucket.Key(lastUTXODebugReproducedRootHashKeyName),
@@ -341,7 +346,47 @@ func (ps *pruningStore) HadStartedUpdatingPruningPointUTXOSet(dbContext model.DB
 }
 
 func (ps *pruningStore) FinishUpdatingPruningPointUTXOSet(dbContext model.DBWriter) error {
-	return dbContext.Delete(ps.updatingPruningPointUTXOSetKey)
+	err := dbContext.Delete(ps.updatingPruningPointUTXOSetKey)
+	if err != nil {
+		return err
+	}
+	// Deleted after the flag: if the node stops in between, the record names a pruning point the next update is not
+	// for, so it is ignored.
+	return dbContext.Delete(ps.pruningPointUTXOSetUpdateMethodKey)
+}
+
+// StorePruningPointUTXOSetUpdateMethod records which diff method the update of pruningPoint's UTXO set uses. It is
+// written before the set is, so an update interrupted part way through resumes with the same method.
+func (ps *pruningStore) StorePruningPointUTXOSetUpdateMethod(dbContext model.DBWriter,
+	pruningPoint *externalapi.DomainHash, method string,
+) error {
+	value := append(pruningPoint.ByteSlice(), []byte(method)...)
+	return dbContext.Put(ps.pruningPointUTXOSetUpdateMethodKey, value)
+}
+
+// PruningPointUTXOSetUpdateMethod returns the diff method recorded for the update of pruningPoint's UTXO set, and
+// whether one was recorded for that pruning point.
+func (ps *pruningStore) PruningPointUTXOSetUpdateMethod(dbContext model.DBReader,
+	pruningPoint *externalapi.DomainHash,
+) (string, bool, error) {
+	value, err := dbContext.Get(ps.pruningPointUTXOSetUpdateMethodKey)
+	if database.IsNotFoundError(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if len(value) < externalapi.DomainHashSize {
+		return "", false, nil
+	}
+	recordedPruningPoint, err := externalapi.NewDomainHashFromByteSlice(value[:externalapi.DomainHashSize])
+	if err != nil {
+		return "", false, err
+	}
+	if !recordedPruningPoint.Equal(pruningPoint) {
+		return "", false, nil
+	}
+	return string(value[externalapi.DomainHashSize:]), true, nil
 }
 
 func (ps *pruningStore) indexAsKey(index uint64) model.DBKey {
