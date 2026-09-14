@@ -562,11 +562,14 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 	}
 	defer cursor.Close()
 
+	// offset is the number of UTXOs to skip. Positions are compared with >=: a strict comparison skipped
+	// offset+1 entries, so no request could return an address's first UTXO and paging with offset += limit
+	// dropped one at every page boundary.
 	iterator := uint32(0)
 	count := 0
 	if limit == 0 {
 		for ok := cursor.First(); ok; ok = cursor.Next() {
-			if iterator > offset {
+			if iterator >= offset {
 				count++
 			}
 			iterator++
@@ -583,7 +586,7 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 
 	iterator = uint32(0) // reset iterator to reuse for filling buffer
 	for ok := cursor.First(); ok; ok = cursor.Next() {
-		if iterator > offset {
+		if iterator >= offset {
 			key, err := cursor.Key()
 			if err != nil {
 				return nil, buffer, err
