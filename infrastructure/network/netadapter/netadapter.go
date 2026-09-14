@@ -166,8 +166,23 @@ func (na *NetAdapter) onP2PConnectedHandler(connection server.Connection) error 
 		routerForConnection = routerpkg.NewRouter(routerName)
 	}
 
+	// forgetOutboundRouter drops this connection's router from the outbound cache, unless a newer
+	// connection to the same address has already replaced it there.
+	forgetOutboundRouter := func() {
+		if !connection.IsOutbound() {
+			return
+		}
+		na.outboundP2PRoutersLock.Lock()
+		defer na.outboundP2PRoutersLock.Unlock()
+		if na.outboundP2PRouters[peerAddress] == routerForConnection {
+			delete(na.outboundP2PRouters, peerAddress)
+			log.Debugf("Removed cached outbound router for peer: %s", peerAddress)
+		}
+	}
+
 	netConnection := newNetConnection(connection, na.p2pRouterInitializer, routerName, routerForConnection)
 	if netConnection.ErrorMessage != nil {
+		forgetOutboundRouter()
 		return nil // don't do anything further since handshake failed.
 	}
 
@@ -181,16 +196,20 @@ func (na *NetAdapter) onP2PConnectedHandler(connection server.Connection) error 
 		na.p2pConnectionsLock.Unlock()
 
 		// 2. Immediately purge the router from the outbound cache if applicable
-		if connection.IsOutbound() {
-			na.outboundP2PRoutersLock.Lock()
-			delete(na.outboundP2PRouters, peerAddress)
-			na.outboundP2PRoutersLock.Unlock()
-
-			log.Debugf("Removed cached outbound router for peer: %s", peerAddress)
-		}
+		forgetOutboundRouter()
 	})
 
 	na.p2pConnections[netConnection] = struct{}{}
+
+	// The router initializer runs asynchronous checks (the ban check among them) that can disconnect
+	// the peer before the handler above was installed. The gRPC connection fires its disconnected
+	// handler only once, so that disconnect is not reported again, and starting an already
+	// disconnected connection does nothing - the entry and the cached router used to stay forever.
+	if !connection.IsConnected() {
+		delete(na.p2pConnections, netConnection)
+		forgetOutboundRouter()
+		return nil
+	}
 
 	netConnection.start()
 
