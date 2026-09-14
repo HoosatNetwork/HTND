@@ -73,10 +73,10 @@ func (op *orphansPool) maybeAddOrphan(transaction *externalapi.DomainTransaction
 
 func (op *orphansPool) limitOrphanPoolSize() error {
 	for uint64(len(op.allOrphans)) > op.mempool.config.MaximumOrphanTransactionCount {
-		orphanToRemove := op.randomNonHighPriorityOrphan()
-		if orphanToRemove == nil { // this means all orphans are HighPriority
+		orphanToRemove := op.randomEvictableOrphan()
+		if orphanToRemove == nil { // this means all orphans are locally submitted high-priority ones
 			log.Warnf(
-				"Number of high-priority transactions in orphanPool (%d) is higher than maximum allowed (%d)",
+				"Number of locally submitted high-priority transactions in orphanPool (%d) is higher than maximum allowed (%d)",
 				len(op.allOrphans),
 				op.mempool.config.MaximumOrphanTransactionCount)
 			break
@@ -304,8 +304,8 @@ func (op *orphansPool) expireOrphanTransactions() error {
 	}
 
 	for _, orphanTransaction := range op.allOrphans {
-		// Never expire high priority transactions
-		if orphanTransaction.IsHighPriority() {
+		// Never expire locally submitted high priority transactions
+		if isProtectedOrphan(orphanTransaction) {
 			continue
 		}
 
@@ -344,9 +344,22 @@ func (op *orphansPool) updateOrphansAfterTransactionRemoved(
 	return nil
 }
 
-func (op *orphansPool) randomNonHighPriorityOrphan() *model.OrphanTransaction {
+// isProtectedOrphan reports whether an orphan is exempt from eviction and expiry: a high-priority orphan
+// that this node's own RPC submitted. A relayed orphan is never exempt, whatever its priority.
+//
+// Relayed compound transactions are raised to high priority so that the transaction pool keeps them until
+// they are mined (see raisePriorityIfCompound). In the orphan pool the same exemption let any peer add
+// orphans the pool could neither evict nor expire: a relayed compound whose parents never arrived stayed
+// forever, and the pool grew far past MaximumOrphanTransactionCount. The exemption did not even carry over
+// once the parents did arrive, since unorphanTransaction inserts the promoted transaction as not high
+// priority.
+func isProtectedOrphan(orphan *model.OrphanTransaction) bool {
+	return orphan.IsHighPriority() && orphan.IsLocalSubmission()
+}
+
+func (op *orphansPool) randomEvictableOrphan() *model.OrphanTransaction {
 	for _, orphan := range op.allOrphans {
-		if !orphan.IsHighPriority() {
+		if !isProtectedOrphan(orphan) {
 			return orphan
 		}
 	}
