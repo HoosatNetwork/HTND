@@ -60,6 +60,8 @@ retry:
 		if err != nil {
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")
+				// Wait before asking again; retrying at once hammered the daemon in a tight loop.
+				time.Sleep(retryDelay)
 				attempt--
 			} else {
 				fmt.Printf("Failed to create unsigned transactions after %d attempts: %s\n", attempt, err)
@@ -104,10 +106,13 @@ retry:
 			chunk := signedTransactions[offset:end]
 			response, err := daemonClient.Broadcast(broadcastCtx, &pb.BroadcastRequest{Transactions: chunk})
 			if err != nil {
-				broadcastCancel()
-				fmt.Printf("Failed to broadcast transactions after %d attempts: %s\n", attempt, err)
-				time.Sleep(retryDelay)
-				continue retry
+				// Never build new transactions and try again after a broadcast error: it does not mean nothing
+				// was sent. The daemon submits transactions one by one, and a lost response looks the same as
+				// a failure, so the payment may already be in the node's mempool. New transactions would spend
+				// other coins and pay the recipient again.
+				return errors.Wrapf(err, "failed to broadcast transactions (%d of %d were broadcast before the "+
+					"failing batch); check the recipient's balance and the wallet's before trying again",
+					offset, len(signedTransactions))
 			}
 
 			fmt.Printf("Broadcasted %d transaction(s) (broadcasted %.2f%% of the transactions so far)\n", len(chunk), 100*float64(end)/float64(len(signedTransactions)))
@@ -123,8 +128,8 @@ retry:
 				fmt.Printf("\t%x\n\n", signedTx)
 			}
 		}
-		break
+		return nil
 	}
 
-	return nil
+	return errors.Errorf("Failed to send after %d attempts", maxRetries+1)
 }
