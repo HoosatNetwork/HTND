@@ -424,19 +424,33 @@ func (s *server) sortUTXOsByAmountDescending() {
 func (s *server) selectUTXOsForTransaction(spendAmount uint64, isSendAll bool, feePerInput uint64, fromAddresses []*walletAddress) (
 	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error,
 ) {
-	selectedUTXOs = []*libhtnwallet.UTXO{}
-	totalValue := uint64(0)
-
 	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	return s.selectUTXOsForTransactionAtDAAScore(spendAmount, isSendAll, feePerInput, fromAddresses, dagInfo.VirtualDAAScore)
+}
+
+// selectUTXOsForTransactionAtDAAScore selects the coins for a send, given the virtual DAA score that
+// decides which coins are spendable.
+func (s *server) selectUTXOsForTransactionAtDAAScore(spendAmount uint64, isSendAll bool, feePerInput uint64,
+	fromAddresses []*walletAddress, virtualDAAScore uint64,
+) (selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error) {
+	// The amount comes unchecked from the request. Near the uint64 limit, spendAmount + fee wrapped to
+	// a small number that the funds check below accepted.
+	if !isSendAll && spendAmount > constants.MaxSompi {
+		return nil, 0, 0, errors.Errorf("send amount of %d sompi exceeds the maximum of %d sompi",
+			spendAmount, uint64(constants.MaxSompi))
+	}
+
+	selectedUTXOs = []*libhtnwallet.UTXO{}
+	totalValue := uint64(0)
 
 	s.sortUTXOsByAmountDescending()
 
 	for _, utxo := range s.utxosSortedByAmount {
 		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+			!s.isUTXOSpendable(utxo, virtualDAAScore) {
 			continue
 		}
 
@@ -469,6 +483,12 @@ func (s *server) selectUTXOsForTransaction(spendAmount uint64, isSendAll bool, f
 	fee := feePerInput * uint64(len(selectedUTXOs))
 	var totalSpend uint64
 	if isSendAll {
+		// Without this, coins worth less than their fees made totalValue - fee wrap to a payment of about
+		// 2^64 sompi, and the check below compares totalValue with itself, so it never caught that.
+		if len(selectedUTXOs) > 0 && totalValue <= fee {
+			return nil, 0, 0, errors.Errorf("Insufficient funds for send all: %f available, while the fee is %f",
+				float64(totalValue)/constants.SompiPerHoosat, float64(fee)/constants.SompiPerHoosat)
+		}
 		totalSpend = totalValue
 		totalReceived = totalValue - fee
 	} else {
