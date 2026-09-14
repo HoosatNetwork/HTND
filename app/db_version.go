@@ -21,6 +21,10 @@ func checkDatabaseVersion(dbPath string) (err error) {
 		}
 		return err
 	}
+	// The file is created before the version is written, so a crash or a full disk in between leaves it empty.
+	if len(versionBytes) == 0 {
+		return errors.Errorf("Database version file %s is empty. Expected version: %d", versionFileName, currentDatabaseVersion)
+	}
 	versionBytesStr := unsafe.String(&versionBytes[0], len(versionBytes))
 	databaseVersion, err := strconv.Atoi(versionBytesStr)
 	if err != nil {
@@ -43,7 +47,7 @@ func createDatabaseVersionFile(dbPath string, versionFileName string) error {
 
 	versionFile, err := os.Create(versionFileName)
 	if err != nil {
-		return nil
+		return err
 	}
 	defer versionFile.Close()
 
