@@ -67,8 +67,8 @@ func main() {
 			return ">=100000"
 		}
 	}
-	dbPath := flag.String("db", "", "path to LevelDB database (required)")
-	cacheSize := flag.Int("cache", 256, "LevelDB cache size in MiB")
+	dbPath := flag.String("db", "", "path to a copy of the pebble database (required)")
+	cacheSize := flag.Int("cache", 256, "pebble cache size in MiB")
 	netName := flag.String("net", "auto", "network: auto|mainnet|testnet")
 	format := flag.String("format", "text", "output format: text|json")
 	out := flag.String("out", "", "output file path (for json); default stdout")
@@ -90,9 +90,9 @@ func main() {
 	// Initialize infrastructure logger so subsystem loggers (e.g., consensus)
 	// print to stdout when running this harness.
 	infralogger.InitLogStdout(infralogger.LevelInfo)
-	db, err := pebble.NewPebbleDB(*dbPath, *cacheSize)
+	db, err := pebble.OpenPebbleDB(*dbPath, *cacheSize)
 	if err != nil {
-		log.Fatalf("failed to open LevelDB at %s: %v", *dbPath, err)
+		log.Fatalf("failed to open the pebble database at %s: %v", *dbPath, err)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {

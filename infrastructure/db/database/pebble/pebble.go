@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2"
 	"github.com/pkg/errors"
 )
@@ -19,13 +20,30 @@ type DB struct {
 	mu      sync.Mutex  // Protect cursors slice
 }
 
-// NewPebbleDB opens a Pebble instance defined by the given path.
+// OpenPebbleDB opens a Pebble instance defined by the given path, and returns pebble's error when it
+// cannot, including pebble.ErrCorruption. Unlike NewPebbleDB it never deletes anything.
+//
+// Offline tools must use this. They are run on copies of datadirs, often because the node's data is
+// suspect, and NewPebbleDB's recovery would silently wipe the very copy being investigated.
+func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
+	db, err := pebble.Open(path, Options(cacheSizeMiB))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return &DB{db: db}, nil
+}
+
+// NewPebbleDB opens a Pebble instance defined by the given path. It is meant for the node's own
+// datadir: if pebble reports corruption, it deletes the directory and creates a fresh database, since
+// pebble has no repair API. Offline tools must use OpenPebbleDB instead.
 func NewPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	options := Options(cacheSizeMiB)
 
 	db, err := pebble.Open(path, options)
 	if err != nil {
-		if errors.Is(err, pebble.ErrCorruption) {
+		// Pebble marks corruption with cockroachdb/errors' Mark, which only cockroachdb's Is follows;
+		// the standard (and pkg/errors) Is never matched it, so this recovery never ran.
+		if crdberrors.Is(err, pebble.ErrCorruption) {
 			log.Warnf("Pebble corruption detected at %s: %v", path, err)
 
 			// Remove the corrupted DB

@@ -228,7 +228,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	db, err := pebble.NewPebbleDB(*dbPath, 256)
+	db, err := pebble.OpenPebbleDB(*dbPath, 256)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open db: %v\n", err)
 		os.Exit(1)
@@ -255,7 +255,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "-diffsets requires -db2")
 			os.Exit(2)
 		}
-		db2, err := pebble.NewPebbleDB(*dbPath2, 256)
+		db2, err := pebble.OpenPebbleDB(*dbPath2, 256)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "open db2: %v\n", err)
 			os.Exit(1)

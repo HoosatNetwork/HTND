@@ -42,7 +42,8 @@ func openDatabase(dbPath string, dbType string) (infrastructuredatabase.Database
 	if strings.EqualFold(dbType, "leveldb") {
 		return ldb.NewLevelDB(dbPath, leveldbCacheSizeMiB)
 	}
-	return pebble.NewPebbleDB(dbPath, pebbledbCacheSizeMiB)
+	// OpenPebbleDB, not NewPebbleDB: a corrupted target datadir must be reported, not wiped.
+	return pebble.OpenPebbleDB(dbPath, pebbledbCacheSizeMiB)
 }
 
 // openConsensus opens the node's own on-disk database directly. `create`, `verify` and `diff
