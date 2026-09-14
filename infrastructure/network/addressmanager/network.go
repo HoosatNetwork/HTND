@@ -200,8 +200,15 @@ func IsRFC6598(na *appmessage.NetAddress) bool {
 func IsValid(na *appmessage.NetAddress) bool {
 	// IsUnspecified returns if address is 0, so only all bits set, and
 	// RFC3849 need to be explicitly checked.
-	return na.IP != nil && !(na.IP.IsUnspecified() ||
+	return hasValidIPLength(na) && !(na.IP.IsUnspecified() ||
 		na.IP.Equal(net.IPv4bcast))
+}
+
+// hasValidIPLength reports whether na's IP is 4 or 16 bytes. Peers supply the IP bytes unchecked, and a slice of any
+// other length matches none of the range checks, so it used to count as routable; an empty one then rendered as
+// ":<port>", which dials the local system.
+func hasValidIPLength(na *appmessage.NetAddress) bool {
+	return len(na.IP) == net.IPv4len || len(na.IP) == net.IPv6len
 }
 
 // IsRoutable returns whether or not the passed address is routable over
@@ -209,7 +216,7 @@ func IsValid(na *appmessage.NetAddress) bool {
 // in any reserved ranges.
 func IsRoutable(na *appmessage.NetAddress, acceptUnroutable bool) bool {
 	if acceptUnroutable {
-		return !IsLocal(na)
+		return hasValidIPLength(na) && !IsLocal(na)
 	}
 
 	return IsValid(na) && !(IsRFC1918(na) || IsRFC2544(na) ||
