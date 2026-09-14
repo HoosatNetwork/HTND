@@ -160,6 +160,11 @@ func DecodeAddress(addr string, expectedPrefix Bech32Prefix) (Address, error) {
 	case multiSigAddrID:
 		return NewAddressMultiSig(decoded, prefix)
 	case multiSigPKHAddrID:
+		// The hash is fixed size: copying a shorter or longer payload would zero-pad or truncate it into a
+		// different script hash than the address encodes.
+		if len(decoded) != blake2b.Size256 {
+			return nil, errors.Errorf("multisig script hash must be of length %d bytes", blake2b.Size256)
+		}
 		var hash [blake2b.Size256]byte
 		copy(hash[:], decoded)
 		return NewAddressMultiSigPKH(&hash, prefix)
