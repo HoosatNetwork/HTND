@@ -63,7 +63,7 @@ func TestSortInTopologicalOrderUsesBlueWorkNotBlueScore(t *testing.T) {
 
 	sm := &syncManager{
 		ghostdagDataStore: store,
-		ghostdagManager:   ghostdagmanager.New(nil, nil, nil, nil, nil, nil, nil, nil),
+		ghostdagManager:   ghostdagmanager.New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil),
 	}
 
 	// Sanity-check the arrangement is the adversarial one, so this test can't silently degrade into

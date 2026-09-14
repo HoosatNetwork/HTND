@@ -48,7 +48,9 @@ type implManager struct {
 		headerStore model.BlockHeaderStore,
 		consensusStateStore model.ConsensusStateStore,
 		k []externalapi.KType,
-		genesisHash *externalapi.DomainHash) model.GHOSTDAGManager
+		genesisHash *externalapi.DomainHash,
+		daaBlocksStore model.DAABlocksStore,
+		powScores []uint64) model.GHOSTDAGManager
 	implName string
 }
 
@@ -109,7 +111,7 @@ func TestGHOSTDAG(t *testing.T) {
 			blockHeadersStore.dagMap[genesisHash] = genesisHeader
 
 			for _, factory := range implementationFactories {
-				g := factory.function(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{test.K}, &genesisHash)
+				g := factory.function(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{test.K}, &genesisHash, nil, nil)
 
 				for _, testBlockData := range test.Blocks {
 					blockID := StringToDomainHash(testBlockData.ID)
@@ -278,7 +280,7 @@ func TestBlueWork(t *testing.T) {
 	dagTopology.childrenMap[*longestChainBlock3Hash] = append(dagTopology.childrenMap[*longestChainBlock3Hash], tipHash)
 	blockHeadersStore.dagMap[*tipHash] = lowDifficultyHeader
 
-	manager := ghostdagmanager.New(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{18}, fakeGenesisHash)
+	manager := ghostdagmanager.New(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{18}, fakeGenesisHash, nil, nil)
 	blocksForGHOSTDAG := []*externalapi.DomainHash{
 		longestChainBlock1Hash,
 		longestChainBlock2Hash,

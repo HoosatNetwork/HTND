@@ -98,7 +98,7 @@ func TestUpdateGHOSTDAGFixtures(t *testing.T) {
 				ghostdagDataStore.dagMap[genesisHash] = blockGHOSTDAGDataGenesis
 				blockHeadersStore.dagMap[genesisHash] = genesisHeader
 
-				g := impl.function(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{test.K}, &genesisHash)
+				g := impl.function(nil, dagTopology, nil, ghostdagDataStore, blockHeadersStore, nil, []externalapi.KType{test.K}, &genesisHash, nil, nil)
 
 				for i := range test.Blocks {
 					blk := &test.Blocks[i]

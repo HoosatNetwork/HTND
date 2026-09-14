@@ -234,7 +234,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	}
 	reachabilityDataStore := reachabilityDataStores[0]
 
-	dagTopologyManagers, ghostdagManagers, dagTraversalManagers := f.dagProcesses(config, dbManager, blockHeaderStore, daaWindowStore, windowHeapSliceStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores, consensusStateStore, isOldReachabilityInitialized)
+	dagTopologyManagers, ghostdagManagers, dagTraversalManagers := f.dagProcesses(config, dbManager, blockHeaderStore, daaWindowStore, windowHeapSliceStore, blockRelationStores, reachabilityDataStores, ghostdagDataStores, consensusStateStore, daaBlocksStore, isOldReachabilityInitialized)
 
 	blockRelationStore := blockRelationStores[0]
 
@@ -814,6 +814,7 @@ func (f *factory) dagProcesses(config *Config,
 	reachabilityDataStores []model.ReachabilityDataStore,
 	ghostdagDataStores []model.GHOSTDAGDataStore,
 	consensusStateStore model.ConsensusStateStore,
+	daaBlocksStore model.DAABlocksStore,
 	isOldReachabilityInitialized bool) (
 	[]model.DAGTopologyManager,
 	[]model.GHOSTDAGManager,
@@ -853,7 +854,9 @@ func (f *factory) dagProcesses(config *Config,
 			blockHeaderStore,
 			consensusStateStore,
 			config.K,
-			config.GenesisHash)
+			config.GenesisHash,
+			daaBlocksStore,
+			config.POWScores)
 
 		dagTraversalManagers[i] = dagtraversalmanager.New(
 			dbManager,

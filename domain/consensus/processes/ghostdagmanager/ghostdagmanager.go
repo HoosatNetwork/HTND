@@ -17,6 +17,10 @@ type ghostdagManager struct {
 
 	k           []externalapi.KType
 	genesisHash *externalapi.DomainHash
+	// daaBlocksStore and powScores derive the version whose GHOSTDAG rules color a block (see blockVersion).
+	// powScores is empty for managers built outside a full consensus, which keep the process-global version.
+	daaBlocksStore model.DAABlocksStore
+	powScores      []uint64
 
 	// Cache only UMCVoting results (DAGKnight)
 	umcVotingCache *lrucache.LRUCache[int]
@@ -35,6 +39,8 @@ func New(
 	consensusStateStore model.ConsensusStateStore,
 	k []externalapi.KType,
 	genesisHash *externalapi.DomainHash,
+	daaBlocksStore model.DAABlocksStore,
+	powScores []uint64,
 ) model.GHOSTDAGManager {
 	return &ghostdagManager{
 		databaseContext:     databaseContext,
@@ -45,6 +51,8 @@ func New(
 		consensusStateStore: consensusStateStore,
 		k:                   k,
 		genesisHash:         genesisHash,
+		daaBlocksStore:      daaBlocksStore,
+		powScores:           powScores,
 		umcVotingCache:      lrucache.New[int](500, true),
 		chainPathCache:      lrucache.New[[]*externalapi.DomainHash](2000, true),
 		lcaCache:            lrucache.New[*externalapi.DomainHash](5000, true),

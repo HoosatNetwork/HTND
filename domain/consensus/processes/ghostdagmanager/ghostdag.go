@@ -58,21 +58,37 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 		return err
 	}
 
+	isGenesis := len(blockParents) == 0
+	var selectedParent *externalapi.DomainHash
+	if !isGenesis {
+		selectedParent, err = gm.findSelectedParent(stagingArea, blockParents)
+		if err != nil {
+			return err
+		}
+		if selectedParent == nil {
+			return errors.Errorf("findSelectedParent returned nil")
+		}
+	}
+
+	// The block is colored by the GHOSTDAG rules of its own version (see blockVersion). Dynamic K and the
+	// enlarged anticone bound used to be selected by the process-global block version, which a restart resets to
+	// 1 and IBD raises to the tip version, so the same block could be colored differently on different nodes.
+	blockVersion, err := gm.blockVersion(stagingArea, selectedParent)
+	if err != nil {
+		return err
+	}
+
 	// Calculate rank using DAGKnight algorithm to determine dynamic K for the block
 	// DAGKnight TODO: modify blockversions before mainnet release.
 	var k externalapi.KType
-	if constants.GetBlockVersion() >= 6 {
-		if len(blockParents) == 0 {
-			// Genesis block uses default K
-			k = gm.k[constants.GetBlockVersion()-1]
-		} else {
-			k, err = gm.dynamicKForBlock(stagingArea, blockHash, blockParents)
-			if err != nil {
-				return err
-			}
+	if blockVersion >= 6 && !isGenesis {
+		k, err = gm.dynamicKForBlock(stagingArea, blockHash, blockParents)
+		if err != nil {
+			return err
 		}
 	} else {
-		k = gm.k[constants.GetBlockVersion()-1]
+		// Genesis block uses default K
+		k = gm.kForBlockVersion(blockVersion)
 	}
 
 	// Record the K this coloring actually used, on EVERY path.
@@ -101,16 +117,7 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 	// of the 175 reds sat in that five-blue-score gap.
 	newBlockData.dynamicK = k
 
-	isGenesis := len(blockParents) == 0
 	if !isGenesis {
-		selectedParent, err := gm.findSelectedParent(stagingArea, blockParents)
-		if err != nil {
-			return err
-		}
-		if selectedParent == nil {
-			return errors.Errorf("findSelectedParent returned nil")
-		}
-
 		newBlockData.selectedParent = selectedParent
 		newBlockData.mergeSetBlues = append(newBlockData.mergeSetBlues, selectedParent)
 		newBlockData.bluesAnticoneSizes[*selectedParent] = 0
@@ -124,7 +131,7 @@ func (gm *ghostdagManager) GHOSTDAG(stagingArea *model.StagingArea, blockHash *e
 
 	for _, blueCandidate := range mergeSetWithoutSelectedParent {
 		isBlue, candidateAnticoneSize, candidateBluesAnticoneSizes, err := gm.checkBlueCandidate(
-			stagingArea, newBlockData.toModel(), blueCandidate, k)
+			stagingArea, newBlockData.toModel(), blueCandidate, k, blockVersion)
 		if err != nil {
 			return err
 		}
@@ -217,7 +224,7 @@ type chainBlockData struct {
 }
 
 func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, newBlockData *externalapi.BlockGHOSTDAGData,
-	blueCandidate *externalapi.DomainHash, k externalapi.KType) (isBlue bool, candidateAnticoneSize externalapi.KType,
+	blueCandidate *externalapi.DomainHash, k externalapi.KType, blockVersion uint16) (isBlue bool, candidateAnticoneSize externalapi.KType,
 	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType, err error,
 ) {
 	// The maximum length of node.blues can be K+1 because
@@ -247,7 +254,7 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 	// returns either
 	for {
 		isBlue, isRed, err := gm.checkBlueCandidateWithChainBlock(stagingArea, newBlockData, chainBlock, blueCandidate,
-			candidateBluesAnticoneSizes, &candidateAnticoneSize, k)
+			candidateBluesAnticoneSizes, &candidateAnticoneSize, k, blockVersion)
 		if err != nil {
 			return false, 0, nil, err
 		}
@@ -277,7 +284,7 @@ func (gm *ghostdagManager) checkBlueCandidate(stagingArea *model.StagingArea, ne
 func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.StagingArea,
 	newBlockData *externalapi.BlockGHOSTDAGData, chainBlock chainBlockData, blueCandidate *externalapi.DomainHash,
 	candidateBluesAnticoneSizes map[externalapi.DomainHash]externalapi.KType,
-	candidateAnticoneSize *externalapi.KType, k externalapi.KType,
+	candidateAnticoneSize *externalapi.KType, k externalapi.KType, blockVersion uint16,
 ) (isBlue, isRed bool, err error) {
 	// If blueCandidate is in the future of chainBlock, it means
 	// that all remaining blues are in the past of chainBlock and thus
@@ -324,7 +331,7 @@ func (gm *ghostdagManager) checkBlueCandidateWithChainBlock(stagingArea *model.S
 
 		// TODO: Increase allowed anticone size to be bigger than k, by adding offset. This will allow more blue blocks.
 		var maxAnticoneSize = k
-		if constants.GetBlockVersion() >= 7 {
+		if blockVersion >= 7 {
 			maxAnticoneSize += 1
 		}
 
@@ -387,4 +394,48 @@ func (gm *ghostdagManager) blueAnticoneSize(stagingArea *model.StagingArea,
 	}
 	log.Debugf("blueAnticoneSize  took %v", time.Since(rotationStart))
 	return 0, errors.Errorf("block %s is not in blue set of the given context", block)
+}
+
+// blockVersion returns the block version whose GHOSTDAG rules color a block with the given selected parent.
+//
+// It is derived from the selected parent's DAA score as this node computed it. The block's own DAA score does not
+// exist yet - it is computed from this coloring - and its header's claim is not validated. Activation scores are far
+// apart, so the selected parent's version equals the block's own except at an activation boundary, and it is the same
+// on every node. The header's DAA score is used only where no DAA store is available, and the process-global version
+// only for managers built without an activation table (pruning proof levels, tests) and while nothing is known.
+func (gm *ghostdagManager) blockVersion(stagingArea *model.StagingArea, selectedParent *externalapi.DomainHash) (uint16, error) {
+	if len(gm.powScores) == 0 {
+		return constants.GetBlockVersion(), nil
+	}
+	if selectedParent == nil {
+		return 1, nil
+	}
+	if gm.daaBlocksStore != nil {
+		daaScore, err := gm.daaBlocksStore.DAAScore(gm.databaseContext, stagingArea, selectedParent)
+		if err == nil {
+			return constants.BlockVersionForDAAScore(gm.powScores, daaScore), nil
+		}
+		if !database.IsNotFoundError(err) {
+			return 0, err
+		}
+	}
+	if gm.headerStore != nil {
+		header, err := gm.headerStore.BlockHeader(gm.databaseContext, stagingArea, selectedParent)
+		if err == nil {
+			return constants.BlockVersionForDAAScore(gm.powScores, header.DAAScore()), nil
+		}
+		if !database.IsNotFoundError(err) {
+			return 0, err
+		}
+	}
+	return constants.GetBlockVersion(), nil
+}
+
+// kForBlockVersion returns the configured K for blockVersion, using the last entry when the table is shorter.
+func (gm *ghostdagManager) kForBlockVersion(blockVersion uint16) externalapi.KType {
+	index := max(int(blockVersion)-1, 0)
+	if index >= len(gm.k) {
+		index = len(gm.k) - 1
+	}
+	return gm.k[index]
 }
