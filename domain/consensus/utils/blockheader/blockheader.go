@@ -2,6 +2,7 @@ package blockheader
 
 import (
 	"math/big"
+	"sync/atomic"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
@@ -21,10 +22,14 @@ type blockHeader struct {
 	blueWork             *big.Int
 	pruningPoint         *externalapi.DomainHash
 
-	isBlockLevelCached bool
-	blockLevel         int
-	isPoWValueCached   bool
-	powValue           *big.Int
+	// cachedBlockLevel holds the block level plus one, or zero when it is not
+	// cached yet. BlockLevel fills it lazily on a header that is otherwise
+	// read-only, and such headers are shared between goroutines: the
+	// dagconfig genesis header is validated by every consensus instance
+	// built from the same params, so the cache has to be atomic.
+	cachedBlockLevel atomic.Int64
+	isPoWValueCached bool
+	powValue         *big.Int
 }
 
 func (bh *blockHeader) TimeAndBits() (int64, uint32) {
@@ -57,19 +62,19 @@ func (bh *blockHeader) SetPoWValue(powValue *big.Int) {
 }
 
 func (bh *blockHeader) SetNonce(nonce uint64) {
-	bh.isBlockLevelCached = false
+	bh.cachedBlockLevel.Store(0)
 	bh.isPoWValueCached = false
 	bh.nonce = nonce
 }
 
 func (bh *blockHeader) SetTimeInMilliseconds(timeInMilliseconds int64) {
-	bh.isBlockLevelCached = false
+	bh.cachedBlockLevel.Store(0)
 	bh.isPoWValueCached = false
 	bh.timeInMilliseconds = timeInMilliseconds
 }
 
 func (bh *blockHeader) SetHashMerkleRoot(hashMerkleRoot *externalapi.DomainHash) {
-	bh.isBlockLevelCached = false
+	bh.cachedBlockLevel.Store(0)
 	bh.isPoWValueCached = false
 	bh.hashMerkleRoot = hashMerkleRoot
 }
@@ -200,17 +205,21 @@ func (bh *blockHeader) ToMutable() externalapi.MutableBlockHeader {
 }
 
 func (bh *blockHeader) BlockLevel(maxBlockLevel int) int {
-	if !bh.isBlockLevelCached {
-		if bh.isPoWValueCached {
-			bh.blockLevel = pow.BlockLevelFromValue(bh.powValue, maxBlockLevel)
-			bh.isBlockLevelCached = true
-		} else {
-			bh.blockLevel = pow.BlockLevel(bh, maxBlockLevel)
-			bh.isBlockLevelCached = true
-		}
+	if cached := bh.cachedBlockLevel.Load(); cached != 0 {
+		return int(cached - 1)
 	}
 
-	return bh.blockLevel
+	var blockLevel int
+	if bh.isPoWValueCached {
+		blockLevel = pow.BlockLevelFromValue(bh.powValue, maxBlockLevel)
+	} else {
+		blockLevel = pow.BlockLevel(bh, maxBlockLevel)
+	}
+	// Concurrent callers may both compute the level; they get the same value,
+	// so the last store winning is harmless.
+	bh.cachedBlockLevel.Store(int64(blockLevel) + 1)
+
+	return blockLevel
 }
 
 // NewImmutableBlockHeader returns a new immutable header
