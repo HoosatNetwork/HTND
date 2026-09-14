@@ -21,7 +21,7 @@ func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, requ
 				return nil, err
 			}
 			entries = append(entries, &appmessage.MempoolEntry{
-				Fee:         transaction.Fee,
+				Fee:         transaction.LoadFee(),
 				Transaction: rpcTransaction,
 				IsOrphan:    false,
 			})
@@ -35,7 +35,7 @@ func HandleGetMempoolEntries(context *rpccontext.Context, _ *router.Router, requ
 				return nil, err
 			}
 			entries = append(entries, &appmessage.MempoolEntry{
-				Fee:         transaction.Fee,
+				Fee:         transaction.LoadFee(),
 				Transaction: rpcTransaction,
 				IsOrphan:    true,
 			})

@@ -63,16 +63,16 @@ func (tobf *TransactionsOrderedByFeeRate) RemoveAtIndex(index int) error {
 // If the transaction was not found, will return wasFound=false and index=the index at which transaction can be inserted
 // while preserving the order.
 func (tobf *TransactionsOrderedByFeeRate) findTransactionIndex(transaction *MempoolTransaction) (index int, wasFound bool, err error) {
-	if transaction.Transaction().Fee == 0 || transaction.Transaction().LoadMass() == 0 {
+	if transaction.Transaction().LoadFee() == 0 || transaction.Transaction().LoadMass() == 0 {
 		return 0, false, errors.Errorf("findTransactionIndex expects a transaction with " +
 			"populated fee and mass")
 	}
 	txID := transaction.TransactionID()
-	txFeeRate := float64(transaction.Transaction().Fee) / float64(transaction.Transaction().LoadMass())
+	txFeeRate := float64(transaction.Transaction().LoadFee()) / float64(transaction.Transaction().LoadMass())
 
 	index = sort.Search(len(tobf.slice), func(i int) bool {
 		iElement := tobf.slice[i]
-		elementFeeRate := float64(iElement.Transaction().Fee) / float64(iElement.Transaction().LoadMass())
+		elementFeeRate := float64(iElement.Transaction().LoadFee()) / float64(iElement.Transaction().LoadMass())
 		if elementFeeRate > txFeeRate {
 			return true
 		}

@@ -188,9 +188,9 @@ func (mp *mempool) checkTransactionStandardInContext(transaction *externalapi.Do
 	}
 
 	minimumFee := mp.minimumRequiredTransactionRelayFee(transaction.LoadMass())
-	if transaction.Fee < minimumFee {
+	if transaction.LoadFee() < minimumFee {
 		str := fmt.Sprintf("transaction %s has %d fees which is under the required amount of %d",
-			consensushashing.TransactionID(transaction), transaction.Fee, minimumFee)
+			consensushashing.TransactionID(transaction), transaction.LoadFee(), minimumFee)
 		return transactionRuleError(RejectInsufficientFee, str)
 	}
 

@@ -42,7 +42,7 @@ func (bb *testBlockBuilder) EnableUniqueDefaultCoinbaseExtraData() {
 
 func cleanBlockPrefilledFields(block *externalapi.DomainBlock) {
 	for _, tx := range block.Transactions {
-		tx.Fee = 0
+		tx.StoreFee(0)
 		tx.StoreMass(0)
 		tx.SetCachedID(nil)
 

@@ -79,7 +79,7 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 	if err != nil {
 		return err
 	}
-	tx.Fee = totalSompiIn - totalSompiOut
+	tx.StoreFee(totalSompiIn - totalSompiOut)
 
 	// 2. The remaining checks can run in parallel.
 	type result struct {

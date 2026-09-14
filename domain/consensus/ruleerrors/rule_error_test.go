@@ -64,8 +64,8 @@ func TestNewErrInvalidTransactionsInNewBlock(t *testing.T) {
 	if *inner.InvalidTransactions[0].Error != ErrNoTxInputs {
 		t.Fatalf("TestNewErrInvalidTransactionsInNewBlock: Expected ErrNoTxInputs. found: %v", inner.InvalidTransactions[0].Error)
 	}
-	if inner.InvalidTransactions[0].Transaction.Fee != 1337 {
-		t.Fatalf("TestNewErrInvalidTransactionsInNewBlock: Expected 1337. found: %v", inner.InvalidTransactions[0].Transaction.Fee)
+	if inner.InvalidTransactions[0].Transaction.LoadFee() != 1337 {
+		t.Fatalf("TestNewErrInvalidTransactionsInNewBlock: Expected 1337. found: %v", inner.InvalidTransactions[0].Transaction.LoadFee())
 	}
 
 	rule := &RuleError{}

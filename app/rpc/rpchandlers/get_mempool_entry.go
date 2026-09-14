@@ -31,5 +31,5 @@ func HandleGetMempoolEntry(context *rpccontext.Context, _ *router.Router, reques
 	if err != nil {
 		return nil, err
 	}
-	return appmessage.NewGetMempoolEntryResponseMessage(mempoolTransaction.Fee, rpcTransaction, isOrphan), nil
+	return appmessage.NewGetMempoolEntryResponseMessage(mempoolTransaction.LoadFee(), rpcTransaction, isOrphan), nil
 }

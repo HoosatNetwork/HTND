@@ -29,6 +29,9 @@ type DomainTransaction struct {
 	Gas          uint64
 	Payload      []byte
 
+	// Fee is populated by in-context validation while other goroutines may read the transaction
+	// (RPC handlers read mempool transactions after the mempool lock is released). Setting it in a
+	// composite literal is fine; anywhere else go through LoadFee and StoreFee.
 	Fee uint64
 	// Mass is populated lazily by the transaction validator, including on
 	// transactions shared between goroutines (the dagconfig genesis coinbase
@@ -76,6 +79,19 @@ func (tx *DomainTransaction) StoreMass(mass uint64) {
 	atomic.StoreUint64(&tx.Mass, mass)
 }
 
+// LoadFee returns the transaction fee, or 0 if it hasn't been populated.
+//
+// Atomic access to a uint64 field needs it to be 64-bit aligned, which the
+// struct layout only guarantees on 64-bit platforms.
+func (tx *DomainTransaction) LoadFee() uint64 {
+	return atomic.LoadUint64(&tx.Fee)
+}
+
+// StoreFee sets the transaction fee.
+func (tx *DomainTransaction) StoreFee(fee uint64) {
+	atomic.StoreUint64(&tx.Fee, fee)
+}
+
 // Clone returns a clone of DomainTransaction
 func (tx *DomainTransaction) Clone() *DomainTransaction {
 	inputsClone := make([]*DomainTransactionInput, len(tx.Inputs))
@@ -106,7 +122,7 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 		SubnetworkID: *tx.SubnetworkID.Clone(),
 		Gas:          tx.Gas,
 		Payload:      payloadClone,
-		Fee:          tx.Fee,
+		Fee:          tx.LoadFee(),
 		Mass:         tx.LoadMass(),
 		ID:           idClone,
 	}
@@ -172,7 +188,7 @@ func (tx *DomainTransaction) Equal(other *DomainTransaction) bool {
 		return false
 	}
 
-	if tx.Fee != 0 && other.Fee != 0 && tx.Fee != other.Fee {
+	if fee, otherFee := tx.LoadFee(), other.LoadFee(); fee != 0 && otherFee != 0 && fee != otherFee {
 		panic(errors.New("identical transactions should always have the same fee"))
 	}
 

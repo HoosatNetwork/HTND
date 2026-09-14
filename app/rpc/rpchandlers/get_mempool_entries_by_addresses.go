@@ -49,7 +49,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				}
 
 				sending = append(sending, &appmessage.MempoolEntry{
-					Fee:         transaction.Fee,
+					Fee:         transaction.LoadFee(),
 					Transaction: rpcTransaction,
 					IsOrphan:    false,
 				},
@@ -64,7 +64,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				}
 
 				receiving = append(receiving, &appmessage.MempoolEntry{
-					Fee:         transaction.Fee,
+					Fee:         transaction.LoadFee(),
 					Transaction: rpcTransaction,
 					IsOrphan:    false,
 				},
@@ -81,7 +81,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				}
 
 				sending = append(sending, &appmessage.MempoolEntry{
-					Fee:         transaction.Fee,
+					Fee:         transaction.LoadFee(),
 					Transaction: rpcTransaction,
 					IsOrphan:    true,
 				},
@@ -96,7 +96,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				}
 
 				receiving = append(receiving, &appmessage.MempoolEntry{
-					Fee:         transaction.Fee,
+					Fee:         transaction.LoadFee(),
 					Transaction: rpcTransaction,
 					IsOrphan:    true,
 				},

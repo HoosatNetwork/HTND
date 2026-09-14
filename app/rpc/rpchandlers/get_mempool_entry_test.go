@@ -55,7 +55,7 @@ func TestHandleGetMempoolEntryReportsFee(t *testing.T) {
 	if entryResponse.Error != nil {
 		t.Fatalf("unexpected RPC error: %s", entryResponse.Error.Message)
 	}
-	if entryResponse.Entry.Fee != transaction.Fee {
-		t.Fatalf("expected fee %d, got %d", transaction.Fee, entryResponse.Entry.Fee)
+	if entryResponse.Entry.Fee != transaction.LoadFee() {
+		t.Fatalf("expected fee %d, got %d", transaction.LoadFee(), entryResponse.Entry.Fee)
 	}
 }

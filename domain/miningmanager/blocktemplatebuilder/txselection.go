@@ -152,10 +152,10 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		// result.
 		selectedTxs = append(selectedTxs, selectedTx)
 		txsForBlockTemplate.totalMass += selectedTx.LoadMass()
-		txsForBlockTemplate.totalFees += selectedTx.Fee
+		txsForBlockTemplate.totalFees += selectedTx.LoadFee()
 
 		log.Tracef("Adding tx %s (feePerMegaGram %d)",
-			consensushashing.TransactionID(tx), selectedTx.Fee*1e6/selectedTx.LoadMass())
+			consensushashing.TransactionID(tx), selectedTx.LoadFee()*1e6/selectedTx.LoadMass())
 
 		markCandidateTxForDeletion(selectedTx)
 	}
@@ -173,7 +173,7 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		for i := 0; i < len(selectedTxs); i++ {
 			txsForBlockTemplate.selectedTxs[i] = selectedTxs[i].DomainTransaction
 			txsForBlockTemplate.txMasses[i] = selectedTxs[i].LoadMass()
-			txsForBlockTemplate.txFees[i] = selectedTxs[i].Fee
+			txsForBlockTemplate.txFees[i] = selectedTxs[i].LoadFee()
 		}
 	}
 	return txsForBlockTemplate

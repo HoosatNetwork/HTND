@@ -257,12 +257,12 @@ func (mp *mempool) BlockCandidateTransactions() []*externalapi.DomainTransaction
 		}
 
 		numExtraOuts := len(readyTxs[i].Outputs) - len(readyTxs[i].Inputs)
-		if !hasCoinbaseInput && numExtraOuts > 2 && readyTxs[i].Fee < uint64(numExtraOuts)*constants.SompiPerHoosat {
+		if !hasCoinbaseInput && numExtraOuts > 2 && readyTxs[i].LoadFee() < uint64(numExtraOuts)*constants.SompiPerHoosat {
 			log.Debugf("Filtered spam tx %s", consensushashing.TransactionID(readyTxs[i]))
 			continue
 		}
 
-		if hasCoinbaseInput || readyTxs[i].Fee > checkedUint64FromExtraOutputs(numExtraOuts)*constants.SompiPerHoosat {
+		if hasCoinbaseInput || readyTxs[i].LoadFee() > checkedUint64FromExtraOutputs(numExtraOuts)*constants.SompiPerHoosat {
 			candidateTxs = append(candidateTxs, readyTxs[i])
 		} else {
 			txNewestUTXODaaScore := readyTxs[i].Inputs[0].UTXOEntry.BlockDAAScore()

@@ -319,7 +319,7 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 			}
 			blockAcceptanceData.TransactionAcceptanceData[j] = &externalapi.TransactionAcceptanceData{
 				Transaction:                 transaction,
-				Fee:                         transaction.Fee,
+				Fee:                         transaction.LoadFee(),
 				IsAccepted:                  isAccepted,
 				TransactionInputUTXOEntries: transactionInputUTXOEntries,
 			}

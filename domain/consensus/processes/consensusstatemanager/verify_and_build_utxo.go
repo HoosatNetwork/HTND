@@ -593,7 +593,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		log.Infof("LockTime: %d", coinbaseTransaction.LockTime)
 		log.Infof("SubnetworkID: %s", coinbaseTransaction.SubnetworkID)
 		log.Infof("Gas: %d", coinbaseTransaction.Gas)
-		log.Infof("Fee: %d", coinbaseTransaction.Fee)
+		log.Infof("Fee: %d", coinbaseTransaction.LoadFee())
 		log.Infof("Mass: %d", coinbaseTransaction.LoadMass())
 		log.Infof("Payload length: %d, hex: %x", len(coinbaseTransaction.Payload), coinbaseTransaction.Payload)
 		log.Infof("Inputs count: %d", len(coinbaseTransaction.Inputs))
@@ -610,7 +610,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		log.Infof("LockTime: %d", expectedCoinbaseTransaction.LockTime)
 		log.Infof("SubnetworkID: %s", expectedCoinbaseTransaction.SubnetworkID)
 		log.Infof("Gas: %d", expectedCoinbaseTransaction.Gas)
-		log.Infof("Fee: %d", expectedCoinbaseTransaction.Fee)
+		log.Infof("Fee: %d", expectedCoinbaseTransaction.LoadFee())
 		log.Infof("Mass: %d", expectedCoinbaseTransaction.LoadMass())
 		log.Infof("Payload length: %d, hex: %x", len(expectedCoinbaseTransaction.Payload), expectedCoinbaseTransaction.Payload)
 		log.Infof("Inputs count: %d", len(expectedCoinbaseTransaction.Inputs))
@@ -635,8 +635,8 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		if coinbaseTransaction.Gas != expectedCoinbaseTransaction.Gas {
 			log.Infof("DIFFERENCE: Gas (actual=%d, expected=%d)", coinbaseTransaction.Gas, expectedCoinbaseTransaction.Gas)
 		}
-		if coinbaseTransaction.Fee != expectedCoinbaseTransaction.Fee {
-			log.Infof("DIFFERENCE: Fee (actual=%d, expected=%d)", coinbaseTransaction.Fee, expectedCoinbaseTransaction.Fee)
+		if coinbaseTransaction.LoadFee() != expectedCoinbaseTransaction.LoadFee() {
+			log.Infof("DIFFERENCE: Fee (actual=%d, expected=%d)", coinbaseTransaction.LoadFee(), expectedCoinbaseTransaction.LoadFee())
 		}
 		if coinbaseTransaction.LoadMass() != expectedCoinbaseTransaction.LoadMass() {
 			log.Infof("DIFFERENCE: Mass (actual=%d, expected=%d)", coinbaseTransaction.LoadMass(), expectedCoinbaseTransaction.LoadMass())

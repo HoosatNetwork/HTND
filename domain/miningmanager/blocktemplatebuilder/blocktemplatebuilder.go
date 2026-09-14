@@ -231,7 +231,7 @@ func (btb *blockTemplateBuilder) calcTxValue(tx *consensusexternalapi.DomainTran
 	massLimit := btb.policy.BlockMaxMass[constants.GetBlockVersion()-1]
 
 	mass := tx.LoadMass()
-	fee := tx.Fee
+	fee := tx.LoadFee()
 	if subnetworks.IsBuiltInOrNative(tx.SubnetworkID) {
 		return float64(fee) / (float64(mass) / float64(massLimit))
 	}
