@@ -44,7 +44,7 @@ func cleanBlockPrefilledFields(block *externalapi.DomainBlock) {
 	for _, tx := range block.Transactions {
 		tx.Fee = 0
 		tx.Mass = 0
-		tx.ID = nil
+		tx.SetCachedID(nil)
 
 		for _, input := range tx.Inputs {
 			input.UTXOEntry = nil

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/pkg/errors"
 )
@@ -31,8 +33,29 @@ type DomainTransaction struct {
 	Mass uint64
 
 	// ID is a field that is used to cache the transaction ID.
-	// Always use consensushashing.TransactionID instead of accessing this field directly
+	// Always use consensushashing.TransactionID instead of accessing this field directly.
+	// Setting it in a composite literal is fine; anywhere else go through
+	// CachedID and SetCachedID, because the cache is filled lazily on
+	// transactions that are shared between goroutines (the dagconfig genesis
+	// coinbase is hashed by every consensus instance built from the same params).
 	ID *DomainTransactionID
+}
+
+// CachedID returns the cached transaction ID, or nil if it isn't cached.
+func (tx *DomainTransaction) CachedID() *DomainTransactionID {
+	return (*DomainTransactionID)(atomic.LoadPointer(tx.idPointer()))
+}
+
+// SetCachedID caches the transaction ID; nil clears the cache. Callers that
+// mutate a transaction must clear it, since the ID depends on the contents.
+func (tx *DomainTransaction) SetCachedID(id *DomainTransactionID) {
+	atomic.StorePointer(tx.idPointer(), unsafe.Pointer(id))
+}
+
+// idPointer lets ID stay a plain exported pointer field, which keeps composite
+// literals and reflect.DeepEqual working, while its accessors are atomic.
+func (tx *DomainTransaction) idPointer() *unsafe.Pointer {
+	return (*unsafe.Pointer)(unsafe.Pointer(&tx.ID))
 }
 
 // Clone returns a clone of DomainTransaction
@@ -53,8 +76,8 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 	}
 
 	var idClone *DomainTransactionID
-	if tx.ID != nil {
-		idClone = tx.ID.Clone()
+	if id := tx.CachedID(); id != nil {
+		idClone = id.Clone()
 	}
 
 	return &DomainTransaction{
@@ -139,7 +162,7 @@ func (tx *DomainTransaction) Equal(other *DomainTransaction) bool {
 		panic(errors.New("identical transactions should always have the same mass"))
 	}
 
-	if tx.ID != nil && other.ID != nil && !tx.ID.Equal(other.ID) {
+	if id, otherID := tx.CachedID(), other.CachedID(); id != nil && otherID != nil && !id.Equal(otherID) {
 		panic(errors.New("identical transactions should always have the same ID"))
 	}
 

@@ -165,7 +165,7 @@ func TestDoubleSpendInMempool(t *testing.T) {
 		}
 
 		doubleSpendingTransaction := transaction.Clone()
-		doubleSpendingTransaction.ID = nil
+		doubleSpendingTransaction.SetCachedID(nil)
 		doubleSpendingTransaction.Outputs[0].Value-- // do some minor change so that txID is different
 
 		_, err = miningManager.ValidateAndInsertTransaction(doubleSpendingTransaction, false, true, true)

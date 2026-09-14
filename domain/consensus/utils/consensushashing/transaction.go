@@ -46,8 +46,8 @@ func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransac
 	}
 
 	// If transaction ID is already cached on the object, return it
-	if tx.ID != nil {
-		return tx.ID
+	if id := tx.CachedID(); id != nil {
+		return id
 	}
 
 	// Encode the transaction, replace signature script with zeroes, cut off
@@ -65,9 +65,11 @@ func TransactionID(tx *externalapi.DomainTransaction) *externalapi.DomainTransac
 	}
 	transactionID := externalapi.DomainTransactionID(*writer.Finalize())
 
-	tx.ID = &transactionID
+	// Concurrent callers may both compute the ID; they get the same value, so
+	// the last store winning is harmless.
+	tx.SetCachedID(&transactionID)
 
-	return tx.ID
+	return &transactionID
 }
 
 // TransactionIDs converts the provided slice of DomainTransactions to a corresponding slice of TransactionIDs
