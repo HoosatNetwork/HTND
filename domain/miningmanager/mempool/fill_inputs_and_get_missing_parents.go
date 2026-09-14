@@ -41,7 +41,15 @@ func fillInputs(transaction *externalapi.DomainTransaction, parentsInPool model.
 		if !ok {
 			continue
 		}
-		relevantOutput := parent.Transaction().Outputs[input.PreviousOutpoint.Index]
+		// The index comes from the transaction's sender and nothing has checked it yet: consensus validation runs
+		// after this. An output the parent does not have is left unfilled, so consensus reports the outpoint as
+		// missing - as it does for a non-existent output of any other transaction - instead of this indexing out of
+		// range and crashing the node on a single relayed transaction.
+		outputs := parent.Transaction().Outputs
+		if uint64(input.PreviousOutpoint.Index) >= uint64(len(outputs)) {
+			continue
+		}
+		relevantOutput := outputs[input.PreviousOutpoint.Index]
 		input.UTXOEntry = utxo.NewUTXOEntry(relevantOutput.Value, relevantOutput.ScriptPublicKey,
 			false, constants.UnacceptedDAAScore)
 	}
