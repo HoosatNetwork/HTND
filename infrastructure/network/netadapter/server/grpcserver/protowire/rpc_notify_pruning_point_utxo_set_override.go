@@ -80,6 +80,17 @@ func (x *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) toAppM
 	return x.StopNotifyingPruningPointUTXOSetOverrideResponse.toAppMessage()
 }
 
+func (x *HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse) fromAppMessage(message *appmessage.StopNotifyingPruningPointUTXOSetOverrideResponseMessage) error {
+	var err *RPCError
+	if message.Error != nil {
+		err = &RPCError{Message: message.Error.Message}
+	}
+	x.StopNotifyingPruningPointUTXOSetOverrideResponse = &StopNotifyingPruningPointUTXOSetOverrideResponseMessage{
+		Error: err,
+	}
+	return nil
+}
+
 func (x *StopNotifyingPruningPointUTXOSetOverrideResponseMessage) toAppMessage() (appmessage.Message, error) {
 	if x == nil {
 		return nil, errors.Wrapf(errorNil, "StopNotifyingPruningPointUTXOSetOverrideResponseMessage is nil")

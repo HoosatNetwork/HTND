@@ -940,6 +940,13 @@ func toRPCPayload(message appmessage.Message) (isHoosatdMessage_Payload, error) 
 			return nil, err
 		}
 		return payload, nil
+	case *appmessage.StopNotifyingPruningPointUTXOSetOverrideResponseMessage:
+		payload := new(HoosatdMessage_StopNotifyingPruningPointUTXOSetOverrideResponse)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case *appmessage.EstimateNetworkHashesPerSecondRequestMessage:
 		payload := new(HoosatdMessage_EstimateNetworkHashesPerSecondRequest)
 		err := payload.fromAppMessage(message)

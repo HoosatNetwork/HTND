@@ -57,7 +57,7 @@ type StopNotifyingPruningPointUTXOSetOverrideRequestMessage struct {
 
 // Command returns the protocol command string for the message
 func (msg *StopNotifyingPruningPointUTXOSetOverrideRequestMessage) Command() MessageCommand {
-	return CmdNotifyPruningPointUTXOSetOverrideRequestMessage
+	return CmdStopNotifyingPruningPointUTXOSetOverrideRequestMessage
 }
 
 // NewStopNotifyingPruningPointUTXOSetOverrideRequestMessage returns a instance of the message
@@ -74,7 +74,7 @@ type StopNotifyingPruningPointUTXOSetOverrideResponseMessage struct {
 
 // Command returns the protocol command string for the message
 func (msg *StopNotifyingPruningPointUTXOSetOverrideResponseMessage) Command() MessageCommand {
-	return CmdNotifyPruningPointUTXOSetOverrideResponseMessage
+	return CmdStopNotifyingPruningPointUTXOSetOverrideResponseMessage
 }
 
 // NewStopNotifyingPruningPointUTXOSetOverrideResponseMessage returns a instance of the message
