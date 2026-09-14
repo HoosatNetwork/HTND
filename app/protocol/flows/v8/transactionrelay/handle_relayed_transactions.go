@@ -32,6 +32,9 @@ type handleRelayedTransactionsFlow struct {
 	TransactionsRelayContext
 	incomingRoute, outgoingRoute *router.Route
 	invsQueue                    []*appmessage.MsgInvTransaction
+	// queuedInvTransactionIDs is the number of transaction IDs across invsQueue, bounded by
+	// maxQueuedInvTransactionIDs.
+	queuedInvTransactionIDs int
 
 	// pendingTransactions holds transactions that were fetched from the peer while this node was not
 	// yet able to process them, in arrival order. pendingTransactionIDs indexes it for deduplication.
@@ -53,6 +56,13 @@ func HandleRelayedTransactions(context TransactionsRelayContext, incomingRoute *
 	}
 	return flow.start()
 }
+
+// maxQueuedInvTransactionIDs bounds the transaction IDs of the invs queued while the flow waits for requested
+// transactions. A peer can take up to common.DefaultTimeout to answer each request and send invs meanwhile, so an
+// unbounded queue let one peer exhaust the node's memory. Honest peers send at most one inv (of up to
+// MaxInvPerTxInvMsg IDs) per TransactionIDPropagationInterval, and answer requests promptly; invs past the bound are
+// dropped, as invs already are when the route is full.
+const maxQueuedInvTransactionIDs = 4 * appmessage.MaxInvPerTxInvMsg
 
 // pendingRetryInterval is how often the flow wakes to re-check whether it can now process the
 // transactions it is holding, when no new inv happens to arrive to drive the loop.
@@ -285,6 +295,7 @@ func (flow *handleRelayedTransactionsFlow) readInv() (*appmessage.MsgInvTransact
 	if len(flow.invsQueue) > 0 {
 		var inv *appmessage.MsgInvTransaction
 		inv, flow.invsQueue = flow.invsQueue[0], flow.invsQueue[1:]
+		flow.queuedInvTransactionIDs -= len(inv.TxIDs)
 		return inv, nil
 	}
 
@@ -328,7 +339,13 @@ func (flow *handleRelayedTransactionsFlow) readMsgTxOrNotFound() (
 
 		switch message := message.(type) {
 		case *appmessage.MsgInvTransaction:
+			if flow.queuedInvTransactionIDs+len(message.TxIDs) > maxQueuedInvTransactionIDs {
+				log.Debugf("Dropping an inv of %d transactions: %d are already queued while waiting for "+
+					"requested transactions", len(message.TxIDs), flow.queuedInvTransactionIDs)
+				continue
+			}
 			flow.invsQueue = append(flow.invsQueue, message)
+			flow.queuedInvTransactionIDs += len(message.TxIDs)
 		case *appmessage.MsgTx:
 			return message, nil, nil
 		case *appmessage.MsgTransactionNotFound:
