@@ -58,6 +58,9 @@ type pruningProofManager struct {
 	k             []externalapi.KType
 	pruningProofM uint64
 	maxBlockLevel int
+	// powScores lets the proof GHOSTDAG managers color each proof header by the rules of its own version rather
+	// than the process-global version, which is the tip version during IBD.
+	powScores []uint64
 
 	cachedPruningPoint *externalapi.DomainHash
 	cachedProof        *externalapi.PruningPointProof
@@ -87,6 +90,7 @@ func New(
 	k []externalapi.KType,
 	pruningProofM uint64,
 	maxBlockLevel int,
+	powScores []uint64,
 ) model.PruningProofManager {
 	return &pruningProofManager{
 		databaseContext:      databaseContext,
@@ -110,6 +114,7 @@ func New(
 		k:             k,
 		pruningProofM: pruningProofM,
 		maxBlockLevel: maxBlockLevel,
+		powScores:     powScores,
 	}
 }
 
@@ -784,7 +789,7 @@ func (ppm *pruningProofManager) dagProcesses(
 			ppm.k,
 			ppm.genesisHash,
 			nil,
-			nil)
+			ppm.powScores)
 
 		dagTraversalManagers[i] = dagtraversalmanager.New(
 			ppm.databaseContext,
@@ -843,7 +848,7 @@ func (ppm *pruningProofManager) populateProofReachabilityAndHeaders(pruningPoint
 	}
 	blockRelationStoreForTargetReachabilityManager := blockrelationstore.New(bucket, 0, false)
 	dagTopologyManagerForTargetReachabilityManager := dagtopologymanager.New(ppm.databaseContext, targetReachabilityManager, blockRelationStoreForTargetReachabilityManager, nil)
-	ghostdagManagerForTargetReachabilityManager := ghostdagmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, nil, ghostdagDataStoreForTargetReachabilityManager, ppm.blockHeaderStore, nil, ppm.k, nil, nil, nil)
+	ghostdagManagerForTargetReachabilityManager := ghostdagmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, nil, ghostdagDataStoreForTargetReachabilityManager, ppm.blockHeaderStore, nil, ppm.k, nil, nil, ppm.powScores)
 	dagTraversalManagerForTargetReachabilityManager := dagtraversalmanager.New(ppm.databaseContext, dagTopologyManagerForTargetReachabilityManager, ghostdagDataStoreForTargetReachabilityManager, targetReachabilityManager, ghostdagManagerForTargetReachabilityManager, nil, nil, nil, []int{0}, nil, nil)
 	ghostdagManagerForTargetReachabilityManager.SetDAGTraversalManager(dagTraversalManagerForTargetReachabilityManager)
 	err = dagTopologyManagerForTargetReachabilityManager.SetParents(stagingArea, model.VirtualGenesisBlockHash, nil)

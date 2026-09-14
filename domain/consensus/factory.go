@@ -558,6 +558,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.K,
 		config.PruningProofM,
 		config.MaxBlockLevel,
+		config.POWScores,
 	)
 
 	c = &consensus{
