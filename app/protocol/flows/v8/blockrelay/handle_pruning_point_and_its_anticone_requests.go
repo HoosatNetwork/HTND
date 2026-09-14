@@ -2,7 +2,6 @@ package blockrelay
 
 import (
 	"strconv"
-	"sync/atomic"
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
@@ -20,7 +19,11 @@ type PruningPointAndItsAnticoneRequestsContext interface {
 	Config() *config.Config
 }
 
-var isBusy atomic.Uint32
+// pruningPointAnticoneSlot allows one pruning point anticone serve to do its work at a time. It is held while the
+// anticone is computed and while each batch is sent, but not while the flow waits for the syncee to ask for the next
+// batch: that wait has no timeout, and holding the slot through it let one syncee that went quiet make every other
+// syncee's request fail as busy for as long as it stayed connected.
+var pruningPointAnticoneSlot = make(chan struct{}, 1)
 
 // HandlePruningPointAndItsAnticoneRequests listens to appmessage.MsgRequestPruningPointAndItsAnticone messages and sends
 // the pruning point and its anticone to the requesting peer.
@@ -34,10 +37,17 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 				return err
 			}
 
-			if !isBusy.CompareAndSwap(0, 1) {
+			select {
+			case pruningPointAnticoneSlot <- struct{}{}:
+			default:
 				return protocolerrors.Errorf(false, "node is busy with other pruning point anticone requests")
 			}
-			defer isBusy.Store(0)
+			holdsSlot := true
+			defer func() {
+				if holdsSlot {
+					<-pruningPointAnticoneSlot
+				}
+			}()
 
 			log.Debugf("Got request for pruning point and its anticone from %s", peer)
 
@@ -153,11 +163,15 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 
 				if (i+1)%getIBDBatchSize() == 0 {
 					// No timeout here, as we don't care if the syncee takes its time computing,
-					// since it only blocks this dedicated flow
+					// since it only blocks this dedicated flow - so the slot is released for the wait
+					<-pruningPointAnticoneSlot
+					holdsSlot = false
 					message, err := incomingRoute.Dequeue()
 					if err != nil {
 						return err
 					}
+					pruningPointAnticoneSlot <- struct{}{}
+					holdsSlot = true
 					if _, ok := message.(*appmessage.MsgRequestNextPruningPointAndItsAnticoneBlocks); !ok {
 						return protocolerrors.Errorf(true, "received unexpected message type. "+
 							"expected: %s, got: %s", appmessage.CmdRequestNextPruningPointAndItsAnticoneBlocks, message.Command())
