@@ -73,10 +73,14 @@ func parse(conf *parseConfig) error {
 				return err
 			}
 
-			addressString := scriptPublicKeyAddress.EncodeAddress()
-			if scriptPublicKeyType == txscript.NonStandardTy {
+			// A non-standard script, or a bare multisig one, has no address: ExtractScriptPubKeyAddress returns a
+			// nil address for it, and calling EncodeAddress before checking panicked.
+			var addressString string
+			if scriptPublicKeyType == txscript.NonStandardTy || scriptPublicKeyAddress == nil {
 				scriptPublicKeyHex := fastHex(sigBuf[:], output.ScriptPublicKey.Script)
 				addressString = fmt.Sprintf("<Non-standard transaction script public key: %s>", scriptPublicKeyHex)
+			} else {
+				addressString = scriptPublicKeyAddress.EncodeAddress()
 			}
 
 			fmt.Printf("Output %d: \tRecipient: %s \tAmount: %.2f Hoosat\n",
