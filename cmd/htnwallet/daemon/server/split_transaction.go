@@ -46,7 +46,8 @@ func (s *server) maybeAutoCompoundTransaction(transactionBytes []byte, toAddress
 		return nil, err
 	}
 
-	splitTransactions, err := s.maybeSplitAndMergeTransaction(transaction, toAddress, changeAddress, changeWalletAddress)
+	spentOutpoints := make(map[externalapi.DomainOutpoint]struct{})
+	splitTransactions, err := s.maybeSplitAndMergeTransaction(transaction, spentOutpoints, toAddress, changeAddress, changeWalletAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +64,7 @@ func (s *server) maybeAutoCompoundTransaction(transactionBytes []byte, toAddress
 func (s *server) mergeTransaction(
 	splitTransactions []*serialization.PartiallySignedTransaction,
 	originalTransaction *serialization.PartiallySignedTransaction,
+	spentOutpoints map[externalapi.DomainOutpoint]struct{},
 	toAddress util.Address,
 	changeAddress util.Address,
 	changeWalletAddress *walletAddress,
@@ -76,9 +78,13 @@ func (s *server) mergeTransaction(
 			len(originalTransaction.Tx.Outputs))
 	}
 
-	totalValue := uint64(0)
+	splitOutputsValue := uint64(0)
 	sentValue := originalTransaction.Tx.Outputs[0].Value
 	utxos := make([]*libhtnwallet.UTXO, len(splitTransactions))
+	excludedOutpoints := make(map[externalapi.DomainOutpoint]struct{}, len(spentOutpoints)+len(splitTransactions))
+	for outpoint := range spentOutpoints {
+		excludedOutpoints[outpoint] = struct{}{}
+	}
 	for i, splitTransaction := range splitTransactions {
 		output := splitTransaction.Tx.Outputs[0]
 		utxos[i] = &libhtnwallet.UTXO{
@@ -89,19 +95,26 @@ func (s *server) mergeTransaction(
 			UTXOEntry:      utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, false, constants.UnacceptedDAAScore),
 			DerivationPath: s.walletAddressPath(changeWalletAddress),
 		}
-		totalValue += output.Value
-		totalValue -= feePerInput
+		excludedOutpoints[*utxos[i].Outpoint] = struct{}{}
+		splitOutputsValue += output.Value
 	}
+	fees := feePerInput * uint64(len(splitTransactions))
 
-	if totalValue < sentValue {
+	// The value left for the payment and change, computed without wrapping: subtracting the fee input by
+	// input used to wrap when the split outputs were worth less than their fees.
+	totalValue := uint64(0)
+	if splitOutputsValue >= sentValue+fees {
+		totalValue = splitOutputsValue - fees
+	} else {
 		// sometimes the fees from compound transactions make the total output higher than what's available from selected
 		// utxos, in such cases - find one more UTXO and use it.
-		additionalUTXOs, totalValueAdded, err := s.moreUTXOsForMergeTransaction(utxos, sentValue-totalValue)
+		additionalUTXOs, totalValueAdded, err := s.moreUTXOsForMergeTransaction(excludedOutpoints,
+			sentValue+fees-splitOutputsValue)
 		if err != nil {
 			return nil, err
 		}
 		utxos = append(utxos, additionalUTXOs...)
-		totalValue += totalValueAdded
+		totalValue = splitOutputsValue + totalValueAdded - fees
 	}
 
 	payments := []*libhtnwallet.Payment{{
@@ -124,7 +137,10 @@ func (s *server) mergeTransaction(
 	return serialization.DeserializePartiallySignedTransaction(mergeTransactionBytes)
 }
 
-func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.PartiallySignedTransaction, toAddress util.Address,
+// maybeSplitAndMergeTransaction collects into spentOutpoints the outpoints spent by every transaction it
+// returns, so that a merge transaction at any depth of the recursion never picks one of them as extra funds.
+func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.PartiallySignedTransaction,
+	spentOutpoints map[externalapi.DomainOutpoint]struct{}, toAddress util.Address,
 	changeAddress util.Address, changeWalletAddress *walletAddress,
 ) ([]*serialization.PartiallySignedTransaction, error) {
 	transactionMass, err := s.estimateMassAfterSignatures(transaction)
@@ -141,6 +157,10 @@ func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.Partia
 		return nil, err
 	}
 
+	for _, input := range transaction.Tx.Inputs {
+		spentOutpoints[input.PreviousOutpoint] = struct{}{}
+	}
+
 	splitTransactions := make([]*serialization.PartiallySignedTransaction, splitCount)
 	for i := range splitCount {
 		startIndex := i * inputCountPerSplit
@@ -153,12 +173,12 @@ func (s *server) maybeSplitAndMergeTransaction(transaction *serialization.Partia
 	}
 
 	if len(splitTransactions) > 1 {
-		mergeTransaction, err := s.mergeTransaction(splitTransactions, transaction, toAddress, changeAddress, changeWalletAddress)
+		mergeTransaction, err := s.mergeTransaction(splitTransactions, transaction, spentOutpoints, toAddress, changeAddress, changeWalletAddress)
 		if err != nil {
 			return nil, err
 		}
 		// Recursion will be 2-3 iterations deep even in the rarest` cases, so considered safe..
-		splitMergeTransaction, err := s.maybeSplitAndMergeTransaction(mergeTransaction, toAddress, changeAddress, changeWalletAddress)
+		splitMergeTransaction, err := s.maybeSplitAndMergeTransaction(mergeTransaction, spentOutpoints, toAddress, changeAddress, changeWalletAddress)
 		if err != nil {
 			return nil, err
 		}
@@ -227,8 +247,13 @@ func (s *server) createSplitTransaction(transaction *serialization.PartiallySign
 		})
 
 		totalSompi += selectedUTXOs[i-startIndex].UTXOEntry.Amount()
-		totalSompi -= feePerInput
 	}
+	fees := feePerInput * uint64(len(selectedUTXOs))
+	if totalSompi < fees {
+		return nil, errors.Errorf("split transaction inputs are worth %d sompi, less than their fees of %d sompi",
+			totalSompi, fees)
+	}
+	totalSompi -= fees
 	unsignedTransactionBytes, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
 		s.keysFile.MinimumSignatures,
 		[]*libhtnwallet.Payment{{
@@ -273,23 +298,39 @@ func (s *server) estimateMassAfterSignatures(transaction *serialization.Partiall
 	return s.txMassCalculator.CalculateTransactionMass(transactionWithSignatures), nil
 }
 
-func (s *server) moreUTXOsForMergeTransaction(alreadySelectedUTXOs []*libhtnwallet.UTXO, requiredAmount uint64) (
-	additionalUTXOs []*libhtnwallet.UTXO, totalValueAdded uint64, err error,
-) {
+func (s *server) moreUTXOsForMergeTransaction(excludedOutpoints map[externalapi.DomainOutpoint]struct{},
+	requiredAmount uint64,
+) (additionalUTXOs []*libhtnwallet.UTXO, totalValueAdded uint64, err error) {
 	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
 	if err != nil {
 		return nil, 0, err
 	}
-	alreadySelectedUTXOsMap := make(map[externalapi.DomainOutpoint]struct{}, len(alreadySelectedUTXOs))
-	for _, alreadySelectedUTXO := range alreadySelectedUTXOs {
-		alreadySelectedUTXOsMap[*alreadySelectedUTXO.Outpoint] = struct{}{}
-	}
+	return s.selectMoreUTXOsForMergeTransaction(excludedOutpoints, requiredAmount, dagInfo.VirtualDAAScore)
+}
 
+// selectMoreUTXOsForMergeTransaction picks extra coins worth requiredAmount after their fees. It skips
+// excludedOutpoints - the coins the split transactions already spend, and the split outputs - and coins
+// recently spent by another transaction. It used to exclude only the split outputs, so it could pick a
+// coin a split spends (always, for a send-all) and the merge failed to broadcast after the splits went out.
+func (s *server) selectMoreUTXOsForMergeTransaction(excludedOutpoints map[externalapi.DomainOutpoint]struct{},
+	requiredAmount uint64, virtualDAAScore uint64,
+) (additionalUTXOs []*libhtnwallet.UTXO, totalValueAdded uint64, err error) {
 	for _, utxo := range s.utxosSortedByAmount {
-		if _, ok := alreadySelectedUTXOsMap[*utxo.Outpoint]; ok {
+		if _, ok := excludedOutpoints[*utxo.Outpoint]; ok {
 			continue
 		}
-		if !s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+		if !s.isUTXOSpendable(utxo, virtualDAAScore) {
+			continue
+		}
+		if broadcastTime, ok := s.usedOutpoints[*utxo.Outpoint]; ok {
+			if s.usedOutpointHasExpired(broadcastTime) {
+				delete(s.usedOutpoints, *utxo.Outpoint)
+			} else {
+				continue
+			}
+		}
+		// A coin worth no more than its fee adds nothing, and subtracting the fee from it would wrap.
+		if utxo.UTXOEntry.Amount() <= feePerInput {
 			continue
 		}
 		additionalUTXOs = append(additionalUTXOs, &libhtnwallet.UTXO{
