@@ -271,12 +271,12 @@ func (tp *transactionsPool) getTransaction(transactionID *externalapi.DomainTran
 }
 
 func (tp *transactionsPool) getTransactionsByAddresses(clone bool) (
-	sending model.ScriptPublicKeyStringToDomainTransaction,
-	receiving model.ScriptPublicKeyStringToDomainTransaction,
+	sending model.ScriptPublicKeyStringToDomainTransactions,
+	receiving model.ScriptPublicKeyStringToDomainTransactions,
 	err error,
 ) {
-	sending = make(model.ScriptPublicKeyStringToDomainTransaction, tp.transactionCount())
-	receiving = make(model.ScriptPublicKeyStringToDomainTransaction, tp.transactionCount())
+	sending = make(model.ScriptPublicKeyStringToDomainTransactions, tp.transactionCount())
+	receiving = make(model.ScriptPublicKeyStringToDomainTransactions, tp.transactionCount())
 	var transaction *externalapi.DomainTransaction
 	for _, mempoolTransaction := range tp.allTransactions {
 		transaction = mempoolTransaction.Transaction()
@@ -287,10 +287,10 @@ func (tp *transactionsPool) getTransactionsByAddresses(clone bool) (
 			if input.UTXOEntry == nil {
 				return nil, nil, errors.Errorf("Mempool transaction %s is missing an UTXOEntry. This should be fixed, and not happen", consensushashing.TransactionID(transaction).String())
 			}
-			sending[input.UTXOEntry.ScriptPublicKey().String()] = transaction
+			sending.Add(input.UTXOEntry.ScriptPublicKey().String(), transaction)
 		}
 		for _, output := range transaction.Outputs {
-			receiving[output.ScriptPublicKey.String()] = transaction
+			receiving.Add(output.ScriptPublicKey.String(), transaction)
 		}
 	}
 	return sending, receiving, nil

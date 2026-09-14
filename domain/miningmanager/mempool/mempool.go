@@ -121,10 +121,10 @@ func (mp *mempool) GetTransactionNoClone(transactionID *externalapi.DomainTransa
 }
 
 func (mp *mempool) GetTransactionsByAddresses(includeTransactionPool bool, includeOrphanPool bool) (
-	sendingInTransactionPool map[string]*externalapi.DomainTransaction,
-	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
-	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
-	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+	sendingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	receivingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	sendingInOrphanPool map[string][]*externalapi.DomainTransaction,
+	receivingInOrphanPool map[string][]*externalapi.DomainTransaction,
 	err error,
 ) {
 	mp.mtx.RLock()
@@ -138,20 +138,20 @@ func (mp *mempool) GetTransactionsByAddresses(includeTransactionPool bool, inclu
 	}
 
 	if includeOrphanPool {
-		sendingInTransactionPool, receivingInOrphanPool, err = mp.orphansPool.getOrphanTransactionsByAddresses(true)
+		sendingInOrphanPool, receivingInOrphanPool, err = mp.orphansPool.getOrphanTransactionsByAddresses(true)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 	}
 
-	return sendingInTransactionPool, receivingInTransactionPool, sendingInTransactionPool, receivingInOrphanPool, nil
+	return sendingInTransactionPool, receivingInTransactionPool, sendingInOrphanPool, receivingInOrphanPool, nil
 }
 
 func (mp *mempool) GetTransactionsByAddressesNoClone(includeTransactionPool bool, includeOrphanPool bool) (
-	sendingInTransactionPool map[string]*externalapi.DomainTransaction,
-	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
-	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
-	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+	sendingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	receivingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	sendingInOrphanPool map[string][]*externalapi.DomainTransaction,
+	receivingInOrphanPool map[string][]*externalapi.DomainTransaction,
 	err error,
 ) {
 	mp.mtx.RLock()
@@ -165,13 +165,13 @@ func (mp *mempool) GetTransactionsByAddressesNoClone(includeTransactionPool bool
 	}
 
 	if includeOrphanPool {
-		sendingInTransactionPool, receivingInOrphanPool, err = mp.orphansPool.getOrphanTransactionsByAddresses(false)
+		sendingInOrphanPool, receivingInOrphanPool, err = mp.orphansPool.getOrphanTransactionsByAddresses(false)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 	}
 
-	return sendingInTransactionPool, receivingInTransactionPool, sendingInTransactionPool, receivingInOrphanPool, nil
+	return sendingInTransactionPool, receivingInTransactionPool, sendingInOrphanPool, receivingInOrphanPool, nil
 }
 
 func (mp *mempool) AllTransactions(includeTransactionPool bool, includeOrphanPool bool) (

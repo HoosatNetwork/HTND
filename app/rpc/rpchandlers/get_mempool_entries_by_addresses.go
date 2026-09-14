@@ -41,7 +41,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 
 		if !getMempoolEntriesByAddressesRequest.FilterTransactionPool {
 
-			if transaction, found := sendingInTransactionPool[scriptPublicKeyString]; found {
+			for _, transaction := range sendingInTransactionPool[scriptPublicKeyString] {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
 				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
@@ -56,7 +56,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				)
 			}
 
-			if transaction, found := receivingInTransactionPool[scriptPublicKeyString]; found {
+			for _, transaction := range receivingInTransactionPool[scriptPublicKeyString] {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
 				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
@@ -73,7 +73,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 		}
 		if getMempoolEntriesByAddressesRequest.IncludeOrphanPool {
 
-			if transaction, found := sendingInOrphanPool[scriptPublicKeyString]; found {
+			for _, transaction := range sendingInOrphanPool[scriptPublicKeyString] {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
 				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {
@@ -88,7 +88,7 @@ func HandleGetMempoolEntriesByAddresses(context *rpccontext.Context, _ *router.R
 				)
 			}
 
-			if transaction, found := receivingInOrphanPool[scriptPublicKeyString]; found {
+			for _, transaction := range receivingInOrphanPool[scriptPublicKeyString] {
 				rpcTransaction := appmessage.DomainTransactionToRPCTransaction(transaction)
 				err := context.PopulateTransactionWithVerboseData(rpcTransaction, transaction, nil)
 				if err != nil {

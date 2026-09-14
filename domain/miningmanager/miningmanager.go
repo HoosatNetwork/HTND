@@ -24,16 +24,16 @@ type MiningManager interface {
 		isOrphan bool,
 		found bool)
 	GetTransactionsByAddresses(includeTransactionPool bool, includeOrphanPool bool) (
-		sendingInTransactionPool map[string]*externalapi.DomainTransaction,
-		receivingInTransactionPool map[string]*externalapi.DomainTransaction,
-		sendingInOrphanPool map[string]*externalapi.DomainTransaction,
-		receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+		sendingInTransactionPool map[string][]*externalapi.DomainTransaction,
+		receivingInTransactionPool map[string][]*externalapi.DomainTransaction,
+		sendingInOrphanPool map[string][]*externalapi.DomainTransaction,
+		receivingInOrphanPool map[string][]*externalapi.DomainTransaction,
 		err error)
 	GetTransactionsByAddressesNoClone(includeTransactionPool bool, includeOrphanPool bool) (
-		sendingInTransactionPool map[string]*externalapi.DomainTransaction,
-		receivingInTransactionPool map[string]*externalapi.DomainTransaction,
-		sendingInOrphanPool map[string]*externalapi.DomainTransaction,
-		receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+		sendingInTransactionPool map[string][]*externalapi.DomainTransaction,
+		receivingInTransactionPool map[string][]*externalapi.DomainTransaction,
+		sendingInOrphanPool map[string][]*externalapi.DomainTransaction,
+		receivingInOrphanPool map[string][]*externalapi.DomainTransaction,
 		err error)
 	AllTransactions(includeTransactionPool bool, includeOrphanPool bool) (
 		transactionPoolTransactions []*externalapi.DomainTransaction,
@@ -162,20 +162,20 @@ func (mm *miningManager) AllTransactionsNoClone(includeTransactionPool bool, inc
 }
 
 func (mm *miningManager) GetTransactionsByAddresses(includeTransactionPool bool, includeOrphanPool bool) (
-	sendingInTransactionPool map[string]*externalapi.DomainTransaction,
-	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
-	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
-	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+	sendingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	receivingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	sendingInOrphanPool map[string][]*externalapi.DomainTransaction,
+	receivingInOrphanPool map[string][]*externalapi.DomainTransaction,
 	err error,
 ) {
 	return mm.mempool.GetTransactionsByAddresses(includeTransactionPool, includeOrphanPool)
 }
 
 func (mm *miningManager) GetTransactionsByAddressesNoClone(includeTransactionPool bool, includeOrphanPool bool) (
-	sendingInTransactionPool map[string]*externalapi.DomainTransaction,
-	receivingInTransactionPool map[string]*externalapi.DomainTransaction,
-	sendingInOrphanPool map[string]*externalapi.DomainTransaction,
-	receivingInOrphanPool map[string]*externalapi.DomainTransaction,
+	sendingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	receivingInTransactionPool map[string][]*externalapi.DomainTransaction,
+	sendingInOrphanPool map[string][]*externalapi.DomainTransaction,
+	receivingInOrphanPool map[string][]*externalapi.DomainTransaction,
 	err error,
 ) {
 	return mm.mempool.GetTransactionsByAddressesNoClone(includeTransactionPool, includeOrphanPool)

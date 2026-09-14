@@ -379,12 +379,12 @@ func (op *orphansPool) getOrphanTransaction(transactionID *externalapi.DomainTra
 }
 
 func (op *orphansPool) getOrphanTransactionsByAddresses(clone bool) (
-	sending model.ScriptPublicKeyStringToDomainTransaction,
-	receiving model.ScriptPublicKeyStringToDomainTransaction,
+	sending model.ScriptPublicKeyStringToDomainTransactions,
+	receiving model.ScriptPublicKeyStringToDomainTransactions,
 	err error,
 ) {
-	sending = make(model.ScriptPublicKeyStringToDomainTransaction)
-	receiving = make(model.ScriptPublicKeyStringToDomainTransaction, op.orphanTransactionCount())
+	sending = make(model.ScriptPublicKeyStringToDomainTransactions)
+	receiving = make(model.ScriptPublicKeyStringToDomainTransactions, op.orphanTransactionCount())
 	var transaction *externalapi.DomainTransaction
 	for _, mempoolTransaction := range op.allOrphans {
 		transaction = mempoolTransaction.Transaction()
@@ -396,10 +396,10 @@ func (op *orphansPool) getOrphanTransactionsByAddresses(clone bool) (
 				continue
 			}
 
-			sending[input.UTXOEntry.ScriptPublicKey().String()] = transaction
+			sending.Add(input.UTXOEntry.ScriptPublicKey().String(), transaction)
 		}
 		for _, output := range transaction.Outputs {
-			receiving[output.ScriptPublicKey.String()] = transaction
+			receiving.Add(output.ScriptPublicKey.String(), transaction)
 		}
 	}
 	return sending, receiving, nil
