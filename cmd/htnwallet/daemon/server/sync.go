@@ -116,9 +116,13 @@ func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 func (s *server) collectFarAddresses() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	err := s.collectAddresses(s.nextSyncStartIndex, s.nextSyncStartIndex+numIndexesToQueryForFarAddresses)
+	scanned, err := s.collectAddresses(s.nextSyncStartIndex, s.nextSyncStartIndex+numIndexesToQueryForFarAddresses)
 	if err != nil {
 		return err
+	}
+	if !scanned {
+		// Retry the same range next time; moving past it would leave it unscanned for good.
+		return nil
 	}
 
 	s.nextSyncStartIndex += numIndexesToQueryForFarAddresses
@@ -146,9 +150,13 @@ func (s *server) collectRecentAddresses() error {
 	index := uint32(0)
 	maxUsedIndex := uint32(0)
 	for ; index < maxUsedIndex+numIndexesToQueryForRecentAddresses; index += numIndexesToQueryForRecentAddresses {
-		err := s.collectAddressesWithLock(index, index+numIndexesToQueryForRecentAddresses)
+		scanned, err := s.collectAddressesWithLock(index, index+numIndexesToQueryForRecentAddresses)
 		if err != nil {
 			return err
+		}
+		if !scanned {
+			// The next sync rescans from the start; nextSyncStartIndex must not claim this range.
+			return nil
 		}
 		maxUsedIndex = s.maxUsedIndexWithLock()
 
@@ -164,38 +172,40 @@ func (s *server) collectRecentAddresses() error {
 	return nil
 }
 
-func (s *server) collectAddressesWithLock(start, end uint32) error {
+func (s *server) collectAddressesWithLock(start, end uint32) (scanned bool, err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	return s.collectAddresses(start, end)
 }
 
-func (s *server) collectAddresses(start, end uint32) error {
+// collectAddresses scans the given index range and reports whether it did. A closed RPC route (the client
+// is reconnecting) skips the scan without an error; callers must then not treat the range as scanned.
+func (s *server) collectAddresses(start, end uint32) (scanned bool, err error) {
 	addressSet, err := s.addressesToQuery(start, end)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	getUsableAddressesResponse, err := s.backgroundRPCClient.GetUsableAddresses(addressSet.strings())
 	if err != nil {
 		if errors.Is(err, router.ErrRouteClosed) {
 			log.Warnf("Route is closed during GetUsableAddresses; ignoring and skipping sync cycle.")
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 
 	err = s.updateAddressesAndLastUsedIndexes(addressSet, getUsableAddressesResponse)
 	if err != nil {
 		if errors.Is(err, router.ErrRouteClosed) {
 			log.Warnf("Route is closed during GetUsableAddresses; ignoring and skipping sync cycle.")
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
 func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAddressSet,
