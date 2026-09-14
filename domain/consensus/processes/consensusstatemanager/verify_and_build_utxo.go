@@ -263,11 +263,10 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 						errors.Wrapf(err, "transaction %s skipped", transactionID))
 					return
 				}
+				// Every other failure is recorded, not only missing inputs. A database error here used to
+				// return without setting firstErr: the transaction's inputs went unvalidated, the block was
+				// stored as UTXO-valid, and a transient local fault became a durable status difference.
 				mu.Lock()
-				if !isMissingTxOut {
-					mu.Unlock()
-					return
-				}
 				if firstErr == nil {
 					firstErr = err
 					close(done) // Signal others to stop
