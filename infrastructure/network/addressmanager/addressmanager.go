@@ -92,6 +92,14 @@ func (am *AddressManager) addAddressNoLock(netAddress *appmessage.NetAddress) er
 	if !IsRoutable(netAddress, am.cfg.AcceptUnroutable) {
 		return nil
 	}
+	// A timestamp before the Unix epoch cannot be persisted - serializeAddress panics on it - and no
+	// honest peer advertises one. Peers supply the timestamp unchecked, in address messages and in the
+	// handshake's version message, so accepting it let any peer crash the node with one address.
+	if netAddress.Timestamp.UnixMilliseconds() < 0 {
+		log.Debugf("Ignoring address %s: its timestamp %d precedes the Unix epoch",
+			netAddress.TCPAddress(), netAddress.Timestamp.UnixMilliseconds())
+		return nil
+	}
 
 	key := netAddressKey(netAddress)
 	now := time.Now()
