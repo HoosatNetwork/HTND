@@ -79,7 +79,9 @@ func (x *GetPaginatedUtxosByAddressesResponseMessage) toAppMessage() (appmessage
 		entries[i] = entryAsAppMessage
 	}
 
-	return &appmessage.GetUTXOsByAddressesResponseMessage{
+	// The paginated type, not the plain GetUTXOsByAddresses one: clients route responses by command, and the plain
+	// type sent every page to the GetUTXOsByAddresses route, where the paginated request never saw it.
+	return &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{
 		Entries: entries,
 		Error:   rpcErr,
 	}, nil
