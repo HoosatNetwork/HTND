@@ -90,7 +90,7 @@ func (rtl *compoundTxRateLimiter) looksLikeCompoundTransaction(transaction *exte
 	}
 
 	// Also consider transactions with unusually high mass as compound
-	if transaction.Mass > MaximumStandardTransactionMass/2 {
+	if transaction.LoadMass() > MaximumStandardTransactionMass/2 {
 		return true
 	}
 

@@ -6,8 +6,10 @@ import (
 
 // PopulateMass calculates and populates the mass of the given transaction
 func (v *transactionValidator) PopulateMass(transaction *externalapi.DomainTransaction) {
-	if transaction.Mass != 0 {
+	if transaction.LoadMass() != 0 {
 		return
 	}
-	transaction.Mass = v.txMassCalculator.CalculateTransactionMass(transaction)
+	// Concurrent callers may both compute the mass; they get the same value, so
+	// the last store winning is harmless.
+	transaction.StoreMass(v.txMassCalculator.CalculateTransactionMass(transaction))
 }

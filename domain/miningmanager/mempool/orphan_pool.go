@@ -93,10 +93,10 @@ func (op *orphansPool) limitOrphanPoolSize() error {
 }
 
 func (op *orphansPool) checkOrphanMass(transaction *externalapi.DomainTransaction) error {
-	if transaction.Mass > op.mempool.config.MaximumOrphanTransactionMass {
+	if transaction.LoadMass() > op.mempool.config.MaximumOrphanTransactionMass {
 		str := fmt.Sprintf("orphan transaction size of %d bytes is "+
 			"larger than max allowed size of %d bytes",
-			transaction.Mass, op.mempool.config.MaximumOrphanTransactionMass)
+			transaction.LoadMass(), op.mempool.config.MaximumOrphanTransactionMass)
 		return transactionRuleError(RejectBadOrphan, str)
 	}
 	return nil

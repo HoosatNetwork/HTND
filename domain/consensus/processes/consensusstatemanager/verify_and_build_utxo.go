@@ -594,7 +594,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		log.Infof("SubnetworkID: %s", coinbaseTransaction.SubnetworkID)
 		log.Infof("Gas: %d", coinbaseTransaction.Gas)
 		log.Infof("Fee: %d", coinbaseTransaction.Fee)
-		log.Infof("Mass: %d", coinbaseTransaction.Mass)
+		log.Infof("Mass: %d", coinbaseTransaction.LoadMass())
 		log.Infof("Payload length: %d, hex: %x", len(coinbaseTransaction.Payload), coinbaseTransaction.Payload)
 		log.Infof("Inputs count: %d", len(coinbaseTransaction.Inputs))
 		for i, input := range coinbaseTransaction.Inputs {
@@ -611,7 +611,7 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		log.Infof("SubnetworkID: %s", expectedCoinbaseTransaction.SubnetworkID)
 		log.Infof("Gas: %d", expectedCoinbaseTransaction.Gas)
 		log.Infof("Fee: %d", expectedCoinbaseTransaction.Fee)
-		log.Infof("Mass: %d", expectedCoinbaseTransaction.Mass)
+		log.Infof("Mass: %d", expectedCoinbaseTransaction.LoadMass())
 		log.Infof("Payload length: %d, hex: %x", len(expectedCoinbaseTransaction.Payload), expectedCoinbaseTransaction.Payload)
 		log.Infof("Inputs count: %d", len(expectedCoinbaseTransaction.Inputs))
 		for i, input := range expectedCoinbaseTransaction.Inputs {
@@ -638,8 +638,8 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 		if coinbaseTransaction.Fee != expectedCoinbaseTransaction.Fee {
 			log.Infof("DIFFERENCE: Fee (actual=%d, expected=%d)", coinbaseTransaction.Fee, expectedCoinbaseTransaction.Fee)
 		}
-		if coinbaseTransaction.Mass != expectedCoinbaseTransaction.Mass {
-			log.Infof("DIFFERENCE: Mass (actual=%d, expected=%d)", coinbaseTransaction.Mass, expectedCoinbaseTransaction.Mass)
+		if coinbaseTransaction.LoadMass() != expectedCoinbaseTransaction.LoadMass() {
+			log.Infof("DIFFERENCE: Mass (actual=%d, expected=%d)", coinbaseTransaction.LoadMass(), expectedCoinbaseTransaction.LoadMass())
 		}
 		if !bytes.Equal(coinbaseTransaction.Payload, expectedCoinbaseTransaction.Payload) {
 			log.Infof("DIFFERENCE: Payload (actual=%x, expected=%x)", coinbaseTransaction.Payload, expectedCoinbaseTransaction.Payload)

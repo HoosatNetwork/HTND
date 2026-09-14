@@ -230,7 +230,7 @@ func (btb *blockTemplateBuilder) ModifyBlockTemplate(newCoinbaseData *consensuse
 func (btb *blockTemplateBuilder) calcTxValue(tx *consensusexternalapi.DomainTransaction) float64 {
 	massLimit := btb.policy.BlockMaxMass[constants.GetBlockVersion()-1]
 
-	mass := tx.Mass
+	mass := tx.LoadMass()
 	fee := tx.Fee
 	if subnetworks.IsBuiltInOrNative(tx.SubnetworkID) {
 		return float64(fee) / (float64(mass) / float64(massLimit))

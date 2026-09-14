@@ -29,7 +29,12 @@ type DomainTransaction struct {
 	Gas          uint64
 	Payload      []byte
 
-	Fee  uint64
+	Fee uint64
+	// Mass is populated lazily by the transaction validator, including on
+	// transactions shared between goroutines (the dagconfig genesis coinbase
+	// is validated by every consensus instance built from the same params).
+	// Setting it in a composite literal is fine; anywhere else go through
+	// LoadMass and StoreMass.
 	Mass uint64
 
 	// ID is a field that is used to cache the transaction ID.
@@ -56,6 +61,19 @@ func (tx *DomainTransaction) SetCachedID(id *DomainTransactionID) {
 // literals and reflect.DeepEqual working, while its accessors are atomic.
 func (tx *DomainTransaction) idPointer() *unsafe.Pointer {
 	return (*unsafe.Pointer)(unsafe.Pointer(&tx.ID))
+}
+
+// LoadMass returns the transaction mass, or 0 if it hasn't been populated.
+//
+// Atomic access to a uint64 field needs it to be 64-bit aligned, which the
+// struct layout only guarantees on 64-bit platforms.
+func (tx *DomainTransaction) LoadMass() uint64 {
+	return atomic.LoadUint64(&tx.Mass)
+}
+
+// StoreMass sets the transaction mass; 0 marks it as not populated.
+func (tx *DomainTransaction) StoreMass(mass uint64) {
+	atomic.StoreUint64(&tx.Mass, mass)
 }
 
 // Clone returns a clone of DomainTransaction
@@ -89,7 +107,7 @@ func (tx *DomainTransaction) Clone() *DomainTransaction {
 		Gas:          tx.Gas,
 		Payload:      payloadClone,
 		Fee:          tx.Fee,
-		Mass:         tx.Mass,
+		Mass:         tx.LoadMass(),
 		ID:           idClone,
 	}
 }
@@ -158,7 +176,7 @@ func (tx *DomainTransaction) Equal(other *DomainTransaction) bool {
 		panic(errors.New("identical transactions should always have the same fee"))
 	}
 
-	if tx.Mass != 0 && other.Mass != 0 && tx.Mass != other.Mass {
+	if mass, otherMass := tx.LoadMass(), other.LoadMass(); mass != 0 && otherMass != 0 && mass != otherMass {
 		panic(errors.New("identical transactions should always have the same mass"))
 	}
 

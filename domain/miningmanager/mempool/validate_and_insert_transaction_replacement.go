@@ -77,11 +77,11 @@ func (mp *mempool) validateAndInsertTransactionReplacement(transaction *external
 			consensushashing.TransactionID(transaction), transaction.Fee, totalRemovedFee)
 		return nil, nil, transactionRuleError(RejectInsufficientFee, str)
 	}
-	if transaction.Mass == 0 || totalRemovedMass == 0 {
+	if transaction.LoadMass() == 0 || totalRemovedMass == 0 {
 		return nil, nil, transactionRuleError(RejectInvalid, "replacement fee-rate calculation expects populated mass")
 	}
 
-	replacementFeeRate := float64(transaction.Fee) / float64(transaction.Mass)
+	replacementFeeRate := float64(transaction.Fee) / float64(transaction.LoadMass())
 	removedFeeRate := float64(totalRemovedFee) / float64(totalRemovedMass)
 	if replacementFeeRate <= removedFeeRate {
 		str := fmt.Sprintf("replacement transaction %s fee rate (%.8f) is not higher than evicted transactions fee rate (%.8f)",
@@ -167,7 +167,7 @@ func replacementRemovalTotals(transactionsToRemove map[externalapi.DomainTransac
 ) {
 	for _, tx := range transactionsToRemove {
 		totalRemovedFee += tx.Transaction().Fee
-		totalRemovedMass += tx.Transaction().Mass
+		totalRemovedMass += tx.Transaction().LoadMass()
 	}
 	return totalRemovedFee, totalRemovedMass
 }

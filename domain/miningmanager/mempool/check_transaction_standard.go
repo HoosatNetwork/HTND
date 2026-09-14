@@ -58,9 +58,9 @@ func (mp *mempool) checkTransactionStandardInIsolation(transaction *externalapi.
 	// almost as much to process as the sender fees, limit the maximum
 	// size of a transaction. This also helps mitigate CPU exhaustion
 	// attacks.
-	if transaction.Mass > MaximumStandardTransactionMass {
+	if transaction.LoadMass() > MaximumStandardTransactionMass {
 		str := fmt.Sprintf("transaction mass of %d is larger than max allowed size of %d",
-			transaction.Mass, MaximumStandardTransactionMass)
+			transaction.LoadMass(), MaximumStandardTransactionMass)
 		return transactionRuleError(RejectNonstandard, str)
 	}
 
@@ -187,7 +187,7 @@ func (mp *mempool) checkTransactionStandardInContext(transaction *externalapi.Do
 
 	}
 
-	minimumFee := mp.minimumRequiredTransactionRelayFee(transaction.Mass)
+	minimumFee := mp.minimumRequiredTransactionRelayFee(transaction.LoadMass())
 	if transaction.Fee < minimumFee {
 		str := fmt.Sprintf("transaction %s has %d fees which is under the required amount of %d",
 			consensushashing.TransactionID(transaction), transaction.Fee, minimumFee)

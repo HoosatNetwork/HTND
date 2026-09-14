@@ -108,9 +108,9 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		// for overflow.
 		// log.Infof("Current total mass %d, candidate tx %s mass %d, max block mass %d",
 		// 	txsForBlockTemplate.totalMass, consensushashing.TransactionID(tx),
-		// 	selectedTx.Mass, btb.policy.BlockMaxMass[constants.GetBlockVersion()-1])
-		if txsForBlockTemplate.totalMass+selectedTx.Mass < txsForBlockTemplate.totalMass ||
-			txsForBlockTemplate.totalMass+selectedTx.Mass > btb.policy.BlockMaxMass[constants.GetBlockVersion()-1] {
+		// 	selectedTx.LoadMass(), btb.policy.BlockMaxMass[constants.GetBlockVersion()-1])
+		if txsForBlockTemplate.totalMass+selectedTx.LoadMass() < txsForBlockTemplate.totalMass ||
+			txsForBlockTemplate.totalMass+selectedTx.LoadMass() > btb.policy.BlockMaxMass[constants.GetBlockVersion()-1] {
 			log.Tracef("Tx %s would exceed the max block mass. "+
 				"As such, stopping.", consensushashing.TransactionID(tx))
 			break
@@ -151,11 +151,11 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		// save the masses, fees, and signature operation counts to the
 		// result.
 		selectedTxs = append(selectedTxs, selectedTx)
-		txsForBlockTemplate.totalMass += selectedTx.Mass
+		txsForBlockTemplate.totalMass += selectedTx.LoadMass()
 		txsForBlockTemplate.totalFees += selectedTx.Fee
 
 		log.Tracef("Adding tx %s (feePerMegaGram %d)",
-			consensushashing.TransactionID(tx), selectedTx.Fee*1e6/selectedTx.Mass)
+			consensushashing.TransactionID(tx), selectedTx.Fee*1e6/selectedTx.LoadMass())
 
 		markCandidateTxForDeletion(selectedTx)
 	}
@@ -172,7 +172,7 @@ func (btb *blockTemplateBuilder) selectTransactions(candidateTxs []*candidateTx)
 		txsForBlockTemplate.txFees = make([]uint64, len(selectedTxs))
 		for i := 0; i < len(selectedTxs); i++ {
 			txsForBlockTemplate.selectedTxs[i] = selectedTxs[i].DomainTransaction
-			txsForBlockTemplate.txMasses[i] = selectedTxs[i].Mass
+			txsForBlockTemplate.txMasses[i] = selectedTxs[i].LoadMass()
 			txsForBlockTemplate.txFees[i] = selectedTxs[i].Fee
 		}
 	}

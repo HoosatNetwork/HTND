@@ -105,12 +105,12 @@ func (mp *mempool) raisePriorityIfCompound(transaction *externalapi.DomainTransa
 	// expires or is evicted, which is not a throttle but the removal of the pool's only bound. So when
 	// the degenerate input rule is the only thing that matched, fall back to the ordinary lifetime; a
 	// genuinely large transaction still qualifies on mass.
-	if mp.config.CompoundTxMinInputsThreshold == 0 && transaction.Mass <= MaximumStandardTransactionMass/2 {
+	if mp.config.CompoundTxMinInputsThreshold == 0 && transaction.LoadMass() <= MaximumStandardTransactionMass/2 {
 		return isHighPriority
 	}
 
 	log.Debugf("Transaction %s is a compound transaction (%d inputs, mass %d), raising it to high "+
 		"priority so that the mempool does not expire it", consensushashing.TransactionID(transaction),
-		len(transaction.Inputs), transaction.Mass)
+		len(transaction.Inputs), transaction.LoadMass())
 	return true
 }
