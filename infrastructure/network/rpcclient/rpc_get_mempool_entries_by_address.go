@@ -8,7 +8,7 @@ func (c *RPCClient) GetMempoolEntriesByAddresses(addresses []string, includeOrph
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetMempoolEntriesByAddressesResponseMessage).Dequeue()
+	response, err := c.route(appmessage.CmdGetMempoolEntriesByAddressesResponseMessage).DequeueWithTimeout(c.timeout)
 	if err != nil {
 		return nil, err
 	}

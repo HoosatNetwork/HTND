@@ -8,7 +8,7 @@ func (c *RPCClient) GetBalancesByAddresses(addresses []string) (*appmessage.GetB
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetBalancesByAddressesResponseMessage).Dequeue()
+	response, err := c.route(appmessage.CmdGetBalancesByAddressesResponseMessage).DequeueWithTimeout(c.timeout)
 	if err != nil {
 		return nil, err
 	}
