@@ -111,6 +111,12 @@ var (
 		"the whole retained chain can be scanned. The newest block that still AGREES is the newest "+
 		"point this node can derive a bundle for that the chain will accept")
 
+	headerGHOSTDAGScan = flag.Int("headerghostdagscan", 0, "walk this many selected-chain blocks back from the "+
+		"headers selected tip comparing each block's header BlueScore and BlueWork against the GHOSTDAG data this "+
+		"node stored for it. The header-in-context checks for both values are disabled, and applying a pruning "+
+		"point proof copies header values into proof blocks' GHOSTDAG data, so a disagreement is accepted silently; "+
+		"this counts them. One header and one GHOSTDAG read per block, no UTXO iteration")
+
 	supplyByDAA = flag.Uint64("supplybydaa", 0, "bucket size in DAA scores. Reports how much of this "+
 		"node's supply carries a stamp in each bucket, with a running total, so growth since a point "+
 		"in time can be accounted for rather than guessed at")
@@ -303,6 +309,10 @@ func main() {
 
 	if *commitmentScan > 0 {
 		scanCommitmentAgreement(s, sa, *commitmentScan)
+	}
+
+	if *headerGHOSTDAGScan > 0 {
+		scanHeaderGHOSTDAGAgreement(s, sa, *headerGHOSTDAGScan)
 	}
 
 	if *reconstruct {
@@ -3069,5 +3079,107 @@ func pruningDepthAudit(s *stores, sa *model.StagingArea, depth int) {
 			verdict = "CONSISTENT with these headers"
 		}
 		fmt.Printf("     candidate depth %-7d (block version %d): %s\n", c.depth, c.version, verdict)
+	}
+}
+
+// scanHeaderGHOSTDAGAgreement walks the selected chain back from the headers selected tip and compares each block's
+// header BlueScore and BlueWork with the GHOSTDAG data this node stored for the block (HTN-006). The header-in-context
+// checks that would reject a disagreement are disabled (blockvalidator/block_header_in_context.go), and applying a
+// pruning point proof overwrites proof blocks' level-0 GHOSTDAG data with their header values, so a node synced through
+// a headers proof and one synced from genesis can hold different blue scores for the same blocks - and pruning and
+// finality use those stored values. This counts how often, on this node, the stored values and the headers disagree.
+func scanHeaderGHOSTDAGAgreement(s *stores, sa *model.StagingArea, depth int) {
+	fmt.Printf("\n=== header BlueScore/BlueWork vs this node's stored GHOSTDAG data\n")
+
+	tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa)
+	if err != nil {
+		fmt.Printf("  headers selected tip: %v\n", err)
+		return
+	}
+	tip, err := s.chain.GetIndexByHash(s.db, sa, tipHash)
+	if err != nil {
+		fmt.Printf("  tip index: %v\n", err)
+		return
+	}
+
+	type mismatch struct {
+		index                    uint64
+		hash                     *externalapi.DomainHash
+		daaScore                 uint64
+		headerScore, storedScore uint64
+		headerWork, storedWork   string
+	}
+	var scanned, unreadable, agreeing, scoreAndWork, scoreOnly, workOnly int
+	var minScoreDelta, maxScoreDelta int64
+	var newest, oldest *mismatch
+
+	for i := tip; i > 0 && tip-i < uint64(depth); i-- {
+		blockHash, err := s.chain.GetHashByIndex(s.db, sa, i)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, blockHash)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		data, err := s.gd.Get(s.db, sa, blockHash, false)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		scanned++
+
+		scoreDiffers := header.BlueScore() != data.BlueScore()
+		workDiffers := data.BlueWork() == nil || header.BlueWork() == nil || header.BlueWork().Cmp(data.BlueWork()) != 0
+		switch {
+		case !scoreDiffers && !workDiffers:
+			agreeing++
+			continue
+		case scoreDiffers && workDiffers:
+			scoreAndWork++
+		case scoreDiffers:
+			scoreOnly++
+		default:
+			workOnly++
+		}
+
+		delta := int64(header.BlueScore()) - int64(data.BlueScore())
+		if delta < minScoreDelta {
+			minScoreDelta = delta
+		}
+		if delta > maxScoreDelta {
+			maxScoreDelta = delta
+		}
+		current := &mismatch{index: i, hash: blockHash, daaScore: header.DAAScore(),
+			headerScore: header.BlueScore(), storedScore: data.BlueScore(),
+			headerWork: fmt.Sprint(header.BlueWork()), storedWork: fmt.Sprint(data.BlueWork())}
+		if newest == nil {
+			newest = current
+		}
+		// Walking backwards, so the last mismatch seen is the oldest one in the window.
+		oldest = current
+	}
+
+	fmt.Printf("  chain blocks examined : %d (of %d requested, %d unreadable)\n", scanned, depth, unreadable)
+	fmt.Printf("    header and stored GHOSTDAG AGREE      : %d\n", agreeing)
+	fmt.Printf("    blue score AND blue work differ       : %d\n", scoreAndWork)
+	fmt.Printf("    only blue score differs               : %d\n", scoreOnly)
+	fmt.Printf("    only blue work differs                : %d\n", workOnly)
+	if newest == nil {
+		if scanned > 0 {
+			fmt.Printf("  => every examined block's header matches the GHOSTDAG data this node stored for it\n")
+		}
+		return
+	}
+	fmt.Printf("    header - stored blue score ranges over [%d, %d]\n", minScoreDelta, maxScoreDelta)
+	for _, m := range []struct {
+		label string
+		value *mismatch
+	}{{"newest", newest}, {"oldest", oldest}} {
+		fmt.Printf("  %s mismatch: %s (chain index %d, DAA %d)\n", m.label, m.value.hash, m.value.index, m.value.daaScore)
+		fmt.Printf("    header blue score %d, stored %d; header blue work %s, stored %s\n",
+			m.value.headerScore, m.value.storedScore, m.value.headerWork, m.value.storedWork)
 	}
 }
