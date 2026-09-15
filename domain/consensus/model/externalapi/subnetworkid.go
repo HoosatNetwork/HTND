@@ -8,16 +8,13 @@ const DomainSubnetworkIDSize = 20
 // DomainSubnetworkID is the domain representation of a Subnetwork ID
 type DomainSubnetworkID [DomainSubnetworkIDSize]byte
 
-var DomainSubnetworkIDBuf [256]byte
-
-func fastHex(dst []byte, src []byte) string {
-	n := hex.Encode(dst, src)
-	return string(dst[:n])
-}
-
 // String stringifies a subnetwork ID.
 func (id DomainSubnetworkID) String() string {
-	return fastHex(DomainSubnetworkIDBuf[:], id[:])
+	// A per-call buffer: String runs on many goroutines at once (RPC transaction conversion, log formatting), and
+	// the package-level buffer it used could be overwritten by another call between encoding and copying.
+	var buffer [2 * DomainSubnetworkIDSize]byte
+	hex.Encode(buffer[:], id[:])
+	return string(buffer[:])
 }
 
 // Clone returns a clone of DomainSubnetworkID
