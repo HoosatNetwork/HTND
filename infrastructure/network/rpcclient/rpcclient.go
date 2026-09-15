@@ -127,6 +127,10 @@ func (c *RPCClient) disconnect() error {
 	return nil
 }
 
+// reconnectRetryDelay is how long Reconnect waits between connection attempts. It is a variable only so tests can
+// shorten it.
+var reconnectRetryDelay = 10 * time.Second
+
 // Reconnect forces the client to attempt to reconnect to the address
 // this client initially was connected to
 func (c *RPCClient) Reconnect() error {
@@ -159,7 +163,7 @@ func (c *RPCClient) Reconnect() error {
 		if c.isClosed.Load() == 1 {
 			return errors.Errorf("Stopped reconnecting to %s because the client was closed", c.rpcAddress)
 		}
-		const retryDelay = 10 * time.Second
+		retryDelay := reconnectRetryDelay
 		if time.Since(c.lastDisconnectedTime) > retryDelay {
 			err := c.connect()
 			if err == nil {
@@ -211,6 +215,12 @@ func (c *RPCClient) handleClientDisconnected() {
 		c.lastDisconnectedTime = time.Now()
 		err = c.Reconnect()
 		if err != nil {
+			// Close() stops a reconnect in progress, and Reconnect reports that as an error. It is the client
+			// shutting down, not a failure: this runs on a spawned receive or send loop, where a panic exits the
+			// whole process.
+			if c.isClosed.Load() == 1 {
+				return
+			}
 			panic(err)
 		}
 	}
