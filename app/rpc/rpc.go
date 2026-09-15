@@ -82,36 +82,76 @@ func (m *Manager) routerInitializer(rtr *router.Router, netConnection *netadapte
 	spawn("routerInitializer-handleIncomingMessages", func() {
 		defer m.context.NotificationManager.RemoveListener(rtr)
 
-		err := m.handleIncomingMessages(rtr, incomingRoute, netConnection)
+		err := m.handleIncomingMessages(rtr, incomingRoute, netConnection.Address(), netConnection)
 		m.handleError(err, netConnection)
 	})
 }
 
-func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *router.Route, netConnection *netadapter.NetConnection) error {
-	clientAddress := netConnection.Address()
-	outgoingRoute := router.OutgoingRoute()
+// addressIndexCommands are the requests that check every coin of an address against virtual's UTXO set. For an address
+// with many coins, such as a mining pool's, that takes minutes, so they are handled apart from the client's other
+// requests.
+var addressIndexCommands = map[appmessage.MessageCommand]struct{}{
+	appmessage.CmdGetBalanceByAddressRequestMessage:          {},
+	appmessage.CmdGetBalancesByAddressesRequestMessage:       {},
+	appmessage.CmdGetUTXOsByAddressesRequestMessage:          {},
+	appmessage.CmdGetPaginatedUTXOsByAddressesRequestMessage: {},
+	appmessage.CmdGetUsableAddressesRequestMessage:           {},
+}
+
+const addressIndexRequestsQueueSize = 100
+
+func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *router.Route, clientAddress string,
+	netConnection *netadapter.NetConnection,
+) error {
+	// A client's requests are handled one at a time, and a pool that asked for its address's balance on the connection
+	// it mines through had its GetBlockTemplate and SubmitBlock requests wait minutes behind it. Address-index requests
+	// go to their own worker, still in order among themselves; responses are matched by type, not by order.
+	addressIndexRequests := make(chan appmessage.Message, addressIndexRequestsQueueSize)
+	defer close(addressIndexRequests)
+	spawn("routerInitializer-handleAddressIndexRequests", func() {
+		failed := false
+		for request := range addressIndexRequests {
+			// After a failure the connection is being closed; keep draining so the sender never blocks.
+			if failed {
+				continue
+			}
+			err := m.handleRequest(router, request)
+			if err != nil {
+				failed = true
+				m.handleError(err, netConnection)
+			}
+		}
+	})
+
 	for {
 		request, err := incomingRoute.Dequeue()
 		if err != nil {
 			return err
 		}
-		handler, ok := handlers[request.Command()]
-		if !ok {
+		if _, ok := handlers[request.Command()]; !ok {
 			return errors.Errorf("unknown RPC command %s", request.Command())
 		}
 
 		// Record the RPC request for statistics
 		RPCStats.RecordRequest(clientAddress, request.Command().String())
 
-		response, err := handler(m.context, router, request)
-		if err != nil {
-			return err
+		if _, ok := addressIndexCommands[request.Command()]; ok {
+			addressIndexRequests <- request
+			continue
 		}
-		err = outgoingRoute.Enqueue(response)
+		err = m.handleRequest(router, request)
 		if err != nil {
 			return err
 		}
 	}
+}
+
+func (m *Manager) handleRequest(router *router.Router, request appmessage.Message) error {
+	response, err := handlers[request.Command()](m.context, router, request)
+	if err != nil {
+		return err
+	}
+	return router.OutgoingRoute().Enqueue(response)
 }
 
 func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection) {
