@@ -41,9 +41,11 @@ type gRPCServer struct {
 	compressionFallback *compressionFallback
 }
 
-// newGRPCServer creates a gRPC server
-func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundConnections int, name string) *gRPCServer {
-	log.Debugf("Created new %s GRPC server with maxMessageSize %d and maxInboundConnections %d", name, maxMessageSize, maxInboundConnections)
+// init installs the tiered buffer pool as gRPC's process-wide default. grpc documents SetDefaultBufferPool as
+// init-time only and not thread-safe, but it used to run in newGRPCServer - for every P2P and RPC server, and for
+// every in-process node a test starts - while clients created earlier were reading the same global. Every binary
+// that builds a gRPC server links this package, including the htnwallet daemon, so setting it here covers them all.
+func init() {
 	tieredPool := mem.NewTieredBufferPool(
 		1024,         // 1 KiB
 		4*1024,       // 4 KiB
@@ -55,6 +57,11 @@ func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundCo
 		16*1024*1024, // 16 MiB
 	)
 	experimental.SetDefaultBufferPool(tieredPool)
+}
+
+// newGRPCServer creates a gRPC server
+func newGRPCServer(listeningAddresses []string, maxMessageSize int, maxInboundConnections int, name string) *gRPCServer {
+	log.Debugf("Created new %s GRPC server with maxMessageSize %d and maxInboundConnections %d", name, maxMessageSize, maxInboundConnections)
 	return &gRPCServer{
 		server: grpc.NewServer(
 			grpc.MaxRecvMsgSize(maxMessageSize),

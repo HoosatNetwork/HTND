@@ -96,7 +96,9 @@ func TestRPCMaxInboundConnections(t *testing.T) {
 	}
 
 	rpcClients := make([]*testRPCClient, 0, harness.config.RPCMaxClients)
-	defer closeRPCClients(t, rpcClients)
+	// A closure, so the clients appended below - and the replacement stored in rpcClients[0] - are closed. A plain
+	// deferred call evaluated the empty slice, and the leaked clients kept reconnecting into later tests.
+	defer func() { closeRPCClients(t, rpcClients) }()
 
 	for i := 0; i < harness.config.RPCMaxClients; i++ {
 		rpcClient, err := newTestRPCClient(harness.rpcAddress)
