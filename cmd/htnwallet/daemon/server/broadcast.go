@@ -37,12 +37,12 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 		if isDomain {
 			tx, err = serialization.DeserializeDomainTransaction(transaction)
 			if err != nil {
-				return nil, err
+				return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 			}
 		} else if !isDomain { // default in proto3 is false
 			tx, err = libhtnwallet.ExtractTransaction(transaction, s.keysFile.ECDSA)
 			if err != nil {
-				return nil, err
+				return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 			}
 		}
 
@@ -51,7 +51,7 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			if shouldReleaseUsedOutpointsOnBroadcastError(err) {
 				s.releaseUsedOutpoints(tx)
 			}
-			return nil, err
+			return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 		}
 
 		for _, input := range tx.Inputs {
@@ -61,6 +61,17 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 
 	s.forceSync()
 	return txIDs, nil
+}
+
+// withSubmittedTransactionIDs adds to a broadcast error the IDs of the transactions of the same request that were
+// already submitted. They are in the node's mempool and will be mined, but the error replaces the response that would
+// have listed them, so without this the caller cannot tell which payments went out.
+func withSubmittedTransactionIDs(err error, submittedTxIDs []string) error {
+	if len(submittedTxIDs) == 0 {
+		return err
+	}
+	return errors.Wrapf(err, "%d transaction(s) of this request were already submitted and may be in the node's "+
+		"mempool (%s)", len(submittedTxIDs), strings.Join(submittedTxIDs, ", "))
 }
 
 func shouldReleaseUsedOutpointsOnBroadcastError(err error) bool {
