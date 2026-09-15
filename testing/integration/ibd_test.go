@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"math"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -9,8 +10,8 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/mining"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
 	"github.com/HoosatNetwork/HTND/internal/ci"
 
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
@@ -165,21 +166,30 @@ func TestIBDWithPruning(t *testing.T) {
 	const numBlocks = 100
 
 	overrideDAGParams := dagconfig.SimnetParams
+	// Copy the per-version tables changed below: the struct copy above shares their arrays with SimnetParams.
+	overrideDAGParams.TargetTimePerBlock = append([]time.Duration(nil), overrideDAGParams.TargetTimePerBlock...)
+	overrideDAGParams.K = append([]externalapi.KType(nil), overrideDAGParams.K...)
+	// The overrides below are version 1 values, and block rules and pruning depth follow each block's (and the
+	// chain's) own version. Simnet activates version 2 at DAA score 5, where the default target time makes these
+	// mock timestamps, spaced 10 seconds apart, too far in the future. Keep every block at version 1.
+	overrideDAGParams.POWScores = []uint64{math.MaxUint64}
 
 	// Increase the target time per block so that we could mine
 	// blocks with timestamps that are spaced far enough apart
 	// to avoid failing the timestamp threshold validation of
 	// ibd-with-headers-proof
-	overrideDAGParams.TargetTimePerBlock[constants.GetBlockVersion()-1] = time.Minute
+	// Index the version 1 entries directly: the chain is kept at version 1, while the process-global version may
+	// already have been raised by blocks an earlier test in this package mined.
+	overrideDAGParams.TargetTimePerBlock[0] = time.Minute
 
 	// This is done to make a pruning depth of 6 blocks
-	overrideDAGParams.FinalityDuration = []time.Duration{2 * overrideDAGParams.TargetTimePerBlock[constants.GetBlockVersion()-1]}
-	overrideDAGParams.K[constants.GetBlockVersion()-1] = 0
+	overrideDAGParams.FinalityDuration = []time.Duration{2 * overrideDAGParams.TargetTimePerBlock[0]}
+	overrideDAGParams.K[0] = 0
 	overrideDAGParams.PruningProofM = 20
 
 	expectedPruningDepth := uint64(6)
-	if overrideDAGParams.PruningDepth() != expectedPruningDepth {
-		t.Fatalf("Unexpected pruning depth: expected %d but got %d", expectedPruningDepth, overrideDAGParams.PruningDepth())
+	if pruningDepth := overrideDAGParams.PruningDepthForBlockVersion(1); pruningDepth != expectedPruningDepth {
+		t.Fatalf("Unexpected pruning depth: expected %d but got %d", expectedPruningDepth, pruningDepth)
 	}
 
 	harnesses, teardown := setupHarnesses(t, []*harnessParams{
@@ -257,8 +267,15 @@ func mineNextBlockWithMockTimestamps(t *testing.T, harness *appHarness, rd *rand
 	mutableHeader.SetTimeInMilliseconds(currentMockTimestamp)
 	block.Header = mutableHeader.ToImmutable()
 
-	_, powhash := mining.SolveBlock(block, rd)
-	block.PoWHash = powhash
+	if harness.config.ActiveNetParams.SkipProofOfWork {
+		// PoW validation is disabled for integration tests, so avoid the nonce search, as mineNextBlock does: with
+		// Hoohash it can run for minutes and made this helper hang the test.
+		_, powHash := pow.NewState(block.Header.ToMutable()).CalculateProofOfWorkValue()
+		block.PoWHash = powHash.String()
+	} else {
+		_, powHash := mining.SolveBlock(block, rd)
+		block.PoWHash = powHash
+	}
 	_, err = harness.rpcClient.SubmitBlockAlsoIfNonDAA(block, block.PoWHash)
 	if err != nil {
 		t.Fatalf("Error submitting block: %s", err)
