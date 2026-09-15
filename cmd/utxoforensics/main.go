@@ -44,19 +44,28 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/acceptancedatastore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockheaderstore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockrelationstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstatusstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockstore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/blockwindowheapslicestore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/consensusstatestore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/daablocksstore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/daawindowstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/ghostdagdatastore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/headersselectedchainstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/headersselectedtipstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/multisetstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/pruningstore"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/reachabilitydatastore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/utxodiffstore"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/processes/coinbasemanager"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/dagtopologymanager"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/dagtraversalmanager"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/difficultymanager"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/ghostdagmanager"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/reachabilitymanager"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
@@ -68,6 +77,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
 	infradatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
+	"github.com/HoosatNetwork/HTND/util/difficulty"
 	"github.com/pkg/errors"
 )
 
@@ -116,6 +126,12 @@ var (
 		"node stored for it. The header-in-context checks for both values are disabled, and applying a pruning "+
 		"point proof copies header values into proof blocks' GHOSTDAG data, so a disagreement is accepted silently; "+
 		"this counts them. One header and one GHOSTDAG read per block, no UTXO iteration")
+
+	difficultyScan = flag.Int("difficultyscan", 0, "walk this many selected-chain blocks back from the headers "+
+		"selected tip comparing each header's bits with the difficulty this node requires for the block "+
+		"(RequiredDifficulty over the block's own DAA window, mainnet parameters). The header-in-context check "+
+		"that would compare them is not run, so any bits up to powMax are accepted; this counts how often the "+
+		"committed bits and the required difficulty disagree (HTN-007). Computes one DAA window per block")
 
 	supplyByDAA = flag.Uint64("supplybydaa", 0, "bucket size in DAA scores. Reports how much of this "+
 		"node's supply carries a stamp in each bucket, with a running total, so growth since a point "+
@@ -197,6 +213,7 @@ var (
 
 type stores struct {
 	db         model.DBManager
+	prefix     model.DBBucket
 	headers    model.BlockHeaderStore
 	blocks     model.BlockStore
 	accept     model.AcceptanceDataStore
@@ -313,6 +330,10 @@ func main() {
 
 	if *headerGHOSTDAGScan > 0 {
 		scanHeaderGHOSTDAGAgreement(s, sa, *headerGHOSTDAGScan)
+	}
+
+	if *difficultyScan > 0 {
+		scanDifficultyAgreement(s, sa, *difficultyScan)
 	}
 
 	if *reconstruct {
@@ -949,7 +970,7 @@ func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
 		return nil, err
 	}
 	return &stores{
-		db: dbManager, headers: bhs, blocks: bs,
+		db: dbManager, prefix: pb, headers: bhs, blocks: bs,
 		accept:     acceptancedatastore.New(pb, 100, false),
 		ms:         multisetstore.New(pb, 100, false),
 		gd:         ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
@@ -3181,5 +3202,149 @@ func scanHeaderGHOSTDAGAgreement(s *stores, sa *model.StagingArea, depth int) {
 		fmt.Printf("  %s mismatch: %s (chain index %d, DAA %d)\n", m.label, m.value.hash, m.value.index, m.value.daaScore)
 		fmt.Printf("    header blue score %d, stored %d; header blue work %s, stored %s\n",
 			m.value.headerScore, m.value.storedScore, m.value.headerWork, m.value.storedWork)
+	}
+}
+
+// newDifficultyManager builds a difficulty manager over the stores of a copied datadir, wired the way the consensus
+// factory wires level 0: the reachability store the node already uses (the old per-level one when it holds data for
+// virtual genesis, otherwise the one under the consensus prefix), DAG topology, GHOSTDAG, DAG traversal, then the
+// difficulty manager itself, with mainnet parameters.
+func newDifficultyManager(s *stores, sa *model.StagingArea) (model.DifficultyManager, error) {
+	params := dagconfig.MainnetParams
+	level0 := s.prefix.Bucket([]byte{0})
+
+	reachabilityStore := reachabilitydatastore.New(level0, 10_000, false)
+	hasOldReachability, err := reachabilityStore.HasReachabilityData(s.db, sa, model.VirtualGenesisBlockHash)
+	if err != nil {
+		return nil, err
+	}
+	if !hasOldReachability {
+		reachabilityStore = reachabilitydatastore.New(s.prefix, 10_000, false)
+	}
+	reachabilityManager := reachabilitymanager.New(s.db, s.gd, reachabilityStore)
+	dagTopologyManager := dagtopologymanager.New(s.db, reachabilityManager, blockrelationstore.New(level0, 10_000, false), s.gd)
+	ghostdagManager := ghostdagmanager.New(s.db, dagTopologyManager, nil, s.gd, s.headers, s.state, params.K,
+		params.GenesisHash, s.daa, params.POWScores)
+	dagTraversalManager := dagtraversalmanager.New(s.db, dagTopologyManager, s.gd, reachabilityManager, ghostdagManager,
+		daawindowstore.New(s.prefix, 1_000, false), blockwindowheapslicestore.New(1_000, false), params.GenesisHash,
+		params.DifficultyAdjustmentWindowSize, s.daa, params.POWScores)
+	ghostdagManager.SetDAGTraversalManager(dagTraversalManager)
+
+	return difficultymanager.New(s.db, ghostdagManager, s.gd, s.headers, s.daa, dagTopologyManager, dagTraversalManager,
+		params.PowMax, params.DifficultyAdjustmentWindowSize, params.DisableDifficultyAdjustment, params.TargetTimePerBlock,
+		params.GenesisHash, params.GenesisBlock.Header.Bits(), params.POWScores), nil
+}
+
+// scanDifficultyAgreement walks the selected chain back from the headers selected tip and compares each block's
+// header bits with the difficulty this node requires for it (HTN-007). The check that would reject a difference is
+// not run during validation, so a header may commit to any bits up to powMax. The required difficulty is computed with
+// the current rules - each block's DAA window sized by its own block version - so a mismatch can also come from a
+// window rule that differs from the one the block's miner used; the per-version breakdown separates the two.
+func scanDifficultyAgreement(s *stores, sa *model.StagingArea, depth int) {
+	fmt.Printf("\n=== header bits vs the difficulty this node requires for the block\n")
+
+	difficultyManager, err := newDifficultyManager(s, sa)
+	if err != nil {
+		fmt.Printf("  difficulty manager: %v\n", err)
+		return
+	}
+	tipHash, err := s.headersTip.HeadersSelectedTip(s.db, sa)
+	if err != nil {
+		fmt.Printf("  headers selected tip: %v\n", err)
+		return
+	}
+	tip, err := s.chain.GetIndexByHash(s.db, sa, tipHash)
+	if err != nil {
+		fmt.Printf("  tip index: %v\n", err)
+		return
+	}
+
+	type mismatch struct {
+		index            uint64
+		hash             *externalapi.DomainHash
+		daaScore         uint64
+		version          uint16
+		headerBits, want uint32
+	}
+	var scanned, unreadable, agreeing, headerEasier, headerHarder int
+	var firstUnreadable string
+	mismatchesByVersion := map[uint16]int{}
+	agreeingByVersion := map[uint16]int{}
+	var newest, oldest *mismatch
+
+	for i := tip; i > 0 && tip-i < uint64(depth); i-- {
+		blockHash, err := s.chain.GetHashByIndex(s.db, sa, i)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, blockHash)
+		if err != nil {
+			unreadable++
+			continue
+		}
+		required, err := difficultyManager.RequiredDifficulty(model.NewStagingArea(), blockHash)
+		if err != nil {
+			unreadable++
+			if firstUnreadable == "" {
+				firstUnreadable = fmt.Sprintf("%s (chain index %d): %v", blockHash, i, err)
+			}
+			continue
+		}
+		scanned++
+		version := constants.BlockVersionForDAAScore(dagconfig.MainnetParams.POWScores, header.DAAScore())
+		if header.Bits() == required {
+			agreeing++
+			agreeingByVersion[version]++
+			continue
+		}
+		mismatchesByVersion[version]++
+		// A larger target is an easier difficulty.
+		if difficulty.CompactToBig(header.Bits()).Cmp(difficulty.CompactToBig(required)) > 0 {
+			headerEasier++
+		} else {
+			headerHarder++
+		}
+		current := &mismatch{index: i, hash: blockHash, daaScore: header.DAAScore(), version: version,
+			headerBits: header.Bits(), want: required}
+		if newest == nil {
+			newest = current
+		}
+		// Walking backwards, so the last mismatch seen is the oldest one in the window.
+		oldest = current
+	}
+
+	fmt.Printf("  chain blocks examined : %d (of %d requested, %d unreadable)\n", scanned, depth, unreadable)
+	if firstUnreadable != "" {
+		fmt.Printf("    first unreadable: %s\n", firstUnreadable)
+	}
+	fmt.Printf("    header bits EQUAL required difficulty : %d\n", agreeing)
+	fmt.Printf("    header bits EASIER than required      : %d\n", headerEasier)
+	fmt.Printf("    header bits HARDER than required      : %d\n", headerHarder)
+	versions := map[uint16]bool{}
+	for version := range agreeingByVersion {
+		versions[version] = true
+	}
+	for version := range mismatchesByVersion {
+		versions[version] = true
+	}
+	sortedVersions := make([]int, 0, len(versions))
+	for version := range versions {
+		sortedVersions = append(sortedVersions, int(version))
+	}
+	sort.Ints(sortedVersions)
+	for _, version := range sortedVersions {
+		fmt.Printf("    header DAA version %d: %d equal, %d differ\n", version,
+			agreeingByVersion[uint16(version)], mismatchesByVersion[uint16(version)])
+	}
+	for _, m := range []struct {
+		label string
+		value *mismatch
+	}{{"newest", newest}, {"oldest", oldest}} {
+		if m.value == nil {
+			continue
+		}
+		fmt.Printf("  %s mismatch: %s (chain index %d, DAA %d, version %d): header bits %08x, required %08x\n",
+			m.label, m.value.hash, m.value.index, m.value.daaScore, m.value.version, m.value.headerBits, m.value.want)
 	}
 }
