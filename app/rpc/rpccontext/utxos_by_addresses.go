@@ -174,7 +174,6 @@ func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
 	addressStrings []string,
 ) ([]*UTXOsChangedNotificationAddress, error) {
 	addresses := make([]*UTXOsChangedNotificationAddress, len(addressStrings))
-	var reusableHexBuffer []byte
 	for i, addressString := range addressStrings {
 		address, err := util.DecodeAddress(addressString, ctx.Config.ActiveNetParams.Prefix)
 		if err != nil {
@@ -184,9 +183,9 @@ func (ctx *Context) ConvertAddressStringsToUTXOsChangedNotificationAddresses(
 		if err != nil {
 			return nil, errors.Errorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 		}
-		var scriptHex string
-		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
-		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(scriptHex)
+		// The key must be the script's String() form - version and raw script bytes - because that is how the
+		// notification filter looks up each UTXO change. The hex text of the script never matched it.
+		scriptPublicKeyString := utxoindex.ScriptPublicKeyString(scriptPublicKey.String())
 		addresses[i] = &UTXOsChangedNotificationAddress{
 			Address:               addressString,
 			ScriptPublicKeyString: scriptPublicKeyString,
