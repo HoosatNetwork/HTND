@@ -494,10 +494,16 @@ func makeFakeUTXOs() []*externalapi.OutpointAndUTXOEntryPair {
 func TestGetPruningPointUTXOs(t *testing.T) {
 	ci.SkipLongTest(t, "Skipping IBD test (Takes way too long to execute in CI)")
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		// The overrides below are version 1 values, and the pruning depth follows the chain's own version: testnet
+		// reaches version 5 at DAA score 200, whose pruning depth is about 29k blocks. Keep every block at version 1.
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
+		// Copy the per-version table changed below: it is shared with the network's params.
+		consensusConfig.K = append([]externalapi.KType(nil), consensusConfig.K...)
+
 		// This is done to reduce the pruning depth to 8 blocks
 		finalityDepth := 4
-		consensusConfig.FinalityDuration = []time.Duration{time.Duration(finalityDepth) * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}
-		consensusConfig.K[constants.GetBlockVersion()-1] = 0
+		consensusConfig.FinalityDuration = []time.Duration{time.Duration(finalityDepth) * consensusConfig.TargetTimePerBlock[0]}
+		consensusConfig.K[0] = 0
 
 		consensusConfig.BlockCoinbaseMaturity = 0
 
