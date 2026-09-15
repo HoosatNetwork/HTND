@@ -348,6 +348,14 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 
 	updateVirtualStagingArea := model.NewStagingArea()
 
+	if processingPointStatus == externalapi.StatusDisqualifiedFromChain {
+		err = csm.stageDisqualifiedProcessingPointAsSelectedTip(updateVirtualStagingArea, processingPoint,
+			previousVirtualSelectedParent)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
 	virtualParents := []*externalapi.DomainHash{processingPoint}
 	// If `isCompletelyResolved`, set virtual correctly with all tips which have less blue work than pending
 	if isCompletelyResolved {
