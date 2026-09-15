@@ -96,7 +96,7 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 		return nil, err
 	}
 
-	confirmations := selectedParentInfo.BlueScore - blockInfo.BlueScore + 1
+	confirmations := confirmationsSince(selectedParentInfo.BlueScore, blockInfo.BlueScore)
 
 	if blockInfo.BlockStatus == externalapi.StatusInvalid {
 		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusInvalid, emptyHash, 0), nil
@@ -148,7 +148,7 @@ func transactionStatusResponse(context *rpccontext.Context, acceptance *transact
 	if err != nil {
 		return nil, err
 	}
-	confirmations := selectedParentInfo.BlueScore - acceptingBlockInfo.BlueScore + 1
+	confirmations := confirmationsSince(selectedParentInfo.BlueScore, acceptingBlockInfo.BlueScore)
 
 	switch {
 	case !acceptance.accepted:
@@ -163,4 +163,16 @@ func transactionStatusResponse(context *rpccontext.Context, acceptance *transact
 		return appmessage.NewGetTransactionStatusResponseMessage(
 			appmessage.TransactionStatusAccepted, acceptance.acceptingBlock, confirmations), nil
 	}
+}
+
+// confirmationsSince counts a block's confirmations from the virtual selected parent's blue score, the selected
+// parent itself being one. A block whose blue score is above the selected parent's - an unmerged tip with more blues
+// but less blue work, or a block beyond a virtual that is still being resolved - is not in the selected parent's past
+// and has none. The subtraction used to be done in place on unsigned values, so such a block wrapped to about 2^64
+// confirmations, and a pending transaction was reported as buried under the whole history of the chain.
+func confirmationsSince(selectedParentBlueScore, blockBlueScore uint64) uint64 {
+	if blockBlueScore > selectedParentBlueScore {
+		return 0
+	}
+	return selectedParentBlueScore - blockBlueScore + 1
 }
