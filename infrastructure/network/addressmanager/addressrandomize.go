@@ -23,20 +23,34 @@ func NewAddressRandomize(maxFailedCount uint64) *AddressRandomize {
 // weightedRand is a help function which returns a random index in the
 // range [0, len(weights)-1] with probability weighted by `weights`
 func weightedRand(weights []float32) int {
+	return weightedRandAt(weights, cryptoRandFloat32())
+}
+
+// weightedRandAt returns the index whose share of the total weight covers randPoint, a point in [0, 1).
+//
+// An entry with no weight is never returned while any entry has weight: RandomAddresses zeroes the weight of each
+// address it has already picked. Such an entry used to come back in two ways - a random point of exactly 0 matched a
+// zero-weight first entry, whose cumulative share is also 0, and when float32 rounding left the cumulative shares
+// short of the random point the scan fell through to the last entry whatever its weight - so one call could hand out
+// the same address twice.
+func weightedRandAt(weights []float32, randPoint float32) int {
 	sum := float32(0)
 	for _, weight := range weights {
 		sum += weight
 	}
-	randPoint := cryptoRandFloat32()
+	lastWeighted := len(weights) - 1
 	scanPoint := float32(0)
 	for i, weight := range weights {
-		normalizedWeight := weight / sum
-		scanPoint += normalizedWeight
+		if weight <= 0 {
+			continue
+		}
+		lastWeighted = i
+		scanPoint += weight / sum
 		if randPoint <= scanPoint {
 			return i
 		}
 	}
-	return len(weights) - 1
+	return lastWeighted
 }
 
 // cryptoRandFloat32 returns a cryptographically secure random float32 in [0,1)
