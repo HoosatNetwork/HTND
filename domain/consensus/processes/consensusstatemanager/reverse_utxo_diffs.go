@@ -8,6 +8,11 @@ import (
 	"github.com/HoosatNetwork/HTND/util/staging"
 )
 
+// reverseUTXODiffsInterruptHook, when set, is called after each diff ReverseUTXODiffs commits, with the number committed
+// so far. An error from it stops the reversal there, as a crash between two of its commits would. It is only ever set
+// by tests (see export_test.go).
+var reverseUTXODiffsInterruptHook func(committedDiffs int) error
+
 func (csm *consensusStateManager) ReverseUTXODiffs(tipHash *externalapi.DomainHash,
 	reversalData *model.UTXODiffReversalData,
 ) error {
@@ -35,6 +40,12 @@ func (csm *consensusStateManager) ReverseUTXODiffs(tipHash *externalapi.DomainHa
 	err = csm.commitUTXODiffInSeparateStagingArea(previousBlock, reversalData.SelectedParentUTXODiff, tipHash)
 	if err != nil {
 		return err
+	}
+	committedDiffs := 1
+	if reverseUTXODiffsInterruptHook != nil {
+		if err := reverseUTXODiffsInterruptHook(committedDiffs); err != nil {
+			return err
+		}
 	}
 
 	log.Trace("Reversed 1 utxoDiff")
@@ -83,6 +94,12 @@ func (csm *consensusStateManager) ReverseUTXODiffs(tipHash *externalapi.DomainHa
 		err = csm.commitUTXODiffInSeparateStagingArea(currentBlock, currentUTXODiff, previousBlock)
 		if err != nil {
 			return err
+		}
+		committedDiffs++
+		if reverseUTXODiffsInterruptHook != nil {
+			if err := reverseUTXODiffsInterruptHook(committedDiffs); err != nil {
+				return err
+			}
 		}
 
 		// We stop reversing when current doesn't have a UTXODiffChild (nil/virtual), or when current's UTXODiffChild
