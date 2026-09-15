@@ -74,3 +74,40 @@ func TestUTXODiffStoreRoundTripChildAndDelete(t *testing.T) {
 		t.Fatalf("expected not-found after delete, got %v", err)
 	}
 }
+
+// TestUTXODiffStoreStagedNilChildHidesStoredChild pins that staging a block's diff with no diff child hides the child it
+// has in the database from reads through the same staging area, as it does from HasUTXODiffChild and as committing it
+// does. UTXODiffChild used to fall through to the stored child, so a walk from that block to virtual within the staging
+// area followed a pointer the staging area had already removed, and could loop back to the block forever.
+func TestUTXODiffStoreStagedNilChildHidesStoredChild(t *testing.T) {
+	dbManager, prefixBucket, teardown := testutils.NewTestDB(t)
+	defer teardown()
+
+	store := New(prefixBucket, 10, false)
+
+	blockHash := testutils.Hash(1)
+	childHash := testutils.Hash(2)
+	diff := utxo.NewUTXODiff()
+
+	stagingArea := model.NewStagingArea()
+	store.Stage(stagingArea, blockHash, diff, childHash)
+	testutils.Commit(t, dbManager, stagingArea)
+
+	stagingArea = model.NewStagingArea()
+	store.Stage(stagingArea, blockHash, diff, nil)
+
+	hasChild, err := store.HasUTXODiffChild(dbManager, stagingArea, blockHash)
+	if err != nil {
+		t.Fatalf("HasUTXODiffChild: %v", err)
+	}
+	if hasChild {
+		t.Fatalf("expected HasUTXODiffChild to be false after staging no child")
+	}
+	gotChild, err := store.UTXODiffChild(dbManager, stagingArea, blockHash)
+	if err != nil {
+		t.Fatalf("UTXODiffChild: %v", err)
+	}
+	if gotChild != nil {
+		t.Fatalf("expected no diff child after staging no child, got the stored child %s", gotChild)
+	}
+}

@@ -104,8 +104,9 @@ func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.
 func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error) {
 	stagingShard := uds.stagingShard(stagingArea)
 
-	utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
-	if ok && utxoDiffChild != nil {
+	// A staged nil child means the staging area removes the child, as HasUTXODiffChild and Commit treat it, so it must
+	// not fall through to the stored one.
+	if utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]; ok {
 		return utxoDiffChild, nil
 	}
 	utxoDiffChildCached, ok := uds.utxoDiffChildCache.Get(blockHash)
