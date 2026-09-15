@@ -305,6 +305,21 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		// Otherwise, internal UTXO diff logic gets all messed up
 		for !isNewVirtualSelectedParent {
 			if processingPointIndex == 0 {
+				// No block of the pending chain wins the previous virtual selected parent. From block version 6 the
+				// pending tip is picked in DAGKnight order, whose tie-break is by hash, so this is a lighter chain.
+				// When the selected parent is UTXO-valid, virtual keeps it: resolving the lighter chain here and making
+				// its tip virtual's only parent moved virtual off the heavier valid chain. The lighter chain stays
+				// pending until one of its blocks overcomes the selected parent.
+				previousVirtualSelectedParentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, readStagingArea,
+					previousVirtualSelectedParent)
+				if err != nil {
+					return nil, false, err
+				}
+				if previousVirtualSelectedParentStatus == externalapi.StatusUTXOValid {
+					log.Warnf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
+						"Keeping it as virtual's selected parent.", pendingTip, previousVirtualSelectedParent)
+					return nil, true, nil
+				}
 				// If we've reached the pending tip and it still doesn't overcome the previous
 				// virtual selected parent, this could happen in nearly synced scenarios where
 				// GHOSTDAG data isn't fully consistent. Log a warning and process from the pending tip.
