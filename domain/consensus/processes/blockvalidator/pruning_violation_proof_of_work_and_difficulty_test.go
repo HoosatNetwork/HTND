@@ -232,9 +232,15 @@ func TestCheckParentHeadersExist(t *testing.T) {
 
 func TestCheckPruningPointViolation(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		// The overrides below are version 1 values, and the pruning depth follows the chain's own version: testnet
+		// reaches version 5 at DAA score 200, whose pruning depth is 28902 blocks. Keep every block at version 1.
+		consensusConfig.POWScores = []uint64{math.MaxUint64}
+		// Copy the per-version table changed below: it is shared with the network's params.
+		consensusConfig.K = append([]externalapi.KType(nil), consensusConfig.K...)
+
 		// This is done to reduce the pruning depth to 6 blocks
-		consensusConfig.FinalityDuration = []time.Duration{2 * consensusConfig.TargetTimePerBlock[constants.GetBlockVersion()-1]}
-		consensusConfig.K[constants.GetBlockVersion()-1] = 0
+		consensusConfig.FinalityDuration = []time.Duration{2 * consensusConfig.TargetTimePerBlock[0]}
+		consensusConfig.K[0] = 0
 
 		factory := consensus.NewFactory()
 
