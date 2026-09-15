@@ -95,6 +95,15 @@ func (a *ComponentManager) Stop() {
 
 	a.protocolManager.Close()
 	close(a.protocolManager.Context().Domain().ConsensusEventsChannel())
+
+	// The database is closed right after Stop returns. Let the RPC manager's consensus events handler apply the events
+	// still queued first - an IBD resolve leaves many - or it writes to the closed database, panics and exits the
+	// process with status 1. The wait is bounded to stay inside the caller's graceful shutdown timeout.
+	const consensusEventsDrainTimeout = 90 * time.Second
+	if !a.rpcManager.WaitForConsensusEventsHandler(consensusEventsDrainTimeout) {
+		log.Warnf("The consensus events handler did not finish within %s; closing the database anyway",
+			consensusEventsDrainTimeout)
+	}
 }
 
 // NewComponentManager returns a new ComponentManager instance.

@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"time"
+
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/protocol"
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
@@ -19,6 +21,10 @@ import (
 type Manager struct {
 	context             *rpccontext.Context
 	consensusEventsChan chan externalapi.ConsensusEvent
+
+	// consensusEventsHandlerDone is closed when the consensus events handler has exited, after handling every event
+	// queued before the events channel was closed.
+	consensusEventsHandlerDone chan struct{}
 }
 
 // NewManager creates a new RPC Manager
@@ -57,7 +63,9 @@ func NewManager(
 }
 
 func (m *Manager) initConsensusEventsHandler(consensusEventsChan chan externalapi.ConsensusEvent) {
+	m.consensusEventsHandlerDone = make(chan struct{})
 	spawn("consensusEventsHandler", func() {
+		defer close(m.consensusEventsHandlerDone)
 		for {
 			consensusEvent, ok := <-consensusEventsChan
 			if !ok {
@@ -81,6 +89,22 @@ func (m *Manager) initConsensusEventsHandler(consensusEventsChan chan externalap
 			}
 		}
 	})
+}
+
+// WaitForConsensusEventsHandler waits until the consensus events handler has exited - which it does once the events
+// channel is closed and every event queued before that has been handled - or until timeout. It reports whether the
+// handler exited.
+//
+// Shutdown closes the database right after the component manager stops. The handler writes each virtual change to the
+// UTXO index, and an IBD resolve leaves many queued, so closing the database without waiting made the handler read
+// from a closed database, panic, and exit the process with status 1 in the middle of the database close.
+func (m *Manager) WaitForConsensusEventsHandler(timeout time.Duration) bool {
+	select {
+	case <-m.consensusEventsHandlerDone:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // notifyBlockAddedToDAG notifies the manager that a block has been added to the DAG
