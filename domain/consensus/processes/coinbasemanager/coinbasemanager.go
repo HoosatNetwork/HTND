@@ -656,6 +656,30 @@ func (c *coinbaseManager) calcDeflationaryPeriodBlockSubsidyFloatCalc(year uint6
 	return uint64(subsidy)
 }
 
+func acceptedFee(txAcceptance *externalapi.TransactionAcceptanceData) uint64 {
+	if txAcceptance == nil || !txAcceptance.IsAccepted || txAcceptance.Transaction == nil {
+		return 0
+	}
+	if len(txAcceptance.Transaction.Inputs) == 0 {
+		return 0 // coinbase
+	}
+	var totalIn uint64
+	for _, entry := range txAcceptance.TransactionInputUTXOEntries {
+		if entry == nil {
+			return 0
+		}
+		totalIn += entry.Amount()
+	}
+	var totalOut uint64
+	for _, out := range txAcceptance.Transaction.Outputs {
+		totalOut += out.Value
+	}
+	if totalIn < totalOut {
+		return 0
+	}
+	return totalIn - totalOut
+}
+
 func (c *coinbaseManager) calcMergedBlockReward(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	blockAcceptanceData *externalapi.BlockAcceptanceData, mergingBlockDAAAddedBlocksSet hashset.HashSet,
 ) (uint64, error) {
@@ -670,9 +694,7 @@ func (c *coinbaseManager) calcMergedBlockReward(stagingArea *model.StagingArea, 
 
 	totalFees := uint64(0)
 	for _, txAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
-		if txAcceptanceData.IsAccepted {
-			totalFees += txAcceptanceData.Fee
-		}
+		totalFees += acceptedFee(txAcceptanceData)
 	}
 
 	block, err := c.blockStore.Block(c.databaseContext, stagingArea, blockHash)

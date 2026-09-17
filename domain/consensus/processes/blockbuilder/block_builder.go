@@ -114,20 +114,27 @@ func (bb *blockBuilder) buildBlock(stagingArea *model.StagingArea, coinbaseData 
 	if err != nil {
 		return nil, false, err
 	}
-	constants.SetBlockVersion(bb.blockVersionForDAAScore(newBlockDAAScore))
+	blockVersion := bb.blockVersionForDAAScore(newBlockDAAScore)
+	constants.SetBlockVersion(blockVersion)
 
-	// The timestamp must be picked before the coinbase is built (rather than inside buildHeader, as
-	// before) so it can be folded into coinbase entropy from CoinbaseTimestampEntropyActivationVersion
-	// onward (see coinbasemanager.coinbaseEntropy), and the exact same value must then be reused
-	// verbatim for the header itself rather than recomputed - recomputing would risk a different
-	// wall-clock value and desync the coinbase's entropy from what a validator recomputes from the
-	// stored header.
 	newBlockTimeInMilliseconds, err := bb.newBlockTime(stagingArea)
 	if err != nil {
 		return nil, false, err
 	}
 
-	coinbase, coinbaseHasRedReward, err := bb.newBlockCoinbaseTransaction(stagingArea, coinbaseData, newBlockTimeInMilliseconds)
+	// One replay, same snapshot for coinbase + accepted-ID root + UTXO commitment.
+	// Do not mix a fresh acceptance row with a stale multiset: validation
+	// derives all three from CalculatePastUTXOAndAcceptanceData(H).
+	_, virtualAcceptanceData, virtualMultiset, err := bb.consensusStateManager.CalculatePastUTXOAndAcceptanceData(
+		stagingArea, model.VirtualBlockHash)
+	if err != nil {
+		return nil, false, err
+	}
+	bb.acceptanceDataStore.Stage(stagingArea, model.VirtualBlockHash, virtualAcceptanceData)
+	bb.multisetStore.Stage(stagingArea, model.VirtualBlockHash, virtualMultiset)
+
+	coinbase, coinbaseHasRedReward, err := bb.newBlockCoinbaseTransaction(
+		stagingArea, coinbaseData, newBlockTimeInMilliseconds)
 	if err != nil {
 		return nil, false, err
 	}
@@ -211,8 +218,9 @@ func (bb *blockBuilder) validateTransaction(
 
 func (bb *blockBuilder) newBlockCoinbaseTransaction(stagingArea *model.StagingArea,
 	coinbaseData *externalapi.DomainCoinbaseData, candidateTimestamp int64,
-) (expectedTransaction *externalapi.DomainTransaction, hasRedReward bool, err error) {
-	return bb.coinbaseManager.ExpectedCoinbaseTransaction(stagingArea, model.VirtualBlockHash, coinbaseData, candidateTimestamp)
+) (*externalapi.DomainTransaction, bool, error) {
+	return bb.coinbaseManager.ExpectedCoinbaseTransaction(
+		stagingArea, model.VirtualBlockHash, coinbaseData, candidateTimestamp)
 }
 
 func (bb *blockBuilder) buildHeader(stagingArea *model.StagingArea, transactions []*externalapi.DomainTransaction,
