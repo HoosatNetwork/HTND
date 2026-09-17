@@ -1,10 +1,11 @@
 package coinbasemanager
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 	"math"
 	"sort"
 	"time"
+
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
@@ -224,8 +225,18 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			var minerScript *externalapi.ScriptPublicKey
 			minerScript = blockCoinbaseData.ScriptPublicKey
 
+			blockVersion, err := c.blockVersion(stagingArea, blockHash)
+			if err != nil {
+				return nil, false, err
+			}
+			var devFee uint64
+			if blockVersion >= 10 {
+				devFee = calcDevFeeQuantity(blockReward)
+			} else {
+				devFee = uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+			}
 			// Calculate dev fee
-			devFee := uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+
 			blockReward -= devFee
 			if blockReward <= 0 {
 				continue
@@ -355,6 +366,14 @@ func (c *coinbaseManager) daaAddedBlocksSet(stagingArea *model.StagingArea, bloc
 	return hashset.NewFromSlice(daaAddedBlocks...), nil
 }
 
+// calcDevFeeQuantity returns floor(reward * DevFee / 100) in sompi.
+// Multiply-then-divide is exact and platform-independent. The overflow-safe
+// form is used so reward * DevFee cannot wrap uint64.
+func calcDevFeeQuantity(reward uint64) uint64 {
+	fee := uint64(constants.DevFee)
+	return (reward/100)*fee + (reward%100)*fee/100
+}
+
 // coinbaseOutputForBlueBlock calculates the output that should go into the coinbase transaction of blueBlock
 // If blueBlock gets no fee - returns nil for txOut
 func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.StagingArea,
@@ -374,7 +393,19 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 	if err != nil {
 		return nil, nil, false, err
 	}
-	devFeeQuantity := uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+	blueBlockVersion, err := c.blockVersion(stagingArea, blueBlock)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	// Integer-only split so every node computes the same sompi amounts.
+	// floor(blockReward * DevFee / 100); leftover sompi stay with the miner.
+	var devFeeQuantity uint64
+	if blueBlockVersion >= 10 {
+		devFeeQuantity = calcDevFeeQuantity(blockReward)
+	} else {
+		devFeeQuantity = uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+	}
 	blockReward -= devFeeQuantity
 	if blockReward <= 0 {
 		return nil, nil, false, nil
@@ -385,10 +416,6 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 	if len(blockAcceptanceData.TransactionAcceptanceData) == 0 || blockAcceptanceData.TransactionAcceptanceData[0].Transaction == nil {
 		log.Warnf("coinbaseOutputForBlueBlockV2: no coinbase transaction found in acceptance data for block %s", blueBlock)
 		return nil, nil, false, nil
-	}
-	blueBlockVersion, err := c.blockVersion(stagingArea, blueBlock)
-	if err != nil {
-		return nil, nil, false, err
 	}
 	_, coinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 		blockAcceptanceData.TransactionAcceptanceData[0].Transaction, blueBlockVersion)
