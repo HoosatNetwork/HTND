@@ -663,10 +663,17 @@ func acceptedFee(txAcceptance *externalapi.TransactionAcceptanceData) uint64 {
 	if len(txAcceptance.Transaction.Inputs) == 0 {
 		return 0 // coinbase
 	}
+	// Acceptance data written by older or interrupted resolution paths can be missing the
+	// input entries. Keep the recorded fee in that case so block creation does not build a
+	// fee-less coinbase that a later complete resolution will reject. When all entries are
+	// present, recompute from the UTXOs so a stale recorded Fee cannot create a disagreement.
+	if len(txAcceptance.TransactionInputUTXOEntries) != len(txAcceptance.Transaction.Inputs) {
+		return txAcceptance.Fee
+	}
 	var totalIn uint64
 	for _, entry := range txAcceptance.TransactionInputUTXOEntries {
 		if entry == nil {
-			return 0
+			return txAcceptance.Fee
 		}
 		totalIn += entry.Amount()
 	}

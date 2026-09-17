@@ -7,6 +7,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 )
 
@@ -91,6 +92,41 @@ func TestCalcDeflationaryPeriodBlockSubsidy(t *testing.T) {
 			t.Errorf("TestCalcDeflationaryPeriodBlockSubsidy: test '%s' failed. Want: %d, got: %d",
 				test.name, test.expectedBlockSubsidy, blockSubsidy)
 		}
+	}
+}
+
+func TestAcceptedFeeFallsBackToRecordedFeeWhenInputEntriesAreMissing(t *testing.T) {
+	transaction := &externalapi.DomainTransaction{
+		Inputs:  []*externalapi.DomainTransactionInput{{}},
+		Outputs: []*externalapi.DomainTransactionOutput{{Value: 1}},
+	}
+	acceptance := &externalapi.TransactionAcceptanceData{
+		Transaction: transaction,
+		Fee:         884000,
+		IsAccepted:  true,
+	}
+
+	if got := acceptedFee(acceptance); got != acceptance.Fee {
+		t.Fatalf("acceptedFee() = %d, want recorded fee %d", got, acceptance.Fee)
+	}
+}
+
+func TestAcceptedFeeRecomputesWhenInputEntriesAreComplete(t *testing.T) {
+	transaction := &externalapi.DomainTransaction{
+		Inputs:  []*externalapi.DomainTransactionInput{{}},
+		Outputs: []*externalapi.DomainTransactionOutput{{Value: 1}},
+	}
+	acceptance := &externalapi.TransactionAcceptanceData{
+		Transaction: transaction,
+		Fee:         999999,
+		IsAccepted:  true,
+		TransactionInputUTXOEntries: []externalapi.UTXOEntry{
+			utxo.NewUTXOEntry(1, &externalapi.ScriptPublicKey{}, false, 0),
+		},
+	}
+
+	if got := acceptedFee(acceptance); got != 0 {
+		t.Fatalf("acceptedFee() = %d, want recomputed fee 0", got)
 	}
 }
 
