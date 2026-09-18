@@ -1095,11 +1095,6 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
 	}
 
-	// err = flow.Domain().Consensus().RepairBlockStatuses()
-	// if err != nil {
-	// 	log.Warnf("Failed to repair block statuses before resolve: %v", err)
-	// }
-
 	log.Infof("Start resolving virtual")
 	if !updateVirtual {
 		err = flow.resolveVirtual(highestProcessedDAAScore)
@@ -1205,20 +1200,37 @@ func (flow *handleIBDFlow) receiveRequestedIBDBlocks(hashesToRequest []*external
 }
 
 func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64) error {
-	err := flow.Domain().Consensus().ResolveVirtual(func(virtualDAAScoreStart uint64, virtualDAAScore uint64) {
-		var percents int
-		if estimatedVirtualDAAScoreTarget <= virtualDAAScoreStart {
-			percents = 100
-		} else {
-			percents = int(float64(virtualDAAScore-virtualDAAScoreStart) / float64(estimatedVirtualDAAScoreTarget-virtualDAAScoreStart) * 100)
+	err := flow.resolveVirtualOnce(estimatedVirtualDAAScoreTarget)
+
+	// Every tip is disqualified or invalid, so virtual has nowhere to go and the node is stuck at the
+	// virtual genesis marker for good - another IBD finds the same statuses and stops in the same
+	// place. The blocks themselves are usually fine; it is the recorded statuses that are not. Reset
+	// the disqualified tip chains to pending verification so the next resolve recomputes them, and
+	// try once more. Blocks that deserve their disqualification get it back, with a UTXO diff this
+	// time. This is deliberately not RepairBlockStatuses: that one walks every block in the store and
+	// declares them UTXO-valid without a diff, which is a recovery step to ask for with
+	// --repair-block-statuses, not one to run unattended.
+	if errors.Is(err, externalapi.ErrVirtualHasNoUsableTip) {
+		log.Warnf("ResolveVirtual left virtual at the virtual genesis marker because every tip is "+
+			"disqualified or invalid. Resetting the disqualified tip chains and resolving once more: %s", err)
+		resetCount, repairErr := flow.Domain().Consensus().RepairDisqualifiedTipChains()
+		if repairErr != nil {
+			log.Errorf("Failed to reset the disqualified tip chains after a stuck ResolveVirtual: %s", repairErr)
+			return wrapResolveVirtualError(err)
 		}
-		if percents < 0 {
-			percents = 0
-		} else if percents > 100 {
-			percents = 100
+		if resetCount == 0 {
+			log.Errorf("No disqualified block was found on any tip's chain, so the tips are invalid " +
+				"rather than disqualified and resetting statuses cannot help")
+			return wrapResolveVirtualError(err)
 		}
-		log.Infof("Resolving virtual. Estimated progress: %d%%", percents)
-	})
+		log.Infof("Reset %d disqualified block(s) to pending verification, resolving virtual again", resetCount)
+		err = flow.resolveVirtualOnce(estimatedVirtualDAAScoreTarget)
+		if errors.Is(err, externalapi.ErrVirtualHasNoUsableTip) {
+			log.Errorf("ResolveVirtual is still stuck at the virtual genesis marker after resetting " +
+				"the disqualified tip chains, so the statuses were not what was wrong")
+		}
+	}
+
 	if err != nil {
 		if database.IsNotFoundError(err) {
 			log.Errorf("Error: Not found: %s", err)
@@ -1233,6 +1245,23 @@ func (flow *handleIBDFlow) resolveVirtual(estimatedVirtualDAAScoreTarget uint64)
 
 	log.Infof("Resolved virtual")
 	return nil
+}
+
+func (flow *handleIBDFlow) resolveVirtualOnce(estimatedVirtualDAAScoreTarget uint64) error {
+	return flow.Domain().Consensus().ResolveVirtual(func(virtualDAAScoreStart uint64, virtualDAAScore uint64) {
+		var percents int
+		if estimatedVirtualDAAScoreTarget <= virtualDAAScoreStart {
+			percents = 100
+		} else {
+			percents = int(float64(virtualDAAScore-virtualDAAScoreStart) / float64(estimatedVirtualDAAScoreTarget-virtualDAAScoreStart) * 100)
+		}
+		if percents < 0 {
+			percents = 0
+		} else if percents > 100 {
+			percents = 100
+		}
+		log.Infof("Resolving virtual. Estimated progress: %d%%", percents)
+	})
 }
 
 // NEW: Helper for periodic rate check

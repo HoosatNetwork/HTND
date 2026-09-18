@@ -1440,8 +1440,7 @@ func (s *consensus) ResolveVirtual(progressReportCallback func(uint64, uint64)) 
 		}
 	}
 	if !hasUsableTip {
-		return errors.Errorf(
-			"ResolveVirtual finished with no UTXO-valid/pending tip (all tips disqualified or invalid); virtual cannot leave VirtualGenesis")
+		return errors.WithStack(externalapi.ErrVirtualHasNoUsableTip)
 	}
 
 	parents, err := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
@@ -1800,6 +1799,77 @@ func mapLegacyBlockStatus(oldStatus externalapi.BlockStatus) externalapi.BlockSt
 		// Any other value (shouldn't happen) -> StatusInvalid
 		return externalapi.StatusInvalid
 	}
+}
+
+// RepairDisqualifiedTipChains resets the blocks that keep virtual pinned at the virtual genesis
+// marker, and only those: it walks the selected parent chain down from every tip that is
+// StatusDisqualifiedFromChain and marks each disqualified block StatusUTXOPendingVerification,
+// stopping at the first block that is not disqualified.
+//
+// It differs from RepairBlockStatuses in the two ways that matter for running unattended:
+//
+//   - It touches only the disqualified chains rather than every block in the store, so the consensus
+//     lock is held for the length of the disqualified segment and not for a walk of the whole DAG.
+//   - It marks the blocks pending verification rather than UTXO-valid. getUnverifiedChainBlocks
+//     collects exactly the pending blocks and stops at any other status, so a block marked pending is
+//     re-resolved and gets a real UTXO diff, while one marked valid is taken at its word and never
+//     gets one - which is how a repaired node ends up with UTXO-valid blocks that have no diff.
+//
+// Blocks that deserve their disqualification simply get it back on the next resolve, with a diff
+// this time. It returns how many blocks it reset.
+func (s *consensus) RepairDisqualifiedTipChains() (uint64, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+	tips, err := s.consensusStateStore.Tips(stagingArea, s.databaseContext)
+	if err != nil {
+		return 0, err
+	}
+
+	reset := make(map[externalapi.DomainHash]struct{})
+	for _, tip := range tips {
+		current := tip
+		for {
+			if _, alreadyReset := reset[*current]; alreadyReset {
+				break
+			}
+			status, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, current)
+			if database.IsNotFoundError(err) {
+				break
+			}
+			if err != nil {
+				return 0, err
+			}
+			if status != externalapi.StatusDisqualifiedFromChain {
+				break
+			}
+
+			s.blockStatusStore.Stage(stagingArea, current, externalapi.StatusUTXOPendingVerification)
+			reset[*current] = struct{}{}
+
+			ghostdagData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, current, false)
+			if database.IsNotFoundError(err) {
+				break
+			}
+			if err != nil {
+				return 0, err
+			}
+			selectedParent := ghostdagData.SelectedParent()
+			if selectedParent == nil || selectedParent.Equal(model.VirtualGenesisBlockHash) {
+				break
+			}
+			current = selectedParent
+		}
+	}
+
+	if len(reset) == 0 {
+		return 0, nil
+	}
+	if err := staging.CommitAllChanges(s.databaseContext, stagingArea); err != nil {
+		return 0, err
+	}
+	return uint64(len(reset)), nil
 }
 
 // RepairBlockStatuses iterates through all blocks and sets them to StatusUTXOValid
