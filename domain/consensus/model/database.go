@@ -123,8 +123,13 @@ type DBManager interface {
 	// return an error if the key doesn't exist.
 	Delete(key DBKey) error
 
-	// Begin begins a new database transaction.
+	// Begin begins a new database transaction whose reads see its own uncommitted writes.
 	Begin() (DBTransaction, error)
+
+	// BeginUnindexed begins a new database transaction for write-only use, such as a whole
+	// stagingArea.Commit(dbTx). Reading back a key this transaction has itself written
+	// returns an error - use Begin when the caller needs that.
+	BeginUnindexed() (DBTransaction, error)
 }
 
 // DBKey is an interface for a database key

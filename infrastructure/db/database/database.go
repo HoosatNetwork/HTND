@@ -11,8 +11,14 @@ package database
 type Database interface {
 	DataAccessor
 
-	// Begin begins a new database transaction.
+	// Begin begins a new database transaction whose reads see its own uncommitted writes.
 	Begin() (Transaction, error)
+
+	// BeginUnindexed begins a new database transaction for write-only use. It skips the
+	// bookkeeping Begin pays for read-your-own-writes support, which on the pebble backend
+	// costs work on every Put that grows with the number of keys written. Reading back a key
+	// this transaction has itself written returns an error.
+	BeginUnindexed() (Transaction, error)
 
 	// Compact compacts the database instance.
 	Compact() error

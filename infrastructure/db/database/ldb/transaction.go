@@ -22,6 +22,18 @@ type LevelDBTransaction struct {
 
 // Begin begins a new transaction.
 func (db *LevelDB) Begin() (database.Transaction, error) {
+	return db.beginTransaction()
+}
+
+// BeginUnindexed begins a new transaction. A LevelDB batch has no indexed variant - this
+// wrapper already answers reads out of its own tracking maps and the database - so this is
+// the same transaction Begin returns. It exists so callers that only write can say so, and
+// get the cheaper batch on the pebble backend where the distinction is real.
+func (db *LevelDB) BeginUnindexed() (database.Transaction, error) {
+	return db.beginTransaction()
+}
+
+func (db *LevelDB) beginTransaction() (database.Transaction, error) {
 	batch := new(leveldb.Batch)
 
 	transaction := &LevelDBTransaction{

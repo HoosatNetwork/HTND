@@ -52,6 +52,14 @@ func (dbw *dbManager) Begin() (model.DBTransaction, error) {
 	return newDBTransaction(transaction), nil
 }
 
+func (dbw *dbManager) BeginUnindexed() (model.DBTransaction, error) {
+	transaction, err := dbw.db.BeginUnindexed()
+	if err != nil {
+		return nil, err
+	}
+	return newDBTransaction(transaction), nil
+}
+
 // New returns wraps the given database as an instance of model.DBManager
 func New(db database.Database) model.DBManager {
 	return &dbManager{db: db}

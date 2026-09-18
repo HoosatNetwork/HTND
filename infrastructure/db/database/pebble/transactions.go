@@ -14,17 +14,39 @@ import (
 type DBTransaction struct {
 	db               *DB
 	batch            *pebble.Batch
+	indexed          bool
 	cursors          []database.Cursor
 	isClosed         bool
 	keyModifications map[string]bool
 }
 
-// Begin begins a new transaction.
+// Begin begins a new transaction. Its batch is indexed, so Get and Cursor see the
+// transaction's own uncommitted writes. Maintaining that index costs work on every Put,
+// and the cost grows with the number of keys the transaction touches, so a transaction
+// that only writes should use BeginUnindexed instead.
 func (db *DB) Begin() (database.Transaction, error) {
 	batch := db.db.NewIndexedBatch() // Use indexed batch for read support
 	transaction := &DBTransaction{
 		db:               db,
 		batch:            batch,
+		indexed:          true,
+		isClosed:         false,
+		keyModifications: make(map[string]bool),
+	}
+	return transaction, nil
+}
+
+// BeginUnindexed begins a new transaction backed by a plain batch. Get and Has still
+// answer for keys this transaction has not itself written, by falling through to the
+// database, but a key this transaction has already Put cannot be read back - Get returns
+// an error saying so rather than a stale value - and Cursor is not available at all.
+// Use it only for transactions that write and commit without reading their own writes.
+func (db *DB) BeginUnindexed() (database.Transaction, error) {
+	batch := db.db.NewBatch()
+	transaction := &DBTransaction{
+		db:               db,
+		batch:            batch,
+		indexed:          false,
 		isClosed:         false,
 		keyModifications: make(map[string]bool),
 	}
@@ -111,6 +133,12 @@ func (tx *DBTransaction) Get(key *database.Key) ([]byte, error) {
 	if exists, ok := tx.keyModifications[string(key.Bytes())]; ok {
 		if !exists {
 			return nil, errors.Wrapf(database.ErrNotFound, "key %s was deleted in transaction", key)
+		}
+		if !tx.indexed {
+			// pebble.Batch.Get panics on a batch that is not indexed, and falling through to the
+			// database would quietly answer with the value this transaction has already replaced.
+			return nil, errors.Errorf("key %s was written by this transaction, which was opened "+
+				"with BeginUnindexed and cannot read its own writes back - use Begin instead", key)
 		}
 		data, closer, err := tx.batch.Get(key.Bytes())
 		if err == nil {
