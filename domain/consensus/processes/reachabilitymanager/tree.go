@@ -472,7 +472,16 @@ func (rt *reachabilityManager) findNextReindexRoot(stagingArea *model.StagingAre
 
 		chosenChildGHOSTDAGData, err := rt.ghostdagDataStore.Get(rt.databaseContext, stagingArea, chosenChild, false)
 		if database.IsNotFoundError(err) {
-			break
+			// A block that entered the reachability tree through the pruning proof has no
+			// level-0 GHOSTDAG data, so its distance from the selected tip cannot be measured.
+			// Such a block is always far below the selected tip, so keep descending towards the
+			// tip rather than leaving the reindex root above it - a reindex root that stays at
+			// the root of the tree makes every subsequent block reindex the entire tree.
+			if chosenChild.Equal(selectedTip) {
+				break
+			}
+			newReindexRoot = chosenChild
+			continue
 		}
 		if err != nil {
 			return nil, nil, err
