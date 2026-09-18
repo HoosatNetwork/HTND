@@ -11,8 +11,9 @@ next.
 
 ## Wake protocol
 
-1. Read `AGENT_STATE.md`, then the tail of `ISSUES.md`. Both are gitignored working files, not
-   documentation for anyone else.
+1. Read `AGENT_STATE.md`, then the tail of `ISSUES.md`. Both are tracked working files (not
+   documentation for anyone else, but committed and pushed like any other file in the repo — see the
+   commit rule below).
 2. Read **Session input** at the end of this prompt. If it says anything, it overrides step 3.
 3. Do the `next_action` recorded in `AGENT_STATE.md`. If there is none, pick the highest-value open
    issue in `ISSUES.md` that is not marked `needs_human`; if there are none of those either, go
@@ -38,10 +39,12 @@ next.
 - Record the issue in `ISSUES.md` in the existing `## HTN-NNN` format (title, status, reported,
   mechanism, fix, tests, what you deliberately left alone), and update `AGENT_STATE.md` with what you
   did, what you ruled out, and the next action.
-- Commit code only, directly to master, staging by path. Never `git add` `AGENT_STATE.md` or
-  `ISSUES.md`. No push, no PR. Commit subject: a plain-English sentence describing the behavior
-  change. Body: the defect mechanism, why this fix and not an alternative, what was left alone, and
-  any remaining tension.
+- Commit code directly to master, staging by path, one commit per fix. Commit subject: a plain-English
+  sentence describing the behavior change. Body: the defect mechanism, why this fix and not an
+  alternative, what was left alone, and any remaining tension.
+- Commit `AGENT_STATE.md` and `ISSUES.md` too — separately from code commits, with subject
+  `docs(agent): <what changed>` (matches this repo's existing commit history). Push after each commit
+  (code and docs(agent) alike) — user decision 2026-09-18, updated from the earlier no-push rule.
 - Then start the next issue in the same message. Keep going.
 
 ## Hard rules

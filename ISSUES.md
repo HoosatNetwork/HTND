@@ -1330,7 +1330,11 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 
 ## HTN-194
 - title: Shutdown closes the database while the RPC consensus events handler is still writing to the UTXO index, so the node panics and exits with status 1 during shutdown
-- status: open
+- status: FIXED, committed 646f779c8 (2026-09-15). Status line was stale (still said "open") - the fix
+  and its test (app/rpc/consensus_events_handler_test.go) were already in the tree; corrected 2026-09-18.
+  The full go test ./... gate it was "owed" at commit time (skipped then for low memory) has since run
+  repeatedly on this exact code as part of HTN-208/HTN-207/HTN-196's gates today, all green - considered
+  paid.
 - severity: high
 - area: app/shutdown, utxoindex
 - evidence:
@@ -1362,7 +1366,9 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 
 ## HTN-196
 - title: Fresh headers-proof sync gets stuck forever: the imported pruning point is not on the headers tip's selected chain, missingBlockBodyHashes returns no bodies, and IBD "finishes successfully" in a loop
-- status: investigating
+- status: FIXED (the specific virtual-genesis discriminator only) 2026-09-18, commit b687caf80 - see
+  entry below for what shipped, what was deliberately left narrower than the original fix_plan, and
+  what is still open
 - severity: critical (the recovered htnd5 node, the miners' submit node, cannot sync)
 - area: syncmanager/ibd
 - evidence:
@@ -1379,6 +1385,38 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - fix_plan: pending. Operational: get IBD from a different peer (ban 178.121.114.34 on the running node via RPC, or a fresh sync that cannot take inbound peers). Code: the empty-result fallback should not report success when no body can ever be fetched - fail the IBD so the node disconnects that syncer and tries another, and investigate the duplicate pruning point entry in the tips store.
 - tests: n/a
 - commit: none
+- FIXED, narrower than fix_plan's "the empty-result fallback" phrasing (2026-09-18): missingBlockBodyHashes
+  has FIVE give-up branches that return an empty result with a nil error (IsInSelectedParentChainOf DB
+  error, findLowHashInHighHashSelectedParentChain DB error, virtual-genesis-only shared ancestor,
+  SelectedChildIterator construction error, and "no header-only block found but lowHash != highHash").
+  The function's own top comment says this leniency "must be hit even on a completely fresh sync, so it
+  must not fail IBD" - a blanket change to all five would risk breaking that documented normal case, and
+  I have no evidence the other four ever loop the way the fifth does. Only the branch the log evidence
+  actually shows looping (pruning point and highHash's chain share nothing but virtual genesis) was
+  changed: domain/consensus/model/externalapi/errors.go gained a sentinel
+  ErrPruningPointDataDoesNotReconcile (same pattern as ErrVirtualHasNoUsableTip); that one branch in
+  domain/consensus/processes/syncmanager/antipast.go now returns it instead of an empty success.
+  app/protocol/flows/v8/blockrelay/ibd.go's syncMissingBlockBodies catches it with errors.Is and wraps
+  it protocolerrors.Wrapf(false, err, ...) - ShouldBan=false because this is a network-wide baseline-
+  consistency condition (the same one HTN-002/HTN-208 are about), not evidence this specific peer
+  misbehaved. Without that wrap the error would reach protocol.go's handleError unrecognised and PANIC
+  the connection goroutine (handleError panics on anything that isn't a ProtocolError or one of five
+  named sentinels) - confirmed by reading handleError, not assumed.
+- tests: new domain/consensus/processes/syncmanager/missing_block_body_hashes_test.go
+  (TestMissingBlockBodyHashesFailsWhenChainsOnlyShareVirtualGenesis), package-internal with fake
+  PruningStore/DAGTopologyManager/GHOSTDAGDataStore reproducing the exact shape from the log (pruning
+  point whose selected-parent walk reaches virtual genesis before rejoining highHash's chain). Verified
+  to fail (nil error, "old infinite-loop behavior") against the pre-fix antipast.go and pass after.
+  domain/consensus/... and app/... full suites green, go test -tags=ci ./... 108 ok, rest of tree 48 ok,
+  cmd/htnwallet -p 1 ok, testing/integration full non-ci run (all long tests) green. staticcheck + gofmt
+  clean repo-wide.
+- left alone / still open: the other four give-up branches in missingBlockBodyHashes (not confirmed to
+  loop, and the function's own comment warns a blanket change risks a real fresh-sync case); the
+  duplicate pruning-point-in-tips-list observation from the evidence (GetBlockDagInfo showing 8df9bedf
+  twice in tipHashes) - not investigated, may be a separate bug; whether a currently-stuck node (like the
+  htnd5-fresh datadir in the evidence) needs anything beyond restarting IBD against a peer once this fix
+  is deployed - the fix only changes what happens on the NEXT IBD attempt that hits this branch, it does
+  not retroactively unstick a node sitting on a bad commit from before the fix existed.
 
 ## HTN-197
 - title: Header IBD rejects every header with "blockHash is nil" while retrying an unfinished pruning point UTXO set update
@@ -1388,6 +1426,38 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - mechanism (code read): validateAndInsertBlock calls UpdatePruningPointIfRequired after every insert, header-only included; when HadStartedUpdatingPruningPointUTXOSet is set it runs updatePruningPoint. The acceptance-data diff fails first (a selected-chain block between the previous and current pruning point has no acceptance data), then the diff-chain-walk fallback (calculateDiffBetweenPreviousAndCurrentPruningPoints) takes UTXODiffChild, which in HTND returns nil,nil for "no child" (kaspad returns not-found), and passes that nil to ghostdagDataStore.Get -> "blockHash is nil". The error propagates, so the header is rejected, and the next insert retries the same thing. Still present at HEAD (pruningPointUTXOSetDiff fallback path).
 - needs: which node and version; the log lines just before (the "Calculating pruning points diff failed <reason>. Falling back" line names the acceptance-data failure); whether it repeats on every header and whether IBD ever proceeds.
 - fix_plan: first establish why the flag is set while the chain data between pruning points is missing (header-only blocks?). Only then decide between deferring the update until the data exists and erroring; a nil check alone only changes the message.
+- 2026-09-18 re-audit (code reading only, no new log - two of the three "needs" items above are now
+  answered from the code, the third still needs the user):
+  - CONFIRMED still present at HEAD: utxodiffstore.UTXODiffChild (utxo_diff_store.go:104-131) returns
+    (nil, nil) for "no child recorded" (both the staged-nil-child case at line 109 and the
+    database.ErrNotFound case at line 118-120) - this is deliberate HTND behavior, not a bug in that
+    function itself (its own comment explains the staged-nil semantics). ghostdagdatastore.Get
+    (ghostdag_data_store.go:57-59) does NOT panic on a nil hash - it returns a clean
+    errors.New("blockHash is nil"). So the mechanism is a diff-child walk (calculateDiffBetween
+    PreviousAndCurrentPruningPoints, pruningmanager.go:978/991) hitting a legitimate "no child yet"
+    and mistaking it for "walk cannot continue", not a crash risk - it fails cleanly but wrongly.
+  - ANSWERED "does it repeat on every header": YES, by construction. UpdatePruningPointIfRequired
+    (pruningmanager.go:1821) runs after every insert (header-only included per the original mechanism
+    note) while HadStartedUpdatingPruningPointUTXOSet is set, and that flag is only cleared inside
+    updatePruningPoint() on success (FinishUpdatingPruningPointUTXOSet) - an error leaves it set, so
+    the identical failing walk retries on every subsequent insert with no backoff.
+  - ANSWERED "does IBD ever proceed": NO, once triggered this is permanent for that sync attempt -
+    same reasoning: the flag never clears, so every header hits the same error and gets rejected.
+  - NEW theory, not yet confirmed: the immediately-preceding acceptance-data fallback failure ("a
+    selected-chain block between the previous and current pruning point has no acceptance data") is
+    itself the signature of a header-only block in that range - acceptance data only exists once a
+    block is UTXO-resolved. That is the same shape HTN-196 fixed (header-only blocks whose bodies
+    never arrive because the syncer chain and this node's pruning point don't reconcile). Possible
+    that HTN-196's fix reduces how often this state is reached, since it stops IBD from silently
+    "succeeding" while stuck on such a gap - not verified, would need a fresh occurrence to check.
+  - Deliberately NOT fixed here: the original fix_plan's caution stands - "a nil check alone only
+    changes the message" - and this touches pruning-point UTXO diff computation, which every other
+    pruning/UTXO-diff issue this session (HTN-002/004/005) treats as consensus-adjacent and
+    measure-first territory. Severity is arguably higher than "needs_info" suggested (this is a
+    permanent-stall class like HTN-196, not a transient one), but the right fix - defer vs. surface a
+    clearer error vs. something else - still needs either a live repro or the user's call. Still
+    needs_human on which node/version reported it and whether it's worth reproducing deliberately now
+    that HTN-196 is fixed.
 
 ## HTN-198
 - title: ResolveVirtual moves virtual onto a lighter pending chain when DAGKnight orders its tip ahead of a UTXO-valid selected parent
@@ -1547,7 +1617,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 
 ## HTN-207
 - title: A large address-balance query scans virtual's UTXO set through the shared LRU and evicts everything block processing had warmed
-- status: open, analysed, not fixed
+- status: FIXED 2026-09-18, commit 499758822 (see fixed_commit below)
 - severity: medium (52% of the node's CPU while it runs, and it runs under the consensus lock)
 - area: rpc/rpccontext + consensus/consensusstatestore
 - reported: 2026-09-18, found in the CPU profile taken right after HTN-205/HTN-206 were fixed - with the reachability reindex gone, this became the top cost on htnd5.
@@ -1560,10 +1630,33 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - alternatives considered: a scan-resistant cache (2Q/SLRU) would fix the class rather than this one caller, but it is a much larger change to a structure block validation depends on. Raising the cache size does not help - the scan is unbounded in the address's coin count, not bounded by any size that would fit.
 - left alone: the per-outpoint serial pebble Get itself. Sorting the outpoints into key order before the loop would turn random point lookups into a near-sequential scan and should help materially, but that is an optimisation I have not measured, and it changes the order entries are produced in, so it needs the index permutation carried through. Worth doing after the eviction fix, with a measurement.
 - related: HTN-199 already stopped these queries blocking the same client's mining requests; this is about what they cost the node, not about head-of-line blocking.
+- FIXED exactly as fix_plan proposed: domain/consensus/datastructures/consensusstatestore/utxo.go
+  gained UTXOByOutpointWithoutPopulatingCache (delegates to the existing lookup helper with a new
+  populateCacheOnMiss bool, now false on this path and true on the existing UTXOByOutpoint), added to
+  the ConsensusStateStore interface. consensus.go's virtualUTXOEntriesNoLock (the only caller of
+  GetVirtualUTXOEntries's per-outpoint loop, i.e. the bulk/RPC path) now calls the new method instead
+  of UTXOByOutpoint. Block validation's own lookup (consensusstatemanager.virtualUTXOEntry, used by
+  the offset-toleration arithmetic check) is untouched and keeps populating, as fix_plan specified.
+- tests: new
+  domain/consensus/datastructures/consensusstatestore/utxo_by_outpoint_without_populating_cache_test.go
+  (TestUTXOByOutpointWithoutPopulatingCacheDoesNotEvictTheWorkingSet) - warms a 2-entry cache with two
+  outpoints as block validation would, then runs four more misses through the new method and asserts
+  the cache length is unchanged AND the two warmed entries are still individually present. Verified to
+  fail (both warmed entries reported evicted) when temporarily made to populate on every miss, and to
+  pass against the real fix. domain/consensus/... full suite green (plain and -tags=ci), staticcheck
+  and gofmt clean repo-wide, full go test -tags=ci ./... 108 ok, plain ./... (minus htnwallet, cross-
+  checked separately) 48+ ok, testing/integration full non-ci run (all long tests included) green.
+- left alone: exactly what fix_plan called out - the per-outpoint serial pebble Get, and sorting
+  outpoints into key order for a more sequential scan. Not measured or done here.
+- fixed_commit: 499758822
+- HTN-207 note 2026-09-18: this session moved onto 192.168.1.170 itself mid-fix (see AGENT_STATE.md);
+  the live production node (htnd-public, in Docker on this host) was not touched by anything above -
+  no build, restart, or datadir access. This is a pure code/test change, verified offline.
 
 ## HTN-208
 - title: A block above an imported pruning point is disqualified for a UTXO commitment mismatch the toleration cannot recognise, and one such block strands the whole node
-- status: open, CRITICAL, mechanism established, not fixed
+- status: FIXED 2026-09-18, commit f1abbcb16 (options 1+2 per user decision; see the entry near the
+  end of this section for what shipped, tests, and what was left alone)
 - severity: critical (it is the entry point to "all tips disqualified / virtual cannot leave VirtualGenesis" - a node that finishes a 140k-block IBD and is then unusable)
 - area: consensus/consensusstatemanager (verify_and_build_utxo, import_pruning_utxo_set)
 - reported: 2026-09-18 by the user. The pasted log is from 192.168.1.170:42520, which was syncing FROM
@@ -1660,3 +1753,225 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   will be re-disqualified on the retry). HTN-207 is unrelated. The supply figures in GetInfo
   (703.0e15 circulating vs 640.1e15 reference from 2026-08-01) are consistent with ~6.5 weeks of
   emission and are NOT evidence of corruption here.
+- user decision 2026-09-18: implement fix options 1+2 together (recommended combination above).
+- FIXED 2026-09-18, domain/consensus/processes/consensusstatemanager/verify_and_build_utxo.go +
+  consensus_state_manager.go + domain/consensus/model/externalapi/utxo_set_health.go:
+  1. blockInheritsKnownUTXOCommitmentOffset gained a third signal: blockHash's selected parent IS the
+     current pruning point (new currentPruningPoint helper). Signal 2 reads the pruning point's own
+     multiset against its own header - the exact check verifyAndRepairImportedPruningPointUTXOSet
+     already ran and passed at import time - so it was structurally blind to an offset that only shows
+     up one block later. The boundary block has nothing else to inherit an offset from, so a commitment
+     mismatch there is now tolerated the same way. Self-scoping like the other two signals: it only
+     matches the one block whose selected parent is the current pruning point.
+  2. validateUTXOCommitment's tolerated-mismatch branch now calls confirmBaselineOffsetIfBoundaryBlock,
+     which records (in a new boundaryOffsetConfirmedPruningPoint field, keyed by pruning point hash,
+     process-memory only like the existing baselineOffsetPruningPoint/baselineOffset fields) that this
+     pruning point's baseline is offset even though its own stored multiset hashes correctly against
+     its own header. UTXOSetHealth now ORs that recorded state into `verified` instead of only
+     re-hashing the pruning point's own multiset (which would keep saying "verified" forever), so
+     GetInfo's IsUtxoSetVerified stops claiming a health the chain has demonstrably disproven, and
+     pruningPointBaselineIsOffset (signal 1) covers every later block once this has fired once.
+  Both changes are self-scoping the same way the pre-existing toleration is: they clear themselves
+  the moment the pruning point advances to a clean one, and neither widens what gets tolerated beyond
+  the specific block(s) named above.
+- tests: new domain/consensus/processes/consensusstatemanager/boundary_offset_test.go, package-internal
+  (constructs a consensusStateManager directly with fake PruningStore/GHOSTDAGDataStore/MultisetStore/
+  BlockHeaderStore, following the dropped_input_error_test.go pattern) so it can stage the exact
+  post-import shape without a real IBD: TestBlockInheritsKnownUTXOCommitmentOffsetCoversTheBoundaryBlock
+  (signal 3 fires for the boundary block, not for an unrelated healthy block - self-scoping check),
+  TestConfirmBaselineOffsetMakesUTXOSetHealthHonest (UTXOSetHealth/BaselineVerified flips to false after
+  the boundary block fails, even though the pruning point's own stored multiset still equals its header
+  commitment - the property option 2 exists for), TestConfirmBaselineOffsetIsScopedToTheBoundaryBlock
+  (calling the recorder for a non-boundary block is a no-op). All three fail to compile against the
+  pre-fix tree (confirmBaselineOffsetIfBoundaryBlock did not exist) and pass after. Full package suite
+  green (go test and go test -tags=ci), staticcheck clean, gofmt clean.
+- left alone: this does not touch import_pruning_utxo_set.go itself, and does not change what an
+  imported set is accepted on - only what a demonstrated-offset baseline is allowed to tolerate one
+  block later and how honestly that state is reported. Option 3 (refuse the peer's set) stays ruled out
+  per the evidence above. The already-imported set on a currently-stranded node still needs the fix
+  deployed and the boundary block reprocessed (e.g. via a resync or the existing
+  RepairDisqualifiedTipChains retry path) to take effect - this does not retroactively repair a node
+  that disqualified itself before the fix was running.
+- next: get this onto a currently-stranded node (htnd5 or 192.168.1.170) and confirm virtual leaves
+  VirtualGenesis and IsUtxoSetVerified reports false rather than the node silently claiming health it
+  does not have.
+
+## HTN-209
+- title: TransactionsOrderedByFeeRate.GetByIndex has no bounds check, so mempool eviction can crash
+  the node with an unrecovered index-out-of-range panic
+- status: FIXED 2026-09-18, commit pending (see fixed_commit below)
+- severity: high (unrecovered panic on the mempool hot path, reachable by ordinary RPC/relay traffic
+  under mempool congestion - a DoS surface, no consensus-rule violation needed to trigger it)
+- area: miningmanager/mempool
+- reported: 2026-09-18, found by a background audit fork of previously-unswept mempool files
+  (domain/miningmanager/mempool/transactions_pool.go, remove_transaction.go,
+  revalidate_high_priority_transactions.go, validate_and_insert_transaction[_replacement].go,
+  validate_transaction.go, mempool_utxo_set.go, mempool.go, fill_inputs_and_get_missing_parents.go,
+  model/ordered_transactions_by_fee_rate.go, model/mempool_transaction.go). This session's earlier
+  audits had already covered compound_tx_rate_limiter, wallet_freezing_manager,
+  blocktemplatebuilder/txselection.go, the block template builder GC-diff commit, and RBF - all
+  checked safe; this pass covered the files those hadn't.
+- mechanism: model/ordered_transactions_by_fee_rate.go's TransactionsOrderedByFeeRate.slice is meant
+  to mirror transactions_pool.go's allTransactions map 1:1, but the two structures are NOT kept
+  strictly in sync in production:
+    1. addMempoolTransaction (transactions_pool.go:54-77) writes to allTransactions,
+       chainedTransactionsByParentID and mempoolUTXOSet BEFORE calling
+       transactionsOrderedByFeeRate.Push, with no rollback if Push fails (findTransactionIndex
+       refuses a transaction whose Fee or Mass reads as 0). A failed Push leaves the transaction
+       permanently in allTransactions but absent from tobf.slice.
+    2. removeTransaction (transactions_pool.go:110-120) already documents this happening: it deletes
+       from allTransactions unconditionally, and when transactionsOrderedByFeeRate.Remove returns
+       ErrTransactionNotFound it logs "This should never happen but sometimes does" and continues,
+       rather than treating it as a bug.
+  Once tobf.slice is shorter than allTransactions, limitTransactionCount's eviction loop
+  (transactions_pool.go, called after every accepted transaction) walks currentIndex up while
+  skipping high-priority entries, bounded only against len(tp.allTransactions) - never against
+  len(tobf.slice) - and calls transactionsOrderedByFeeRate.GetByIndex(currentIndex), which had no
+  bounds check at all (unlike its sibling RemoveAtIndex, which already had one). Once the mempool
+  fills past MaximumTransactionCount with enough high-priority entries at low indices - plausible
+  since raisePriorityIfCompound marks ordinary relayed compound transactions high-priority by default
+  - currentIndex walks past len(tobf.slice)-1 while still under len(tp.allTransactions), and
+  GetByIndex indexes out of range: an unrecovered panic, crashing the node.
+  The audit did not nail the exact trigger for the FIRST desync (checked whether PopulateMass/fee
+  population could leave LoadFee()==0 || LoadMass()==0 reachable at Push time; a prior session note
+  already rules zero-fee unreachable via minrelaytxfee, and mass looked deterministic on a quick
+  check) - not required for the fix, since the desync is independently conceded by removeTransaction's
+  own tolerated-error comment regardless of how it first arises.
+- fix: model/ordered_transactions_by_fee_rate.go's GetByIndex now bounds-checks and returns nil for
+  an out-of-range index, matching RemoveAtIndex's existing contract. transactions_pool.go's
+  limitTransactionCount checks for a nil result and logs a warning + returns instead of dereferencing
+  it, treating "ran out of ordered entries" the same as the existing "ran out of allTransactions
+  entries" fallback it already had.
+- left alone: the root desync itself (unrolled-back Push failure in addMempoolTransaction, and
+  removeTransaction's tolerated ErrTransactionNotFound) - fixing why the two structures fall out of
+  sync is a larger change to mempool bookkeeping and wasn't the load-bearing fix; this stops the crash
+  at the point of consumption, which is where RemoveAtIndex already drew the same line. Worth a
+  follow-up if the desync itself turns out to be more than rare/benign.
+- tests: new domain/miningmanager/mempool/model/ordered_transactions_by_fee_rate_test.go
+  (TestGetByIndexOutOfBoundsReturnsNil) - covers an empty set, negative index, index == len (the
+  exact value that used to panic), and index > len, plus confirms in-bounds indices still work.
+  Verified to panic ("index out of range [0] with length 0") against the pre-fix GetByIndex and pass
+  after. go vet + staticcheck clean, gofmt clean, domain/miningmanager/... full suite green, go test
+  -tags=ci ./... 109 ok, rest of tree 49 ok, testing/integration full non-ci run green.
+- fixed_commit: 59091739a
+
+## HTN-210
+- title: constants.SetBlockVersion is a check-then-act race, not an atomic compare-and-swap, so the
+  process-global block-version ratchet can theoretically regress under concurrent calls
+- status: FIXED 2026-09-18, commit pending (see fixed_commit below)
+- severity: medium (a real correctness bug in code the whole codebase's most-repeated gotcha depends
+  on - see CLAUDE.md's "Hoosat-specific gotcha: the block-version global" - but see "not reproduced"
+  below: could not demonstrate it firing under stress, so treat the severity as "definitely wrong code
+  in a load-bearing place" rather than "observed live failure")
+- area: consensus/utils/constants
+- reported: 2026-09-18, found by self (not a fork) while auditing app/protocol/flows/v8's
+  handle_relay_invs.go, which calls constants.SetBlockVersion(version) once per relayed block, from
+  each peer's own connection goroutine - i.e. concurrently across peers by construction.
+- mechanism: the old implementation was
+    current := atomic.LoadUint32(&blockVersion)
+    if uint32(v) > current { ...; atomic.StoreUint32(&blockVersion, uint32(v)) }
+  Each individual load and store is memory-safe (no torn reads/writes, so `go test -race` sees nothing
+  wrong - this is not a Go memory-model data race), but the read-compare-write as a whole is not
+  atomic: two goroutines can both load the same `current` before either stores. If the goroutine
+  proposing the LOWER version's store lands after the one proposing the higher version's, the ratchet
+  - which GetBlockVersion's every caller trusts to never decrease - visibly regresses until the next
+  higher call catches it back up. HTN-001's finality/pruning depths read this "current" value directly
+  (by user decision, chain-derived rather than per-block), so a regression in this exact window could
+  make one node's own validation briefly use a lower version's parameters than it should, self-
+  inconsistently with calls made microseconds apart on the same node.
+- NOT REPRODUCED: tried to catch the old code regressing under a start-barrier stress test (up to 2000
+  goroutines proposing random values 1-50 concurrently, 20 repeated attempts) and it passed every time
+  on this hardware (80 cores) - the window between LoadUint32 and StoreUint32 is apparently too narrow
+  to hit reliably even under heavy contention. This is a real, provable defect in the code as written
+  (textbook non-atomic check-then-act on a monotonic-max update), not a demonstrated live failure -
+  recorded honestly per this session's "prove it or say you couldn't" discipline. Fixed anyway because
+  the fix is a strict, zero-cost improvement (same behavior outside the race window, provably correct
+  inside it, no new dependency, same style as the atomic primitives already in use) to already-
+  concurrency-sensitive code guarding the single most load-bearing global in this codebase - this is
+  not "adding validation for a scenario that can't happen" (CLAUDE.md's caution), since concurrent
+  calls to SetBlockVersion from different peers' goroutines demonstrably do happen; only the specific
+  regression window could not be demonstrated firing.
+- fix: domain/consensus/utils/constants/constants.go's SetBlockVersion now loops on
+  atomic.CompareAndSwapUint32(&blockVersion, current, uint32(v)), retrying against the freshly-read
+  current value if the CAS fails because another goroutine wrote first. A store only ever commits if
+  blockVersion is still exactly what was just read, so a version that already advanced past v during
+  the loop can never be overwritten by it.
+- tests: new domain/consensus/utils/constants/constants_test.go -
+  TestSetBlockVersionNeverDecreasesSequentially (the simple single-threaded contract) and
+  TestSetBlockVersionIsMonotonicUnderConcurrency (200 goroutines x 200 iterations of random values,
+  asserts the final value is the true max proposed) - documented honestly in its own comment as a
+  regression guard pinning the invariant going forward, not a reproduction of the old bug (which this
+  same test, run repeatedly against the pre-fix code, never caught failing). go vet + staticcheck
+  clean, gofmt clean, go test -race ./domain/consensus/utils/constants/... x3 clean,
+  domain/consensus/... full suite green, go test -tags=ci ./... 110 ok, rest of tree 49 ok,
+  cmd/htnwallet ok, testing/integration full non-ci run green.
+- left alone: nothing else reads or writes blockVersion outside GetBlockVersion/SetBlockVersion/
+  ForceSetBlockVersion, all three already atomic-based; no other global in the codebase was found to
+  share this check-then-act shape during this pass (not an exhaustive sweep for the pattern elsewhere).
+- fixed_commit: b190d32aa
+
+## HTN-211
+- title: ResolveVirtual's DAGKnight-vs-blue-work overcome check only runs when chunking, so the common
+  short-backlog case still swaps virtual onto a lighter pending tip unconditionally
+- status: FIXED 2026-09-18, commit pending (see fixed_commit below)
+- severity: high (this is very likely the dominant engine behind "reorgs happen so often" - see below)
+- area: consensus/consensusstatemanager
+- reported: 2026-09-18, found by self while analyzing a user question ("why do reorgs happen so often,
+  and why do node disagreements happen on transactions") by tracing HTN-198 (fixed f1a75eb75) past its
+  own fix to see whether the gap it left open ("left alone / needs_human: ... The chain-shorter-than-
+  a-chunk path ... is untouched") was actually reachable in practice.
+- mechanism: resolve.go has two different ways virtual's selected parent gets chosen. The normal live-
+  block path (AddBlock -> updateVirtual -> pickVirtualParents -> selectVirtualSelectedParent) is pure
+  blue-work GHOSTDAG selection off a DownHeap - fine, not affected. The IBD/catch-up path
+  (ResolveVirtual, called at the end of every IBD round from app/protocol/flows/v8/blockrelay/ibd.go's
+  syncMissingBlockBodies, i.e. essentially every time a node falls even slightly behind and catches
+  back up, not only cold starts) picks its starting "pending tip" via findNextPendingTip, which orders
+  tips by DAGKnight's OrderDAG (k-colouring votes, hash tie-break) from block version 6 - a different
+  algorithm from blue-work, and one HTN-198 already showed disagrees with it on real mainnet data.
+  HTN-198's fix added an "overcome check" (if the DAGKnight-ordered tip never out-blue-works the
+  previous UTXO-valid virtual selected parent, keep the previous one instead of swapping) - but that
+  check lives entirely inside the `if maxBlocksToResolve != 0 && len(unverifiedBlocks) >
+  maxBlocksToResolve` chunking branch (resolve.go, originally lines 294-338). When the unverified
+  backlog is short enough to resolve in one pass - the ordinary case once a node is nearly caught up,
+  since every routine IBD round ends here regardless of how far behind the node was - `processingPoint`
+  was set to the DAGKnight-ordered pending tip and used UNCONDITIONALLY, with zero check against the
+  previous selected parent's blue work. Virtual's selected parent would swap to whatever DAGKnight
+  currently ranks first on essentially every ordinary catch-up round, independent of accumulated work -
+  not a real proof-of-work reorg, an algorithmic disagreement between two different tip-orderings
+  flipping the canonical chain back and forth.
+- connection to transaction-level disagreement: HTN-004 (open, needs_human) already documents that
+  "the diff-child tree itself depends on reorg history and arrival order" and that its UTXO-diff
+  tolerances (isTolerableConflict, addEntry's incoming-score-wins restamp) exist because of exactly
+  this kind of repeated restamping. Every spurious selected-parent flip this bug caused is a reorg from
+  the diff-child bookkeeping's point of view, so this is very plausibly the engine that kept re-
+  triggering HTN-004's and HTN-005's already-documented UTXO/transaction drift mechanisms - fixing the
+  frequency of spurious reorgs does not fix HTN-004/005 (those tolerances and the drift mechanism are
+  untouched), but it removes what was very likely the largest source of exposure to them.
+- why this did not need a fresh consensus decision: unlike HTN-002/004/005/006 (open protocol questions
+  about which baseline or ordering should govern), the POLICY here was already decided by the user in
+  the same commit (f1a75eb75, HTN-198): keep the UTXO-valid previous virtual selected parent unless the
+  new tip actually overcomes it by blue work. This fix applies that identical, already-approved rule to
+  the code path where the guard was accidentally scoped to chunking only - it is not a new policy
+  question, confirmed with the user before implementing.
+- fix: domain/consensus/processes/consensusstatemanager/resolve.go - added the same
+  isNewSelectedTip(pendingTip, previousVirtualSelectedParent) check unconditionally, right after
+  computing unverifiedBlocks and before the chunking branch, mirroring the existing chunked-branch
+  logic exactly (same store read, same log line, same early return keeping the previous valid selected
+  parent). The existing chunked-branch code is untouched - still runs its own backward search for
+  chains long enough to need chunking, which the new up-front check does not replace, only complements.
+- tests: domain/consensus/processes/consensusstatemanager/resolve_lighter_pending_tip_test.go -
+  parameterized the existing lighterPendingTipScenario helper with maxBlocksToResolve (previously
+  hardcoded to 2, forcing the chunked path) and added
+  TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTipShortChain, identical scenario but
+  with maxBlocksToResolve=0 (unlimited - the short/non-chunked path). Verified to fail against the
+  pre-fix resolve.go (virtual's selected parent visibly moved from the heavier valid tip to the lighter
+  DAGKnight-preferred one) and pass after. The pre-existing chunked-path test still passes unchanged.
+  go vet + staticcheck clean, gofmt clean, domain/consensus/... full suite green (53 ok), go test
+  -tags=ci ./... 110 ok, rest of tree 49 ok, cmd/htnwallet ok, testing/integration full non-ci run
+  green.
+- left alone: the chunked branch's own backward-search logic (untouched, still correct); HTN-198's
+  still-open broader question of whether DAGKnight order or blue-work should fundamentally govern
+  virtual's chain from version 6 - that remains needs_human, this fix only makes the two paths
+  consistent about NOT moving virtual backward off a valid heavier chain, not about resolving which
+  ordering is "right" in general; HTN-004/005's own drift mechanisms, unaffected by this fix.
+- fixed_commit: 22529337f

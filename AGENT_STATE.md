@@ -1,13 +1,86 @@
 # AGENT_STATE (session htnd-copy-1d)
-updated: 2026-09-18T09:05:00+03:00
-phase: incident
-active_issue: none in progress. All work committed and PUSHED to origin/master (head 07c95219d). Open: HTN-204 needs_human, HTN-207 analysed-not-fixed, Test16IncomingConnections never run.
-next_action: HTN-208 (CRITICAL) - the boundary block above an imported pruning point fails its UTXO commitment and the offset toleration cannot see it, stranding the node. Mechanism established, fix needs the user's choice between tolerate-the-boundary and make-the-baseline-signal-honest (recommend both). Next evidence: pull 19506f5f... out of /mnt/data/.htnd5/utxo-survey.jsonl for the differing outpoints. Then HTN-207 (ask first), HTN-204 needs_human.
-working_tree: clean, pushed (HTN-205 committed 20ba94e7c); earlier HTN-204 fix + test + testapi accessor (go test -tags=ci ./... all ok; plain go test ./... running)
-last_command: integration4.test -test.run Test16IncomingConnections (EXIT=137, OOM at MemAvailable 4.3G)
-last_result: FULL GATE GREEN for 07c95219d - go test -tags=ci ./... 108 ok exit 0; plain ./... (minus integration) 107 ok exit 0; ./testing/integration 11 PASS 0 FAIL exit 0. Test16IncomingConnections still never run (OOM, 17 in-process nodes vs a production node holding 6.6G).
+updated: 2026-09-18T17:40:00+03:00
+phase: audit
+active_issue: none in progress. HTN-208 committed f1abbcb16, HTN-207 committed 499758822, HTN-196
+  (virtual-genesis discriminator only, see ISSUES.md for scope) committed b687caf80. None pushed
+  (never push per instructions). Open: HTN-204 needs_human (and the whole needs_human list in the
+  "parked needs_human" note below), plus HTN-196's remaining scope (4 other give-up branches in
+  missingBlockBodyHashes, and a duplicate-pruning-point-in-tips observation - both explicitly left
+  alone, see ISSUES.md HTN-196).
+next_action: mempool audit is now COMPLETE (two fork passes, all production .go files in
+  domain/miningmanager/mempool + mempool/model covered). One real bug found and fixed (HTN-209,
+  59091739a: GetByIndex bounds check). Second pass (check_transaction_standard.go,
+  handle_new_block_transactions.go, remaining model/*.go) found nothing that survived scrutiny -
+  checked safe: IsTransactionOutputDust's output.Value*1000 multiply can wrap on a huge peer-supplied
+  value but Go wraps rather than panics and the tx still needs real backing inputs to go anywhere, so
+  worst case is a wrong dust classification, not a crash or fund bug; checkTransactionStandardInContext's
+  input.UTXOEntry deref is pre-guarded by fillInputsAndGetMissingParents (traced); handle_new_block_
+  transactions.go's blockTransactions slice always has a coinbase (only ever called with a consensus-
+  accepted block, traced from flowcontext/blocks.go:41); HandleNewBlockTransactions confirmed under
+  mp.mtx; map_types/mempool_transaction/orphan_transaction/transaction.go are trivial, nothing to find.
+  Started app/protocol/flows/v8 pass (self, not a fork - already had deep context on pruning-point/IBD
+  mechanics from HTN-196/208): handle_pruning_point_and_its_anticone_requests.go read end to end,
+  checked safe (the pruningPointAnticoneSlot release-during-wait/reacquire design is correct - every
+  "holds the slot" phase is bounded, the only unbounded wait releases first, and the defer covers
+  every return path including disconnect; the `index < 0` check at line 106 and the int->string->uint64
+  conversions are dead-code/style oddities, not bugs). ibd_with_headers_proof.go's
+  requireStagingConsensus (line 81-89) discards InitStagingConsensusWithoutGenesis's error and can
+  return (nil, nil) - traced whether that's reachable: BOTH of its 2 call sites are only ever reached
+  through downloadHeadersAndPruningUTXOSet, which is only called from ibdWithHeadersProof AFTER that
+  function's own lines 20-38 already guarantee a staging consensus exists (creates it or returns an
+  error). So the nil-fallback branch in requireStagingConsensus is unreachable via the only call graph
+  today - tried fixing it, then reverted per CLAUDE.md's "don't add handling for scenarios that can't
+  happen": I could not produce a live failure scenario, so it doesn't meet this session's bar (prove
+  the mechanism, don't guess). Left as-is; worth revisiting only if a new caller of
+  requireStagingConsensus is ever added without that guarantee.
+  Read handle_relay_invs.go end to end next: found and fixed HTN-210 (constants.SetBlockVersion was a
+  check-then-act race, not a CAS - committed b190d32aa; see ISSUES.md for the "not reproduced under
+  stress but definitely wrong code" honesty note). Rest of handle_relay_invs.go checked safe on this
+  pass (offenseTracker locking, invsQueue/invChan/blockChan/locatorChan channel handling, requestBlock
+  hash-match ban, orphan/IBD routing) - nothing else new found.
+  2026-09-18 ~19:15: user asked "why do reorgs happen so often, and why do node disagreements happen
+  on transactions" - answered by synthesizing the existing HTN-001..012 split-brain audit cluster
+  (HTN-002/005 baseline-never-matches-commitment is the confirmed epicenter, HTN-004 is the
+  transaction-level mechanism, HTN-001/003/009/010's now-fixed-but-historically-baked-in version
+  disparity likely explains HTN-006's measured 62.5% blue-score mismatch rate), then traced PAST
+  HTN-198's own fix and found HTN-211: ResolveVirtual's DAGKnight-vs-blue-work "overcome" check
+  (added by HTN-198/f1a75eb75) only ran inside the chunking branch: chains short enough to resolve in
+  one pass - the common case, since every ordinary IBD catch-up round ends by calling ResolveVirtual -
+  skipped the check entirely, so virtual's selected parent swapped to whatever DAGKnight ranked first
+  unconditionally, no blue-work check at all. User said "Fix it" (applying the SAME already-decided
+  HTN-198 rule to the gap, not a fresh policy question) - FIXED, committed 22529337f. Full gate green
+  (domain/consensus/... 53 ok, -tags=ci ./... 110 ok, rest of tree 49 ok, cmd/htnwallet ok,
+  testing/integration full non-ci green). New test verified to fail pre-fix (selected parent visibly
+  moved to the lighter tip) and pass after.
+  Rest of app/protocol/flows/v8 (block_locator.go, handle_ibd_*.go except what HTN-196 touched,
+  handle_request_*.go, transactionrelay/*, addressexchange/*, ping/*, rejects/*) NOT yet re-read this
+  pass - most already have "checked safe" entries from earlier in this session's history (see the long
+  block of "checked safe:"/"audited safe:" notes above), but none of those predate HTN-205/206/207/208.
+  HTN-197 and HTN-203 stay needs_human.
+  worth checking: whether any OTHER process-global mutable var in the codebase shares
+  SetBlockVersion's old check-then-act shape (HTN-210's fix note says this pass was not an exhaustive
+  sweep for the pattern).
+  next candidate worth investigating (not started): whether HTN-211's fix, deployed to a real node,
+  measurably reduces reorg/restamp frequency - would need a live node comparison, can't do from here.
+  ISSUES.md status-field distrust note still stands - HTN-194 and HTN-208 both had stale status lines
+  found and corrected this session; worth a dedicated pass at some point re-reading every "status:"
+  line against what actually shipped.
+working_tree: clean except AGENT_STATE.md/ISSUES.md (never staged, per instructions).
+last_command: full gate for HTN-196 (see last_result)
+last_result: HTN-196 FULL GATE GREEN 2026-09-18 ~17:35 - domain/consensus/... + app/... full suites;
+  go test -tags=ci ./... 108 ok; rest of tree 48 ok; cmd/htnwallet -p 1 ok; testing/integration full
+  non-ci rerun (all long tests) 50s PASS. staticcheck + gofmt clean repo-wide. New regression test
+  (missing_block_body_hashes_test.go) verified to fail against the pre-fix antipast.go (git stash of
+  just that file) and pass after.
 blocked_reason: none
-safety_flags: consensus_touch=yes (HTN-003/009/010 version semantics) protocol_touch=no genesis_touch=no
+safety_flags: consensus_touch=yes for HTN-208 (blockInheritsKnownUTXOCommitmentOffset gained a 3rd
+  signal; UTXOSetHealth/IsUtxoSetVerified semantics widened - both scoped to the
+  imported-pruning-point-offset regime, see f1abbcb16). HTN-207 (499758822) is NOT consensus-visible -
+  it only changes which lookups populate an in-memory read cache, not any validated value or DB
+  content. HTN-196 (b687caf80) protocol_touch=yes but NOT a validation-rule change: it changes IBD
+  control flow only (report failure instead of false success on one specific unreconcilable-chain
+  shape, so the node disconnects and retries a different peer) - does not change what any block or
+  peer message is accepted/rejected on consensus grounds. genesis_touch=no throughout.
 notes:
 - HTN-204 IS NOT SAFE TO RE-APPLY as ISSUES.md described it. Re-applying it breaks testing/integration TestIBDWithPruning 3/3 (2/2 pass without). calculateBlockWindowHeap feeds BOTH difficulty AND BlockDAAWindowHashes, which handle_pruning_point_and_its_anticone_requests uses to decide what trusted data to serve; widening the window makes the serving node enumerate blocks TrustedDataDataDAAHeader cannot answer for, and the syncing peer's IBD times out. That is almost certainly why the fix is not in master. Reopened as needs_human.
 - integration gate memory: testing/integration Test16IncomingConnections starts 17 in-process nodes. Each gets pebble.Options' 4 GiB default cache (HTND_PEBBLE_CACHE_MB only helps above 256) plus preallocated LRUs, so it needs the machine mostly idle. The other 11 integration tests run fine under a 7G cap with HTND_PEBBLE_CACHE_MB=300 HTND_MEMTABLE_SIZE_MB=32.
@@ -216,3 +289,18 @@ notes:
 - HTN-204 probe technique: EstimateNetworkHashesPerSecond is a read-only way to measure the DAA window a live node can actually build - its answer stops changing once windowSize exceeds the real window length. Saturation point == virtualDaaScore - pruningPointDaaScore proved the window held only blocks above the pruning point
 - HTN-204 arithmetic: difficulty 65536.01 IS mainnet genesisBits (0x1E7FFFFF); the powMax clamp shows 1.00. Any node reporting 65536.01 on mainnet/simnet is in the genesisBits fallback, not at a computed target
 - htnctl refuses to talk to a node whose version differs; an untracked file makes the local build "-dirty". Use htnctl -a to bypass
+- 2026-09-18 ~16:20 user: this agent has been moved to run ON 192.168.1.170 itself (hostname
+  hoosat-network) rather than a separate dev box. `docker ps` here shows the real production stack:
+  htnd-public (the mainnet node, "docker build running as mainnet node 1", up since ~13:20 this
+  session), htn-stratum-bridge, htn-db-filler x2, htn-faucet, htnd-proxy, htn-rest-server,
+  htn-explorer, htn-website, htn-discord-bot, htn-payment-gateway, htn-socket-server, htn-webwallet,
+  pg16, htn-dns-seeder, htn-wiki, htn-vault - all "Up". `pgrep -a htnd` does NOT show htnd-public
+  (it runs inside its own container namespace); check `docker ps` / `docker logs htnd-public` instead
+  of pgrep to see whether the production node is busy. Never docker restart/stop it - same rule as
+  the bare-metal node, just containerized now.
+  User: "there is ram available to run more tests and nodes" - confirmed 188Gi available of 251Gi
+  total (2026-09-18 16:20, htnd-public running). The old memory-pressure caution (4.3G available,
+  Test16IncomingConnections OOM'd) no longer applies at this headroom - re-attempt long/skipped
+  (non -tags=ci) integration tests here instead of treating them as permanently untestable, but
+  still cap systemd-run MemoryMax explicitly and check `free -h` first since other things share
+  this host now.
