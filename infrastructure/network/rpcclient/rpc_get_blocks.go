@@ -6,12 +6,12 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 func (c *RPCClient) GetBlocks(lowHash string, includeBlocks bool,
 	includeTransactions bool,
 ) (*appmessage.GetBlocksResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(
+	err := c.outgoingRoute().Enqueue(
 		appmessage.NewGetBlocksRequestMessage(lowHash, includeBlocks, includeTransactions))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetBlocksResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetBlocksResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

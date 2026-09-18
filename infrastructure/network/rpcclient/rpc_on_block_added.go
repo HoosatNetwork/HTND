@@ -9,11 +9,11 @@ import (
 // RegisterForBlockAddedNotifications sends an RPC request respective to the function's name and returns the RPC server's response.
 // Additionally, it starts listening for the appropriate notification using the given handler function
 func (c *RPCClient) RegisterForBlockAddedNotifications(onBlockAdded func(notification *appmessage.BlockAddedNotificationMessage)) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyBlockAddedRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyBlockAddedRequestMessage())
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyBlockAddedResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyBlockAddedResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}

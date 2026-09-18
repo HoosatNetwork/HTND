@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetPaginatedUTXOsByAddresses sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetPaginatedUTXOsByAddresses(addresses []string, offset uint32, limit uint32) (*appmessage.GetPaginatedUTXOsByAddressesResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetPaginatedUTXOsByAddressesRequestMessage(addresses, offset, limit))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetPaginatedUTXOsByAddressesRequestMessage(addresses, offset, limit))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetPaginatedUTXOsByAddressesResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetPaginatedUTXOsByAddressesResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

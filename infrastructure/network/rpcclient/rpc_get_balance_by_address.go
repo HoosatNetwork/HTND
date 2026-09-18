@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetBalanceByAddress sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetBalanceByAddress(address string) (*appmessage.GetBalanceByAddressResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetBalanceByAddressRequest(address))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetBalanceByAddressRequest(address))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetBalanceByAddressResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetBalanceByAddressResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

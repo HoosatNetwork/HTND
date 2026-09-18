@@ -12,11 +12,11 @@ func (c *RPCClient) RegisterForFinalityConflictsNotifications(
 	onFinalityConflict func(notification *appmessage.FinalityConflictNotificationMessage),
 	onFinalityConflictResolved func(notification *appmessage.FinalityConflictResolvedNotificationMessage),
 ) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyFinalityConflictsRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyFinalityConflictsRequestMessage())
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyFinalityConflictsResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyFinalityConflictsResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func (c *RPCClient) RegisterForFinalityConflictsNotifications(
 			_ = recover()
 		}()
 		for {
-			notification, err := c.route(appmessage.CmdFinalityConflictNotificationMessage).DequeueWithTimeout(c.timeout)
+			notification, err := c.route(appmessage.CmdFinalityConflictNotificationMessage).DequeueWithTimeout(c.getTimeout())
 			if err != nil {
 				if errors.Is(err, routerpkg.ErrRouteClosed) {
 					break
@@ -56,7 +56,7 @@ func (c *RPCClient) RegisterForFinalityConflictsNotifications(
 			_ = recover()
 		}()
 		for {
-			notification, err := c.route(appmessage.CmdFinalityConflictResolvedNotificationMessage).DequeueWithTimeout(c.timeout)
+			notification, err := c.route(appmessage.CmdFinalityConflictResolvedNotificationMessage).DequeueWithTimeout(c.getTimeout())
 			if err != nil {
 				if errors.Is(err, routerpkg.ErrRouteClosed) {
 					break

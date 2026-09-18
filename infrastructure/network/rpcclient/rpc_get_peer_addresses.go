@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetPeerAddresses sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetPeerAddresses() (*appmessage.GetPeerAddressesResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetPeerAddressesRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetPeerAddressesRequestMessage())
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetPeerAddressesResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetPeerAddressesResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

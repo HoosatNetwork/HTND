@@ -6,13 +6,13 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 func (c *RPCClient) GetBlockByTransactionID(transactionID string, includeTransactions bool) (
 	*appmessage.GetBlockByTransactionIDResponseMessage, error,
 ) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(
+	err := c.outgoingRoute().Enqueue(
 		appmessage.NewGetBlockByTransactionIDRequestMessage(transactionID, includeTransactions),
 	)
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetBlockByTransactionIDResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetBlockByTransactionIDResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

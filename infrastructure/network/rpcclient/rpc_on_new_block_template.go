@@ -9,11 +9,11 @@ import (
 // RegisterForNewBlockTemplateNotifications sends an RPC request respective to the function's name and returns the RPC server's response.
 // Additionally, it starts listening for the appropriate notification using the given handler function
 func (c *RPCClient) RegisterForNewBlockTemplateNotifications(onNewBlockTemplate func(notification *appmessage.NewBlockTemplateNotificationMessage)) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyNewBlockTemplateRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyNewBlockTemplateRequestMessage())
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyNewBlockTemplateResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyNewBlockTemplateResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}

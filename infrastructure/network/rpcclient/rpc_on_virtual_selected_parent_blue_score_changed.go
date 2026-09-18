@@ -12,11 +12,11 @@ import (
 func (c *RPCClient) RegisterForVirtualSelectedParentBlueScoreChangedNotifications(
 	onVirtualSelectedParentBlueScoreChanged func(notification *appmessage.VirtualSelectedParentBlueScoreChangedNotificationMessage),
 ) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualSelectedParentBlueScoreChangedRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualSelectedParentBlueScoreChangedRequestMessage())
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyVirtualSelectedParentBlueScoreChangedResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyVirtualSelectedParentBlueScoreChangedResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}

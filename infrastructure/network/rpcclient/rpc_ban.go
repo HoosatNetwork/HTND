@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // Ban sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) Ban(ip string) (*appmessage.BanResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewBanRequestMessage(ip))
+	err := c.outgoingRoute().Enqueue(appmessage.NewBanRequestMessage(ip))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdBanResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdBanResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

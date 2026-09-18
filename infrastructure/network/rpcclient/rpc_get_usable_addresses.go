@@ -4,14 +4,14 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetUsableAddresses sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetUsableAddresses(addresses []string) (*appmessage.GetUsableAddressesResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetUsableAddressesRequest(addresses))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetUsableAddressesRequest(addresses))
 	if err != nil {
 		return nil, err
 	}
 	log.Debugf("Enqueued NewGetUsableAddressesRequest")
 	// Wait with the client's timeout like every other call. htnwallet makes this call while holding its
 	// server lock, so waiting without one let a node that never answered hang the wallet entirely.
-	response, err := c.route(appmessage.CmdGetUsableAddressesResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetUsableAddressesResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

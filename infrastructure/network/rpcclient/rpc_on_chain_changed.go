@@ -11,12 +11,12 @@ import (
 func (c *RPCClient) RegisterForVirtualSelectedParentChainChangedNotifications(includeAcceptedTransactionIDs bool,
 	onChainChanged func(notification *appmessage.VirtualSelectedParentChainChangedNotificationMessage),
 ) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(
+	err := c.outgoingRoute().Enqueue(
 		appmessage.NewNotifyVirtualSelectedParentChainChangedRequestMessage(includeAcceptedTransactionIDs))
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyVirtualSelectedParentChainChangedResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyVirtualSelectedParentChainChangedResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}

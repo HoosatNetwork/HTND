@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetFeeEstimate sends an RPC request for fee estimation and returns the RPC server's response.
 func (c *RPCClient) GetFeeEstimate() (*appmessage.GetFeeEstimateResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetFeeEstimateRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetFeeEstimateRequestMessage())
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetFeeEstimateResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetFeeEstimateResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

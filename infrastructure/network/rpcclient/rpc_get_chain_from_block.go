@@ -6,12 +6,12 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 func (c *RPCClient) GetVirtualSelectedParentChainFromBlock(startHash string, includeAcceptedTransactionIDs bool) (
 	*appmessage.GetVirtualSelectedParentChainFromBlockResponseMessage, error,
 ) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(
+	err := c.outgoingRoute().Enqueue(
 		appmessage.NewGetVirtualSelectedParentChainFromBlockRequestMessage(startHash, includeAcceptedTransactionIDs))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetVirtualSelectedParentChainFromBlockResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetVirtualSelectedParentChainFromBlockResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

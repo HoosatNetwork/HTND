@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetVirtualSelectedParentBlueScore sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetVirtualSelectedParentBlueScore() (*appmessage.GetVirtualSelectedParentBlueScoreResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetVirtualSelectedParentBlueScoreRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetVirtualSelectedParentBlueScoreRequestMessage())
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetVirtualSelectedParentBlueScoreResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetVirtualSelectedParentBlueScoreResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

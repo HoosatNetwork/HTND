@@ -15,12 +15,12 @@ func (c *RPCClient) SubmitTransaction(transaction *appmessage.RPCTransaction, tr
 func (c *RPCClient) SubmitTransactionWithPriority(transaction *appmessage.RPCTransaction, transactionID string, allowOrphan bool,
 	isHighPriority *bool,
 ) (*appmessage.SubmitTransactionResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionRequestMessageWithPriority(transaction, allowOrphan, isHighPriority))
+	err := c.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionRequestMessageWithPriority(transaction, allowOrphan, isHighPriority))
 	if err != nil {
 		return nil, err
 	}
 	for {
-		response, err := c.route(appmessage.CmdSubmitTransactionResponseMessage).DequeueWithTimeout(c.timeout)
+		response, err := c.route(appmessage.CmdSubmitTransactionResponseMessage).DequeueWithTimeout(c.getTimeout())
 		if err != nil {
 			return nil, err
 		}

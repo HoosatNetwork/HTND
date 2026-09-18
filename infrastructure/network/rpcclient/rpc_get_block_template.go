@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetBlockTemplate sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetBlockTemplate(miningAddress, extraData string) (*appmessage.GetBlockTemplateResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetBlockTemplateRequestMessage(miningAddress, extraData))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetBlockTemplateRequestMessage(miningAddress, extraData))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetBlockTemplateResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetBlockTemplateResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

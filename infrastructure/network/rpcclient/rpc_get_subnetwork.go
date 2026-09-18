@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetSubnetwork sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetSubnetwork(subnetworkID string) (*appmessage.GetSubnetworkResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetSubnetworkRequestMessage(subnetworkID))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetSubnetworkRequestMessage(subnetworkID))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetSubnetworkResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetSubnetworkResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

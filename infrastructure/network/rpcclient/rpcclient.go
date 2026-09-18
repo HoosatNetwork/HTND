@@ -36,15 +36,23 @@ type RPCClient struct {
 	// reporting errors after it is closed, and those must not tear down the connection that replaced it.
 	activeClient atomic.Pointer[grpcclient.GRPCClient]
 
-	timeout time.Duration
+	// timeoutNanos is time.Duration nanoseconds. connect() briefly lowers it around the initial
+	// GetInfo call, and SetTimeout can be called from user code at any time, both racing an in-flight
+	// request method reading it to build a DequeueWithTimeout call - see getTimeout/SetTimeout.
+	timeoutNanos atomic.Int64
+}
+
+// getTimeout returns the current RPC call timeout.
+func (c *RPCClient) getTimeout() time.Duration {
+	return time.Duration(c.timeoutNanos.Load())
 }
 
 // NewRPCClient сreates a new RPC client with a default call timeout value
 func NewRPCClient(rpcAddress string) (*RPCClient, error) {
 	rpcClient := &RPCClient{
 		rpcAddress: rpcAddress,
-		timeout:    defaultTimeout,
 	}
+	rpcClient.timeoutNanos.Store(int64(defaultTimeout))
 	err := rpcClient.connect()
 	if err != nil {
 		return nil, err
@@ -88,10 +96,10 @@ func (c *RPCClient) connect() error {
 
 	log.Debugf("Connected to %s", c.rpcAddress)
 
-	originalTimeout := c.timeout
-	c.timeout = initialVersionCheckTimeout
+	originalTimeout := c.getTimeout()
+	c.timeoutNanos.Store(int64(initialVersionCheckTimeout))
 	getInfoResponse, err := c.GetInfo()
-	c.timeout = originalTimeout
+	c.timeoutNanos.Store(int64(originalTimeout))
 	if err != nil {
 		c.activeClient.CompareAndSwap(rpcClient, nil)
 		c.rpcRouterMutex.RLock()
@@ -236,7 +244,7 @@ func (c *RPCClient) handleClientError(err error) {
 
 // SetTimeout sets the timeout by which to wait for RPC responses
 func (c *RPCClient) SetTimeout(timeout time.Duration) {
-	c.timeout = timeout
+	c.timeoutNanos.Store(int64(timeout))
 }
 
 // Close closes the RPC client
@@ -263,6 +271,16 @@ func (c *RPCClient) route(command appmessage.MessageCommand) *routerpkg.Route {
 	c.rpcRouterMutex.RLock()
 	defer c.rpcRouterMutex.RUnlock()
 	return c.rpcRouter.routes[command]
+}
+
+// outgoingRoute returns the active router's outgoing route. Every rpc_*.go request method goes
+// through this instead of reading c.rpcRouter directly: connect() replaces c.rpcRouter under
+// rpcRouterMutex on every (re)connection, and a request goroutine reading the field unguarded raced
+// that write - the same class of bug route() above was already written to avoid.
+func (c *RPCClient) outgoingRoute() *routerpkg.Route {
+	c.rpcRouterMutex.RLock()
+	defer c.rpcRouterMutex.RUnlock()
+	return c.rpcRouter.outgoingRoute()
 }
 
 // ErrRPC is an error in the RPC protocol

@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetCoinSupply sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetCoinSupply() (*appmessage.GetCoinSupplyResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetCoinSupplyRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetCoinSupplyRequestMessage())
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetCoinSupplyResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetCoinSupplyResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

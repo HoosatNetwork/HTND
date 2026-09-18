@@ -15,12 +15,12 @@ func (c *RPCClient) SubmitTransactionReplacement(transaction *appmessage.RPCTran
 func (c *RPCClient) SubmitTransactionReplacementWithPriority(transaction *appmessage.RPCTransaction, transactionID string,
 	isHighPriority *bool,
 ) (*appmessage.SubmitTransactionReplacementResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionReplacementRequestMessageWithPriority(transaction, isHighPriority))
+	err := c.outgoingRoute().Enqueue(appmessage.NewSubmitTransactionReplacementRequestMessageWithPriority(transaction, isHighPriority))
 	if err != nil {
 		return nil, err
 	}
 	for {
-		response, err := c.route(appmessage.CmdSubmitTransactionReplacementResponseMessage).DequeueWithTimeout(c.timeout)
+		response, err := c.route(appmessage.CmdSubmitTransactionReplacementResponseMessage).DequeueWithTimeout(c.getTimeout())
 		if err != nil {
 			return nil, err
 		}

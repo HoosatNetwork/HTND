@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetTransactionStatus sends an RPC request respective to the function's name and returns the RPC server's response.
 func (c *RPCClient) GetTransactionStatus(transactionID string) (*appmessage.GetTransactionStatusResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetTransactionStatusRequestMessage(transactionID))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetTransactionStatusRequestMessage(transactionID))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetTransactionStatusResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetTransactionStatusResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

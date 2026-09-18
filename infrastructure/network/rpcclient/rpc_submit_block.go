@@ -8,11 +8,11 @@ import (
 func (c *RPCClient) submitBlock(block *externalapi.DomainBlock, powHash string, allowNonDAABlocks bool) (appmessage.RejectReason, error) {
 	PoWHashForRPC, _ := externalapi.NewDomainHashFromString(powHash)
 	submitBlockRequest := appmessage.NewSubmitBlockRequestMessage(appmessage.DomainBlockToRPCBlock(block), allowNonDAABlocks, PoWHashForRPC)
-	err := c.rpcRouter.outgoingRoute().Enqueue(submitBlockRequest)
+	err := c.outgoingRoute().Enqueue(submitBlockRequest)
 	if err != nil {
 		return appmessage.RejectReasonNone, err
 	}
-	response, err := c.route(appmessage.CmdSubmitBlockResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdSubmitBlockResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return appmessage.RejectReasonNone, err
 	}

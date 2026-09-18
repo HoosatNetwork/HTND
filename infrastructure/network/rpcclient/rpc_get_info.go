@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetInfo sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetInfo() (*appmessage.GetInfoResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetInfoRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetInfoRequestMessage())
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetInfoResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetInfoResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

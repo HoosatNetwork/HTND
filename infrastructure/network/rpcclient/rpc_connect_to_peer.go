@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // AddPeer sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) AddPeer(address string, isPermanent bool) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewAddPeerRequestMessage(address, isPermanent))
+	err := c.outgoingRoute().Enqueue(appmessage.NewAddPeerRequestMessage(address, isPermanent))
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdAddPeerResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdAddPeerResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}

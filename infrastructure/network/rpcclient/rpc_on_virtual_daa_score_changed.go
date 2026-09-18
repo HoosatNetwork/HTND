@@ -12,11 +12,11 @@ import (
 func (c *RPCClient) RegisterForVirtualDaaScoreChangedNotifications(
 	onVirtualDaaScoreChanged func(notification *appmessage.VirtualDaaScoreChangedNotificationMessage),
 ) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualDaaScoreChangedRequestMessage())
+	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualDaaScoreChangedRequestMessage())
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyVirtualDaaScoreChangedResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyVirtualDaaScoreChangedResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}

@@ -4,11 +4,11 @@ import "github.com/HoosatNetwork/HTND/app/appmessage"
 
 // GetMempoolEntriesByAddresses sends an RPC request respective to the function's name and returns the RPC server's response
 func (c *RPCClient) GetMempoolEntriesByAddresses(addresses []string, includeOrphanPool bool, filterTransactionPool bool) (*appmessage.GetMempoolEntriesByAddressesResponseMessage, error) {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewGetMempoolEntriesByAddressesRequestMessage(addresses, includeOrphanPool, filterTransactionPool))
+	err := c.outgoingRoute().Enqueue(appmessage.NewGetMempoolEntriesByAddressesRequestMessage(addresses, includeOrphanPool, filterTransactionPool))
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.route(appmessage.CmdGetMempoolEntriesByAddressesResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdGetMempoolEntriesByAddressesResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return nil, err
 	}

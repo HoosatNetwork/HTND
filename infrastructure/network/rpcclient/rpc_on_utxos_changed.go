@@ -11,11 +11,11 @@ import (
 func (c *RPCClient) RegisterForUTXOsChangedNotifications(addresses []string,
 	onUTXOsChanged func(notification *appmessage.UTXOsChangedNotificationMessage),
 ) error {
-	err := c.rpcRouter.outgoingRoute().Enqueue(appmessage.NewNotifyUTXOsChangedRequestMessage(addresses))
+	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyUTXOsChangedRequestMessage(addresses))
 	if err != nil {
 		return err
 	}
-	response, err := c.route(appmessage.CmdNotifyUTXOsChangedResponseMessage).DequeueWithTimeout(c.timeout)
+	response, err := c.route(appmessage.CmdNotifyUTXOsChangedResponseMessage).DequeueWithTimeout(c.getTimeout())
 	if err != nil {
 		return err
 	}
