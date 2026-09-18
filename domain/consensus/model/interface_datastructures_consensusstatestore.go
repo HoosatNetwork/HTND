@@ -9,6 +9,10 @@ type ConsensusStateStore interface {
 
 	StageVirtualUTXODiff(stagingArea *StagingArea, virtualUTXODiff externalapi.UTXODiff)
 	UTXOByOutpoint(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error)
+	// UTXOByOutpointWithoutPopulatingCache behaves like UTXOByOutpoint but never adds a cache miss to
+	// the shared virtual UTXO cache - only a hit refreshes an entry's recency. For a bulk caller whose
+	// outpoint count can dwarf the cache size, see HTN-207.
+	UTXOByOutpointWithoutPopulatingCache(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error)
 	HasUTXOByOutpoint(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (bool, error)
 	VirtualUTXOSetIterator(dbContext DBReader, stagingArea *StagingArea) (externalapi.ReadOnlyUTXOSetIterator, error)
 	VirtualUTXOs(dbContext DBReader, fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error)

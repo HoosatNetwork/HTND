@@ -951,7 +951,10 @@ func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutp
 		return nil, err
 	}
 	for i, outpoint := range outpoints {
-		entry, found, err := s.consensusStateStore.UTXOByOutpoint(s.databaseContext, stagingArea, outpoint)
+		// Does not populate the cache on a miss: an address with more coins than the cache holds
+		// would otherwise scan through it evicting everything block validation put there, going cold
+		// for the path that actually needs it, for no benefit to itself - see HTN-207.
+		entry, found, err := s.consensusStateStore.UTXOByOutpointWithoutPopulatingCache(s.databaseContext, stagingArea, outpoint)
 		if database.IsNotFoundError(err) {
 			continue
 		}

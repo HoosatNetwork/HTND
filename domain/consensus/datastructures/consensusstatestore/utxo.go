@@ -84,11 +84,25 @@ func (css *consensusStateStore) UTXOByOutpoint(dbContext model.DBReader, staging
 ) (externalapi.UTXOEntry, bool, error) {
 	stagingShard := css.stagingShard(stagingArea)
 
-	return css.utxoByOutpointFromStagedVirtualUTXODiff(dbContext, stagingShard, outpoint)
+	return css.utxoByOutpointFromStagedVirtualUTXODiff(dbContext, stagingShard, outpoint, true)
+}
+
+// UTXOByOutpointWithoutPopulatingCache behaves like UTXOByOutpoint but never adds a cache miss to
+// virtualUTXOSetCache - only a hit refreshes the entry's recency. For a bulk lookup whose outpoint
+// count can dwarf the cache size (e.g. GetVirtualUTXOEntries answering an address-balance query),
+// populating on every miss evicts entries block validation put there for its own working set, and
+// buys the bulk lookup nothing back: it is walking a fixed list of outpoints it already has, not
+// going to revisit the same key before it finishes. See HTN-207.
+func (css *consensusStateStore) UTXOByOutpointWithoutPopulatingCache(dbContext model.DBReader,
+	stagingArea *model.StagingArea, outpoint *externalapi.DomainOutpoint,
+) (externalapi.UTXOEntry, bool, error) {
+	stagingShard := css.stagingShard(stagingArea)
+
+	return css.utxoByOutpointFromStagedVirtualUTXODiff(dbContext, stagingShard, outpoint, false)
 }
 
 func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContext model.DBReader,
-	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint,
+	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint, populateCacheOnMiss bool,
 ) (externalapi.UTXOEntry, bool, error) {
 	if stagingShard.virtualUTXODiffStaging != nil {
 		if stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
@@ -121,7 +135,9 @@ func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContex
 		return nil, false, err
 	}
 
-	css.virtualUTXOSetCache.Add(outpoint, entry)
+	if populateCacheOnMiss {
+		css.virtualUTXOSetCache.Add(outpoint, entry)
+	}
 	return entry, true, nil
 }
 
