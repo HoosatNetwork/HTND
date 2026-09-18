@@ -95,3 +95,70 @@ func TestBuiltCoinbasePaysTheFeesOfTheMergeSet(t *testing.T) {
 		}
 	})
 }
+
+// TestBuiltCoinbasePaysEveryMergedBlock pins that a built block's coinbase pays every block its own
+// merge set contains, when that merge set holds more than the selected parent.
+//
+// The coinbase owes an output to each merged block, and which blocks those are was answered about
+// virtual while the validator answers it about the block itself. The two can disagree - the reward
+// is only paid to a merge set block that is in the DAA added blocks set of whichever block the
+// question was asked about - and a merged block that falls out on one side and not the other is an
+// "Output count differs: actual=2, expected=4" rejection of a block this node built itself. Every
+// other builder test merges a single block, where nothing can differ.
+func TestBuiltCoinbasePaysEveryMergedBlock(t *testing.T) {
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestBuiltCoinbasePaysEveryMergedBlock")
+		if err != nil {
+			t.Fatalf("Error setting up consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		// Two siblings over genesis, each mined to its own address, so virtual merges both and the
+		// coinbase owes an output to each - plus a dev fee output per merged block.
+		const siblings = 2
+		for i := range siblings {
+			_, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash},
+				&externalapi.DomainCoinbaseData{
+					ScriptPublicKey: &externalapi.ScriptPublicKey{Script: []byte{byte(i)}, Version: 0},
+					ExtraData:       []byte{byte(i)},
+				}, nil)
+			if err != nil {
+				t.Fatalf("Error adding sibling %d: %+v", i, err)
+			}
+		}
+
+		stagingArea := model.NewStagingArea()
+		virtualGHOSTDAGData, err := tc.GHOSTDAGDataStore().Get(tc.DatabaseContext(), stagingArea,
+			model.VirtualBlockHash, false)
+		if err != nil {
+			t.Fatalf("Error getting virtual's GHOSTDAG data: %+v", err)
+		}
+		mergeSetSize := len(virtualGHOSTDAGData.MergeSetBlues()) + len(virtualGHOSTDAGData.MergeSetReds())
+		if mergeSetSize != siblings {
+			t.Fatalf("virtual merges %d blocks, want %d - the case this test is about did not happen",
+				mergeSetSize, siblings)
+		}
+
+		block, err := tc.BuildBlock(&externalapi.DomainCoinbaseData{
+			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0},
+			ExtraData:       nil,
+		}, nil)
+		if err != nil {
+			t.Fatalf("Error building the block: %+v", err)
+		}
+
+		// Only from block version 2 does the coinbase pay each merged block separately; version 1
+		// buckets the rewards, so the output count says nothing there.
+		coinbase := block.Transactions[0]
+		if block.Header.Version() >= 2 && len(coinbase.Outputs) != 2*siblings {
+			t.Fatalf("the built coinbase has %d outputs, want %d - one reward and one dev fee per merged block",
+				len(coinbase.Outputs), 2*siblings)
+		}
+
+		err = tc.ValidateAndInsertBlock(block, true, true)
+		if err != nil {
+			t.Fatalf("The block this node built was rejected by this node: %+v", err)
+		}
+	})
+}
