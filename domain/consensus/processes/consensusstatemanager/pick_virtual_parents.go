@@ -68,6 +68,20 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 	selectedVirtualParents := []*externalapi.DomainHash{virtualSelectedParent}
 	mergeSetSize := uint64(1) // starts counting from 1 because selectedParent is already in the mergeSet
 
+	// knownPastOfSelectedVirtualParents memoizes IsAncestorOfAny(x, selectedVirtualParents) == true
+	// results across every mergeSetIncrease call in the loop below. This is safe because
+	// selectedVirtualParents only ever grows in this loop (a candidate is appended to it, never
+	// removed): once x is known to be an ancestor of some member of the set, it stays an ancestor of
+	// that same member for any later, larger set, so a "true" answer never needs to be recomputed. A
+	// "false" answer is deliberately NOT cached here, since it can flip to true once a later
+	// candidate is added to selectedVirtualParents - only "true" is monotonic.
+	//
+	// Different candidate tips' merge-set BFS (inside mergeSetIncrease) walk the same shared DAG and
+	// visit heavily overlapping ancestors on a DAG with many tips - a live CPU profile showed this
+	// exact reachability check (IsAncestorOfAny, called once per BFS-visited node) as the largest
+	// single cost in block processing while nearly synced. See HTN-215.
+	knownPastOfSelectedVirtualParents := hashset.New()
+
 	// First condition implies that no point in searching since limit was already reached
 	for mergeSetSize < csm.mergeSetSizeLimit && len(candidates) > 0 && uint64(len(selectedVirtualParents)) < uint64(maxBlockParents) {
 		candidate := candidates[0]
@@ -77,7 +91,7 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 		log.Debugf("The current merge set size is %d", mergeSetSize)
 
 		canBeParent, newCandidate, mergeSetIncrease, err := csm.mergeSetIncrease(
-			stagingArea, candidate, selectedVirtualParents, mergeSetSize)
+			stagingArea, candidate, selectedVirtualParents, mergeSetSize, knownPastOfSelectedVirtualParents)
 		if err != nil {
 			return nil, err
 		}
@@ -294,8 +308,12 @@ func (csm *consensusStateManager) selectVirtualSelectedParent(stagingArea *model
 // mergeSetIncrease returns different things depending on the result:
 // If the candidate can be a virtual parent then canBeParent=true and mergeSetIncrease=The increase in merge set size
 // If the candidate can't be a virtual parent, then canBeParent=false and newCandidate is a new proposed candidate in the past of candidate.
+//
+// knownPastOfSelectedVirtualParents is shared across every candidate considered in the same
+// pickVirtualParents call - see its doc comment there for why caching only "is an ancestor" (never
+// "is not") across candidates is safe.
 func (csm *consensusStateManager) mergeSetIncrease(stagingArea *model.StagingArea, candidate *externalapi.DomainHash,
-	selectedVirtualParents []*externalapi.DomainHash, mergeSetSize uint64) (
+	selectedVirtualParents []*externalapi.DomainHash, mergeSetSize uint64, knownPastOfSelectedVirtualParents hashset.HashSet) (
 	canBeParent bool, newCandidate *externalapi.DomainHash, mergeSetIncrease uint64, err error,
 ) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "mergeSetIncrease")
@@ -318,9 +336,15 @@ func (csm *consensusStateManager) mergeSetIncrease(stagingArea *model.StagingAre
 		current, queue = queue[0], queue[1:]
 		log.Tracef("Attempting to increment the merge set size increase for block %s", current)
 
-		isInPastOfSelectedVirtualParents, err := csm.dagTopologyManager.IsAncestorOfAny(stagingArea, current, selectedVirtualParents)
-		if err != nil {
-			return false, nil, 0, err
+		isInPastOfSelectedVirtualParents := knownPastOfSelectedVirtualParents.Contains(current)
+		if !isInPastOfSelectedVirtualParents {
+			isInPastOfSelectedVirtualParents, err = csm.dagTopologyManager.IsAncestorOfAny(stagingArea, current, selectedVirtualParents)
+			if err != nil {
+				return false, nil, 0, err
+			}
+			if isInPastOfSelectedVirtualParents {
+				knownPastOfSelectedVirtualParents.Add(current)
+			}
 		}
 		if isInPastOfSelectedVirtualParents {
 			log.Tracef("Skipping block %s because it's in the past of one (or more) of the selected virtual parents", current)
