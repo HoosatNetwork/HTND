@@ -2049,3 +2049,106 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - needs: nothing conceptually - this is a local-correctness/concurrency bug, not a protocol question -
   just needs someone to actually read grpcclient.go's Disconnect/send/receive lifecycle end to end and
   design the fix, which this session did not get to.
+
+## HTN-214
+- title: domain/utxoindex.utxoIndexStore.UTXOs scanned its cursor twice for every unlimited query -
+  once just to count, once to fill - instead of reading the count this store already maintains
+- status: FIXED 2026-09-18, commit pending (see fixed_commit below)
+- severity: high (this is the concrete, measured explanation for the user's "why is nearly-synced IBD
+  so damn slow" question - not the only contributor, see HTN-215 below, but the cleanest, safest, and
+  highest-confidence one found)
+- area: domain/utxoindex
+- reported: 2026-09-18, user pasted a live log showing "nearly synced" block processing running at
+  ~2-3 blocks/s with a persistent ~7.5 minute lag between wall-clock and the DAA timestamp embedded
+  in each processed block, and asked why. Investigated with a live 20s CPU profile pulled from the
+  production node's pprof endpoint (HTND_PROFILER=1, already enabled; read-only, node not touched or
+  restarted) at http://127.0.0.1:6060/debug/pprof/profile - matches the profiling approach used in
+  this session's earlier HTN-205/206 investigation.
+- evidence: the profile showed runtime.gcBgMarkWorker/gcDrain (GC background marking) consuming
+  52.88% of ALL CPU sampled over the 20s window (341% average core utilization, so the node was busy,
+  just spending more than half of that on garbage collection). Two concurrent, independent, allocation-
+  heavy call paths were driving it: (1) block processing's per-block virtual-parent selection (see
+  HTN-215) at ~18% of total CPU, and (2) domain/utxoindex.(*UTXOIndex).UTXOs / utxoIndexStore.UTXOs at
+  15.25% of total CPU cumulative, reached from app/rpc/rpchandlers.HandleGetBalancesByAddresses/
+  HandleGetUsableAddresses (8.39%/8.03% respectively) - both running concurrently with IBD on this
+  node, competing for the same CPU and GC budget as block processing.
+- mechanism: utxoIndexStore.UTXOs(scriptPublicKey, limit, buffer), when limit==0 ("give me
+  everything," which HandleGetBalancesByAddresses and HandleGetUsableAddresses both use), ran a first
+  full cursor scan over the script's entire bucket just to count entries (so the result buffer could
+  be pre-sized exactly), then ran a SECOND full cursor scan, from the start again, to actually
+  deserialize and collect them - go tool pprof -list showed the counting pass alone cost 2.31s of the
+  profile's 20s window, separate from the fill pass's own ~7.5s (cursor iteration, key/outpoint
+  conversion, UTXO entry deserialization). Meanwhile domain/utxoindex/store.go already maintains an
+  exact, incrementally-updated per-script UTXO count (utxoCountKeyForScriptPublicKey /
+  applyUTXOCountDeltas, committed atomically in the same transaction as the entries themselves,
+  specifically so a caller needing the count doesn't have to scan for it) - already used by HasUTXOs,
+  just not by UTXOs.
+- fix: UTXOs now reads the maintained count with a single point Get (falling back to 0 on not-found)
+  instead of a full cursor scan, for the limit==0 case; the limit>0 case was already O(1) (count =
+  int(limit)) and is untouched. The single remaining cursor pass is the same fill loop as before,
+  unchanged.
+- tests: new domain/utxoindex/utxos_count_sizing_test.go
+  (TestUTXOsSizesFromTheMaintainedCountNotAScan) - two scripts, several commits including an
+  add-then-remove of the same outpoint within one commit (nets to zero) and a partial removal from an
+  earlier commit, checks UTXOs(sp, 0, ...) returns exactly the surviving set (not the net-zero
+  outpoint, not affected by the other script's churn) and that limit>0 still truncates correctly.
+  This is a performance fix, not a bug fix - the pre-fix double-scan was already correct, just slow -
+  so there is no "fails before, passes after" reproduction to point to; correctness is established by
+  this test and the pre-existing TestHasUTXOsUsesTrackedCounts/TestUTXOsReturnsReallocatedBufferFor
+  CallerCleanup (both pass unchanged), and the performance claim by code reading (one cursor pass
+  removed) plus the live profile that motivated it. go vet + staticcheck clean, gofmt clean, full repo
+  build clean, domain/utxoindex/... full suite green (11 tests), go test -tags=ci ./... 110 ok, rest
+  of tree 49 ok, cmd/htnwallet ok, testing/integration full non-ci run green.
+- left alone: HTN-215 (below) - the other major cost center from the same profile, deliberately not
+  touched in this commit because it's consensus-visible (virtual parent selection) rather than a pure
+  serving-path optimization like this one.
+- fixed_commit: 267c7f8e1
+
+## HTN-215
+- title: pickVirtualParents' per-candidate merge-set-size check re-walks reachability from scratch for
+  every DAG tip considered, with no memoization across candidates in the same virtual update
+- status: open, needs_human (consensus-visible: this is block-parent-selection code, a memoization
+  fix that changes iteration/call patterns around reachability queries touches exactly the kind of
+  code this session has treated as measure-first-then-ask territory all along - not fixed without
+  the user's go-ahead, unlike HTN-214 which was a pure non-consensus serving-path optimization)
+- severity: high (this is the OTHER major contributor to the "nearly synced IBD is slow" symptom,
+  and unlike HTN-214 it sits directly on the block-processing critical path, not a competing RPC
+  path - see HTN-214's evidence section for the same profile this was found in)
+- area: consensus/consensusstatemanager (pick_virtual_parents.go)
+- reported: 2026-09-18, same live-node CPU profile as HTN-214 (see that entry for how it was taken -
+  http://127.0.0.1:6060/debug/pprof/profile, 20s, read-only, node not touched).
+- evidence: consensus.ValidateAndInsertBlock -> ...AddBlock -> consensusStateManager.updateVirtual ->
+  pickVirtualParents -> mergeSetIncrease accounted for 19.22%/19.25%/18.28%/17.80% of the whole
+  profile's CPU respectively (nearly identical, i.e. essentially all of updateVirtual's cost is this
+  one call chain). go tool pprof -list mergeSetIncrease showed 9.63s of its 12.15s total inside a
+  single line: `csm.dagTopologyManager.IsAncestorOfAny(stagingArea, current, selectedVirtualParents)`,
+  called once per BFS-visited ancestor of each candidate tip. Downstream, IsAncestorOfAny ->
+  reachabilityManager.IsDAGAncestorOf -> interval/futureCoveringSetHasAncestorOf/ReachabilityData
+  together accounted for another ~9-14% of total CPU each (overlapping - these are on the same call
+  chain). This IS block-processing work (not RPC contention like HTN-214), and it runs on literally
+  every block while the node is "nearly synced" (updateVirtual, the internal function, is only
+  called when AddBlock's updateVirtual PARAMETER is true - i.e. exactly the nearly-synced live path
+  the user asked about; the bulk/far-behind IBD path defers this entirely via ResolveVirtual, which
+  is why bulk IBD is fast and nearly-synced IBD is comparatively so slow - this is architectural, not
+  a bug in itself, but the per-call cost inside it plausibly is more expensive than necessary).
+- mechanism: pickVirtualParents (pick_virtual_parents.go:14) iterates candidate tips (up to
+  maxBlockParents*3, sorted by blue work) and calls mergeSetIncrease(candidate, selectedVirtualParents,
+  mergeSetSize) once per candidate, in a loop. Each call runs its OWN independent BFS from the
+  candidate's parents, calling IsAncestorOfAny(current, selectedVirtualParents) for every visited
+  node, with NO memoization of ancestry results across separate candidates' BFS runs within the same
+  pickVirtualParents call - even though selectedVirtualParents only grows (never shrinks) across
+  those calls, and the DAG being walked is identical between them. On a DAG with many tips (a busy,
+  high-BPS network - exactly what this session's HTN-205/206/198/211 work has been about), this
+  multiplies: candidates x BFS-size x reachability-check-cost, with a large constant-factor of
+  redundant work between candidates whose BFS visits overlapping ancestor sets.
+- fix_plan: not designed - this needs someone with authority over the consensus code path to decide
+  the shape of a fix (e.g. a memoization cache scoped to one pickVirtualParents call, keyed by
+  (blockHash, selectedVirtualParents-generation) or similar) that provably produces IDENTICAL output
+  (same selectedVirtualParents, same order) to the current O(candidates x BFS) algorithm - a pure
+  speed optimization with zero behavior change, not an algorithm change - before writing it. Measure
+  first: how many candidates/BFS nodes does this walk on the live node in the steady state, and how
+  much does memoization actually save, before deciding whether it's worth the added complexity/review
+  risk in a hot consensus path.
+- left alone: entirely, this session - HTN-214 was implemented (non-consensus, unambiguously safe);
+  this one was not, and needs the user's decision on whether/how to proceed given it's on the
+  virtual-parent-selection path.

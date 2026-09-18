@@ -11,7 +11,26 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   paste showing ~2-3 blocks/s processed per ~1.1-1.5s slice while the block timestamps embedded in the
   log are running ~7.5 minutes behind wall-clock at the time each line was printed - the node is
   "nearly synced" (past the IsNearlySynced threshold) but visibly not keeping up in real time.
-  Investigation in progress now, see next_action.
+  Investigated via a live 20s CPU profile pulled read-only from the production node's pprof
+  (HTND_PROFILER=1 already set, http://127.0.0.1:6060/debug/pprof/profile - node never touched,
+  matches the HTN-205/206 profiling approach). Found: runtime GC background marking alone was 52.88%
+  of ALL sampled CPU (341% avg core utilization, so the node is busy, just burning most of it on GC),
+  driven by two independent, concurrent, allocation-heavy paths:
+  1. HTN-214 (FIXED, 267c7f8e1): domain/utxoindex.UTXOs() scanned its cursor twice per unlimited
+     query (once to count, once to fill) when a maintained per-script count already existed and just
+     wasn't being read - 15.25% of total CPU, reached from HandleGetBalancesByAddresses/
+     HandleGetUsableAddresses running concurrently with IBD. Pure non-consensus serving-path fix,
+     implemented without asking (same class as HTN-207/199).
+  2. HTN-215 (open, needs_human): pickVirtualParents/mergeSetIncrease's per-candidate reachability
+     BFS (IsAncestorOfAny called once per visited ancestor, no memoization across candidates in the
+     same call) - ~18-19% of total CPU, and THIS one is on the block-processing critical path itself
+     (only runs when AddBlock's updateVirtual param is true, i.e. exactly the nearly-synced live path
+     - the bulk/far-behind IBD path defers this via ResolveVirtual instead, which is why bulk IBD is
+     fast and nearly-synced is comparatively slow - architectural, not itself a bug, but the per-call
+     cost plausibly is higher than necessary). NOT fixed: touches consensus virtual-parent-selection
+     code, a memoization fix needs the user's go-ahead per this session's measure-first-then-ask
+     pattern for anything on that path (HTN-002/004/005/006 class). Presented both findings to the
+     user, awaiting direction on HTN-215.
 next_action: mempool audit is now COMPLETE (two fork passes, all production .go files in
   domain/miningmanager/mempool + mempool/model covered). One real bug found and fixed (HTN-209,
   59091739a: GetByIndex bounds check). Second pass (check_transaction_standard.go,
