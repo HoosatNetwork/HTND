@@ -43,13 +43,29 @@ func GetBlockVersion() uint16 {
 	return uint16(v)
 }
 
-// SetBlockVersion sets the current block version (atomic store).
+// SetBlockVersion raises the current block version to v if v is higher, as a compare-and-swap loop
+// rather than a plain load-then-store.
+//
+// SetBlockVersion is called concurrently from every peer's own relay goroutine as each processes a
+// different block, so a load-then-store here is a check-then-act race: two goroutines can both read
+// the same current value before either writes, and if the one proposing the LOWER version's store
+// lands after the one proposing the higher version's, the ratchet - which every reader of
+// GetBlockVersion trusts to never decrease (see the CLAUDE.md "block-version global" note) - would
+// transiently regress. The CAS loop makes the whole read-compare-write atomic: a store only commits
+// if blockVersion is still exactly what was just read, so a version that already advanced past v
+// during the loop is never overwritten.
 func SetBlockVersion(v uint16) {
-	current := atomic.LoadUint32(&blockVersion)
-	if uint32(v) > current {
-		BlockVersionProgressed(current, v)
-		log.Infof("Set block version to %d", v)
-		atomic.StoreUint32(&blockVersion, uint32(v))
+	for {
+		current := atomic.LoadUint32(&blockVersion)
+		if uint32(v) <= current {
+			return
+		}
+		if atomic.CompareAndSwapUint32(&blockVersion, current, uint32(v)) {
+			BlockVersionProgressed(current, v)
+			log.Infof("Set block version to %d", v)
+			return
+		}
+		// blockVersion changed concurrently since the load above; retry against its new value.
 	}
 }
 
