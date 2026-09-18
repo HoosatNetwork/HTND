@@ -622,6 +622,8 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 			log.Infof("  Output %d: Script(%x) Value(%d)", i, output.ScriptPublicKey.Script, output.Value)
 		}
 
+		logMergeSetFeeBreakdown(blockHash, acceptanceData)
+
 		// Identify the specific difference
 		if coinbaseTransaction.Version != expectedCoinbaseTransaction.Version {
 			log.Infof("DIFFERENCE: Version (actual=%d, expected=%d)", coinbaseTransaction.Version, expectedCoinbaseTransaction.Version)
@@ -656,6 +658,80 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	}
 
 	return nil
+}
+
+// maxTransactionsLoggedPerMergeSetBlock bounds the fee breakdown below. A merge set block can hold
+// hundreds of transactions and the breakdown is printed per rejected block, so the per-transaction
+// lines are capped; the per-block totals are always complete.
+const maxTransactionsLoggedPerMergeSetBlock = 16
+
+// logMergeSetFeeBreakdown prints where the fees this node expects the coinbase to pay come from.
+//
+// A coinbase mismatch that differs only in output values is a disagreement about fees, and nothing
+// else in the dump says which transactions those fees belong to, how many there are, or whether the
+// two fee numbers a block carries agree: the fee recorded in the acceptance data (what the coinbase
+// manager sums) and the fee implied by the accepted transaction's input UTXO entries (what the
+// UTXO set actually says was paid). Those two coming apart is a different defect from the miner
+// simply having counted a different set of transactions, and only this tells them apart.
+func logMergeSetFeeBreakdown(blockHash *externalapi.DomainHash, acceptanceData externalapi.AcceptanceData) {
+	log.Infof("=== MERGE SET FEE BREAKDOWN for block %s ===", blockHash)
+	for _, blockAcceptanceData := range acceptanceData {
+		var recordedTotal, impliedTotal uint64
+		accepted, logged := 0, 0
+		for _, txAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
+			if txAcceptanceData == nil || !txAcceptanceData.IsAccepted || txAcceptanceData.Transaction == nil {
+				continue
+			}
+			// Coinbases pay no fee, and the selected parent's coinbase is accepted in every merge
+			// set, so listing them would bury the transactions that do carry fees.
+			if len(txAcceptanceData.Transaction.Inputs) == 0 {
+				continue
+			}
+			accepted++
+			impliedFee, entriesComplete := feeImpliedByInputEntries(txAcceptanceData)
+			recordedTotal += txAcceptanceData.Fee
+			impliedTotal += impliedFee
+			if txAcceptanceData.Fee == 0 && impliedFee == 0 && entriesComplete {
+				continue
+			}
+			if logged >= maxTransactionsLoggedPerMergeSetBlock {
+				continue
+			}
+			logged++
+			log.Infof("  tx %s in %s: recorded fee %d, fee implied by input entries %d, %d inputs, "+
+				"%d input entries, entries complete: %t",
+				consensushashing.TransactionID(txAcceptanceData.Transaction), blockAcceptanceData.BlockHash,
+				txAcceptanceData.Fee, impliedFee, len(txAcceptanceData.Transaction.Inputs),
+				len(txAcceptanceData.TransactionInputUTXOEntries), entriesComplete)
+		}
+		log.Infof("  merge set block %s: %d accepted transactions with inputs, recorded fee total %d, "+
+			"implied fee total %d", blockAcceptanceData.BlockHash, accepted, recordedTotal, impliedTotal)
+	}
+}
+
+// feeImpliedByInputEntries is what the accepted transaction's own input UTXO entries say it paid.
+// entriesComplete reports whether there was one non-nil entry per input; when there was not, the
+// returned fee is meaningless and only says that this record cannot answer the question.
+func feeImpliedByInputEntries(txAcceptanceData *externalapi.TransactionAcceptanceData) (fee uint64, entriesComplete bool) {
+	transaction := txAcceptanceData.Transaction
+	if len(txAcceptanceData.TransactionInputUTXOEntries) != len(transaction.Inputs) {
+		return 0, false
+	}
+	var totalIn uint64
+	for _, entry := range txAcceptanceData.TransactionInputUTXOEntries {
+		if entry == nil {
+			return 0, false
+		}
+		totalIn += entry.Amount()
+	}
+	var totalOut uint64
+	for _, output := range transaction.Outputs {
+		totalOut += output.Value
+	}
+	if totalIn < totalOut {
+		return 0, true
+	}
+	return totalIn - totalOut, true
 }
 
 // filterAcceptanceDataByMergeSet filters the acceptance data to only include blocks
