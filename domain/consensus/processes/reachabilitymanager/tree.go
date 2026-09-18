@@ -351,6 +351,12 @@ func (rt *reachabilityManager) updateReindexRoot(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
+	if currentReindexRoot.Equal(selectedTip) {
+		// findNextReindexRoot would ask FindNextAncestor for the chain child of the root that leads
+		// to the selected tip, and that errors when the two are the same block. The root is where it
+		// belongs anyway, so there is nothing to do.
+		return nil
+	}
 	_, err = rt.ghostdagDataStore.Get(rt.databaseContext, stagingArea, currentReindexRoot, false)
 	if database.IsNotFoundError(err) {
 		// The reindex root is a performance hint. During pruning-point import or staging-consensus

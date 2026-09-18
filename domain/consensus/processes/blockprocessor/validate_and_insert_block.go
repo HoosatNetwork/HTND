@@ -103,17 +103,9 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 		return nil, externalapi.StatusInvalid, err
 	}
 
-	var oldHeadersSelectedTip *externalapi.DomainHash
 	hasHeaderSelectedTip, err := bp.headersSelectedTipStore.Has(bp.databaseContext, stagingArea)
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
-	}
-	if hasHeaderSelectedTip {
-		var err error
-		oldHeadersSelectedTip, err = bp.headersSelectedTipStore.HeadersSelectedTip(bp.databaseContext, stagingArea)
-		if err != nil {
-			return nil, externalapi.StatusInvalid, err
-		}
 	}
 
 	shouldAddHeaderSelectedTip := false
@@ -159,7 +151,7 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 	}
 
 	if hasHeaderSelectedTip {
-		err := bp.updateReachabilityReindexRoot(stagingArea, oldHeadersSelectedTip)
+		err := bp.updateReachabilityReindexRoot(stagingArea)
 		if err != nil {
 			return nil, externalapi.StatusInvalid, err
 		}
@@ -260,18 +252,21 @@ func isHeaderOnlyBlock(block *externalapi.DomainBlock) bool {
 	return len(block.Transactions) == 0
 }
 
-func (bp *blockProcessor) updateReachabilityReindexRoot(stagingArea *model.StagingArea,
-	oldHeadersSelectedTip *externalapi.DomainHash,
-) error {
+func (bp *blockProcessor) updateReachabilityReindexRoot(stagingArea *model.StagingArea) error {
 	headersSelectedTip, err := bp.headersSelectedTipStore.HeadersSelectedTip(bp.databaseContext, stagingArea)
 	if err != nil {
 		return err
 	}
 
-	if headersSelectedTip.Equal(oldHeadersSelectedTip) {
-		return nil
-	}
-
+	// This used to return early when the headers selected tip had not changed since this block
+	// started being inserted. It no longer does. A node whose own blocks
+	// keep losing ChooseSelectedParent - a miner on a branch with less blue work - leaves that tip
+	// standing still for hours while its DAG grows underneath, and skipping here meant the reindex
+	// root was never reconsidered in all that time. The root is what concentrateInterval hands
+	// fresh reachability interval space down from, so a root that stops moving ends with every
+	// ancestor of the growing chain exactly full, and then every block reindexes the whole subtree.
+	// When the root is already where it belongs this costs one FindNextAncestor and a blue score
+	// comparison, because the walk stops at the first chain block inside the reindex window.
 	return bp.reachabilityManager.UpdateReindexRoot(stagingArea, headersSelectedTip)
 }
 

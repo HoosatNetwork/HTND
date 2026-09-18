@@ -108,3 +108,32 @@ func TestUpdateReindexRootPassesBlocksWithoutGHOSTDAGData(t *testing.T) {
 			expectedReindexRoot, manager.reindexWindow, newReindexRoot)
 	}
 }
+
+// TestUpdateReindexRootWhenRootIsTheSelectedTip covers the case the block processor now reaches on
+// every block, rather than only when the headers selected tip changed: asking for a reindex root
+// update when the root already is the selected tip. FindNextAncestor rejects an ancestor that is
+// its own descendant, so without a guard this would fail block insertion.
+func TestUpdateReindexRootWhenRootIsTheSelectedTip(t *testing.T) {
+	reachabilityDataStore := newReachabilityDataStoreMock()
+	ghostdagDataStore := newGHOSTDAGDataStoreMock()
+	manager := New(nil, ghostdagDataStore, reachabilityDataStore).(*reachabilityManager)
+	helper := newTestHelper(manager, t, reachabilityDataStore)
+
+	stagingArea := model.NewStagingArea()
+
+	root := helper.newNode(stagingArea)
+	manager.stageReindexRoot(stagingArea, root)
+	ghostdagDataStore.stageBlueScore(root, 1)
+
+	if err := manager.updateReindexRoot(stagingArea, root); err != nil {
+		t.Fatalf("updateReindexRoot with the root equal to the selected tip: %+v", err)
+	}
+
+	unchanged, err := manager.reindexRoot(stagingArea)
+	if err != nil {
+		t.Fatalf("reindexRoot: %+v", err)
+	}
+	if !unchanged.Equal(root) {
+		t.Fatalf("expected the reindex root to stay %s, got %s", root, unchanged)
+	}
+}
