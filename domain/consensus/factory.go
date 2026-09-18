@@ -81,6 +81,13 @@ type Config struct {
 	// 15-20+ minutes on a mature chain. Off by default; only for actively investigating a UTXO
 	// commitment mismatch.
 	EnableUTXODebugDiagnostics bool
+	// RepairBlockStatuses re-marks every block that is neither invalid nor header-only as UTXO-valid
+	// at startup, to get a node that has disqualified its whole chain back to a state where it can
+	// process blocks again. It walks every block in the store with the status cache cleared and
+	// commits each changed status on its own, which on a mature or archival node takes long enough
+	// that the node does not reach the point of listening for RPC - so it is a recovery step to ask
+	// for, not something to pay for on every boot.
+	RepairBlockStatuses bool
 	// EnableAutoExodusExportOnPruning exports an acceptance-data Exodus bundle after a pruning point moves.
 	// AutoExodusExportDir is the parent directory for those best-effort diagnostic bundles.
 	EnableAutoExodusExportOnPruning bool
@@ -650,7 +657,12 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
-	c.RepairBlockStatuses()
+	if config.RepairBlockStatuses {
+		err = c.RepairBlockStatuses()
+		if err != nil {
+			return nil, false, err
+		}
+	}
 	// c.ReresolveInvalidBlocks()
 	// hash, err := externalapi.NewDomainHashFromString("3ba7ac9a1d0f8262ba05e3e5c00fab85ffc9ce9ed8ddfaec6709615af7a6c531")
 	// if err != nil {
