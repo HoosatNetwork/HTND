@@ -1,8 +1,10 @@
 package coinbasemanager
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
@@ -177,10 +179,18 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			return nil, false, err
 		}
 
+		// Which merge set blocks the coinbase pays is consensus, and the two sides answer it about
+		// different blocks: the builder asks it of virtual, the validator asks it of the block in
+		// front of it. A merge set block that drops out on one side and not the other is exactly an
+		// "Output count differs" rejection, and every path below that drops one is silent or traced,
+		// so the block and the reason that dropped it are collected and reported together.
+		var droppedMergeSetBlocks []string
 		for i, blockHash := range allMergeBlocks {
 			blockAcc := acceptanceDataMap[*blockHash]
 			if blockAcc == nil {
 				log.Warnf("No acceptance data found for merge set block %d: %s", i, blockHash)
+				droppedMergeSetBlocks = append(droppedMergeSetBlocks,
+					fmt.Sprintf("%s (no acceptance data)", blockHash))
 				continue
 			}
 			log.Tracef("Processing merge set block %d: %s", i, blockHash)
@@ -201,12 +211,17 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			}
 			if blockReward <= 0 {
 				log.Tracef("Merge set block %s has no reward", blockHash)
+				droppedMergeSetBlocks = append(droppedMergeSetBlocks,
+					fmt.Sprintf("%s (no reward; in the DAA added blocks set: %t)", blockHash,
+						daaAddedBlocksSet.Contains(blockHash)))
 				continue
 			}
 
 			// Extract miner's script public key from the block's coinbase transaction
 			if len(blockAcc.TransactionAcceptanceData) == 0 || blockAcc.TransactionAcceptanceData[0].Transaction == nil {
 				log.Warnf("No coinbase transaction found for merge set block %d: %s", i, blockHash)
+				droppedMergeSetBlocks = append(droppedMergeSetBlocks,
+					fmt.Sprintf("%s (no coinbase transaction in its acceptance data)", blockHash))
 				continue
 			}
 			mergeSetBlockVersion, err := c.blockVersion(stagingArea, blockHash)
@@ -239,6 +254,8 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 
 			blockReward -= devFee
 			if blockReward <= 0 {
+				droppedMergeSetBlocks = append(droppedMergeSetBlocks,
+					fmt.Sprintf("%s (whole reward consumed by the dev fee %d)", blockHash, devFee))
 				continue
 			}
 
@@ -255,6 +272,12 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 
 			txOuts = append(txOuts, txOut)
 			txOuts = append(txOuts, devTx)
+		}
+
+		if len(droppedMergeSetBlocks) > 0 {
+			log.Infof("Coinbase being built for %s pays nothing to %d of its %d merge set blocks: %s",
+				blockHash, len(droppedMergeSetBlocks), len(allMergeBlocks),
+				strings.Join(droppedMergeSetBlocks, ", "))
 		}
 
 		hasRedReward = len(ghostdagData.MergeSetReds()) > 0
