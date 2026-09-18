@@ -486,11 +486,20 @@ func (sm *syncManager) missingBlockBodyHashes(stagingArea *model.StagingArea, hi
 		// header-only block in highHash's past is requested - including pruning-proof headers below
 		// the pruning point that no pruned peer has a body for. The peer answers with the bare header,
 		// the body fails validation and IBD aborts, then repeats against the next peer.
+		//
+		// Unlike the "no shared ancestor reachable" case above, this one is not transient: it is a
+		// standing property of this pruning point relative to highHash's chain, so every future IBD
+		// round against a peer with the same chain shape hits it again. Returning an empty, no-error
+		// result here used to report IBD as successful with nothing actually synced - relay can never
+		// add a block whose ancestors it cannot validate, so the node looped "successfully" forever
+		// without ever resolving virtual (HTN-196). Fail this attempt instead so the caller
+		// disconnects and tries a different peer.
 		if lowAnchor.Equal(model.VirtualGenesisBlockHash) {
 			log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain and the "+
 				"two chains only meet at virtual genesis - the network's pruning-point/chain data does not "+
-				"fully reconcile here; skipping body sync for this segment", pruningPoint, highHash)
-			return []*externalapi.DomainHash{}, nil
+				"fully reconcile here; failing so a different peer is tried", pruningPoint, highHash)
+			return nil, errors.Wrapf(externalapi.ErrPruningPointDataDoesNotReconcile,
+				"pruning point %s and %s's selected parent chain only share virtual genesis", pruningPoint, highHash)
 		}
 		log.Warnf("missingBlockBodyHashes: pruning point %s is not on %s's selected parent chain (the "+
 			"network's pruning-point/chain data does not fully reconcile here) - syncing bodies from shared "+

@@ -981,10 +981,17 @@ func (flow *handleIBDFlow) receiveAndInsertPruningPointUTXOSet(
 
 func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHash) error {
 	hashes, err := flow.Domain().Consensus().GetMissingBlockBodyHashes(highHash)
-	log.Infof("Found %d missing block bodies to sync.", len(hashes))
 	if err != nil {
+		if errors.Is(err, externalapi.ErrPruningPointDataDoesNotReconcile) {
+			// Not this peer's fault specifically - any peer whose chain has this shape relative to
+			// this node's pruning point gives the same answer (HTN-196) - but a plain error here would
+			// otherwise reach handleError as an unrecognised error and panic. Fail this IBD attempt
+			// without banning, so the connection is dropped and a different peer is tried.
+			return protocolerrors.Wrapf(false, err, "cannot sync missing block bodies from peer %s", flow.peer)
+		}
 		return err
 	}
+	log.Infof("Found %d missing block bodies to sync.", len(hashes))
 	if len(hashes) == 0 {
 		log.Debugf("No missing block body hashes found.")
 		return nil
