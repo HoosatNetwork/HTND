@@ -341,9 +341,10 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 		// same fixed multiset offset, because MuHash is homomorphic. Disqualifying each of them for it
 		// leaves virtual resolution permanently stuck right above the pruning point. Detect that
 		// situation from the block's own selected parent - if the parent's stored multiset already
-		// disagrees with the parent's header commitment, this block just carries the inherited offset,
-		// not fresh corruption - and tolerate it: stage the calculated multiset and continue. Fully
-		// self-scoping: as soon as the chain reaches a block whose selected parent is consistent
+		// disagrees with the parent's header commitment, or the parent IS the pruning point itself
+		// (see blockInheritsKnownUTXOCommitmentOffset, HTN-208), this block just carries the inherited
+		// offset, not fresh corruption - and tolerate it: stage the calculated multiset and continue.
+		// Fully self-scoping: as soon as the chain reaches a block whose selected parent is consistent
 		// (e.g. built on a clean pruning point), this returns false and strict enforcement resumes.
 		//
 		// The toleration itself lives in verifyUTXO, which applies the same predicate to any RuleError
@@ -354,6 +355,7 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 		// reached verifyUTXO, so the survey could not count it, and on an offset chain those are the
 		// failures there are thousands of.
 		if csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash) {
+			csm.confirmBaselineOffsetIfBoundaryBlock(stagingArea, blockHash)
 			return errors.Wrapf(ruleerrors.ErrBadUTXOCommitment, "block %s UTXO commitment is invalid - "+
 				"block header indicates %s, but calculated value is %s (inherited pruning-point offset)",
 				blockHash, expectedCommitment, calculatedCommitment)
@@ -391,7 +393,7 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 // MuHash is homomorphic, that fixed offset propagates verbatim to every descendant, so blockHash's
 // own commitment mismatch is that same inherited offset, not fresh corruption.
 //
-// Two independent signals, either is sufficient:
+// Three independent signals, any is sufficient:
 //
 //  1. The current pruning point's own stored multiset does not hash to its header's UTXOCommitment.
 //     This is the network-wide "we are on the offset baseline" condition and is always available
@@ -403,6 +405,16 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 //     Catches propagation when signal 1 is momentarily inconclusive, and keeps this self-scoping:
 //     once the chain reaches a block whose selected parent's multiset does agree with its header,
 //     both signals go false and full ErrBadUTXOCommitment enforcement resumes.
+//
+//  3. blockHash's selected parent IS the current pruning point. Signal 2 reads the pruning point's
+//     own multiset against its own header - the exact check verifyAndRepairImportedPruningPointUTXOSet
+//     already ran and passed at import time - so it is structurally blind to an offset that the
+//     imported set hashes correctly at the pruning point but still gets wrong one block later (see
+//     HTN-208: the import check answers "does this set hash to what the header says", not "is this
+//     set the set the network had"). This block has nothing else to inherit an offset from, so a
+//     commitment mismatch here is treated the same way. Self-scoping like the others: it only
+//     matches the one block immediately above the pruning point, and only while that pruning point
+//     is current.
 //
 // Needs no persisted marker; works on an already-synced database.
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,
@@ -422,6 +434,10 @@ func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(staging
 		return false
 	}
 
+	if pruningPoint := csm.currentPruningPoint(stagingArea); pruningPoint != nil && selectedParent.Equal(pruningPoint) {
+		return true
+	}
+
 	selectedParentMultiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParent)
 	if err != nil {
 		return false
@@ -431,6 +447,55 @@ func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(staging
 		return false
 	}
 	return !selectedParentMultiset.Hash().Equal(selectedParentHeader.UTXOCommitment())
+}
+
+// currentPruningPoint returns the node's current pruning point, or nil if there isn't one readable
+// yet (still on genesis, or the store lookup failed). Shared by every signal above that needs it.
+func (csm *consensusStateManager) currentPruningPoint(stagingArea *model.StagingArea) *externalapi.DomainHash {
+	hasPruningPoint, err := csm.pruningStore.HasPruningPoint(csm.databaseContext, stagingArea)
+	if err != nil || !hasPruningPoint {
+		return nil
+	}
+	pruningPoint, err := csm.pruningStore.PruningPoint(csm.databaseContext, stagingArea)
+	if err != nil {
+		return nil
+	}
+	return pruningPoint
+}
+
+// confirmBaselineOffsetIfBoundaryBlock records that the pruning point baseline is offset once the
+// first block above it (blockHash, whose selected parent is the pruning point) has demonstrably
+// failed its own UTXO commitment check - called only from the mismatch branch of
+// validateUTXOCommitment, so the failure is already established here.
+//
+// Signal 1 in blockInheritsKnownUTXOCommitmentOffset (pruningPointBaselineIsOffset) re-hashes the
+// pruning point's own stored multiset against its own header on every call; for a set that passed
+// verifyAndRepairImportedPruningPointUTXOSet at import time, that will keep coming back "verified"
+// forever, because the offset this uncovers only becomes visible one block later. This makes it
+// visible from here on - UTXOSetHealth / IsUtxoSetVerified stop reporting the baseline as verified
+// once a descendant has demonstrated that it is not - until the pruning point advances past the one
+// recorded here. See HTN-208.
+func (csm *consensusStateManager) confirmBaselineOffsetIfBoundaryBlock(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash,
+) {
+	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
+	if err != nil {
+		return
+	}
+	selectedParent := ghostdagData.SelectedParent()
+	pruningPoint := csm.currentPruningPoint(stagingArea)
+	if selectedParent == nil || pruningPoint == nil || !selectedParent.Equal(pruningPoint) {
+		return
+	}
+	if csm.boundaryOffsetConfirmedPruningPoint != nil && csm.boundaryOffsetConfirmedPruningPoint.Equal(pruningPoint) {
+		return
+	}
+	csm.boundaryOffsetConfirmedPruningPoint = pruningPoint
+	log.Warnf("Pruning point %s: the first block above it (%s) failed its own UTXO commitment check "+
+		"although the pruning point's own stored multiset matched its own header at import time - the "+
+		"imported UTXO set is offset from the network's even though it hashed correctly there. "+
+		"Marking the UTXO baseline as unverified; IsUtxoSetVerified will report false until a clean "+
+		"pruning point is reached.", pruningPoint, blockHash)
 }
 
 // pruningPointBaselineIsOffset reports whether the current pruning point's stored per-block multiset
@@ -475,6 +540,14 @@ func (csm *consensusStateManager) UTXOSetHealth(stagingArea *model.StagingArea) 
 	storedMultiset := pruningPointMultiset.Hash()
 	headerCommitment := pruningPointHeader.UTXOCommitment()
 	verified := storedMultiset.Equal(headerCommitment)
+
+	// The pruning point's own hash can match while it is still offset from the network's true set -
+	// see confirmBaselineOffsetIfBoundaryBlock, called when the first block above the pruning point
+	// fails its own commitment check. That is a stronger signal than this recomputation, which will
+	// keep saying "verified" forever for a set that hashed correctly at import.
+	if csm.boundaryOffsetConfirmedPruningPoint != nil && csm.boundaryOffsetConfirmedPruningPoint.Equal(pruningPoint) {
+		verified = false
+	}
 
 	// The warn line fires once per pruning point, not once per call: this is on the per-block
 	// toleration path, so logging every time would drown the log.

@@ -11,9 +11,13 @@ package externalapi
 // tell.
 type UTXOSetHealth struct {
 	// BaselineVerified is true only when the pruning point's stored multiset matches the UTXO
-	// commitment in the pruning point's own header. False means either that they disagree, or that
-	// the node could not check - both of which are reasons not to trust this node's UTXO set, so
-	// they deliberately share an answer. Callers that need to tell them apart have Checked.
+	// commitment in the pruning point's own header, AND no descendant of the pruning point has since
+	// demonstrated that the set is offset from the network's despite that match (see
+	// consensusstatemanager.confirmBaselineOffsetIfBoundaryBlock - a set that hashes correctly at the
+	// pruning point can still be wrong one block later). False means the hashes disagree, a
+	// descendant proved they should not be trusted anyway, or the node could not check - all reasons
+	// not to trust this node's UTXO set, so they deliberately share an answer. Callers that need to
+	// tell them apart have Checked.
 	BaselineVerified bool
 
 	// Checked distinguishes "verified false because they disagree" from "verified false because

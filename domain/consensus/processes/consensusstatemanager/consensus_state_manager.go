@@ -81,6 +81,15 @@ type consensusStateManager struct {
 	baselineOffsetPruningPoint *externalapi.DomainHash
 	baselineOffset             bool
 
+	// boundaryOffsetConfirmedPruningPoint records the pruning point for which the first block above
+	// it (selected parent == the pruning point) has demonstrably failed its own UTXO commitment
+	// check, even though the pruning point's own stored multiset hashes correctly against its own
+	// header (see confirmBaselineOffsetIfBoundaryBlock). pruningPointBaselineIsOffset's usual check
+	// re-hashes that same pruning point multiset on every call and would keep reporting it verified
+	// forever, because the offset only becomes visible one block later. This makes it visible from
+	// here on, until the pruning point advances past the confirmed one. See HTN-208.
+	boundaryOffsetConfirmedPruningPoint *externalapi.DomainHash
+
 	// rejectionReasons carries, per block hash, why each of that block's merge-set transactions was
 	// not accepted, from applyMergeSetBlocks to the survey record. Only populated when the UTXO survey
 	// is enabled. See stashRejectionReasons for why it is a side channel and not a return value.
