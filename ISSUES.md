@@ -1560,3 +1560,103 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - alternatives considered: a scan-resistant cache (2Q/SLRU) would fix the class rather than this one caller, but it is a much larger change to a structure block validation depends on. Raising the cache size does not help - the scan is unbounded in the address's coin count, not bounded by any size that would fit.
 - left alone: the per-outpoint serial pebble Get itself. Sorting the outpoints into key order before the loop would turn random point lookups into a near-sequential scan and should help materially, but that is an optimisation I have not measured, and it changes the order entries are produced in, so it needs the index permutation carried through. Worth doing after the eviction fix, with a measurement.
 - related: HTN-199 already stopped these queries blocking the same client's mining requests; this is about what they cost the node, not about head-of-line blocking.
+
+## HTN-208
+- title: A block above an imported pruning point is disqualified for a UTXO commitment mismatch the toleration cannot recognise, and one such block strands the whole node
+- status: open, CRITICAL, mechanism established, not fixed
+- severity: critical (it is the entry point to "all tips disqualified / virtual cannot leave VirtualGenesis" - a node that finishes a 140k-block IBD and is then unusable)
+- area: consensus/consensusstatemanager (verify_and_build_utxo, import_pruning_utxo_set)
+- reported: 2026-09-18 by the user. The pasted log is from 192.168.1.170:42520, which was syncing FROM
+  the local node htnd5 and could not finish. htnd5 had hit the SAME block from the other direction
+  hours earlier, while syncing FROM 192.168.1.170. Log:
+    12:17:29.328 [INF] PROT: Start resolving virtual
+    12:17:29.328 [INF] BDAG: Start of virtual DAAScore 227414423
+    12:17:29.476 [WRN] BDAG: UTXO verification for block 19506f5f... failed: UTXO commitment is invalid -
+      block header indicates 98b53db9..., but calculated value is 630c4d96...: ErrBadUTXOCommitment
+- THE DECISIVE DATAPOINT - the same block is valid on a full chain and invalid above an imported
+  pruning point, on the same node:
+    2026-09-17 04:15:08 [INF] PROT: Accepted block 19506f5f... from node 178.121.114.34:52634
+      with 1 tx (dynamic K: 1) Status Valid
+    2026-09-18 06:26:46 [WRN] BDAG: UTXO verification for block 19506f5f... failed:
+      ... UTXO commitment is invalid ... ErrBadUTXOCommitment
+    2026-09-18 06:44:11 [WRN] BDAG: (same block, same failure, after the second import)
+    2026-09-18 12:17:29 [WRN] BDAG: (same block, same failure, now on 192.168.1.170)
+  htnd5 validated that block successfully from the live network on 09-17, and then rejected the very
+  same block on 09-18 after importing pruning point 0eec5f2e... from 192.168.1.170. So the block is
+  not bad. What changed is the UTXO baseline underneath it.
+- and it is reciprocal, so it is not one bad peer: htnd5 imported from 192.168.1.170 (06:16, 06:31
+  "Downloading the pruning point proof from ... 192.168.1.170:42421") and failed on this block; then
+  192.168.1.170 imported from htnd5 and failed on the same block at 12:17. Both directions, same
+  boundary block. Re-requesting the set from the other peer is therefore not a fix - each node hands
+  the other a set that reproduces the fault.
+- both imports reported success: "Imported pruning point 0eec5f2e... UTXO set matches its own header
+  commitment c3fbf1a9..." at 06:20:56 and 06:35:57. The multiset hash at the pruning point is right and
+  the set still produces the wrong answer one block later.
+- what makes it critical, not cosmetic: 227414423 is the pruning point's DAA score plus one. The block
+  that fails is the FIRST block above the imported pruning point. Disqualifying it disqualifies
+  everything built on it, so every tip ends up disqualified, ResolveVirtual has nowhere to move virtual
+  to, and the node is stranded at the virtual genesis marker having just spent a full IBD. That is the
+  HTN-206/ErrVirtualHasNoUsableTip symptom, and this is where it starts.
+- evidence that the toleration exists but does not fire here: the same ErrBadUTXOCommitment reaches two
+  different outcomes in the same log.
+    TOLERATED: "Block 3293a464...: utxo-commitment check failed and is being TOLERATED (... (inherited
+      pruning-point offset) ...)" - 09-17 08:02, 10:40, 11:12, 09-18 06:30, 06:49
+    NOT tolerated: "UTXO verification for block ... failed" - 09-17 06:05, 06:09, 06:13, 06:17, 06:18,
+      07:58, 09:13, 10:35, 09-18 06:26, 06:44
+  9 distinct blocks, 12 occurrences. In the same log, 10 x "ResolveVirtual finished with no
+  UTXO-valid/pending tip".
+- mechanism: verifyUTXO tolerates a commitment mismatch when blockInheritsKnownUTXOCommitmentOffset
+  (verify_and_build_utxo.go:408) says the block merely carries an offset inherited from an incomplete
+  imported pruning point UTXO set. That predicate has two signals:
+    1. pruningPointBaselineIsOffset - the pruning point's own stored multiset disagrees with its own
+       header commitment. This is the network-wide signal and it covers any block.
+    2. failing that, the block's SELECTED PARENT's stored multiset disagrees with the parent's header.
+  Neither can fire for the boundary block. Signal 2 cannot, because the boundary block's selected parent
+  IS the pruning point, whose multiset was imported and checked against that same header at import time.
+  Signal 1 cannot, because verifyAndRepairImportedPruningPointUTXOSet (import_pruning_utxo_set.go:222)
+  only reports matchesHeader=true when the accumulated multiset equals the header commitment - so a
+  pruning point that passed import is, by construction, not an "offset baseline".
+- the proof that this is the state the node is in: GetInfo on htnd5 right now returns
+  "IsUtxoSetVerified": true. The baseline is reported verified - signal 1 is false - while blocks above
+  that same pruning point compute a different UTXO commitment than their headers carry. So the imported
+  set hashes correctly AT the pruning point and produces a different answer ONE block later. The
+  toleration was designed for a baseline that is visibly offset; this is a baseline that is invisibly
+  offset, and it is precisely the case the predicate cannot see.
+- why an offset can be invisible: the import path verifies the set by its multiset hash alone. A set
+  that hashes to the right value at the pruning point can still be wrong for the child if the child's
+  merge set spends or creates outpoints the imported snapshot got wrong in a way that only shows up
+  when diffs are applied. The import check answers "does this set hash to what the header says", not
+  "is this set the set the network had".
+- fix options, in the order I would try them:
+  1. TOLERATE THE BOUNDARY (small, matches what the user asked for): treat the first block whose
+     selected parent is the pruning point as inheriting the offset by definition when its own
+     commitment check fails - it has nothing else to inherit from. Cheap, self-scoping the same way the
+     existing toleration is, and it converts "node stranded after a full IBD" into "node runs with a
+     known-suspect baseline, loudly". Must reuse logToleratedIssue so it is visible once, and must NOT
+     flip IsUtxoSetVerified to true - the whole point is that the operator can see it.
+  2. MAKE THE BASELINE SIGNAL HONEST (the real fix): if the first block above the pruning point
+     disagrees, then the baseline WAS offset regardless of what its own hash said. Record that - set
+     the same offset state signal 1 reads - so every later block is covered by signal 1 and the node
+     stops reporting IsUtxoSetVerified: true when it demonstrably is not. This fixes the reporting bug
+     as well as the stranding.
+  3. REFUSE THE PEER'S SET instead (strict): treat a boundary mismatch as ErrBadPruningPointUTXOSet and
+     re-request from another peer. RULED OUT by the evidence above - the two nodes reproduce the fault
+     on each other's sets, so there is no better peer to fall back to and this would just loop.
+- what I would NOT do: widen the toleration to any commitment mismatch. The offset toleration is
+  deliberately self-scoping so that a node on a clean pruning point still enforces strictly, and that
+  property is worth keeping - it is the only thing separating "permissive after a bad import" from
+  "never validates UTXO commitments at all".
+- needs_human on which of 1/2/3 to take: all three change what a node will accept after an IBD, and 3
+  changes peer behaviour. 1+2 together are my recommendation - tolerate so the node is usable, and stop
+  claiming the UTXO set is verified when a block one above the pruning point says otherwise.
+- next evidence to pull: the survey at /mnt/data/.htnd5/utxo-survey.jsonl (7.8 GB,
+  --enable-utxo-debug-diagnostics is on) should have records for 19506f5f... naming WHICH outpoints
+  differ. Given the datapoint above - block Valid on 09-17, invalid on 09-18 - the question is no longer
+  "did a peer send a bad set" but "which outpoints does the imported snapshot get wrong, and are they
+  ones the pruning point's own multiset is blind to". See docs/utxo-survey.md. Diffing the 09-17 and
+  09-18 acceptance data for that block would answer it directly.
+- related: HTN-206 (the stranding symptom, now recovered from by 07c95219d's RepairDisqualifiedTipChains
+  - but that resets statuses, it does not fix the UTXO set, so a boundary block that genuinely mismatches
+  will be re-disqualified on the retry). HTN-207 is unrelated. The supply figures in GetInfo
+  (703.0e15 circulating vs 640.1e15 reference from 2026-08-01) are consistent with ~6.5 weeks of
+  emission and are NOT evidence of corruption here.
