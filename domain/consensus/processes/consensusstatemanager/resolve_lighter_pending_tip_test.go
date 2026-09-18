@@ -26,7 +26,27 @@ func TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTip(t *testing.
 	t.Cleanup(func() { constants.ForceSetBlockVersion(uint(previous)) })
 
 	for attempt := 0; attempt < 20; attempt++ {
-		if lighterPendingTipScenario(t, attempt) {
+		// maxBlocksToResolve=2 forces the lighter chain (3 blocks) through the chunking branch.
+		if lighterPendingTipScenario(t, attempt, 2) {
+			return
+		}
+	}
+	t.Fatalf("in 20 attempts DAGKnight never ordered the lighter pending tip ahead of the heavier valid tip, so the " +
+		"case this test is about never happened")
+}
+
+// TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTipShortChain is HTN-211: the same
+// scenario as TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTip, but with the lighter
+// chain short enough to resolve in a single pass (maxBlocksToResolve=0, i.e. unlimited), which is the
+// common case in practice - most IBD rounds end with only a small unverified backlog. The overcome
+// check used to live only inside the chunking branch, so this exact shape - the one every ordinary
+// catch-up round hits, not just a long backlog - swapped virtual onto the lighter chain unconditionally.
+func TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTipShortChain(t *testing.T) {
+	previous := constants.GetBlockVersion()
+	t.Cleanup(func() { constants.ForceSetBlockVersion(uint(previous)) })
+
+	for attempt := 0; attempt < 20; attempt++ {
+		if lighterPendingTipScenario(t, attempt, 0) {
 			return
 		}
 	}
@@ -36,7 +56,9 @@ func TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTip(t *testing.
 
 // lighterPendingTipScenario runs the scenario once and reports whether DAGKnight ordered the lighter pending tip first.
 // The side chain's coinbase data changes with the attempt, which changes its hashes and so the tie-break.
-func lighterPendingTipScenario(t *testing.T, attempt int) bool {
+// maxBlocksToResolve is passed straight to ResolveVirtualWithMaxParam, so the caller controls whether
+// the lighter chain is resolved in chunks or in one pass.
+func lighterPendingTipScenario(t *testing.T, attempt int, maxBlocksToResolve uint64) bool {
 	params := dagconfig.MainnetParams
 	params.POWScores = []uint64{1, 1, 1, 1, 1} // every block past genesis is version 6
 	factory := consensus.NewFactory()
@@ -150,7 +172,7 @@ func lighterPendingTipScenario(t *testing.T, attempt int) bool {
 	t.Logf("attempt %d: DAGKnight ordered the lighter pending tip %s ahead of the heavier valid tip %s", attempt,
 		lighterTip, heavierTip)
 
-	_, isCompletelyResolved, err := tc.ResolveVirtualWithMaxParam(2)
+	_, isCompletelyResolved, err := tc.ResolveVirtualWithMaxParam(maxBlocksToResolve)
 	if err != nil {
 		t.Fatalf("Error resolving virtual: %+v", err)
 	}

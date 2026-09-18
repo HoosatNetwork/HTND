@@ -291,6 +291,31 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	processingPoint := pendingTip
 	log.Debugf("Processing point %s", processingPoint)
 
+	// The pending tip must win the previous virtual selected parent by blue work (isNewSelectedTip)
+	// before it can become virtual's selected parent - see the identical check and reasoning inside
+	// the chunking branch below. That check used to run ONLY when there were more unverified blocks
+	// than maxBlocksToResolve; a short backlog - the common case once a node is nearly caught up, since
+	// every IBD round ends by calling ResolveVirtual - skipped it entirely, so a DAGKnight-ordered
+	// pending tip with LESS blue work than the current selected parent still became virtual's selected
+	// parent unconditionally, moving virtual off a heavier valid chain with no reorg backing it. See
+	// HTN-211.
+	pendingTipIsNewSelectedParent, err := csm.isNewSelectedTip(readStagingArea, pendingTip, previousVirtualSelectedParent)
+	if err != nil {
+		return nil, false, err
+	}
+	if !pendingTipIsNewSelectedParent {
+		previousVirtualSelectedParentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, readStagingArea,
+			previousVirtualSelectedParent)
+		if err != nil {
+			return nil, false, err
+		}
+		if previousVirtualSelectedParentStatus == externalapi.StatusUTXOValid {
+			log.Warnf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
+				"Keeping it as virtual's selected parent.", pendingTip, previousVirtualSelectedParent)
+			return nil, true, nil
+		}
+	}
+
 	// Too many blocks to verify, so we only process a chunk and return
 	if maxBlocksToResolve != 0 && uint64(len(unverifiedBlocks)) > maxBlocksToResolve {
 		processingPointIndex := uint64(len(unverifiedBlocks)) - maxBlocksToResolve
