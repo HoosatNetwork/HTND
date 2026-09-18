@@ -99,7 +99,15 @@ Touch every layer, following an existing command such as `GetBlockCount`:
 
 ## Commit style
 
-- **Subject:** a plain-English sentence describing the behavior change, e.g. "Stop relayed compound transactions from expiring before they are mined". Tool-only commits use a prefix, e.g. `utxoforensics: …`.
+- **Subject:** `action(type): message` — a conventional-commit action, the area in parentheses, then a
+  plain-English description of the behavior change. Lower case after the colon, no trailing period,
+  imperative mood. Examples from this repo: `fix(consensus): color each block by the GHOSTDAG rules of
+  its own block version`, `fix(p2p): disconnect a silent outbound peer without waiting for it to send`,
+  `test(db): pin that the pebble engine leaves a LevelDB datadir intact`.
+- **Actions:** `fix`, `feat`, `perf`, `test`, `refactor`, `docs`, `chore`.
+- **Types (scopes):** the area touched — `consensus`, `p2p`, `rpc`, `rpcclient`, `db`, `mempool`,
+  `mining`, `pruning`, `ibd`, `utxoindex`, `addressmanager`, `connmanager`, `autoupdate`, `config`,
+  `app`, `main`, `util`, `htnwallet`, `htnctl`, `utxoforensics`, `ldbtool`, `exodus`.
 - **Body:** explains the defect mechanism, why this fix and not an alternative, what was deliberately left alone, and any remaining tension. Wrap at about 80 columns.
 
 ## Safety notes
