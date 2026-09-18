@@ -1975,3 +1975,77 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   consistent about NOT moving virtual backward off a valid heavier chain, not about resolving which
   ordering is "right" in general; HTN-004/005's own drift mechanisms, unaffected by this fix.
 - fixed_commit: 22529337f
+
+## HTN-212
+- title: rpcclient's outgoing route and request timeout are read from every request method without
+  synchronization, racing Reconnect/connect and SetTimeout
+- status: FIXED 2026-09-18, commit pending (see fixed_commit below)
+- severity: medium (real, unsynchronized concurrent field access in a client library used by htnctl,
+  htnwallet, stability-tests and anything else built on infrastructure/network/rpcclient - a Go data
+  race, `go test -race` catches it directly; not consensus/node-process code)
+- area: infrastructure/network/rpcclient
+- reported: 2026-09-18, found by self while sweeping for other instances of HTN-210's check-then-act/
+  unsynchronized-shared-state class. AGENT_STATE.md already carried an old, never-followed-up note
+  ("rpcclient: reconnect leaks old grpc.ClientConn (never Close), timeout/GRPCClient fields raced") -
+  the leak half was already fixed in a previous session (releaseClient/activeClient, see the doc
+  comment on releaseClient); the "fields raced" half was not.
+- mechanism: every rpc_*.go request method (41 files) read `c.rpcRouter.outgoingRoute()` and
+  `c.timeout` directly. `c.rpcRouter` is a plain `*rpcRouter` field, and `c.timeout` a plain
+  `time.Duration` field; both are written by connect() (on every initial connection and every
+  Reconnect) and `c.timeout` additionally by the exported `SetTimeout`, entirely outside
+  `rpcRouterMutex` for `timeout` and, for `rpcRouter`, under the mutex only on the WRITE side - the 41
+  read sites never took it. The package's own `route()` helper already reads `c.rpcRouter` correctly
+  (RLock before dereferencing), for exactly this reason - the request methods just never used it for
+  the outgoing route, and there was no equivalent guard for `timeout` at all. Any caller issuing RPC
+  requests concurrently with a Reconnect (very ordinary usage - the client reconnects automatically
+  from its own disconnect/error handlers on a background goroutine while user code keeps calling RPC
+  methods) races these two fields.
+- fix: rpcclient.go gained `outgoingRoute()` (RLock, mirrors `route()`) and every `c.rpcRouter.
+  outgoingRoute()` call site now goes through it; `timeout time.Duration` became `timeoutNanos
+  atomic.Int64` with a `getTimeout()` accessor, and `connect()`/`SetTimeout()` write it with
+  `atomic.Int64.Store`. All 41 call sites updated mechanically (sed on the exact call pattern -
+  caught and fixed one self-inflicted bug from that during development: the sed also rewrote the new
+  `outgoingRoute()` helper's own body into a call to itself, an infinite-recursion stack overflow
+  caught immediately by the first `go test -race` run, not shipped).
+- tests: new infrastructure/network/rpcclient/concurrent_request_during_settimeout_test.go
+  (TestConcurrentRequestsDuringSetTimeoutDoNotRace) - concurrent GetInfo and SetTimeout under
+  `go test -race`, clean with the fix. Does NOT also hammer Reconnect concurrently with active sends
+  in a tight loop to exercise the c.rpcRouter half: doing so surfaced a SECOND, separate, pre-existing
+  race inside grpcclient.GRPCClient (below, HTN-213) unrelated to this fix, and kept tripping the test
+  for a different reason than what it was testing. The pre-existing
+  TestReconnectReleasesPreviousConnection and TestCloseWhileReconnectingDoesNotExitTheProcess tests
+  already exercise Reconnect concurrently with this fix in place and pass clean under -race, which is
+  the coverage this change relies on for the c.rpcRouter half. go vet + staticcheck clean, gofmt
+  clean, full repo build clean, go test -race ./infrastructure/network/rpcclient/... clean (all 7
+  tests), go test -tags=ci ./... 110 ok, rest of tree 49 ok, cmd/htnwallet ok, testing/integration
+  full non-ci run green.
+- left alone: HTN-213 (below) - found in the course of writing this fix's test, not fixed here to
+  keep this change scoped to the field-access race it targets.
+- fixed_commit: e5f73cbdf
+
+## HTN-213
+- title: grpcclient.GRPCClient.Disconnect races an in-flight send on the same gRPC stream
+- status: open, not fixed - found incidentally while testing HTN-212, not investigated further
+- severity: unknown (real Go data race, `go test -race` catches it reliably under concurrent
+  Reconnect + active request traffic; whether it causes anything worse than a race-detector report -
+  a panic, a corrupted stream, a hang - was not determined)
+- area: infrastructure/network/rpcclient/grpcclient
+- reported: 2026-09-18, surfaced by a stress test written for HTN-212 (a goroutine issuing GetInfo
+  calls in a tight loop while another goroutine calls Reconnect in a tight loop, under -race) - not a
+  deliberate investigation of this code.
+- evidence (go test -race, infrastructure/network/rpcclient package): WARNING: DATA RACE - write at
+  grpcclient/grpcclient.go:88 (GRPCClient.Disconnect -> the underlying grpc clientStream's CloseSend)
+  by the goroutine running Reconnect -> disconnect -> GRPCClient.Disconnect, racing a read at
+  grpcclient/grpcclient.go:139 (GRPCClient.send -> the same clientStream's SendMsg) by the spawned
+  AttachRouter receive/send-forwarding goroutine - both touch the same underlying grpc-go
+  *clientStream object with no synchronization between Disconnect and an in-flight send.
+- repro: the test written for HTN-212 before it was scoped down (concurrent tight-loop GetInfo +
+  Reconnect) reproduced this reliably; kept as scratch, not committed, since it was testing for a
+  different bug and this one needs its own dedicated investigation and reproduction.
+- fix_plan: not analyzed. Candidates to look at first: whether GRPCClient already has or needs a
+  lock around the clientStream that Disconnect and send both go through, or whether Disconnect should
+  wait for in-flight sends to complete first (matching how releaseClient already detaches
+  activeClient before closing, so callbacks from a closed connection are ignored rather than raced).
+- needs: nothing conceptually - this is a local-correctness/concurrency bug, not a protocol question -
+  just needs someone to actually read grpcclient.go's Disconnect/send/receive lifecycle end to end and
+  design the fix, which this session did not get to.

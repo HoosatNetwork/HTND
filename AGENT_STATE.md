@@ -1,12 +1,17 @@
 # AGENT_STATE (session htnd-copy-1d)
-updated: 2026-09-18T17:40:00+03:00
-phase: audit
-active_issue: none in progress. HTN-208 committed f1abbcb16, HTN-207 committed 499758822, HTN-196
-  (virtual-genesis discriminator only, see ISSUES.md for scope) committed b687caf80. None pushed
-  (never push per instructions). Open: HTN-204 needs_human (and the whole needs_human list in the
-  "parked needs_human" note below), plus HTN-196's remaining scope (4 other give-up branches in
-  missingBlockBodyHashes, and a duplicate-pruning-point-in-tips observation - both explicitly left
-  alone, see ISSUES.md HTN-196).
+updated: 2026-09-18T19:45:00+03:00
+phase: investigating (IBD slowness, user-directed)
+active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git log; HEAD e5f73cbdf as
+  of this update). User changed the standing rule 2026-09-18: AGENT_STATE.md/ISSUES.md are now
+  committed (docs(agent) subject) and PUSHED alongside code, not left unstaged - AGENT_PROMPT.md
+  updated to match. Push now requires SSH: origin was switched by the user from
+  http://github.com/Hoosat-Oy/HTND (no credentials on this host) to
+  git@github.com:HoosatNetwork/HTND.git, which works.
+  User then redirected 2026-09-18 ~19:40: "Find why nearly synced IBD is so damn slow", with a log
+  paste showing ~2-3 blocks/s processed per ~1.1-1.5s slice while the block timestamps embedded in the
+  log are running ~7.5 minutes behind wall-clock at the time each line was printed - the node is
+  "nearly synced" (past the IsNearlySynced threshold) but visibly not keeping up in real time.
+  Investigation in progress now, see next_action.
 next_action: mempool audit is now COMPLETE (two fork passes, all production .go files in
   domain/miningmanager/mempool + mempool/model covered). One real bug found and fixed (HTN-209,
   59091739a: GetByIndex bounds check). Second pass (check_transaction_standard.go,
