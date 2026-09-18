@@ -235,6 +235,16 @@ func (tp *transactionsPool) limitTransactionCount() error {
 		var transactionToRemove *model.MempoolTransaction
 		for {
 			transactionToRemove = tp.transactionsOrderedByFeeRate.GetByIndex(currentIndex)
+			if transactionToRemove == nil {
+				// transactionsOrderedByFeeRate can hold fewer entries than allTransactions (see
+				// addMempoolTransaction's unrolled-back Push failure and removeTransaction's tolerated
+				// ErrTransactionNotFound) - ran out of ordered entries before finding one to evict.
+				log.Warnf(
+					"transactionsOrderedByFeeRate ran out of entries at index %d while evicting "+
+						"(mempool count %d, maximum allowed %d) - it may be out of sync with the pool",
+					currentIndex, len(tp.allTransactions), tp.mempool.config.MaximumTransactionCount)
+				return nil
+			}
 			if !transactionToRemove.IsHighPriority() {
 				break
 			}

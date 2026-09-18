@@ -11,8 +11,17 @@ type TransactionsOrderedByFeeRate struct {
 	slice []*MempoolTransaction
 }
 
-// GetByIndex returns the transaction in the given index
+// GetByIndex returns the transaction in the given index, or nil if the index is out of bounds.
+//
+// tobf.slice is meant to mirror the pool's transaction set 1:1, but transactions_pool.go's own
+// removeTransaction tolerates Remove failing to find an entry here ("This should never happen but
+// sometimes does"), which means the two can fall out of sync in production: a transaction present
+// elsewhere in the pool with no corresponding slot here. RemoveAtIndex already bounds-checks for
+// exactly this reason; GetByIndex is the read-side counterpart.
 func (tobf *TransactionsOrderedByFeeRate) GetByIndex(index int) *MempoolTransaction {
+	if index < 0 || index >= len(tobf.slice) {
+		return nil
+	}
 	return tobf.slice[index]
 }
 
