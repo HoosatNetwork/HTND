@@ -1,6 +1,6 @@
 # AGENT_STATE (session htnd-copy-1d)
-updated: 2026-09-18T19:45:00+03:00
-phase: investigating (IBD slowness, user-directed)
+updated: 2026-09-18T20:15:00+03:00
+phase: audit (IBD slowness investigation closed out - HTN-214 and HTN-215 both landed)
 active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git log; HEAD e5f73cbdf as
   of this update). User changed the standing rule 2026-09-18: AGENT_STATE.md/ISSUES.md are now
   committed (docs(agent) subject) and PUSHED alongside code, not left unstaged - AGENT_PROMPT.md
@@ -21,17 +21,30 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
      wasn't being read - 15.25% of total CPU, reached from HandleGetBalancesByAddresses/
      HandleGetUsableAddresses running concurrently with IBD. Pure non-consensus serving-path fix,
      implemented without asking (same class as HTN-207/199).
-  2. HTN-215 (open, needs_human): pickVirtualParents/mergeSetIncrease's per-candidate reachability
-     BFS (IsAncestorOfAny called once per visited ancestor, no memoization across candidates in the
-     same call) - ~18-19% of total CPU, and THIS one is on the block-processing critical path itself
-     (only runs when AddBlock's updateVirtual param is true, i.e. exactly the nearly-synced live path
-     - the bulk/far-behind IBD path defers this via ResolveVirtual instead, which is why bulk IBD is
-     fast and nearly-synced is comparatively slow - architectural, not itself a bug, but the per-call
-     cost plausibly is higher than necessary). NOT fixed: touches consensus virtual-parent-selection
-     code, a memoization fix needs the user's go-ahead per this session's measure-first-then-ask
-     pattern for anything on that path (HTN-002/004/005/006 class). Presented both findings to the
-     user, awaiting direction on HTN-215.
-next_action: mempool audit is now COMPLETE (two fork passes, all production .go files in
+  2. HTN-215 (FIXED, 7e9b86230, after the user said "proceed"): pickVirtualParents/mergeSetIncrease's
+     per-candidate reachability BFS (IsAncestorOfAny called once per visited ancestor) - ~18-19% of
+     total CPU, on the block-processing critical path itself (only runs when AddBlock's updateVirtual
+     param is true, i.e. exactly the nearly-synced live path - bulk/far-behind IBD defers this via
+     ResolveVirtual, which is why bulk IBD is fast and nearly-synced is comparatively slow -
+     architectural, not itself fixed here). Fixed with a pure memoization: one hashset.HashSet created
+     per pickVirtualParents call, caching only "IsAncestorOfAny==true" results across that call's
+     candidates (safe because selectedVirtualParents only grows within one call - see the commit
+     message / ISSUES.md for the monotonicity argument). Same output by construction; no new test
+     needed since the existing TestConsensusStateManager_pickVirtualParents (3*maxParents chains from
+     shared ancestors, cross-checked against an independent code path) already exercises exactly this
+     scenario and passed unchanged. Full gate green. Live confirmation on the production node needs a
+     rebuild/redeploy - the user's call, node was only ever profiled read-only.
+  Both HTN-214 and HTN-215 landed; nothing else queued from this investigation.
+next_action: no specific issue queued. Candidates in rough priority order: (1) HTN-213
+  (grpcclient.GRPCClient.Disconnect races an in-flight send on the same gRPC stream - found
+  incidentally while testing HTN-212, real Go data race confirmed via -race, not yet investigated
+  properly - needs someone to read Disconnect/send/receive's lifecycle end to end); (2) resume the
+  app/protocol/flows/v8 sweep (block_locator.go, handle_ibd_*.go, handle_request_*.go,
+  transactionrelay/*, addressexchange/*, ping/*, rejects/* not yet re-read since HTN-205/206/207/208
+  changed hot-path timing); (3) HTN-197/HTN-203 stay needs_human, and the whole "parked needs_human"
+  list further down this file remains open pending the user. Historical note now superseded by the
+  above (kept for context, not actionable): "mempool audit is now COMPLETE (two fork passes, all
+  production .go files in
   domain/miningmanager/mempool + mempool/model covered). One real bug found and fixed (HTN-209,
   59091739a: GetByIndex bounds check). Second pass (check_transaction_standard.go,
   handle_new_block_transactions.go, remaining model/*.go) found nothing that survived scrutiny -

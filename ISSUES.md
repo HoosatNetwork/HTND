@@ -2152,3 +2152,33 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - left alone: entirely, this session - HTN-214 was implemented (non-consensus, unambiguously safe);
   this one was not, and needs the user's decision on whether/how to proceed given it's on the
   virtual-parent-selection path.
+- user decision 2026-09-18: proceed.
+- FIXED 2026-09-18, commit pending (see fixed_commit below): pick_virtual_parents.go's
+  pickVirtualParents loop now creates one hashset.HashSet (knownPastOfSelectedVirtualParents) before
+  the candidate loop and threads it into every mergeSetIncrease call for that invocation.
+  mergeSetIncrease checks it before calling IsAncestorOfAny for a visited node, and adds the node to
+  it only when IsAncestorOfAny returns true. Correctness argument (why caching only "true" is safe):
+  selectedVirtualParents only ever grows within one pickVirtualParents call (candidates are appended
+  to it, never removed, and the set is never reused across separate pickVirtualParents calls - it's a
+  local variable created fresh each time). IsAncestorOfAny(x, S) asks "is x an ancestor of ANY member
+  of S" - once true for some S, it stays true for any S' ⊇ S, because the member that made it true
+  is still in S'. A "false" answer has no such guarantee (a later-added member could make it true), so
+  false is never cached - the function falls through to a fresh IsAncestorOfAny call every time,
+  identical to the pre-fix behavior for that case. No other control flow changed: the BFS structure,
+  visited-set semantics, merge-set-size accounting and every return value are untouched.
+- tests: no new test added - the existing TestConsensusStateManager_pickVirtualParents (both mainnet
+  and testnet configs) already builds 3*maxParents chains from shared ancestors specifically to
+  exercise pickVirtualParents with many overlapping candidates (maxCandidates is exactly
+  maxBlockParents*3), and cross-checks its output against BuildBlock's independently-derived parent
+  selection - this is already the strongest available regression guard for exactly the scenario this
+  fix targets, and it passed unchanged. This is a pure memoization (identical output by construction,
+  argued above), the same class as HTN-214, so there is no fails-before/passes-after reproduction to
+  add; go vet + staticcheck clean, gofmt clean, full repo build clean, domain/consensus/... full suite
+  green (53 ok, including the overlapping-candidates test), go test -tags=ci ./... 110 ok, rest of
+  tree 49 ok, cmd/htnwallet ok, testing/integration full non-ci run green.
+- left alone: this reduces redundant work within one pickVirtualParents call; it does not change the
+  BFS itself, the candidate ordering, or the merge-set-limit algorithm - none of that was touched.
+  Live confirmation that this measurably reduces CPU on the production node needs a rebuild and
+  redeploy, which is the user's call, not done from here (the node was only ever profiled read-only,
+  never touched).
+- fixed_commit: 7e9b86230
