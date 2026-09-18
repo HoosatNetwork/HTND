@@ -18,6 +18,11 @@ data
 *.sst
 *.log
 *.wal
+.tmp
+.tmp/**
+**/.tmp
+**/.tmp/**
+/c5-runs
 
 # build outputs
 HTND
