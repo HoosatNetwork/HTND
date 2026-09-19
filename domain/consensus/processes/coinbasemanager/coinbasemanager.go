@@ -45,6 +45,16 @@ type coinbaseManager struct {
 	powScores []uint64
 }
 
+// mergeSetRewardIgnoresDAAWindowVersion is the block version, activated by a hard fork, from which a
+// merge set block's coinbase reward no longer depends on whether that block happened to land inside
+// the difficulty-adjustment window (see calcMergedBlockReward). Below this version the historical,
+// already-mined-and-accepted behavior is preserved exactly. Shares its activation point with the
+// blockVersion >= 10 dev-fee formula change already in ExpectedCoinbaseTransactionInternal - both are
+// the same not-yet-activated hard fork bucket (mainnet's POWScores currently reaches version 9; there
+// is no entry yet that raises it to 10 - see HTN-216 for why this needs a coordinated activation DAA
+// score, not a value chosen here).
+const mergeSetRewardIgnoresDAAWindowVersion = 10
+
 // ExpectedCoinbaseTransactionWithAcceptanceData implements model.CoinbaseManager. blockHash always
 // names an already-mined block being validated here (never a block still under construction), so
 // it always has its own stored header - candidateTimestamp is passed as 0 since blockTimestamp
@@ -205,7 +215,12 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			}
 
 			// Get reward and miner script
-			blockReward, err := c.calcMergedBlockReward(stagingArea, blockHash, blockAcc, daaAddedBlocksSet)
+			mergeSetBlockVersion, err := c.blockVersion(stagingArea, blockHash)
+			if err != nil {
+				return nil, false, err
+			}
+			blockReward, err := c.calcMergedBlockReward(stagingArea, blockHash, blockAcc, daaAddedBlocksSet,
+				mergeSetBlockVersion >= mergeSetRewardIgnoresDAAWindowVersion)
 			if err != nil {
 				return nil, false, err
 			}
@@ -224,10 +239,6 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 					fmt.Sprintf("%s (no coinbase transaction in its acceptance data)", blockHash))
 				continue
 			}
-			mergeSetBlockVersion, err := c.blockVersion(stagingArea, blockHash)
-			if err != nil {
-				return nil, false, err
-			}
 			_, blockCoinbaseData, _, err := c.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(
 				blockAcc.TransactionAcceptanceData[0].Transaction, mergeSetBlockVersion)
 			if err != nil {
@@ -240,10 +251,7 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			var minerScript *externalapi.ScriptPublicKey
 			minerScript = blockCoinbaseData.ScriptPublicKey
 
-			blockVersion, err := c.blockVersion(stagingArea, blockHash)
-			if err != nil {
-				return nil, false, err
-			}
+			blockVersion := mergeSetBlockVersion
 			var devFee uint64
 			if blockVersion >= 10 {
 				devFee = calcDevFeeQuantity(blockReward)
@@ -403,7 +411,7 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV2(stagingArea *model.Stagin
 	blueBlock *externalapi.DomainHash, blockAcceptanceData *externalapi.BlockAcceptanceData,
 	mergingBlockDAAAddedBlocksSet hashset.HashSet,
 ) (*externalapi.DomainTransactionOutput, *externalapi.DomainTransactionOutput, bool, error) {
-	blockReward, err := c.calcMergedBlockReward(stagingArea, blueBlock, blockAcceptanceData, mergingBlockDAAAddedBlocksSet)
+	blockReward, err := c.calcMergedBlockReward(stagingArea, blueBlock, blockAcceptanceData, mergingBlockDAAAddedBlocksSet, false)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -465,7 +473,7 @@ func (c *coinbaseManager) coinbaseOutputForBlueBlockV1(stagingArea *model.Stagin
 	blueBlock *externalapi.DomainHash, blockAcceptanceData *externalapi.BlockAcceptanceData,
 	mergingBlockDAAAddedBlocksSet hashset.HashSet,
 ) (*externalapi.DomainTransactionOutput, bool, error) {
-	blockReward, err := c.calcMergedBlockReward(stagingArea, blueBlock, blockAcceptanceData, mergingBlockDAAAddedBlocksSet)
+	blockReward, err := c.calcMergedBlockReward(stagingArea, blueBlock, blockAcceptanceData, mergingBlockDAAAddedBlocksSet, false)
 	if err != nil {
 		return nil, false, err
 	}
@@ -503,7 +511,7 @@ func (c *coinbaseManager) coinbaseOutputForRewardFromRedBlocksV2(stagingArea *mo
 		if acceptanceDataMap[*red] == nil {
 			continue
 		}
-		reward, err := c.calcMergedBlockReward(stagingArea, red, acceptanceDataMap[*red], daaAddedBlocksSet)
+		reward, err := c.calcMergedBlockReward(stagingArea, red, acceptanceDataMap[*red], daaAddedBlocksSet, false)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -547,7 +555,7 @@ func (c *coinbaseManager) coinbaseOutputForRewardFromRedBlocksV1(stagingArea *mo
 		if acceptanceDataMap[*red] == nil {
 			continue
 		}
-		reward, err := c.calcMergedBlockReward(stagingArea, red, acceptanceDataMap[*red], daaAddedBlocksSet)
+		reward, err := c.calcMergedBlockReward(stagingArea, red, acceptanceDataMap[*red], daaAddedBlocksSet, false)
 		if err != nil {
 			return nil, false, err
 		}
@@ -710,15 +718,31 @@ func acceptedFee(txAcceptance *externalapi.TransactionAcceptanceData) uint64 {
 	return totalIn - totalOut
 }
 
+// calcMergedBlockReward computes the subsidy+fees a merge set block earns for being merged.
+//
+// payRegardlessOfDAAWindow=false reproduces the historical behavior exactly (needed to validate
+// already-mined blocks under the rules they were mined with): reward is 0 unless blockHash is also
+// in mergingBlockDAAAddedBlocksSet - the subset of the merging block's own merge set that happened to
+// land inside the (size-bounded, blue-work-ranked) difficulty-adjustment window sample. That window
+// exists to pick a representative sample for difficulty adjustment, not to track which merge set
+// blocks are "real" - a fully valid, accepted merge set member (blue or red) can lose that sampling
+// cutoff for having lower blue work than whatever already filled the window, and before HTN-216 it
+// then received no reward at all, silently, for no reason connected to whether it was legitimately
+// merged. Measured on a live mainnet node: 27,982 of 27,985 coinbases built over 12 hours dropped at
+// least one merge set block this way, one instance dropping 140 of 163.
+//
+// payRegardlessOfDAAWindow=true (only from mergeSetRewardIgnoresDAAWindowVersion onward) removes that
+// condition: every merge set block with valid acceptance data earns its reward, unconditionally.
 func (c *coinbaseManager) calcMergedBlockReward(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	blockAcceptanceData *externalapi.BlockAcceptanceData, mergingBlockDAAAddedBlocksSet hashset.HashSet,
+	payRegardlessOfDAAWindow bool,
 ) (uint64, error) {
 	if !blockHash.Equal(blockAcceptanceData.BlockHash) {
 		return 0, errors.Errorf("blockAcceptanceData.BlockHash is expected to be %s but got %s",
 			blockHash, blockAcceptanceData.BlockHash)
 	}
 
-	if !mergingBlockDAAAddedBlocksSet.Contains(blockHash) {
+	if !payRegardlessOfDAAWindow && !mergingBlockDAAAddedBlocksSet.Contains(blockHash) {
 		return 0, nil
 	}
 

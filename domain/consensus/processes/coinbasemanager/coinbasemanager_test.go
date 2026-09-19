@@ -1,12 +1,16 @@
 package coinbasemanager
 
 import (
+	"math/big"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockheader"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 )
@@ -178,4 +182,96 @@ func TestBuildSubsidyTable(t *testing.T) {
 	t.Logf("%s", tableStr.String())
 	tableLen := len(subsidyTable)
 	t.Logf("Length: %d", tableLen)
+}
+
+// singleBlockStore is a model.BlockStore fake that serves exactly one block for calcMergedBlockReward
+// (the only method it needs), and panics if any other method is exercised.
+type singleBlockStore struct {
+	hash  externalapi.DomainHash
+	block *externalapi.DomainBlock
+}
+
+func (s *singleBlockStore) Stage(*model.StagingArea, *externalapi.DomainHash, *externalapi.DomainBlock) {
+	panic("not implemented")
+}
+func (s *singleBlockStore) IsStaged(*model.StagingArea) bool { panic("not implemented") }
+func (s *singleBlockStore) UnstageAll(*model.StagingArea)    {}
+func (s *singleBlockStore) Delete(*model.StagingArea, *externalapi.DomainHash) {
+	panic("not implemented")
+}
+func (s *singleBlockStore) Count(*model.StagingArea) uint64 { panic("not implemented") }
+func (s *singleBlockStore) AllBlockHashesIterator(model.DBReader) (model.BlockIterator, error) {
+	panic("not implemented")
+}
+func (s *singleBlockStore) CacheLen() int { panic("not implemented") }
+func (s *singleBlockStore) HasBlock(model.DBReader, *model.StagingArea, *externalapi.DomainHash) (bool, error) {
+	panic("not implemented")
+}
+func (s *singleBlockStore) Blocks(model.DBReader, *model.StagingArea, []*externalapi.DomainHash) ([]*externalapi.DomainBlock, error) {
+	panic("not implemented")
+}
+func (s *singleBlockStore) Block(_ model.DBReader, _ *model.StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
+	if !blockHash.Equal(&s.hash) {
+		panic("unexpected block hash")
+	}
+	return s.block, nil
+}
+
+// TestCalcMergedBlockRewardPaysRegardlessOfDAAWindowFromActivation is HTN-216's regression test.
+//
+// mergingBlockDAAAddedBlocksSet is the subset of a merging block's own merge set that landed inside
+// the (size-bounded, blue-work-ranked) difficulty-adjustment window sample - a sampling artifact, not
+// a statement about whether a merge set block was legitimately merged. Before HTN-216,
+// calcMergedBlockReward silently paid a merge set block nothing whenever it fell outside that
+// sample, for every block version. This pins both sides of the fix: below
+// mergeSetRewardIgnoresDAAWindowVersion the historical (already-mined) behavior is preserved exactly,
+// and from it onward every merge set block with valid acceptance data is paid regardless.
+func TestCalcMergedBlockRewardPaysRegardlessOfDAAWindowFromActivation(t *testing.T) {
+	const subsidy = uint64(1000000)
+	const blockVersion = mergeSetRewardIgnoresDAAWindowVersion
+
+	coinbaseManagerInterface := New(
+		nil, 0, 0, 255, &externalapi.DomainHash{}, 0, 0, 1,
+		dagconfig.MainnetParams.TargetTimePerBlock,
+		nil, nil, nil, nil, nil, nil, nil, nil)
+	cbm := coinbaseManagerInterface.(*coinbaseManager)
+
+	blockHash := *externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1})
+	payload, err := cbm.serializeCoinbasePayload(1, &externalapi.DomainCoinbaseData{
+		ScriptPublicKey: &externalapi.ScriptPublicKey{Script: []byte{0xAB}, Version: 0},
+	}, subsidy, [lengthOfEntropy]byte{}, blockVersion)
+	if err != nil {
+		t.Fatalf("serializeCoinbasePayload: %+v", err)
+	}
+	block := &externalapi.DomainBlock{
+		Header: blockheader.NewImmutableBlockHeader(
+			blockVersion, nil, &externalapi.DomainHash{}, &externalapi.DomainHash{}, &externalapi.DomainHash{},
+			0, 0, 0, 0, 0, big.NewInt(0), &externalapi.DomainHash{}),
+		Transactions: []*externalapi.DomainTransaction{{Payload: payload}},
+	}
+	cbm.blockStore = &singleBlockStore{hash: blockHash, block: block}
+
+	blockAcceptanceData := &externalapi.BlockAcceptanceData{BlockHash: &blockHash}
+	emptyDAAAddedBlocksSet := hashset.New()
+
+	reward, err := cbm.calcMergedBlockReward(model.NewStagingArea(), &blockHash, blockAcceptanceData,
+		emptyDAAAddedBlocksSet, false)
+	if err != nil {
+		t.Fatalf("calcMergedBlockReward (legacy path): %+v", err)
+	}
+	if reward != 0 {
+		t.Fatalf("calcMergedBlockReward with payRegardlessOfDAAWindow=false and an empty DAA added "+
+			"blocks set: want 0 (preserving already-mined-block behavior), got %d", reward)
+	}
+
+	reward, err = cbm.calcMergedBlockReward(model.NewStagingArea(), &blockHash, blockAcceptanceData,
+		emptyDAAAddedBlocksSet, true)
+	if err != nil {
+		t.Fatalf("calcMergedBlockReward (fixed path): %+v", err)
+	}
+	if reward != subsidy {
+		t.Fatalf("calcMergedBlockReward with payRegardlessOfDAAWindow=true and an empty DAA added "+
+			"blocks set: want the block's own subsidy %d paid despite being outside the DAA window, got %d",
+			subsidy, reward)
+	}
 }
