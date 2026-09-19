@@ -1,6 +1,7 @@
 # AGENT_STATE (session htnd-copy-1d)
-updated: 2026-09-18T20:15:00+03:00
-phase: audit (IBD slowness investigation closed out - HTN-214 and HTN-215 both landed)
+updated: 2026-09-19T (live incident response - see HTN-220/221/222 entries below)
+phase: live incident response (v10 activation fallout -> difficulty collapse -> backlog catch-up
+  slowness), each stage fixed and documented as it was found
 active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git log; HEAD e5f73cbdf as
   of this update). User changed the standing rule 2026-09-18: AGENT_STATE.md/ISSUES.md are now
   committed (docs(agent) subject) and PUSHED alongside code, not left unstaged - AGENT_PROMPT.md
@@ -190,7 +191,51 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
     unconditionally overwriting any handler the RouterInitializer set with a no-op right after.
   Both: full package suites green, gofmt/vet/staticcheck clean, whole-tree build clean with and
   without -tags=ci. Node remained healthy and mining throughout both investigations.
-next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
+- 2026-09-19 (continued, live incident chain): user reported "Why block relay still stalls mining??"
+  during the post-v10-activation stratum outage. Investigated and fixed HTN-220 (725557f34): a peer
+  repeating an identical RequestHeaders(lowHash, highHash) paid for a fresh GetHashesBetween/
+  GetBlockHeaders call, under the shared consensus lock, on every retry - added a cache for the exact
+  repeated case. Deployed, but wider log sampling afterward showed this was NOT the actual cause: the
+  "Relaying 4097 headers" traffic was genuinely progressing (different hashes each time, from a
+  legitimately much larger post-flood chain), not a stuck peer. Left in place as a real, verified fix
+  for the failure mode it targets, but explicitly noted as insufficient on its own - see HTN-220's
+  ISSUES.md entry before assuming it explains a future stall report.
+  User then reported "The mining is again not working.. Difficulty is not increasing." Chose careful,
+  measurement-first investigation (user's own "2"). Found and fixed HTN-221 (5e098a72e): the
+  difficulty retarget formula had no bound on actualTimeSpan, so the real multi-hour outage during the
+  v10/multiset-repair incident left a timestamp gap in one window sample that alone pushed the
+  computed target essentially to powMax. Clamped actualTimeSpan to 4x the window's expected span.
+  Deployed WITHOUT a version gate - explicit user decision ("Don't do another hard fork, because nodes
+  are down.. Fix it without version gate!"), justified via HTN-007 (bits are never strictly validated
+  against a recomputed RequiredDifficulty, so this only affects what this node itself advertises as
+  the mining target). User reported "still not working.." after deploy - expected: recovery is gated
+  on BlockWindowHeapSlice's bounded, blue-work-ranked window naturally aging the gap-adjacent block
+  out, which needs real elapsed blocks, not instant.
+  Continued monitoring surfaced a new, distinct symptom: repeating "tip violates finality" cycles.
+  I initially misdiagnosed this as an infinite-loop bug in resolve.go's ResolveVirtual (nil pendingTip
+  handling) and started a fix - caught on closer reading that findNextPendingTip never actually
+  returns (nil, status, nil), so that code path is unreachable; reverted before it went anywhere and
+  told the user directly. Wider log sampling then showed the node was NOT stuck: ResolveVirtual was
+  making genuine, if slow, progress through a large post-IBD backlog ("Estimated progress: 22%" and
+  climbing, ~20s work + ~20s lock-wait per 100-block chunk). User: "Start fixing the node." Found and
+  fixed HTN-222 (b45692455): findNextPendingTip re-runs isViolatingFinality on every current DAG tip
+  on every single chunk, including tips already confirmed violating on a previous chunk - wasteful
+  because the check is monotonic (finality/pruning point only ever advances). Added
+  knownFinalityViolatingTips, a hashset.HashSet memoizing confirmed violations, consulted before the
+  real check runs. Two regression tests: a white-box one (rigged fakes + call counting) that actually
+  proves the second call skips the real check, and a black-box one (real TestConsensus, chunked
+  ResolveVirtualWithMaxParam calls) proving correctness is preserved across repeated chunks either way.
+  Full consensusstatemanager suite (17 functions) + full domain/consensus/... suite green,
+  gofmt/vet/staticcheck clean, whole-tree build clean with and without -tags=ci.
+  All three (HTN-220/221/222) documented in ISSUES.md with full mechanism/fix/test/left-alone detail.
+next_action: push this commit (b45692455) and the ISSUES.md/AGENT_STATE.md docs update, then tell the
+  user to redeploy and keep watching docker logs / GetBlockDagInfo (difficulty, virtualDaaScore) and
+  the "Resolving virtual. Estimated progress" lines to confirm: (a) the backlog actually finishes,
+  (b) mining resumes normally afterward, (c) difficulty climbs off the floor once fresh blocks displace
+  the old gap-adjacent ones from the difficulty window (HTN-221's fix is deployed but its live effect
+  on the actual difficulty VALUE has not yet been independently confirmed - still worth watching for).
+  No other issue is queued beyond continuing to respond to live reports as they come in. Both HTN-213
+  and HTN-216 landed earlier in this same session; the
   remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
   caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block
   builder, deciding whether Get should populate the cache at all from staged data is a broader design

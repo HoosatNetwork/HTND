@@ -2562,4 +2562,133 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   slow address-balance query from blocking a mining pool's GetBlockTemplate/SubmitBlock traffic on the
   same connection - this fix only ensures a dead connection's listener is removed promptly regardless
   of whether that queue is backed up, not the queueing design itself.
+
+## HTN-220
+- title: A peer stuck resending an identical RequestHeaders(lowHash, highHash) paid for a fresh
+  GetHashesBetween/GetBlockHeaders call, and the shared consensus lock, on every retry
+- status: PARTIAL FIX (did not, by itself, resolve the 2026-09-19 mining-stall incident)
+- severity: low-to-medium (wasted consensus-lock time under a specific peer failure mode, not a
+  correctness issue)
+- area: p2p/blockrelay
+- reported: 2026-09-19, live incident investigation - user asked "Why block relay still stalls
+  mining??" while stratum miners could not get block templates during the v10-activation aftermath.
+  Log sampling showed a peer's IBD header requests ("Relaying 4097 headers") recurring at high
+  frequency.
+- mechanism: handle_request_headers.go's inner loop calls GetHashesBetween and GetBlockHeaders fresh
+  on every incoming RequestHeaders message, both of which take the same consensus lock
+  GetBlockTemplate/SubmitBlock need. A peer that keeps resending the exact same (lowHash, highHash)
+  pair instead of ever advancing - a known failure mode for a peer stuck on IBD - pays for, and makes
+  this node pay for, that computation again on every retry, for no new information.
+- fix: added lastServedLowHash/lastServedHighHash/lastServedActualHighHash/lastServedHeadersMessage
+  fields to handleRequestHeadersFlow; the loop now recognizes an identical repeated (lowHash, highHash)
+  request and replies from the cached response instead of recomputing.
+- tests: TestHandleRequestHeadersCachesAnIdenticalRepeatedRequest - constructs the flow directly
+  (white-box, peer: nil, since a real *peer.Peer needs unexported netadapter constructors) and asserts
+  zero GetHashesBetween calls on the second, identical request. Passes; gofmt/vet/staticcheck clean.
+- outcome: deployed, but did NOT resolve the live mining stall. Wider log sampling after deploy showed
+  the "Relaying 4097 headers" pattern continuing at the same frequency, PLUS a second peer doing the
+  same - both were GENUINELY PROGRESSING requests against a legitimately much larger post-flood chain
+  (each request's lowHash/highHash actually differed), not a stuck peer repeating itself. The real
+  cause of the stall was the DAG backlog itself (see HTN-221/HTN-222) and, separately, the
+  --repair-missing-multisets deploy issue recorded under HTN-216's LIVE OUTAGE note in AGENT_STATE.md.
+  Left in place as a legitimate, verified optimization for the failure mode it does address, but it is
+  not sufficient on its own and should not be assumed to be the fix for a future "block relay stalls
+  mining" report - check whether the repeated requests are actually identical first.
+- commit: 725557f34
+
+## HTN-221
+- title: The difficulty retarget formula had no bound on the window's actual time span, so a single
+  multi-hour timestamp gap collapsed mainnet difficulty to powMax
+- status: FIXED, deployed, live effect not yet independently confirmed (see next_action)
+- severity: high (self-correcting under normal operation, but a real live-network difficulty collapse
+  that stratum mining depends on recovering from in a reasonable time)
+- area: consensus/difficultymanager
+- reported: 2026-09-19, user: "The mining is again not working.. Difficulty is not increasing."
+  Investigated at the user's chosen pace (option 2: measure first, no code changes until the mechanism
+  was understood).
+- mechanism: requiredDifficultyFromTargetsWindow computes
+  newTarget = averageWindowTarget * actualTimeSpan / (targetTimePerBlock * windowSize), with actualTimeSpan
+  taken directly from the window's own min/max sampled timestamps and clamped only on the LOW end
+  (floored at 1ms) - never on the high end except by powMax on the final result. The multi-hour outage
+  around the v10 activation/multiset-repair incident left a real, multi-hour gap inside one difficulty
+  window's own timestamp sample. That gap alone, multiplied through the formula, pushed the computed
+  target essentially straight to powMax (mainnet's genesis target is already ~65536x below powMax, and
+  the gap's ratio to the expected span overwhelmed that headroom many times over) - i.e. this was not a
+  bug that needed sustained bad conditions to trigger, one anomalous gap was enough. Recovery is then
+  gated on BlockWindowHeapSlice's bounded, blue-work-ranked sampling aging that gap-adjacent, easy
+  block out of the window naturally, which is slow once collapsed: CalcWork(bits) is proportional to
+  1/target, so a floor-difficulty block contributes far less blue work than the harder blocks it needs
+  to numerically displace, meaning many more easy blocks are needed than the window size would suggest.
+- fix: clamp actualTimeSpan to at most 4x the window's own expected time span
+  (targetTimePerBlockMs * windowSize) before it enters the retarget multiply/divide chain, mirroring
+  the kind of per-adjustment safety valve most PoW retarget algorithms use (e.g. Bitcoin's classic
+  +-4x clamp). Deployed WITHOUT a version gate - explicit, informed user decision ("Don't do another
+  hard fork, because nodes are down.. Fix it without version gate!"), justified by HTN-007 (still
+  open, needs_human): header bits are never strictly validated against a freshly recomputed
+  RequiredDifficulty during block validation, only bits>0/bits<=powMax/PoW-hash-matches-claimed-bits -
+  so this change only affects what THIS node's own future GetBlockTemplate calls advertise as the
+  mining target, not whether it accepts blocks other nodes already built under the old, unclamped
+  computation.
+- tests: TestRequiredDifficultyClampsAnAnomalousTimeSpan (difficultymanager package,
+  timespan_clamp_test.go) - constructs a difficultyManager and blockWindow directly with an artificial
+  ~3-year timestamp gap, asserts the result does not reach powMax and stays within
+  genesisTarget * (maxTimeSpanMultiple+1). Verified to fail before the clamp (reaches powMax exactly)
+  and pass after. gofmt/vet/staticcheck clean, full difficultymanager suite green, whole-tree build
+  clean with and without -tags=ci.
+- left alone: did not add a version gate (see above); did not change powMax itself or the low-end
+  floor; did not change BlockWindowHeapSlice's bounded sampling or blue-work weighting, which is the
+  separate mechanism controlling how fast a collapsed difficulty can climb back out once new,
+  un-gapped blocks start entering the window.
+- commit: 5e098a72e
+
+## HTN-222
+- title: findNextPendingTip re-ran the expensive isViolatingFinality check on the same already-
+  confirmed-violating DAG tips on every single ResolveVirtual chunk
+- status: FIXED
+- severity: medium (pure performance - wastes time under the single consensus lock that mining and
+  IBD/RPC also contend for, directly slowing backlog catch-up; no correctness impact either way)
+- area: consensus/consensusstatemanager
+- reported: 2026-09-19, discovered during the live backlog-catchup follow-up to HTN-221: after a full
+  IBD from a peer, ResolveVirtual was processing a large pending backlog in small chunks (~20s of work
+  plus ~20s of lock-wait per 100-block chunk, "Estimated progress: 22%" and climbing) - genuinely
+  progressing, not stuck, but slow. User: "Start fixing the node."
+- mechanism: findNextPendingTip runs on every single ResolveVirtual chunk while backlog remains. It
+  re-lists every current DAG tip via tipsInDecreasingDAGKnightOrder/tipsInDecreasingGHOSTDAGParentSelectionOrder
+  and calls isViolatingFinality on each one from scratch, with no memoization - including tips already
+  confirmed violating on a previous chunk. isViolatingFinality (check_finality_violation.go) is
+  monotonic: it asks whether the current finality point (or pruning point, whichever is later) is an
+  ancestor of the tip in its selected-parent chain, and both the finality point and the pruning point
+  only ever advance over a node's lifetime, never move backward - so a tip that fails this check once
+  can never pass it later. During a large backlog with several disqualified/violating tips sitting
+  around across hundreds of chunks, this is pure repeated waste, all of it under the same lock IBD
+  header serving and mining (GetBlockTemplate/SubmitBlock) also contend for.
+- fix: added knownFinalityViolatingTips (a hashset.HashSet field on consensusStateManager).
+  findNextPendingTip checks it before calling isViolatingFinality and skips the real check on a hit;
+  a fresh violation confirmation adds the tip to the set. Protected by the same outer consensus lock
+  every ResolveVirtual call already holds, same pattern as the resolveBlockStatusCache field beside it
+  and the earlier HTN-215 pickVirtualParents ancestor memoization.
+  domain/consensus/processes/consensusstatemanager/consensus_state_manager.go,
+  domain/consensus/processes/consensusstatemanager/resolve.go.
+- tests: TestFindNextPendingTipCachesAKnownFinalityViolatingTip (white-box, package
+  consensusstatemanager) rigs a single DAG tip with fakes for every dependency isViolatingFinality
+  reads (finality manager, pruning store, DAG topology manager) so it deterministically reports a
+  violation every time it actually runs, and counts calls to VirtualFinalityPoint: a first
+  findNextPendingTip call must evaluate it for real (1 call) and a second must not (still 1 call) -
+  answered purely from the cache. Verified to fail without the fix (cache never populated, so the
+  "cached after first call" assertion fails immediately) and pass with it restored.
+  TestResolveVirtualRepeatedlySkipsAKnownFinalityViolatingTip (black-box, package
+  consensusstatemanager_test) reuses TestFinalityResolveVirtual's finality-violation attack shape (a
+  heavier side chain built on a separate consensus after the main chain's finality has already
+  advanced past their common ancestor) but resolves it over several small ResolveVirtualWithMaxParam(1)
+  chunks instead of one large call - mirroring the live chunked-backlog pattern - and asserts virtual
+  stays off the violating side chain on every chunk, not just the first. This one does not distinguish
+  cached from uncached behavior by itself (correctness is preserved either way; only the wasted repeat
+  work regresses without the cache), so it is kept as end-to-end correctness coverage alongside the
+  white-box test that actually pins the caching behavior.
+  gofmt/vet/staticcheck clean, full consensusstatemanager suite green (17 test functions), full
+  domain/consensus/... suite green, whole-tree build clean with and without -tags=ci.
+- left alone: did not change ResolveVirtual's chunking logic, the lock-contention shape itself, or
+  BlockWindowHeapSlice/difficulty recovery speed (HTN-221) - this only removes one specific source of
+  repeated, avoidable work inside findNextPendingTip.
+- commit: b45692455
 - commit: cd2b11676
