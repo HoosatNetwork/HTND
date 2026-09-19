@@ -230,10 +230,16 @@ func (op *orphansPool) unorphanTransaction(transaction *model.OrphanTransaction)
 	if err != nil {
 		return err
 	}
+	// Carry the priority the orphan already earned at admission (raisePriorityIfCompound runs before
+	// maybeAddOrphan - see validateAndInsertTransaction) into the promoted mempool transaction.
+	// Discarding it here (as this used to, always passing false) meant a compound transaction that
+	// arrived before its parents was protected only while it waited in the orphan pool and lost that
+	// protection the moment its parents showed up and it was promoted - exactly the gap 78fcbddaf's
+	// keep-alive was meant to close.
 	mempoolTransaction := model.NewMempoolTransaction(
 		transaction.Transaction(),
 		op.mempool.transactionsPool.getParentTransactionsInPool(transaction.Transaction()),
-		false,
+		transaction.IsHighPriority(),
 		virtualDAAScore,
 	)
 	err = op.mempool.transactionsPool.addMempoolTransaction(mempoolTransaction)
@@ -350,9 +356,10 @@ func (op *orphansPool) updateOrphansAfterTransactionRemoved(
 // Relayed compound transactions are raised to high priority so that the transaction pool keeps them until
 // they are mined (see raisePriorityIfCompound). In the orphan pool the same exemption let any peer add
 // orphans the pool could neither evict nor expire: a relayed compound whose parents never arrived stayed
-// forever, and the pool grew far past MaximumOrphanTransactionCount. The exemption did not even carry over
-// once the parents did arrive, since unorphanTransaction inserts the promoted transaction as not high
-// priority.
+// forever, and the pool grew far past MaximumOrphanTransactionCount. isLocalSubmission is what scopes the
+// exemption back down to this node's own submissions here. unorphanTransaction carries an orphan's
+// priority into its promoted mempool transaction, so once the parents do arrive the same priority this
+// function saw continues to apply there too - see its own comment for why that used to be dropped.
 func isProtectedOrphan(orphan *model.OrphanTransaction) bool {
 	return orphan.IsHighPriority() && orphan.IsLocalSubmission()
 }
