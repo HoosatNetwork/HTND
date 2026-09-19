@@ -310,7 +310,10 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 			return nil, false, err
 		}
 		if previousVirtualSelectedParentStatus == externalapi.StatusUTXOValid {
-			log.Warnf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
+			// Routine, not exceptional: any block that loses the local tip race to an already-valid
+			// selected parent takes this path - normal DAGKnight ordering on a DAG with more than one
+			// tip, not a sign of anything wrong. Debug, not Warn.
+			log.Debugf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
 				"Keeping it as virtual's selected parent.", pendingTip, previousVirtualSelectedParent)
 			return nil, true, nil
 		}
@@ -341,7 +344,8 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 					return nil, false, err
 				}
 				if previousVirtualSelectedParentStatus == externalapi.StatusUTXOValid {
-					log.Warnf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
+					// Routine, not exceptional - see the identical check and reasoning above.
+					log.Debugf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
 						"Keeping it as virtual's selected parent.", pendingTip, previousVirtualSelectedParent)
 					return nil, true, nil
 				}
