@@ -165,16 +165,36 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 	// Remove the last block from the window so to calculate the average target of dag.difficultyAdjustmentWindowSize blocks
 	targetsWindow.remove(windowMinIndex)
 
+	targetTimePerBlockMs := dm.targetTimePerBlock[versionIndex(blockVersion, len(dm.targetTimePerBlock))].Milliseconds()
+
+	// We need to clamp the timestamp difference to 1 so that we'll never get a 0 target.
+	actualTimeSpan := math.MaxInt64(windowMaxTimeStamp-windowMinTimestamp, 1)
+
+	// Clamp the actual span to a bounded multiple of what this window's own size would expect, the
+	// same kind of per-adjustment safety valve most PoW retarget algorithms use (e.g. Bitcoin's
+	// classic +-4x clamp) to stop a single anomalously large timestamp gap in the window - a real
+	// multi-hour node outage, a large reorg, clock skew, anything - from producing a target far
+	// beyond what the window's own average target actually implies. Without this, one such gap can
+	// push the computed target to powMax outright (observed on mainnet 2026-09-19: a multi-hour
+	// outage did exactly this), and recovery is then gated on the window's bounded, blue-work-ranked
+	// sampling naturally aging the gap out - which, once collapsed, can take far longer than the
+	// window size to happen, since a newly-mined block at floor difficulty contributes proportionally
+	// far less blue work (CalcWork ~ 1/target) than the harder blocks it would need to displace.
+	expectedTimeSpanMs := targetTimePerBlockMs * int64(targetsWindow.len())
+	const maxTimeSpanMultiple = 4
+	if maxTimeSpanMs := expectedTimeSpanMs * maxTimeSpanMultiple; expectedTimeSpanMs > 0 && actualTimeSpan > maxTimeSpanMs {
+		actualTimeSpan = maxTimeSpanMs
+	}
+
 	// Calculate new target difficulty as:
-	// averageWindowTarget * (windowMinTimestamp / (targetTimePerBlock * windowSize))
+	// averageWindowTarget * (actualTimeSpan / (targetTimePerBlock * windowSize))
 	// The result uses integer division which means it will be slightly
 	// rounded down.
 	div := new(big.Int)
 	newTarget := targetsWindow.averageTarget()
 	newTarget.
-		// We need to clamp the timestamp difference to 1 so that we'll never get a 0 target.
-		Mul(newTarget, div.SetInt64(math.MaxInt64(windowMaxTimeStamp-windowMinTimestamp, 1))).
-		Div(newTarget, div.SetInt64(dm.targetTimePerBlock[versionIndex(blockVersion, len(dm.targetTimePerBlock))].Milliseconds()))
+		Mul(newTarget, div.SetInt64(actualTimeSpan)).
+		Div(newTarget, div.SetInt64(targetTimePerBlockMs))
 	l := max(targetsWindow.len(), 0)
 	windowLength, err := strconv.ParseUint(strconv.Itoa(l), 10, 64)
 	if err != nil {
