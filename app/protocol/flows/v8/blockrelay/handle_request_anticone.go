@@ -5,7 +5,6 @@ import (
 
 	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/HoosatNetwork/HTND/app/protocol/peer"
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/domain"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/infrastructure/config"
@@ -52,7 +51,15 @@ func (flow *handleRequestAnticoneFlow) start() error {
 		var blockHashes []*externalapi.DomainHash
 		blockHashes, err = flow.Domain().Consensus().GetAnticone(blockHash, contextHash, flow.Config().ActiveNetParams.MergeSetSizeLimit*5000)
 		if err != nil {
-			return protocolerrors.Wrap(true, err, "Failed querying anticone")
+			// GetAnticone fails, among other reasons, whenever blockHash or contextHash is a hash
+			// this node does not have - a peer syncing from a point this node has pruned or never
+			// had is a legitimate case, not evidence of anything attributable to the request.
+			// Unconditionally banning here (as this used to) banned honest peers for that, and for
+			// any of this node's own local errors underneath it. Returning the error unwrapped, like
+			// the sibling GetHashesBetween/GetBlockHeaders calls in handle_request_headers.go
+			// already do, lets flowcontext.HandleError's own classifier decide - it bans only for an
+			// actual ruleerrors.RuleError, not for a not-found or an unexpected local failure.
+			return err
 		}
 		log.Debugf("Got %d header hashes in past(%s) cap anticone(%s)", len(blockHashes), contextHash, blockHash)
 

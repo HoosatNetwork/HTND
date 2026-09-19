@@ -40,9 +40,17 @@ func (*FlowContext) HandleError(err error, flowName string, isStopping *uint32, 
 			// Check if this is a wire-format parsing error and treat it as a protocol error
 			// instead of panicking. This allows graceful disconnection from peers sending
 			// malformed data.
+			//
+			// Not grounds for banning: flows never decode protobuf bytes themselves (the actual
+			// on-wire message is already decoded, and already banned separately, before it ever
+			// reaches a flow), so an error with this text reaching HandleError is a local failure -
+			// e.g. a corrupted local store record's raw UnmarshalVT error happens to contain the
+			// same "wire-format"/"protobuf ... parse" wording this heuristic matches on. Banning an
+			// honest peer for this node's own local read failure was the HTN-167/HTN-168 class of
+			// bug the not-found branch above already treats as non-banning; this is the same
+			// mistake by another route.
 			log.Errorf("Wire format error from peer in %s, disconnecting: %v", flowName, err)
-			// Convert to a ProtocolError that should ban the peer
-			err = protocolerrors.Errorf(true, "invalid wire-format data: %s", err.Error())
+			err = protocolerrors.Errorf(false, "invalid wire-format data: %s", err.Error())
 		} else if protocolErr := (protocolerrors.ProtocolError{}); !errors.As(err, &protocolErr) {
 			// Check if this is a rule error and treat it as a protocol error
 			// instead of panicking. Rule violations from consensus should ban the peer.
