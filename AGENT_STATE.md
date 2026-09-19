@@ -168,6 +168,28 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   infrastructure, 164 needs an app.go lifecycle hook, 177 needs either the lost source or a
   deliberate rewrite, and the 7 consensus/protocol issues from the original survey stay untouched on
   purpose).
+- 2026-09-19: user pasted two more live log findings from htnd-public while monitoring the recovered
+  node:
+  - HTN-218 FIXED 175064f21: "Pending tip does not overcome previous selected parent, which is
+    UTXO-valid. Keeping it as virtual's selected parent." at Warn level - user first asked to "fix
+    that so it won't stop node"; checked live logs and confirmed the node had NOT stopped (blocks kept
+    flowing through and after it). User then correctly pointed out the real issue: a block losing the
+    tip race to an already-valid, heavier chain is routine GHOSTDAG/DAGKnight behavior (HTN-211's fix
+    working as intended), not warning-worthy. Downgraded the two "this is fine" occurrences to Debug;
+    left the third, genuinely more unusual occurrence (previous selected parent not UTXO-valid) as
+    Warn. Pure log-level change, zero decision-logic change - existing HTN-211 tests pass unchanged.
+  - HTN-219 FIXED cd2b11676: "Couldn't send message to closed route 'on RPC connected - outgoing'"
+    firing on every accepted block, continuously (445x/15min, not tapering off) - a real listener
+    leak, not just noise. Traced to: RemoveListener only fires when handleIncomingMessages notices a
+    dead route via Dequeue(), but that loop can be stuck indefinitely pushing an address-index request
+    (GetUsableAddressesRequest, 85-98% of this node's RPC traffic all day) into a full serialized
+    queue while its worker is stuck on the same consensus-lock contention seen all day. Fixed by
+    wiring listener removal into the connection's own transport-level disconnect callback too (which
+    fires immediately, independent of the stuck loop) - added NetConnection.SetOnDisconnectedHandler
+    (exported, for cross-package registration) and fixed onRPCConnectedHandler, which was
+    unconditionally overwriting any handler the RouterInitializer set with a no-op right after.
+  Both: full package suites green, gofmt/vet/staticcheck clean, whole-tree build clean with and
+  without -tags=ci. Node remained healthy and mining throughout both investigations.
 next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
   remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
   caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block

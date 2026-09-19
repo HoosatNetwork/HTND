@@ -2473,3 +2473,93 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   clamped at their actual call sites per earlier reading - see HTN-216's activation entry); a broader
   sweep for other unclamped per-version indexing was not performed this session.
 - fixed_commit: 220cb55ad
+
+## HTN-218
+- title: A candidate tip losing the local tip race to an already-valid selected parent was logged at
+  Warn, making routine ResolveVirtual behavior look like a problem
+- status: FIXED
+- severity: low (cosmetic - log level only, no behavior change)
+- area: consensus/consensusstatemanager
+- reported: 2026-09-19, user pasted a live log line: "Pending tip <hash> does not overcome previous
+  selected parent <hash>, which is UTXO-valid. Keeping it as virtual's selected parent." and initially
+  asked to "fix that so it won't stop node" - investigated first and confirmed via live logs the node
+  had NOT stopped (it kept accepting blocks continuously through and after the warning). The user then
+  pointed out the real issue: "Does not matter at all if pending tip is older than selected parent" -
+  i.e. a block losing the tip race to a heavier, already-valid chain is ordinary GHOSTDAG/DAGKnight
+  behavior on any DAG with more than one tip, not something exceptional, so it should not be logged as
+  a warning.
+- mechanism: resolve.go's ResolveVirtual has two occurrences of this exact log line (mirroring each
+  other - see HTN-211), both gated on `previousVirtualSelectedParentStatus == StatusUTXOValid`, i.e.
+  exactly the "this is fine, correctly keeping the current tip" case HTN-211 added. A third, distinct
+  occurrence (previous selected parent NOT UTXO-valid - "could happen in nearly synced scenarios where
+  GHOSTDAG data isn't fully consistent") is a genuinely more unusual state and was left as a warning.
+- fix: downgraded the two "previous selected parent is UTXO-valid" occurrences from log.Warnf to
+  log.Debugf. Zero control-flow or decision change - verified against the existing HTN-211 tests
+  (TestResolveVirtualKeepsValidSelectedParentOverLighterPendingTip and its ShortChain variant), which
+  passed unchanged.
+- tests: no new test - this is a pure log-level change with no observable behavior difference; the
+  existing HTN-211 regression tests already cover the actual decision logic and continue to pass.
+  gofmt/vet/staticcheck clean, full domain/consensus/processes/consensusstatemanager suite green,
+  whole-tree build clean with and without -tags=ci.
+- commit: 175064f21
+
+## HTN-219
+- title: A disconnected RPC client's notification listener could stay registered forever, logging
+  "Couldn't send message to closed route" on every subsequent notification broadcast
+- status: FIXED
+- severity: medium (unbounded per-connection resource leak under client churn, plus continuous log
+  spam - not consensus-affecting, but a real operational problem for a node serving many RPC clients,
+  e.g. a mining pool's stratum bridge)
+- area: rpc/netadapter
+- reported: 2026-09-19, user pasted a live log window: "Couldn't send message to closed route 'on RPC
+  connected - outgoing'" firing once per accepted block, continuously. Measured: 445 occurrences over
+  15 minutes, 227 of those in the single most recent minute - not tapering off, i.e. not a transient
+  race resolving itself, a permanent leak.
+- mechanism: app/rpc/rpccontext/notificationmanager.go broadcasts every notification (block added,
+  UTXOs changed, virtual DAA score changed, etc.) to every router registered in
+  NotificationManager.listeners, via router.OutgoingRoute().MaybeEnqueue(notification) -
+  MaybeEnqueue is deliberately designed to swallow a closed-route error without propagating it
+  (logging only "Couldn't send message to closed route", app/rpc.go:118), so a stale entry never
+  surfaces as anything worse than this log line - it just never stops firing.
+  RemoveListener (unregistering a router from that map) is only called via a defer inside the
+  goroutine running handleIncomingMessages (app/rpc/rpc.go), which fires when that loop's next call to
+  incomingRoute.Dequeue() notices the route is closed. But handleIncomingMessages can be blocked well
+  past that point: address-index commands (GetUsableAddressesRequest and similar, comment at
+  app/rpc/rpc.go:90 - "an address with many coins, such as a mining pool's, takes minutes") are pushed
+  into a separate, capacity-100 addressIndexRequests channel and processed by a dedicated worker
+  goroutine, one at a time. GetUsableAddressesRequest was observed as 85-98% of all RPC traffic on
+  this node throughout the day (RPCSTATS), and this session's own live profiling (HTN-214) and the
+  day's "Consensus has held its lock for longer than 2s" warnings already established that consensus
+  lock contention on this node is real and ongoing. If that worker is stuck on a slow request when a
+  client disconnects, and the client had already queued enough address-index requests to fill the
+  channel, handleIncomingMessages' main loop stays blocked trying to enqueue another one - it never
+  gets back to Dequeue() to notice the connection died, so RemoveListener never fires, and the listener
+  stays registered for as long as that block persists (observed: at least 15+ minutes, continuously).
+  Meanwhile the transport layer already knows the connection is dead immediately -
+  NetConnection's internal disconnect callback (netconnection.go) synchronously calls
+  netConnection.router.Close() the moment the underlying connection drops - but nothing in app/rpc used
+  that signal; onRPCConnectedHandler (netadapter.go) unconditionally set the connection's
+  onDisconnectedHandler to a no-op right after the RouterInitializer ran, discarding whatever the
+  RouterInitializer might have registered.
+- fix: added an exported NetConnection.SetOnDisconnectedHandler (netconnection.go) so
+  app/rpc/rpc.go's routerInitializer, which runs in a different package, can register real cleanup.
+  routerInitializer now registers a handler that calls NotificationManager.RemoveListener(rtr)
+  immediately. Fixed onRPCConnectedHandler to only install the no-op fallback when the
+  RouterInitializer didn't already set a handler, instead of unconditionally overwriting it. The
+  existing deferred RemoveListener inside handleIncomingMessages' goroutine is left in place as a
+  backstop (RemoveListener on an already-removed listener is a no-op, so both paths can safely fire).
+- tests: TestRPCConnectedHandlerDoesNotClobberRouterInitializersDisconnectedHandler
+  (infrastructure/network/netadapter package) - a fake RouterInitializer registers a real disconnect
+  handler via the new exported setter, and the test requires it to actually fire on disconnect rather
+  than being silently replaced by onRPCConnectedHandler's no-op. Verified it fails on the old
+  unconditional-overwrite code (reverted, ran red) and passes with the fix restored.
+  TestRPCConnectedHandlerFallsBackToANoOpWhenNoneIsSet pins the other half - start() panics if
+  onDisconnectedHandler is nil, so the no-op fallback must still apply when nothing else was
+  registered. gofmt/vet/staticcheck clean, full infrastructure/network/netadapter and app/rpc suites
+  green, whole-tree build clean with and without -tags=ci.
+- left alone: did not change handleIncomingMessages' own address-index queueing/serialization
+  behavior, which is itself a separate, deliberate design (comment at app/rpc/rpc.go:90) to stop one
+  slow address-balance query from blocking a mining pool's GetBlockTemplate/SubmitBlock traffic on the
+  same connection - this fix only ensures a dead connection's listener is removed promptly regardless
+  of whether that queue is backed up, not the queueing design itself.
+- commit: cd2b11676
