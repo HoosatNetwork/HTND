@@ -289,7 +289,18 @@ func pathExists(path string) (bool, error) {
 	return false, err
 }
 
-// Save writes the file contents to the disk.
+// Save writes the file contents to the disk atomically: write to a temp file in the same directory,
+// fsync it, rename it over the real path, then fsync the directory - rather than truncating and
+// overwriting the existing file's bytes in place.
+//
+// The previous implementation opened with O_WRONLY|O_CREATE (no O_TRUNC) and encoded directly over
+// the existing bytes with no fsync at all. A shorter new encoding left the old file's tail behind
+// (harmless today only because ReadKeysFile's json.Decoder.Decode stops at the first value), and -
+// more seriously - a crash or power loss mid-write, which can happen on every NewAddress or
+// change-address save the daemon does, could leave a truncated or mixed file holding the encrypted
+// mnemonics, unrecoverable on the next load. Writing to a new file and renaming it into place means
+// a crash before the rename leaves the original file untouched, and POSIX guarantees the rename
+// itself is atomic - readers never see a partial file. The on-disk JSON format itself is unchanged.
 func (d *File) Save() error {
 	if d.path == "" {
 		return errors.New("cannot save a file with uninitialized path")
@@ -300,19 +311,44 @@ func (d *File) Save() error {
 		return err
 	}
 
-	file, err := os.OpenFile(d.path, os.O_WRONLY|os.O_CREATE, 0o600)
+	dir := filepath.Dir(d.path)
+	tempFile, err := os.CreateTemp(dir, filepath.Base(d.path)+".tmp-*")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	tempPath := tempFile.Name()
+	// A no-op once the rename below has succeeded (the path no longer exists); only cleans up a
+	// leftover temp file when Save returns early.
+	defer os.Remove(tempPath)
 
-	encoder := json.NewEncoder(file)
+	encoder := json.NewEncoder(tempFile)
 	err = encoder.Encode(d.toJSON())
 	if err != nil {
+		tempFile.Close()
 		return err
 	}
 
-	return nil
+	err = tempFile.Sync()
+	if err != nil {
+		tempFile.Close()
+		return err
+	}
+	err = tempFile.Close()
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(tempPath, d.path)
+	if err != nil {
+		return err
+	}
+
+	dirFile, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer dirFile.Close()
+	return dirFile.Sync()
 }
 
 const defaultNumThreads = 8
