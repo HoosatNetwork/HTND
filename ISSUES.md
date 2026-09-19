@@ -870,8 +870,22 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: cmd/htnwallet/keys/keys.go:293-316 Save opens the keys file with os.O_WRONLY|os.O_CREATE (no O_TRUNC) and json-encodes over the existing bytes. A shorter encoding (e.g. an older file pretty-printed, or with fields a newer toJSON omits) leaves the old tail after the new value; ReadKeysFile (keys.go:245-248) uses json.Decoder.Decode, which stops at the first value, so this does not break loading today. But Save is also not atomic and never fsyncs: a crash or power loss during a save (the daemon saves on every NewAddress and every change address) can leave a truncated or mixed file holding the encrypted mnemonics, which then fails to load. Not changed: hard rule restricts key-file edits to proven bugs.
 - repro: static
 - fix_plan: maintainer decision - write to a temp file in the same directory with 0600, fsync, rename over the original (and fsync the directory); keep the JSON format unchanged
-- tests: not run
-- commit: none
+- decision (user, 2026-09-19): approved as part of a batch of non-consensus needs_human fixes
+  ("continue fixing" / "continue") - explicit sign-off to touch the key-file save path.
+- FIXED 2026-09-19, commit 03f6b7b6f: Save now writes to os.CreateTemp in the same directory
+  (guaranteed 0600 permissions, same filesystem as the real path), encodes into it, fsyncs the file,
+  closes it, os.Rename's it over the real path, then opens and fsyncs the containing directory. A
+  leftover temp file from an early return is cleaned up via a deferred os.Remove (a no-op once the
+  rename has succeeded). The on-disk JSON format is unchanged.
+- tests: TestSaveRoundTrips (ordinary Save/ReadKeysFile round trip), TestSaveLeavesNoTempFileBehind
+  (a successful Save leaves exactly the real file, no stray .tmp-* file), and
+  TestSaveOverwritingALongerFileLeavesNoTrailingBytes (seeds the path with a 4KB file, Saves much
+  shorter content, requires the result to parse as standalone JSON with json.Unmarshal - a leftover
+  tail would still parse with the old json.Decoder.Decode but not with Unmarshal). Verified the third
+  test fails on the old in-place-write code (reverted, ran red: saved file was 4110 bytes with the
+  old padding trailing) and passes with the fix restored. Full cmd/htnwallet/... suite green,
+  gofmt/vet/staticcheck clean.
+- commit: 03f6b7b6f
 ## HTN-154
 - title: malformed partially signed transaction bytes crash htnwallet (nil proto fields, input count mismatch)
 - status: fixed
@@ -988,6 +1002,22 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: infrastructure/autoupdate/updater.go:444-453 installUpdate calls RestartNode when AutoInstall is set; RestartNode (:696-717) starts the new binary with the same arguments and immediately os.Exit(0)s from the updater goroutine. The node's component shutdown (P2P, RPC, utxoindex, database close) never runs, so every automatic update is effectively a crash of the old process (pebble recovers, but in-flight state is dropped), and the new process starts while the old one still holds the datadir lock - if it reaches the lock first it fails to open the database and exits, leaving no node running. Auto-install is opt-in.
 - repro: static
 - fix_plan: maintainer decision on restart supervision - e.g. request shutdown through signal.ShutdownRequestChannel, let the app finish its normal shutdown, and exec/start the new binary only after the database is closed (or leave restarting to the service manager)
+- investigated further 2026-09-19: the fix_plan's own suggested shape ("request shutdown, wait for it
+  to finish, then start the new binary") does not actually work in this process model. RestartNode
+  runs in a background goroutine spawned by the updater's own check loop, not in main()'s own
+  goroutine. In Go, the moment main() returns, the runtime terminates the entire process immediately,
+  killing every other goroutine mid-flight - including RestartNode's. So there is no way for
+  RestartNode to "wait for app.main() to return, then start the new binary" using ordinary channel
+  synchronization: by the time app.main() has actually returned, RestartNode's own goroutine no
+  longer exists to act on it. Starting the new binary necessarily has to happen before this process's
+  main() returns, which is the ordering the current code already uses.
+- what a real fix needs: a hook wired into app.go's own shutdown sequence itself - e.g. a callback
+  registered by the updater that app.main() invokes right before it returns (after the DB and every
+  other component are actually closed), so the new binary is started from the shutdown path itself
+  rather than from a goroutine racing that path. This is a real change to the node's core lifecycle,
+  not a quick patch, and getting the ordering subtly wrong risks a new startup/shutdown correctness
+  bug in every normal restart, not just auto-update ones. Not attempted this session - needs a
+  deliberate design pass. Stays needs_human.
 - tests: not run
 - commit: none
 ## HTN-165
@@ -1143,6 +1173,22 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: `git ls-files tools/pebble-tool` lists README.md and pebble-tool; the latter is an x86-64 ELF executable (27,607,704 bytes, not stripped) and there is no Go source in the directory. CLAUDE.md describes pebble-tool as a tool that inspects or modifies pebble datadirs. A binary that cannot be rebuilt or reviewed from the repository is a supply-chain and reproducibility risk for a tool pointed at node datadirs, and it bloats every clone.
 - repro: static (git ls-files, file)
 - fix_plan: maintainer decision - restore the source (or point the README at where it lives) and remove the binary from git, or document its provenance
+- investigated further 2026-09-19 (`git log --all -- tools/pebble-tool`): both the binary and the
+  README were added together in a single commit, 7148270f0 ("Revert WAL disable by default - fix
+  tips growing and DAAScore not updating", authored 2026-08-09, "Generated by Mistral Vibe") - a
+  commit whose actual subject is a completely unrelated WAL setting fix. The tool was never
+  deliberately added with its own history; it was bundled into an unrelated automated commit, and no
+  source has ever existed in this repository at any point. The README's own "From Source: cd
+  tools/pebble-tool && go build ." instructions describe a source layout that was never actually
+  committed.
+- left alone: given this is a tool that reads AND WRITES pebble datadirs directly (per CLAUDE.md,
+  "never run except on a copy"), writing a from-scratch reimplementation to match the README's
+  documented command surface without the original source to verify against would be guessing at the
+  exact behavior of a data-mutating tool - a materially different risk than this session's other
+  fixes. Not attempted. The user's call is either: someone locates the real source (it may exist
+  outside git, e.g. wherever the Mistral Vibe run that produced 7148270f0 kept its working files) and
+  it gets committed properly, or the binary is removed and the tool is rewritten deliberately with
+  review, or its provenance is accepted and documented as-is.
 - tests: not applicable
 - commit: none
 
