@@ -96,6 +96,15 @@ func (c *NetConnection) setOnDisconnectedHandler(onDisconnectedHandler server.On
 	c.onDisconnectedHandler = onDisconnectedHandler
 }
 
+// SetOnDisconnectedHandler sets the handler run when this connection disconnects at the transport
+// level - the same handler the internal onDisconnectedHandler field drives, exported so a
+// RouterInitializer (which runs in a different package, before the connected-handler that normally
+// installs this) can register its own cleanup. Overwrites whatever was set before, so call it at
+// most once per connection.
+func (c *NetConnection) SetOnDisconnectedHandler(onDisconnectedHandler server.OnDisconnectedHandler) {
+	c.setOnDisconnectedHandler(onDisconnectedHandler)
+}
+
 // Disconnect disconnects the given connection
 func (c *NetConnection) Disconnect() {
 	if c.isRouterClosed.Add(1) == 1 {

@@ -79,6 +79,20 @@ func (m *Manager) routerInitializer(rtr *router.Router, netConnection *netadapte
 	}
 	m.context.NotificationManager.AddListener(rtr)
 
+	// Removing the listener also happens below, deferred until handleIncomingMessages returns - but
+	// that loop notices a dead connection only the next time it calls incomingRoute.Dequeue(), and it
+	// can be blocked well past that point pushing an address-index request (GetUsableAddressesRequest
+	// and friends) into a full, serialized per-connection queue while its own worker is stuck behind
+	// slow consensus-lock contention. A client that disconnects during that wait left its listener
+	// registered indefinitely, so every future notification broadcast hit its already-closed outgoing
+	// route forever - not a transient race, a permanent leak that only grows as clients reconnect.
+	// The transport layer knows the connection is dead immediately (NetConnection.router.Close() runs
+	// synchronously from the disconnect callback), so remove the listener from there too - whichever
+	// path notices first wins, and RemoveListener on an already-removed listener is a no-op.
+	netConnection.SetOnDisconnectedHandler(func() {
+		m.context.NotificationManager.RemoveListener(rtr)
+	})
+
 	spawn("routerInitializer-handleIncomingMessages", func() {
 		defer m.context.NotificationManager.RemoveListener(rtr)
 

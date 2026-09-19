@@ -221,7 +221,15 @@ func (na *NetAdapter) onRPCConnectedHandler(connection server.Connection) error 
 	if netConnection.ErrorMessage != nil {
 		return nil // don't do anything further since handshake failed.
 	}
-	netConnection.setOnDisconnectedHandler(func() {})
+	// rpcRouterInitializer (a different package) runs inside newNetConnection above and may already
+	// have registered its own disconnect handler via the exported SetOnDisconnectedHandler - e.g. to
+	// remove this connection's RPC notification listener the instant the connection is known dead,
+	// rather than waiting for its message-handling loop to notice (which can be blocked for a long
+	// time on an unrelated slow request). Only fall back to a no-op here if it didn't, since start()
+	// requires some handler to be set.
+	if netConnection.onDisconnectedHandler == nil {
+		netConnection.setOnDisconnectedHandler(func() {})
+	}
 	netConnection.start()
 
 	return nil
