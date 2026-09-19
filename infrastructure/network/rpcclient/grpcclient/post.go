@@ -52,7 +52,9 @@ func (c *GRPCClient) PostAppMessage(requestAppMessage appmessage.Message) (appme
 // RPC server, accepts the first response that arrives back, and
 // returns the response
 func (c *GRPCClient) Post(request *protowire.HoosatdMessage) (*protowire.HoosatdMessage, error) {
+	c.sendMutex.Lock()
 	err := c.stream.Send(request)
+	c.sendMutex.Unlock()
 	if err != nil {
 		return nil, errors.Wrapf(err, "error sending the request to the RPC server")
 	}

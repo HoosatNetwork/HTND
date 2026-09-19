@@ -30,7 +30,13 @@ type GRPCClient struct {
 	connection            *grpc.ClientConn
 	onErrorHandler        OnErrorHandler
 	onDisconnectedHandler OnDisconnectedHandler
-	closeSendMutex        sync.Mutex
+
+	// sendMutex serializes every call into the underlying stream's Send/CloseSend. grpc-go's
+	// ClientStream explicitly documents that concurrent SendMsg calls from different goroutines,
+	// and a concurrent CloseSend/SendMsg pair, are both unsafe (RecvMsg is fine concurrently with
+	// either). This client has three independent Send-family callers - AttachRouter's send loop,
+	// Post, and Disconnect - so all three must go through the same lock.
+	sendMutex sync.Mutex
 }
 
 // Connect connects to the RPC server with the given address
@@ -83,8 +89,8 @@ func (c *GRPCClient) Close() error {
 
 // Disconnect disconnects from the RPC server
 func (c *GRPCClient) Disconnect() error {
-	c.closeSendMutex.Lock()
-	defer c.closeSendMutex.Unlock()
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
 	return c.stream.CloseSend()
 }
 
@@ -136,6 +142,8 @@ func (c *GRPCClient) send(requestAppMessage appmessage.Message) error {
 	if err != nil {
 		return errors.Wrapf(err, "error converting the request")
 	}
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
 	return c.stream.Send(request)
 }
 
