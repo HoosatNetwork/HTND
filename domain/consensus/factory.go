@@ -88,6 +88,14 @@ type Config struct {
 	// that the node does not reach the point of listening for RPC - so it is a recovery step to ask
 	// for, not something to pay for on every boot.
 	RepairBlockStatuses bool
+	// RepairMissingMultisets marks StatusUTXOPendingVerification any StatusUTXOValid block reachable
+	// from a virtual tip that has no stored multiset - the state RepairBlockStatuses (or a past
+	// incident of the same shape) can leave behind - so the normal resolve path re-derives a real
+	// diff and multiset for it. Needed to recover a node stuck unable to build any further block
+	// template ("Multiset <hash> does not exist in db") because virtual's own selected parent is one
+	// of these blocks. A recovery step to ask for, like RepairBlockStatuses, not something to run on
+	// every boot.
+	RepairMissingMultisets bool
 	// EnableAutoExodusExportOnPruning exports an acceptance-data Exodus bundle after a pruning point moves.
 	// AutoExodusExportDir is the parent directory for those best-effort diagnostic bundles.
 	EnableAutoExodusExportOnPruning bool
@@ -662,6 +670,13 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		if err != nil {
 			return nil, false, err
 		}
+	}
+	if config.RepairMissingMultisets {
+		resetCount, err := c.RepairMissingMultisets()
+		if err != nil {
+			return nil, false, err
+		}
+		log.Infof("RepairMissingMultisets marked %d block(s) for re-verification", resetCount)
 	}
 	// c.ReresolveInvalidBlocks()
 	// hash, err := externalapi.NewDomainHashFromString("3ba7ac9a1d0f8262ba05e3e5c00fab85ffc9ce9ed8ddfaec6709615af7a6c531")

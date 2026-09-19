@@ -76,6 +76,7 @@ type Consensus interface {
 	ResolveBlockStatus(blockHash *DomainHash, useSeparateStagingAreaPerBlock bool) (BlockStatus, error)
 	RepairBlockStatuses() error
 	RepairDisqualifiedTipChains() (uint64, error)
+	RepairMissingMultisets() (uint64, error)
 	ReresolveInvalidBlocks() error
 	GetBlockByTransactionID(transactionID *DomainTransactionID) (*DomainBlock, error)
 	CheckMergeSetBluesAndIfBlockExistsInThem(searchedBlock *DomainHash) error

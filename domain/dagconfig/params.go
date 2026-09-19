@@ -377,15 +377,16 @@ var MainnetParams = Params{
 	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
 	// The 8th entry (block version 9) is the CoinbaseTimestampEntropyActivationVersion hard fork -
 	// see domain/consensus/processes/coinbasemanager/payload.go.
-	// A 9th entry (block version 10, for the dev-fee integer-split formula and HTN-216's
-	// merge-set-reward fix, both gated on mergeSetRewardIgnoresDAAWindowVersion in
-	// coinbasemanager.go) was added and activated at 227679830 on 2026-09-19, then REVERTED THE SAME
-	// DAY: this node was the only one on mainnet running the version-10 code, so the instant its own
-	// tip reached that DAA score it started rejecting every version-9 block the rest of the
-	// (unupgraded) network kept relaying, forking itself off alone within minutes (confirmed:
-	// virtualDaaScore stuck exactly at 227679830 for 3+ hours, zero accepted blocks, stratum
-	// hashrate at 0). See HTN-216/ISSUES.md for the incident writeup. Do not re-add this entry
-	// without a real coordinated rollout window for every mainnet node/miner operator first.
+	// The 9th entry (block version 10) activates the dev-fee integer-split formula
+	// (calcDevFeeQuantity) and HTN-216's merge-set-reward fix (calcMergedBlockReward paying every
+	// merge set block regardless of the difficulty-adjustment window sample) - both gated on
+	// mergeSetRewardIgnoresDAAWindowVersion in coinbasemanager.go. User-chosen activation DAA score,
+	// 2026-09-19. Briefly reverted the same day, then re-applied on the user's explicit instruction:
+	// see HTN-216/ISSUES.md for the incident. This node's tip reaching 227679830 does make it reject
+	// version-9 blocks relayed by peers that haven't upgraded (expected, uncoordinated-rollout
+	// behavior, not itself a bug) - the separate, actual bug that was blocking this node's own block
+	// template generation regardless of that (RepairBlockStatuses leaving a UTXO-valid virtual parent
+	// with no stored multiset) is fixed by RepairMissingMultisets, see consensus.go.
 	POWScores: []uint64{
 		17500000,
 		21821800,
@@ -395,6 +396,7 @@ var MainnetParams = Params{
 		213340776,
 		217137983,
 		218735007,
+		227679830,
 	},
 
 	PruningMultiplier: []uint64{

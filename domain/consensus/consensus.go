@@ -1875,6 +1875,90 @@ func (s *consensus) RepairDisqualifiedTipChains() (uint64, error) {
 	return uint64(len(reset)), nil
 }
 
+// RepairMissingMultisets finds every StatusUTXOValid block reachable by walking each virtual tip's
+// selected-parent chain that has no stored multiset - the exact state RepairBlockStatuses can leave
+// behind (see RepairDisqualifiedTipChains's own comment: "which is how a repaired node ends up with
+// UTXO-valid blocks that have no diff") - and marks each one StatusUTXOPendingVerification so the
+// normal resolve path (getUnverifiedChainBlocks/ResolveVirtual) re-derives a real diff and multiset
+// for it, exactly the way RepairDisqualifiedTipChains repairs a disqualified chain instead of
+// inventing new multiset math here.
+//
+// A block only ever becomes StatusUTXOValid through the normal resolve path once its own multiset is
+// staged (calculateMultiset requires its selected parent's multiset to succeed), so if a block on a
+// branch already has a stored multiset, every earlier block on that same branch was resolved
+// correctly before it and does not need checking - each branch's walk stops there.
+//
+// Without this repair, any consumer that needs a UTXOValid block's multiset (most importantly
+// building a new block template over virtual, whose selected parent must be one) fails outright with
+// "Multiset <hash> does not exist in db", which is fatal to producing any further blocks until fixed.
+// It returns how many blocks it reset.
+func (s *consensus) RepairMissingMultisets() (uint64, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+	tips, err := s.consensusStateStore.Tips(stagingArea, s.databaseContext)
+	if err != nil {
+		return 0, err
+	}
+
+	reset := make(map[externalapi.DomainHash]struct{})
+	for _, tip := range tips {
+		current := tip
+		for {
+			if _, alreadyChecked := reset[*current]; alreadyChecked {
+				break
+			}
+
+			status, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, current)
+			if database.IsNotFoundError(err) {
+				break
+			}
+			if err != nil {
+				return 0, err
+			}
+			if status != externalapi.StatusUTXOValid {
+				// Anything else (already pending verification, disqualified, header-only) is
+				// either already headed for the normal resolve path or is RepairDisqualifiedTipChains's
+				// job, not this one's.
+				break
+			}
+
+			_, msErr := s.multisetStore.Get(s.databaseContext, stagingArea, current)
+			if msErr == nil {
+				break
+			}
+			if !database.IsNotFoundError(msErr) {
+				return 0, msErr
+			}
+
+			s.blockStatusStore.Stage(stagingArea, current, externalapi.StatusUTXOPendingVerification)
+			reset[*current] = struct{}{}
+
+			ghostdagData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, current, false)
+			if database.IsNotFoundError(err) {
+				break
+			}
+			if err != nil {
+				return 0, err
+			}
+			selectedParent := ghostdagData.SelectedParent()
+			if selectedParent == nil || selectedParent.Equal(model.VirtualGenesisBlockHash) {
+				break
+			}
+			current = selectedParent
+		}
+	}
+
+	if len(reset) == 0 {
+		return 0, nil
+	}
+	if err := staging.CommitAllChanges(s.databaseContext, stagingArea); err != nil {
+		return 0, err
+	}
+	return uint64(len(reset)), nil
+}
+
 // RepairBlockStatuses iterates through all blocks and sets them to StatusUTXOValid
 // unless they are StatusInvalid. This is useful for repairing databases where blocks
 // were incorrectly marked as disqualified.
