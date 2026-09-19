@@ -22,7 +22,9 @@ import (
 	"github.com/HoosatNetwork/HTND/infrastructure/network/connmanager"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/util"
 	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/pkg/errors"
 )
 
 func checkedDurationFromHours(value uint64) (time.Duration, error) {
@@ -31,6 +33,25 @@ func checkedDurationFromHours(value uint64) (time.Duration, error) {
 		return 0, err
 	}
 	return time.Duration(parsedValue) * time.Hour, nil
+}
+
+// mergedAndValidatedFrozenAddresses combines the mempool's built-in frozen addresses with the ones
+// given via --freeze-address.
+//
+// --freeze-address is documented as "can be specified multiple times", which reads as adding to the
+// built-in frozen list, not replacing it - assigning cfg.FrozenAddresses outright used to silently
+// drop the built-in frozen address the moment an operator froze one more. Addresses are matched later
+// by exact string equality against EncodeAddress() (wallet_freezing_manager.go), so a mistyped,
+// differently cased, or wrong-network address froze nothing with no warning; validating here with the
+// same util.DecodeAddress every other address-taking flag uses catches that at startup instead of
+// silently freezing nothing.
+func mergedAndValidatedFrozenAddresses(defaults, extra []string, prefix util.Bech32Prefix) ([]string, error) {
+	for _, address := range extra {
+		if _, err := util.DecodeAddress(address, prefix); err != nil {
+			return nil, errors.Wrapf(err, "invalid --freeze-address %s", address)
+		}
+	}
+	return append(defaults, extra...), nil
 }
 
 // ComponentManager is a wrapper for all the htnd services
@@ -150,10 +171,12 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		mempoolConfig.CompoundTxMinInputsThreshold = cfg.CompoundTxInputsThreshold
 	}
 
-	// Configure wallet freezing (always enabled)
+	// Configure wallet freezing (always enabled).
 	mempoolConfig.WalletFreezingEnabled = true
-	if len(cfg.FrozenAddresses) > 0 {
-		mempoolConfig.FrozenAddresses = cfg.FrozenAddresses
+	mempoolConfig.FrozenAddresses, err = mergedAndValidatedFrozenAddresses(
+		mempoolConfig.FrozenAddresses, cfg.FrozenAddresses, cfg.ActiveNetParams.Prefix)
+	if err != nil {
+		return nil, err
 	}
 
 	domain, err := domain.New(&consensusConfig, mempoolConfig, db)
