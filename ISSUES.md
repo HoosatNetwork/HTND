@@ -447,7 +447,15 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - fix_plan: cap at a small multiple of getIBDBatchSize() in the converter (p2p protocol behaviour: needs care that honest syncees never exceed it, including retries)
 - tests: not run
 - triage (2026-09-15): v8 is the only protocol version and both senders (ibd.go batch loop and the missing-hash retry) stay within getIBDBatchSize()=495; the handler route carries only CmdRequestIBDBlocks, so its type assertion is safe. Batch history in git: 100 -> 99 (c81506220) -> 500 (3c60a2c8a) -> 99*5 (ab98fe313). A cap would be a new P2P acceptance rule that disconnects any peer (other implementations, forks) sending larger batches; that is a protocol decision, not a clear bug. Suggested if approved: cap at 4*getIBDBatchSize() in RequestIBDBlocksMessage.toAppMessage, mirroring MaxRequestRelayBlocksHashes.
-- commit: uncommitted
+- decision (user, 2026-09-19): approved as part of a batch of non-consensus needs_human fixes ("continue fixing").
+- FIXED 2026-09-19, commit d25248fc2: added MaxRequestIBDBlocksHashes = 4*495 = 1980 to appmessage
+  (hardcoded rather than importing blockrelay's getIBDBatchSize() to avoid a layering cycle), and
+  enforced it in both RequestIBDBlocksMessage.toAppMessage and fromAppMessage, exactly mirroring
+  MaxRequestRelayBlocksHashes' own pattern in p2p_request_relay_blocks.go.
+- tests: TestRequestIBDBlocksHashesCap (protowire package) - table test asserting the boundary
+  (exactly the cap succeeds, one over fails with "too many hashes") in both conversion directions.
+  gofmt/vet/staticcheck clean, full protowire/appmessage package suites green.
+- commit: d25248fc2
 
 ## HTN-116
 - title: NewPebbleDB silently deletes the whole datadir when pebble reports corruption
@@ -780,8 +788,19 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: domain/miningmanager/mempool/orphan_pool.go unorphanTransaction builds the pool entry with model.NewMempoolTransaction(..., false, ...) and does not call raisePriorityIfCompound, so an orphan's high priority (local or compound-raised) is not carried into the transaction pool. 78fcbddaf raises priority "before the orphan branch so a compound transaction arriving ahead of its parents is protected while it waits", but once the parents arrive the promoted compound has the ordinary lifetime and can expire before it is mined. Kaspad also inserts promoted orphans as not high priority.
 - repro: static
 - fix_plan: policy decision - either pass orphan.IsHighPriority() into NewMempoolTransaction (also keeps local high-priority orphans high priority after promotion, a change from kaspad) or re-run raisePriorityIfCompound on promotion (compound shape only). Not changed without maintainer input.
-- tests: not run
-- commit: none
+- decision (user, 2026-09-19): approved option 1 (pass orphan.IsHighPriority() through) as part of a
+  batch of non-consensus needs_human fixes ("continue fixing").
+- FIXED 2026-09-19, commit 31fb8dd99: unorphanTransaction now passes transaction.IsHighPriority()
+  into model.NewMempoolTransaction instead of a hardcoded false, so both a compound orphan's
+  raised priority and a locally-submitted high-priority orphan's priority survive promotion.
+  isProtectedOrphan's own comment, which described the dropped-on-promotion behavior as current, is
+  updated to match.
+- tests: TestUnorphanCarriesThePriorityTheOrphanEarned - a relayed compound orphan (2 inputs,
+  CompoundTxMinInputsThreshold=2) waits for its parent, is confirmed high priority while orphaned,
+  then confirmed still high priority once promoted after the parent arrives. Verified it fails
+  without the fix (reverted to false, ran red) and passes with it restored. Full
+  domain/miningmanager/... suite green, gofmt/vet/staticcheck clean.
+- commit: 31fb8dd99
 ## HTN-147
 - title: a peer sending RequestNextHeaders out of turn crashes the node through an unchecked type assertion
 - status: fixed
@@ -911,8 +930,16 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: app/component_manager.go:143-146 sets mempoolConfig.FrozenAddresses = cfg.FrozenAddresses whenever the flag is given, discarding DefaultConfig's built-in list (domain/miningmanager/mempool/config.go:111-113), although the flag description ("Address to freeze (can be specified multiple times)") reads as adding one. So an operator freezing one more address silently unfreezes the default one. The strings are matched exactly against EncodeAddress() (wallet_freezing_manager.go:123) and never decoded at startup, so a mistyped, differently cased or wrong-network address freezes nothing without any warning. Freezing is not exposed over RPC.
 - repro: static
 - fix_plan: maintainer decision - whether the flag should append to or replace the default list; decode flag addresses with util.DecodeAddress at startup and fail on invalid ones
-- tests: not run
-- commit: none
+- decision (user, 2026-09-19): append (not replace), and validate - approved as part of a batch of
+  non-consensus needs_human fixes ("continue fixing").
+- FIXED 2026-09-19, commit 952ddce97: extracted mergedAndValidatedFrozenAddresses (app/component_manager.go)
+  - appends cfg.FrozenAddresses to the mempool's built-in list instead of replacing it, and validates
+  each with util.DecodeAddress against the active network's prefix, failing node startup with the
+  invalid address named instead of silently freezing nothing.
+- tests: TestMergedAndValidatedFrozenAddresses (app package) - appends instead of replacing, rejects a
+  malformed address, rejects a wrong-network address, and leaves the defaults untouched when nothing
+  extra is given. gofmt/vet/staticcheck clean, full app package suite green.
+- commit: 952ddce97
 ## HTN-160
 - title: a negative --minrelaytxfee is accepted and wraps into a huge minimum relay fee
 - status: fixed
@@ -981,8 +1008,12 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: infrastructure/network/netadapter/server/grpcserver/p2pserver.go:24 p2pMaxMessageSize = 4 GiB (deliberately raised in cff75920a "Increase P2P message max size", 2025-07-23; its comment still says "1GB") and :30 p2pMaxInboundConnections = 0, so gRPC accepts and fully buffers a single inbound P2P message of up to 4 GiB from any unauthenticated connection before any flow validates it - the 500-peer limit (config.go:63 defaultMaxInboundPeers) is enforced by connmanager only after the handshake. RPC: rpcserver.go:15 RPCMaxMessageSize = 1 GiB, config.go:69 DefaultMaxRPCClients = 500, and with no --rpclisten the RPC listener binds all interfaces (config.go:559-561 net.JoinHostPort("", RPCPort)); SafeRPC defaults off. A handful of concurrent maximum-size messages exhausts memory. Same shape as kaspad defaults. Not changed: these are network parameters.
 - repro: static
 - fix_plan: maintainer decision - size P2P limits to the largest legitimate message (IBD batches, blocks) and/or add a per-connection receive budget; consider a lower RPC max message and localhost as the default RPC listener; fix the stale "1GB" comment
-- tests: not run
-- commit: none
+- PARTIALLY FIXED 2026-09-19, commit e6cbe8099: fixed only the stale "1GB" comment next to
+  p2pMaxMessageSize (now correctly says 4GiB, with the commit that raised it). The actual sizing
+  decision - what the real limits should be, a per-connection receive budget, RPC's default listen
+  address - is a genuine operational tradeoff (legitimate IBD/block traffic needs headroom) that
+  needs real numbers from production usage, not a value picked here. Still needs_human for that part.
+- commit: e6cbe8099
 ## HTN-167
 - title: flow errors that are neither protocol nor rule errors ban the peer, so a local fault bans honest peers
 - status: fixed
@@ -1001,8 +1032,21 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: (1) app/protocol/flowcontext/errors.go:39-45 bans (ShouldBan true) any flow error whose text matches isWireFormatError ("proto: ... wire-format", "protobuf ... parse"). Flows never decode protobuf bytes themselves (no UnmarshalVT/protowire use in app/protocol); peer message decoding fails earlier and is already banned as "received bad message" (protocol.go:54). The consensus stores return raw UnmarshalVT errors unwrapped (e.g. blockstore/block_store.go:191-193), so a corrupted local record read inside a flow produces exactly that text and bans an honest peer - the HTN-167 class by another route. The heuristic was added in 207b30620 to stop a panic on that error, with an explicit "should ban the peer". (2) app/protocol/flows/v8/blockrelay/handle_request_anticone.go:55 wraps every GetAnticone error as a banning protocol error, including local database errors and limit/unknown-hash errors for a peer syncing from a point this node does not have (kaspad does the same). Also reviewed and left as deliberate policy: ibd.go:156 IBD timeout ban and ibd.go:1283 low-IBD-rate ban (both logged as --enablebanning policy). Banning is opt-in (EnableBanning defaults false).
 - repro: static
 - fix_plan: maintainer decision - e.g. treat wire-format errors reaching HandleError as non-banning (peer decode errors are already banned upstream), and ban anticone failures only for rule/limit violations attributable to the request
-- tests: not run
-- commit: none
+- decision (user, 2026-09-19): approved as part of a batch of non-consensus needs_human fixes
+  ("continue fixing").
+- FIXED 2026-09-19, commit facb59d98: (1) errors.go's isWireFormatError branch now builds a
+  non-banning protocolerrors.Errorf(false, ...), matching the not-found branch right above it. (2)
+  handle_request_anticone.go's GetAnticone error is now returned unwrapped (return err) instead of
+  protocolerrors.Wrap(true, err, ...), matching the sibling GetHashesBetween/GetBlockHeaders calls in
+  handle_request_headers.go, so flowcontext.HandleError's own classifier decides - bans only for an
+  actual ruleerrors.RuleError. ibd.go's timeout/low-rate bans were reviewed again and left untouched
+  (deliberate --enablebanning policy, not this class of bug).
+- tests: TestHandleErrorBansOnlyForPeerFaults updated (the wire-format-looking case now expects
+  shouldBan=false, was true) plus new TestHandleRequestAnticoneDoesNotForceABanOnNotFound (a fake
+  consensus returning a not-found from GetAnticone must not produce a banning protocol error).
+  Verified the anticone test fails on the old code (reverted, ran red) and passes with the fix
+  restored. Full app/... suite green, gofmt/vet/staticcheck clean.
+- commit: facb59d98
 ## HTN-169
 - title: prefix.Deserialize panics on an empty stored prefix instead of returning an error
 - status: fixed

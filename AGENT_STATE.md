@@ -121,6 +121,33 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   --repair-missing-multisets and the permanent --repair-block-statuses true from the launch command
   afterward (the latter is what caused this and will keep causing it on every future restart if left
   in place).
+- 2026-09-19: user asked to act on all needs_human issues with the goal of getting the network working
+  and reducing disagreement. Judgment call: left the consensus/protocol-splitting ones alone
+  (HTN-002/004/005/006/007/191/204) - each has documented evidence that a naive fix breaks something
+  worse (HTN-006 would reject the majority of the existing chain; HTN-204's "obvious" fix already
+  failed 3/3 IBD-serving tests; HTN-004 has no working repro to validate against; etc.), and touching
+  more consensus rules right after the day's live v10 incident was judged more likely to cause a
+  second incident than reduce disagreement. Instead fixed the batch of non-consensus needs_human
+  issues that don't affect network agreement either way:
+  - HTN-115 FIXED d25248fc2: RequestIBDBlocks capped at 4*getIBDBatchSize() (1980), matching
+    RequestRelayBlocks' own MaxRequestRelayBlocksHashes pattern.
+  - HTN-146 FIXED 31fb8dd99: unorphanTransaction now carries transaction.IsHighPriority() into the
+    promoted mempool transaction instead of hardcoding false - a compound orphan no longer loses its
+    keep-alive protection the instant its parent arrives and it's promoted.
+  - HTN-168 FIXED facb59d98: two ban paths (isWireFormatError heuristic in flowcontext/errors.go,
+    handle_request_anticone.go's unconditional GetAnticone-error ban) no longer force a ban for this
+    node's own local errors or a peer legitimately asking about a hash it doesn't have.
+  - HTN-166 PARTIALLY FIXED e6cbe8099: fixed the stale "1GB" comment on the actual 4GiB
+    p2pMaxMessageSize constant; the real limits-sizing question stays needs_human (needs production
+    traffic data, not a guessed number).
+  - HTN-159 FIXED 952ddce97: --freeze-address now appends to the default frozen list instead of
+    replacing it, and validates each address with util.DecodeAddress, failing startup on an invalid
+    one instead of silently freezing nothing.
+  All five: gofmt/vet/staticcheck clean, full package suites green, whole-tree build clean with and
+  without -tags=ci. Remaining untouched from the original needs_human survey: HTN-114 (blocked on a
+  release containing HTN-113's fix), HTN-153 (touches the wallet key file - needs explicit sign-off),
+  HTN-162 (needs real signing-key infrastructure this session can't invent), HTN-164 (auto-update
+  restart supervision - not attempted this pass), HTN-177 (needs source that doesn't exist here).
 next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
   remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
   caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block
