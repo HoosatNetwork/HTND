@@ -16,6 +16,10 @@ func (x *RequestIBDBlocksMessage) toAppMessage() (appmessage.Message, error) {
 	if x == nil {
 		return nil, errors.Wrapf(errorNil, "RequestIBDBlocksMessage is nil")
 	}
+	if len(x.Hashes) > appmessage.MaxRequestIBDBlocksHashes {
+		return nil, errors.Errorf("too many hashes for message "+
+			"[count %d, max %d]", len(x.Hashes), appmessage.MaxRequestIBDBlocksHashes)
+	}
 	hashes, err := protoHashesToDomain(x.Hashes)
 	if err != nil {
 		return nil, err
@@ -24,6 +28,11 @@ func (x *RequestIBDBlocksMessage) toAppMessage() (appmessage.Message, error) {
 }
 
 func (x *HoosatdMessage_RequestIBDBlocks) fromAppMessage(msgRequestIBDBlocks *appmessage.MsgRequestIBDBlocks) error {
+	if len(msgRequestIBDBlocks.Hashes) > appmessage.MaxRequestIBDBlocksHashes {
+		return errors.Errorf("too many hashes for message "+
+			"[count %d, max %d]", len(msgRequestIBDBlocks.Hashes), appmessage.MaxRequestIBDBlocksHashes)
+	}
+
 	x.RequestIBDBlocks = &RequestIBDBlocksMessage{
 		Hashes: domainHashesToProto(msgRequestIBDBlocks.Hashes),
 	}
