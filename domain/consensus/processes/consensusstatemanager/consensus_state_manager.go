@@ -8,6 +8,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
@@ -123,6 +124,16 @@ type consensusStateManager struct {
 	// powScores derives the version of the block that would be built on a selected parent (see
 	// versionOfChildOf), which governs virtual's parents limit and tip ordering.
 	powScores []uint64
+
+	// knownFinalityViolatingTips memoises which tips isViolatingFinality has already confirmed violate
+	// finality, so findNextPendingTip - called on every single ResolveVirtual chunk while backlog
+	// remains, and re-checking every current DAG tip each time - does not repeat the same expensive
+	// check on the same already-dead tip over and over. Safe because the check is monotonic:
+	// isViolatingFinality asks whether the current finality point (or pruning point, whichever is
+	// later) is an ancestor of the tip, and both of those only move forward over the node's lifetime,
+	// never back - so a tip that fails this once can never pass it later. Protected by the same outer
+	// consensus lock every ResolveVirtual call already holds, like the other memoisation fields above.
+	knownFinalityViolatingTips hashset.HashSet
 }
 
 // New instantiates a new ConsensusStateManager
@@ -197,6 +208,8 @@ func New(
 		mergeDepthRootStore:       mergeDepthRootStore,
 		windowHeapSliceStore:      windowHeapSliceStore,
 		resolveBlockStatusCache:   lrucache.New[resolveBlockStatusCacheEntry](resolveBlockStatusCacheSize, false),
+
+		knownFinalityViolatingTips: hashset.New(),
 
 		expensiveDiagnosticRunsRemaining: 3,
 

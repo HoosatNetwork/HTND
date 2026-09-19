@@ -92,12 +92,25 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 
 	for _, tip := range orderedTips {
 		log.Debugf("Resolving tip %s", tip)
+
+		// isViolatingFinality is monotonic - the finality/pruning point it checks against only moves
+		// forward, so a tip confirmed violating it once can never pass later - see
+		// knownFinalityViolatingTips' own comment. findNextPendingTip runs on every single
+		// ResolveVirtual chunk while backlog remains, re-listing and re-checking every current DAG
+		// tip each time, so a tip that's already known-dead is skipped here without paying for the
+		// real check again.
+		if csm.knownFinalityViolatingTips.Contains(tip) {
+			log.Debugf("Tip %s is already known to violate finality, skipping the check", tip)
+			continue
+		}
+
 		isViolatingFinality, shouldNotify, err := csm.isViolatingFinality(stagingArea, tip)
 		if err != nil {
 			return nil, externalapi.StatusInvalid, err
 		}
 
 		if isViolatingFinality {
+			csm.knownFinalityViolatingTips.Add(tip)
 			log.Infof("Tip %s is violating finality", tip)
 			if shouldNotify {
 				// TODO: Send finality conflict notification
