@@ -35,6 +35,31 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
      scenario and passed unchanged. Full gate green. Live confirmation on the production node needs a
      rebuild/redeploy - the user's call, node was only ever profiled read-only.
   Both HTN-214 and HTN-215 landed; nothing else queued from this investigation.
+- HTN-216 (2026-09-19, urgent, user-directed): read `docker logs htnd-public` per user request ("read
+  logs of htnd-public and fix the issue with coinbase") and found calcMergedBlockReward
+  (coinbasemanager.go) denying a merge set block its subsidy+fees whenever it fell outside
+  daaAddedBlocksSet - the difficulty-adjustment window's bounded, blue-work-ranked SAMPLE, never meant
+  as a reward-eligibility filter. Evidence: the existing diagnostic log fired on 27,982/27,985
+  coinbase builds (99.99%) over 12 hours, one instance dropping 140/163 merge set blocks - i.e. this
+  network's actual tokenomics have been paying almost nobody their full merge set reward. User: "file
+  it properly and fix it, it's urgent bug" - explicit authorization for a consensus/tokenomics change.
+  FIXED 4b4829d9c: calcMergedBlockReward gained `payRegardlessOfDAAWindow bool`; true skips the
+  DAA-window check entirely. Gated behind new `mergeSetRewardIgnoresDAAWindowVersion = 10`, keyed off
+  each merge set block's OWN version (matching how the existing v10 dev-fee check in the same loop is
+  keyed) - the SAME not-yet-activated hard fork bucket that dev-fee change already claims (mainnet
+  POWScores tops out at version 9, no entry for 10 yet, so this is completely inert on the live
+  network right now). Live call site now computes mergeSetBlockVersion once and reuses it for the new
+  gate plus the two lookups that already needed it (removed two redundant c.blockVersion calls). The
+  other 4 call sites (coinbaseOutputForBlueBlockV1/V2, coinbaseOutputForRewardFromRedBlocksV1/V2 - two
+  dead code, two only reachable for version-1 genesis-era blocks) all pass `false`, unchanged
+  behavior. New test TestCalcMergedBlockRewardPaysRegardlessOfDAAWindowFromActivation (white-box,
+  fake single-block BlockStore, real serializeCoinbasePayload) pins both sides: false->0,
+  true->full subsidy, same empty daaAddedBlocksSet. gofmt/vet/staticcheck clean, full package suite
+  green, full domain/consensus/... suite green (53 packages incl. blockbuilder/consensusstatemanager/
+  blockprocessor/blockvalidator), `go build -tags=ci ./...` clean across the whole tree. Full
+  ISSUES.md writeup at HTN-216. IMPORTANT - told the user explicitly: this fix is DORMANT. Actually
+  activating it on mainnet requires adding a coordinated activation DAA score to POWScores in
+  domain/dagconfig/params.go - that decision was not made here, per the standing rule.
 next_action: no specific issue queued. Candidates in rough priority order: (1) HTN-213
   (grpcclient.GRPCClient.Disconnect races an in-flight send on the same gRPC stream - found
   incidentally while testing HTN-212, real Go data race confirmed via -race, not yet investigated

@@ -2182,3 +2182,69 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   redeploy, which is the user's call, not done from here (the node was only ever profiled read-only,
   never touched).
 - fixed_commit: 7e9b86230
+
+## HTN-216
+- title: calcMergedBlockReward denies a fully accepted merge set block its subsidy+fees whenever it
+  falls outside the difficulty-adjustment window's sample, silently underpaying nearly every coinbase
+- status: FIXED (dormant until a coordinated hard fork activation - see fixed section)
+- severity: CRITICAL (tokenomics-affecting: measured 99.99% of coinbases on the live mainnet node
+  underpaying, some miners not paid at all for a fully accepted block)
+- area: consensus/coinbasemanager (coinbasemanager.go)
+- reported: 2026-09-19, via `docker logs htnd-public` (read-only, per user request: "read logs of
+  htnd-public and fix the issue with coinbase.")
+- evidence: the existing diagnostic log line "Coinbase being built for %s pays nothing to %d of its %d
+  merge set blocks: %s ... (no reward; in the DAA added blocks set: false)" fired on 27,982 of 27,985
+  coinbase builds logged over a 12-hour window (99.99%) - one instance dropped 140 of its 163 merge
+  set blocks. Every dropped block's miner received zero reward for a block GHOSTDAG and acceptance
+  processing had already fully accepted into the merge set.
+- mechanism: calcMergedBlockReward (coinbasemanager.go) gated a merge set block's reward on
+  `mergingBlockDAAAddedBlocksSet.Contains(blockHash)`. That set (daaAddedBlocksSet, sourced from
+  DAABlocksStore.DAAAddedBlocks) is the subset of a block's merge set that the difficulty-adjustment
+  window (a size-bounded, blue-work-ranked sampling heap - see calculateBlockWindowHeap/
+  tryPushMergeSet/BlockWindowHeapSlice) happened to sample when computing that block's DAA score. That
+  window exists to pick a representative, bounded-cost sample for retargeting difficulty; it was never
+  designed or intended to answer "was this merge set block legitimately merged" - a fully valid,
+  GHOSTDAG-accepted merge set block (blue or red) can and routinely does lose the sampling cutoff for
+  having lower blue work than whatever already filled the window, especially on a busy DAG with many
+  parallel blocks (exactly HTN-205/206/211/215's territory). calcMergedBlockReward's `if
+  !mergingBlockDAAAddedBlocksSet.Contains(blockHash) { return 0, nil }` reused that sampling artifact
+  as a reward-eligibility filter, so being outside the sample - not being invalid, not being
+  unaccepted, just not sampled - meant the block earned nothing. On this network's actual DAG width
+  this is the common case, not the exception, hence the 99.99% figure.
+- fix: calcMergedBlockReward gained a `payRegardlessOfDAAWindow bool` parameter; when true, the
+  DAA-added-blocks check is skipped entirely and every merge set block with valid acceptance data
+  earns its subsidy+fees. This is a consensus/tokenomics change (it changes the computed coinbase
+  transaction network-wide) so it can't apply unconditionally without an uncoordinated fork. It's
+  gated behind a new `mergeSetRewardIgnoresDAAWindowVersion = 10` constant, activated per merge-set
+  block's OWN version (mirroring how the existing `blockVersion >= 10` dev-fee formula check in the
+  same loop is keyed - not the building block's version). Version 10 is the same not-yet-activated
+  hard fork bucket that dev-fee change already claims in this file: mainnet's POWScores
+  (domain/dagconfig/params.go) currently tops out at version 9, with no entry raising it to 10, so
+  this fix is completely inert on the live network until a maintainer adds a coordinated activation
+  DAA score - not chosen here, per this session's standing consensus-activation rule. The live call
+  site (ExpectedCoinbaseTransactionInternal's v2 merge-set loop) now computes the merge set block's
+  own version once (reusing it for both this gate and the existing dev-fee/coinbase-data-extraction
+  calls that already needed it, removing two now-redundant c.blockVersion lookups in the process) and
+  passes `mergeSetBlockVersion >= mergeSetRewardIgnoresDAAWindowVersion`. The other four call sites -
+  coinbaseOutputForBlueBlockV2 (dead code, no other caller), coinbaseOutputForBlueBlockV1 and
+  coinbaseOutputForRewardFromRedBlocksV1 (only reachable for ownBlockVersion == 1, i.e. genesis-era
+  blocks that will never reach version 10), and coinbaseOutputForRewardFromRedBlocksV2 (dead code) -
+  all pass `false`, preserving their exact pre-fix behavior; none of them needed to change.
+- tests: TestCalcMergedBlockRewardPaysRegardlessOfDAAWindowFromActivation (coinbasemanager_test.go),
+  a white-box test in-package: builds a coinbaseManager with a minimal fake BlockStore serving one
+  block whose coinbase payload is built via the real serializeCoinbasePayload, then calls
+  calcMergedBlockReward directly with an EMPTY daaAddedBlocksSet (the block is guaranteed outside the
+  window) and asserts payRegardlessOfDAAWindow=false returns 0 (pins the exact pre-fix/historical
+  behavior for already-mined blocks) while payRegardlessOfDAAWindow=true returns the block's own
+  subsidy (proves the fix). gofmt clean, go vet clean, staticcheck (build_and_test.sh's exact check
+  list) clean on the package, full package suite green, full domain/consensus/... suite green (all
+  packages ok, including consensusstatemanager/blockbuilder/blockprocessor/blockvalidator which sit
+  next to or call into coinbase logic), `go build -tags=ci ./...` clean across the whole tree.
+- left alone: not touching domain/dagconfig/params.go's POWScores (choosing an activation DAA score is
+  explicitly the user's decision per this session's standing rule, not made here); not changing the
+  meaning or contents of daaAddedBlocksSet itself, or anything about how the DAA window is sampled -
+  that mechanism is correct and unchanged for its actual purpose (difficulty adjustment); not touching
+  the dev-fee formula or entropy logic already keyed off version 10/8/9 in the same function, even
+  though they share the activation bucket - each is an independently-scoped change to the same
+  not-yet-reached version number, not one combined change.
+- fixed_commit: 4b4829d9c
