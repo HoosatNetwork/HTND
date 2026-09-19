@@ -70,6 +70,31 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   verified it fails 3/3 with the Post lock reverted and passes 3/3 restored. Full
   infrastructure/network/rpcclient/... green under -race, gofmt/vet/staticcheck clean, full repo build
   clean.
+- HTN-216 ACTIVATED 2026-09-19, commit 252e0adc5: user picked the mainnet activation DAA score
+  directly (227679830) after I explained why applying the fix ungated was not viable - the coinbase
+  reconstruction function is re-run against historical blocks during IBD/ResolveVirtual too, not just
+  newly-mined ones, so removing the version gate would make this node fail re-validation of ~99.99% of
+  its own already-mined chain (every pre-activation block's real coinbase paid almost nobody; the
+  ungated code would expect it to pay everyone). Added 227679830 as mainnet POWScores' 9th entry, and
+  per the user's explicit follow-up ("increase indexes of other daa parameters also... so it won't
+  crash") extended every other per-version array in MainnetParams (K, TargetTimePerBlock,
+  FinalityDuration, DifficultyAdjustmentWindowSize, PruningMultiplier, MaxBlockMass, MaxBlockParents,
+  MergeDepth) from 9 to 10 entries, each new entry repeating the version-9 value unchanged.
+- HTN-217 FOUND AND FIXED 2026-09-19, commit 220cb55ad: while extending those tables, found two call
+  sites (domain/consensus/factory.go's dagStores, domain/miningmanager/mempool/config.go's
+  DefaultConfig) that indexed a per-version Params table directly with constants.GetBlockVersion()-1
+  with NO bounds clamp at all - unlike every other per-version lookup in the file
+  (FinalityDepthForBlockVersion, PruningDepthForBlockVersion, TargetTimePerBlockForCurrentVersion),
+  which all clamp via blockVersionIndexForSlice. Before HTN-216's table extension, both would have
+  panicked with an index-out-of-range the instant a node's ambient version reached 10 - a real,
+  imminent crash risk that the extension itself only incidentally avoided for THIS activation; it
+  would recur at every future hard fork unless every table is remembered and extended in lockstep with
+  POWScores again. Added DifficultyAdjustmentWindowSizeForCurrentVersion and
+  MaxBlockMassForCurrentVersion to Params (matching TargetTimePerBlockForCurrentVersion's existing
+  pattern) and switched both call sites to them - pure safety net, byte-identical results for every
+  currently valid version, only differs (reuses the last entry instead of panicking) once a future
+  version outruns its table. Full domain/... suite green, gofmt/vet/staticcheck clean, full repo build
+  clean with and without -tags=ci for both HTN-216's activation and HTN-217's fix.
 next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
   remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
   caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block

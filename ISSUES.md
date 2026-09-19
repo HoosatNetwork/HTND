@@ -2266,3 +2266,59 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   though they share the activation bucket - each is an independently-scoped change to the same
   not-yet-reached version number, not one combined change.
 - fixed_commit: 4b4829d9c
+- ACTIVATED 2026-09-19, commit 252e0adc5: user chose the activation DAA score directly ("Make the
+  block v10 activate on 227679830 daa score") after being walked through why an unconditional
+  (ungated) apply was not viable - it would have made this node fail re-validation of ~99.99% of its
+  own already-mined chain (ExpectedCoinbaseTransactionInternal is re-derived for historical blocks
+  during IBD/ResolveVirtual, not only for newly-built ones, so removing the version gate would compare
+  a "pays everyone" expected coinbase against every pre-activation block's real, already-mined,
+  already-accepted "pays almost nobody" coinbase). Added 227679830 as mainnet POWScores' 9th entry.
+  Also extended every other per-version array in MainnetParams (K, TargetTimePerBlock,
+  FinalityDuration, DifficultyAdjustmentWindowSize, PruningMultiplier, MaxBlockMass, MaxBlockParents,
+  MergeDepth) from 9 to 10 entries per the user's explicit follow-up ("increase indexes of other daa
+  parameters also... so it won't crash") - each new 10th entry repeats its array's version-9 value
+  unchanged, so nothing about version 10's behavior changes in any of those dimensions, only the
+  coinbase-manager checks explicitly gated on mergeSetRewardIgnoresDAAWindowVersion take effect from
+  this DAA score. See HTN-217 for a related latent crash this surfaced and fixed on the way.
+
+## HTN-217
+- title: Two call sites indexed a per-version Params table directly with
+  constants.GetBlockVersion()-1, with no bounds clamp - would panic once the ambient version outran
+  the table
+- status: FIXED
+- severity: high (a guaranteed panic/crash on every node, at the exact moment any future hard fork's
+  block version becomes reachable, if the corresponding per-version table isn't extended first)
+- area: consensus/factory, miningmanager/mempool
+- reported: 2026-09-19, found while extending mainnet's per-version tables for HTN-216's version 10
+  activation (see that entry) - checking whether any other code indexes those same tables the same way
+  turned up two direct, unclamped indexes.
+- mechanism: every other per-version lookup in this codebase goes through
+  blockVersionIndexForSlice/currentBlockVersionIndexForSlice, which clamps the index to the last
+  element if constants.GetBlockVersion() (or a given blockVersion) exceeds the table's length -
+  FinalityDepthForBlockVersion, PruningDepthForBlockVersion and TargetTimePerBlockForCurrentVersion
+  all use it. Two call sites did not: domain/consensus/factory.go's dagStores
+  (`config.DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]`) and
+  domain/miningmanager/mempool/config.go's DefaultConfig
+  (`dagParams.MaxBlockMass[constants.GetBlockVersion()-1]`). Both run once, at node/mempool
+  construction time, using whatever constants.GetBlockVersion() is at that moment - which can be any
+  value once IBD has raised it. Before this session extended MainnetParams' tables to 10 entries
+  (HTN-216's activation commit), DifficultyAdjustmentWindowSize and MaxBlockMass both had exactly 9
+  entries (indices 0-8, versions 1-9); the moment a node's ambient version reached 10, both of these
+  would index position 9 of a 9-element slice and panic with an index-out-of-range, crashing the node
+  (or failing mempool construction) outright - not a wrong value, a hard crash.
+- fix: added DifficultyAdjustmentWindowSizeForCurrentVersion and MaxBlockMassForCurrentVersion to
+  Params (domain/dagconfig/params.go), matching the existing TargetTimePerBlockForCurrentVersion
+  pattern exactly (delegates to currentBlockVersionIndexForSlice). Switched both call sites to use
+  them instead of indexing the raw slice. Purely a safety net: for every currently valid block version
+  the clamped and unclamped forms return byte-identical results; they only diverge once the version
+  outruns the table, where the clamped form now reuses the last entry instead of panicking - the same
+  fallback every other per-version lookup in this file already uses.
+- tests: no new test - this is the same well-established clamping pattern already covered by
+  blockVersionIndexForSlice's own use in FinalityDepthForBlockVersion/PruningDepthForBlockVersion,
+  which is exercised throughout domain/consensus's existing suite; gofmt/vet/staticcheck clean, full
+  domain/... suite green, full repo build clean with and without -tags=ci.
+- left alone: did not audit every OTHER direct slice index in the codebase for the same pattern beyond
+  what surfaced from this specific investigation (K, MaxBlockParents and MergeDepth are already
+  clamped at their actual call sites per earlier reading - see HTN-216's activation entry); a broader
+  sweep for other unclamped per-version indexing was not performed this session.
+- fixed_commit: 220cb55ad
