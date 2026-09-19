@@ -2049,6 +2049,24 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - needs: nothing conceptually - this is a local-correctness/concurrency bug, not a protocol question -
   just needs someone to actually read grpcclient.go's Disconnect/send/receive lifecycle end to end and
   design the fix, which this session did not get to.
+- FIXED 2026-09-19, commit 87090d5ad: renamed closeSendMutex to sendMutex and now take it around all
+  three call sites that reach into the underlying stream's Send-family methods - send() (AttachRouter's
+  send loop), Post (post.go, previously entirely unguarded), and Disconnect's CloseSend (already
+  guarded, kept as-is). RecvMsg is intentionally left unguarded: grpc-go's ClientStream doc says
+  concurrent SendMsg+RecvMsg is safe, only concurrent SendMsg-family calls (Send/Send,
+  CloseSend/Send) are not.
+- tests: new TestPostAndDisconnectNeverOverlapOnTheUnderlyingStream (grpcclient package) - a fake
+  RPC_MessageStreamClient (overlapDetectingStream) flags any overlap it observes between its own
+  Send-family calls, then the test runs 300 concurrent Post/Disconnect iterations against it under
+  -race. Verified the repro property directly: reverted the Post lock, ran the test 3/3 times and it
+  failed every time with the overlap detected; restored the lock, 3/3 passes. Full
+  infrastructure/network/rpcclient/... suite green under -race, gofmt/vet/staticcheck (build_and_test.sh's
+  exact check list) clean, full repo build (app/cmd/domain/infrastructure/stability-tests/testing)
+  clean.
+- left alone: receive()/RecvMsg is not locked (safe concurrently with Send per grpc-go's own
+  contract); no change to Disconnect's or send()'s error handling or call sites in rpcclient.go -
+  purely adds synchronization, no behavior/API change.
+- fixed_commit: 87090d5ad
 
 ## HTN-214
 - title: domain/utxoindex.utxoIndexStore.UTXOs scanned its cursor twice for every unlimited query -

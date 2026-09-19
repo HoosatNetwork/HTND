@@ -60,13 +60,29 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   ISSUES.md writeup at HTN-216. IMPORTANT - told the user explicitly: this fix is DORMANT. Actually
   activating it on mainnet requires adding a coordinated activation DAA score to POWScores in
   domain/dagconfig/params.go - that decision was not made here, per the standing rule.
-next_action: no specific issue queued. Candidates in rough priority order: (1) HTN-213
-  (grpcclient.GRPCClient.Disconnect races an in-flight send on the same gRPC stream - found
-  incidentally while testing HTN-212, real Go data race confirmed via -race, not yet investigated
-  properly - needs someone to read Disconnect/send/receive's lifecycle end to end); (2) resume the
+- HTN-213 FIXED 2026-09-19, commit 87090d5ad: renamed GRPCClient.closeSendMutex to sendMutex and now
+  take it around all three call sites reaching into the underlying gRPC stream's Send-family methods
+  (send() for AttachRouter's send loop, Post in post.go which was previously entirely unguarded, and
+  Disconnect's CloseSend which already had the old mutex) - grpc-go's ClientStream doc says
+  concurrent CloseSend/SendMsg is unsafe, only concurrent SendMsg/RecvMsg is fine, so receive() stays
+  unlocked on purpose. New test TestPostAndDisconnectNeverOverlapOnTheUnderlyingStream (fake stream
+  flags any Send-family overlap it observes, 300 concurrent Post/Disconnect iterations under -race) -
+  verified it fails 3/3 with the Post lock reverted and passes 3/3 restored. Full
+  infrastructure/network/rpcclient/... green under -race, gofmt/vet/staticcheck clean, full repo build
+  clean.
+next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
+  remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
+  caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block
+  builder, deciding whether Get should populate the cache at all from staged data is a broader design
+  call) and HTN-203 (calcMergedBlockReward's sibling maybeAcceptTransaction never assigns
+  accumulatedMassAfter - currently provably inert since nothing reads accumulatedMass anywhere, but
+  its own fix_plan says computing a real value depends on whether a merge-set mass limit is wanted at
+  all, which is a consensus question, so left alone). Everything else open in ISSUES.md is
+  needs_human, needs_info from the user, wontfix, or already resolved. Candidates in rough priority
+  order: (1) resume the
   app/protocol/flows/v8 sweep (block_locator.go, handle_ibd_*.go, handle_request_*.go,
   transactionrelay/*, addressexchange/*, ping/*, rejects/* not yet re-read since HTN-205/206/207/208
-  changed hot-path timing); (3) HTN-197/HTN-203 stay needs_human, and the whole "parked needs_human"
+  changed hot-path timing); (2) HTN-197/HTN-203 stay needs_human, and the whole "parked needs_human"
   list further down this file remains open pending the user. Historical note now superseded by the
   above (kept for context, not actionable): "mempool audit is now COMPLETE (two fork passes, all
   production .go files in
