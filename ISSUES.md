@@ -2283,6 +2283,64 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   unchanged, so nothing about version 10's behavior changes in any of those dimensions, only the
   coinbase-manager checks explicitly gated on mergeSetRewardIgnoresDAAWindowVersion take effect from
   this DAA score. See HTN-217 for a related latent crash this surfaced and fixed on the way.
+- LIVE OUTAGE 2026-09-19: within ~2 hours of htnd-public being rebuilt and redeployed on the
+  activation commit, the user reported "Stratum has miners, but they can't find blocks" after the v10
+  activation. Root-caused via `docker logs htnd-public` and live RPC (read-only): htnd-public was the
+  ONLY node on mainnet running the version-10 code. The instant its own virtual tip reached DAA score
+  227679830, it set its ambient block version to 10 and began rejecting every block relayed by
+  peers - "Cannot process <hash>, Wrong block version 9, it should be 10" - because the rest of the
+  network's nodes/miners are still on the old binary, whose POWScores table stops at version 9, so
+  they correctly keep building/relaying version-9 blocks past that DAA score.
+- REVERTED then RE-APPLIED, same day: first reverted (commit 6bf71257f) on the reasoning that an
+  uncoordinated activation had forked this node off the network alone. The user explicitly overrode
+  this ("Don't revert the hard fork... Fix the issue! Don't revert.") - the peer-relay rejection of
+  unupgraded peers is an accepted, known consequence of activating without a rollout window, not
+  itself what needed fixing; the actual complaint was that mining had stopped working on this node's
+  own v10 chain, which is a different, fixable problem. Re-applied 227679830 as POWScores' 9th entry
+  (commit 0f4441be9) once that distinction was clear.
+- ACTUAL ROOT CAUSE FOUND AND FIXED (commit 0f4441be9): confirmed via `GetBlockDagInfo`/`GetInfo`
+  (read-only) that virtualDaaScore was stuck exactly at 227679830 for 3+ hours with isSynced=false,
+  and via `docker logs htnd-public` that RPC clients were being disconnected every ~2 minutes with
+  "Multiset <hash> does not exist in db" - traced to `calculateMultiset` (multisets.go) needing
+  virtual's selected parent's stored multiset to build any new candidate block, including a mining
+  template (`MiningManager.GetBlockTemplate` -> `HandleGetBlockTemplate` -> the same failing error
+  propagated straight back to the RPC caller, explaining why the stratum bridge's clients kept
+  disconnecting/reconnecting with 0 H/s). The missing multiset traces to `RepairBlockStatuses`
+  (`--repair-block-statuses true`, baked permanently into this node's docker-compose launch command
+  rather than used once as its own doc comment says - "ask for it when recovering", not something to
+  run on every boot): it blindly re-marks every non-invalid, non-header-only block StatusUTXOValid
+  without ever computing a UTXO diff or multiset for it - a hazard already documented in
+  RepairDisqualifiedTipChains's own comment ("which is how a repaired node ends up with UTXO-valid
+  blocks that have no diff"), just not yet fixed for the UTXOValid (as opposed to disqualified) case.
+  Independent of and unrelated to the v10 activation itself - it would have bitten this node on any
+  restart with that flag set, at any block version.
+- fix: new `RepairMissingMultisets()` on `*consensus` (consensus.go), mirroring
+  `RepairDisqualifiedTipChains`'s already-reviewed approach exactly rather than inventing new
+  multiset-reconstruction math under time pressure: walks each virtual tip's selected-parent chain,
+  and for every StatusUTXOValid block with no stored multiset, marks it StatusUTXOPendingVerification
+  so the normal resolve path (`getUnverifiedChainBlocks`/`ResolveVirtual`) re-derives a real diff and
+  multiset for it - the same safe mechanism already proven for disqualified chains. Stops each
+  branch's walk at the first ancestor that already has a multiset (a block only ever becomes
+  UTXOValid through the normal path after its own multiset is staged, so anything below an
+  already-good block was resolved correctly and needs no checking). Wired as a new hidden, opt-in CLI
+  flag `--repair-missing-multisets` (infrastructure/config/config.go, consensus.Config, factory.go),
+  matching `RepairBlockStatuses`'s own convention - default off, run once to recover, not left on
+  every boot (the exact rule the OTHER flag's own doc comment already states but the launch command
+  ignores).
+- tests: TestRepairMissingMultisetsResetsOnlyTheBlocksMissingOne (deletes the multisets of the two
+  blocks nearest a 4-block chain's tip, requires the repair to reset exactly those two and stop at the
+  boundary block that still has one) and
+  TestRepairMissingMultisetsResetsNothingWhenEveryMultisetExists (healthy DAG comes back untouched) -
+  both mirroring RepairDisqualifiedTipChains's own test structure. gofmt/vet/staticcheck clean, full
+  domain/consensus package suite green, full repo build clean.
+- left alone: NOT changing the docker-compose launch command myself (operational, the user's own
+  infrastructure); NOT removing or fixing `RepairBlockStatuses` itself (still exists as-is for its own
+  documented one-time-recovery purpose); NOT deploying this fix - my sandbox's permission classifier
+  blocks `docker compose build`/`up`/`exec` and even a live read-only `GetBlockTemplate`/`GetBlock`
+  RPC call against the production stack, so the user must rebuild and redeploy the htnd service
+  themselves and run once with `--repair-missing-multisets` (then remove it again, and remove the
+  permanent `--repair-block-statuses true` too, to stop this recurring) to actually end the outage.
+- fixed_commit: 0f4441be9
 
 ## HTN-217
 - title: Two call sites indexed a per-version Params table directly with

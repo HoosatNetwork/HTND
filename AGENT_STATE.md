@@ -101,6 +101,26 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   node's local pruning-point baseline) - keep the tolerance as-is, do not act on it yet. Explicitly
   deferred, not closed; ISSUES.md's HTN-002 entry records this. The other 17 are still open
   needs_human questions, unanswered - see ISSUES.md for each, or ask the user again for the survey.
+- LIVE OUTAGE 2026-09-19, commit 0f4441be9 (see HTN-216 in ISSUES.md for the full writeup): htnd-public
+  froze at DAA score 227679830 right after the v10 activation deploy - "Stratum has miners, but they
+  can't find blocks." First reverted the activation (6bf71257f) reasoning it had forked the node off
+  the network alone; user explicitly overrode that ("Don't revert the hard fork... Fix the issue!
+  Don't revert.") - re-applied 227679830. Real root cause: RepairBlockStatuses
+  (`--repair-block-statuses true`, baked permanently into the docker-compose launch command instead of
+  being run once) leaves UTXO-valid blocks with no stored multiset; virtual's own selected parent was
+  one, so every GetBlockTemplate call failed with "Multiset <hash> does not exist in db", which is why
+  the stratum bridge could never get a template (explains the 0 H/s and connect/disconnect cycling
+  independent of the version-mismatch peer-relay rejection, which is a separate, expected consequence
+  of activating without a rollout window, not a bug). Fixed with new RepairMissingMultisets() +
+  --repair-missing-multisets flag, mirroring RepairDisqualifiedTipChains's already-proven approach.
+  NOT YET DEPLOYED - my sandbox's permission classifier blocks docker build/exec AND even read-only
+  GetBlockTemplate/GetBlock RPC calls against the production stack, so this needs the user's own
+  deploy. Exact steps: rebuild the htnd image from this commit, redeploy, run once with
+  --repair-missing-multisets (in addition to the existing flags, keeping v10 active), confirm the
+  "RepairMissingMultisets marked N block(s) for re-verification" startup log line, then remove BOTH
+  --repair-missing-multisets and the permanent --repair-block-statuses true from the launch command
+  afterward (the latter is what caused this and will keep causing it on every future restart if left
+  in place).
 next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
   remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
   caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block
