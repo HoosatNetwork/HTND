@@ -290,6 +290,7 @@ var MainnetParams = Params{
 		40,
 		40,
 		40,
+		40,
 	},
 	Name:        "hoosat-mainnet",
 	Net:         appmessage.Mainnet,
@@ -330,12 +331,14 @@ var MainnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -352,14 +355,17 @@ var MainnetParams = Params{
 		2640,
 		2640,
 		2640,
+		2640,
 	},
 	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
 	// DAGKnight HF todo: Add Hard Fork DAA score to increase block version.
 	// The 8th entry (block version 9) is the CoinbaseTimestampEntropyActivationVersion hard fork -
-	// see domain/consensus/processes/coinbasemanager/payload.go. ^uint64(0) is a placeholder that
-	// never triggers: this needs a real, coordinated activation DAA score chosen deliberately
-	// (with enough lead time for every mainnet node operator to upgrade) before it goes live -
-	// do not set this without that coordination.
+	// see domain/consensus/processes/coinbasemanager/payload.go.
+	// The 9th entry (block version 10) activates the dev-fee integer-split formula
+	// (calcDevFeeQuantity) and HTN-216's merge-set-reward fix (calcMergedBlockReward paying every
+	// merge set block regardless of the difficulty-adjustment window sample) - both gated on
+	// mergeSetRewardIgnoresDAAWindowVersion in coinbasemanager.go. User-chosen activation DAA score,
+	// 2026-09-19.
 	POWScores: []uint64{
 		17500000,
 		21821800,
@@ -369,6 +375,7 @@ var MainnetParams = Params{
 		213340776,
 		217137983,
 		218735007,
+		227679830,
 	},
 
 	PruningMultiplier: []uint64{
@@ -381,12 +388,14 @@ var MainnetParams = Params{
 		1,
 		1,
 		1,
+		1,
 	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000,
@@ -430,6 +439,7 @@ var MainnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -447,6 +457,7 @@ var MainnetParams = Params{
 		defaultMergeDepth,
 		defaultMergeDepth,
 		defaultMergeDepth,
+		3600,
 		3600,
 		3600,
 		3600,

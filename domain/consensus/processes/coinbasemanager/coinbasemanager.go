@@ -50,9 +50,8 @@ type coinbaseManager struct {
 // the difficulty-adjustment window (see calcMergedBlockReward). Below this version the historical,
 // already-mined-and-accepted behavior is preserved exactly. Shares its activation point with the
 // blockVersion >= 10 dev-fee formula change already in ExpectedCoinbaseTransactionInternal - both are
-// the same not-yet-activated hard fork bucket (mainnet's POWScores currently reaches version 9; there
-// is no entry yet that raises it to 10 - see HTN-216 for why this needs a coordinated activation DAA
-// score, not a value chosen here).
+// the same hard fork bucket, activated on mainnet at DAA score 227679830 (see the 9th entry of
+// mainnet's POWScores in domain/dagconfig/params.go, added 2026-09-19 - see HTN-216).
 const mergeSetRewardIgnoresDAAWindowVersion = 10
 
 // ExpectedCoinbaseTransactionWithAcceptanceData implements model.CoinbaseManager. blockHash always
