@@ -95,6 +95,12 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   currently valid version, only differs (reuses the last entry instead of panicking) once a future
   version outruns its table. Full domain/... suite green, gofmt/vet/staticcheck clean, full repo build
   clean with and without -tags=ci for both HTN-216's activation and HTN-217's fix.
+- 2026-09-19: surveyed every needs_human issue in ISSUES.md at the user's request (HTN-002, 004, 005,
+  006, 007, 114, 115, 146, 153, 159, 162, 164, 166, 168, 177, 191, 195, 204 - 18 total, one line each
+  on what decision it actually needs). User decision so far: HTN-002 (UTXO validity depends on the
+  node's local pruning-point baseline) - keep the tolerance as-is, do not act on it yet. Explicitly
+  deferred, not closed; ISSUES.md's HTN-002 entry records this. The other 17 are still open
+  needs_human questions, unanswered - see ISSUES.md for each, or ask the user again for the survey.
 next_action: no specific issue queued. Both HTN-213 and HTN-216 landed since the last update; the
   remaining open, non-needs_human items in ISSUES.md are: HTN-201's general hazard (stores' LRU
   caches fill from staged-but-uncommitted reads - mitigated for the one concrete trigger in the block
