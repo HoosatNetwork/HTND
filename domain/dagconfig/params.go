@@ -228,6 +228,22 @@ func (p *Params) TargetTimePerBlockForCurrentVersion() time.Duration {
 	return p.targetTimePerBlockForCurrentVersion()
 }
 
+// DifficultyAdjustmentWindowSizeForCurrentVersion returns the difficulty-adjustment window size for
+// the process-global block version, safely clamped to the last entry if the table is shorter than
+// the current version (see blockVersionIndexForSlice). Callers must use this instead of indexing
+// DifficultyAdjustmentWindowSize directly with constants.GetBlockVersion()-1, which panics the
+// instant the version reaches one past the table's length - exactly what happens at every future
+// hard fork's activation unless every per-version table is extended in lockstep with POWScores.
+func (p *Params) DifficultyAdjustmentWindowSizeForCurrentVersion() int {
+	return p.DifficultyAdjustmentWindowSize[currentBlockVersionIndexForSlice(len(p.DifficultyAdjustmentWindowSize))]
+}
+
+// MaxBlockMassForCurrentVersion returns the max block mass for the process-global block version,
+// safely clamped the same way as DifficultyAdjustmentWindowSizeForCurrentVersion - see its comment.
+func (p *Params) MaxBlockMassForCurrentVersion() uint64 {
+	return p.MaxBlockMass[currentBlockVersionIndexForSlice(len(p.MaxBlockMass))]
+}
+
 /*
 	Block version index must be -1 because blockVersions start at 1 and index from 0.
 	blockVersion = index
