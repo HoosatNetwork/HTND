@@ -44,6 +44,11 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
+	// DISABLED, not gated: no ticket, no recorded reason, and no activation version. It has been off
+	// long enough that the live chain may well contain blocks that violate it, so it cannot simply be
+	// switched on - it needs the same treatment as the four rules in the hardforks package: measure
+	// how much of the existing chain would fail, then gate it. Left as-is here rather than deleted so
+	// the check itself is not lost.
 	// err = v.checkMergeSizeLimit(stagingArea, ghostdagData)
 	// if err != nil {
 	// 	return err
@@ -64,6 +69,10 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		}
 	}
 
+	// DISABLED, not gated. The original note is a performance concern ("think if there is a better
+	// way than the whole reachability"), not a correctness one, so unlike the checks below this may
+	// be a cost question rather than a compatibility question - but it has never been measured, and
+	// an unmeasured disabled consensus check is indistinguishable from a compatibility one.
 	// TODO: Think if there is better way to check for indirect parents than the whole reachability.
 	// if !isBlockWithTrustedData {
 	// 	err = v.checkIndirectParents(stagingArea, header)
@@ -83,26 +92,47 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
+	// The four checks below are DISABLED and NOT gated. Each is a real consensus check that this
+	// node does not perform, so each is a way two nodes can disagree, and none of them is safe to
+	// simply re-enable.
+	//
+	// The "enable these on block v6" note is stale: version 6 activated long ago (mainnet POWScores)
+	// and these are still off, so nothing about reaching v6 resolved the underlying problem. They
+	// are left here, labelled, rather than deleted - deleting them would lose the checks, and
+	// enabling them would reject history.
+	//
+	// The next step for any of them is the one the hardforks package exists for: measure how much of
+	// the existing chain fails the check, then gate it at a new block version. See HTN-006 for the
+	// blue-score/blue-work half, which measured a 62.5% mismatch rate - i.e. re-enabling those two
+	// today would reject the majority of the chain.
+	//
 	// if !isBlockWithTrustedData {
-	// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+
+	// DISABLED, not gated. Relates to HTN-006: a header's claimed DAA score is adopted unchecked.
 	// err = v.checkDAAScore(stagingArea, blockHash, header)
 	// if err != nil {
 	// 	return err
 	// }
 
-	// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+	// DISABLED, not gated. HTN-006: IBD adopts the peer's header-claimed blue work without
+	// validation.
 	// err = v.checkBlueWork(stagingArea, ghostdagData, header)
 	// if err != nil {
 	// 	return err
 	// }
 
-	// TODO: Enable these on block v6 after finding reason for the issues with the blocks
+	// DISABLED, not gated. HTN-006: same for blue score; this is where the measured 62.5% mismatch
+	// rate would bite.
 	// err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
 	// if err != nil {
 	// 	return err
 	// }
 
-	// TODO: SKIP this check for the time being, investigate the chain pruning points.. Though probably can never again be enabled.
+	// DISABLED, not gated. HTN-001 cites this exact line: nothing cross-checks a node's chosen
+	// pruning point, which is half of why two nodes with identical blocks could pick different ones.
+	// The original note reads "probably can never again be enabled" - if that is true it should be
+	// deleted with a recorded decision rather than left looking like a TODO. The import-time half of
+	// this question is gated at hardforks.ValidateIBDPruningListVersion.
 	// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
 	// if err != nil {
 	// 	return err

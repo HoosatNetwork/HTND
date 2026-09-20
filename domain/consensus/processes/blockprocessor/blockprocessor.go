@@ -13,6 +13,7 @@ import (
 // and creating blocks from the current state
 type blockProcessor struct {
 	genesisHash        *externalapi.DomainHash
+	powScores          []uint64
 	targetTimePerBlock []time.Duration
 	maxBlockLevel      int
 	databaseContext    model.DBManager
@@ -52,6 +53,7 @@ type blockProcessor struct {
 // New instantiates a new BlockProcessor
 func New(
 	genesisHash *externalapi.DomainHash,
+	powScores []uint64,
 	targetTimePerBlock []time.Duration,
 	maxBlockLevel int,
 	databaseContext model.DBManager,
@@ -86,6 +88,7 @@ func New(
 ) model.BlockProcessor {
 	return &blockProcessor{
 		genesisHash:           genesisHash,
+		powScores:             powScores,
 		targetTimePerBlock:    targetTimePerBlock,
 		maxBlockLevel:         maxBlockLevel,
 		databaseContext:       databaseContext,

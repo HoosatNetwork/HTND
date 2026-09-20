@@ -3034,3 +3034,25 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - not yet confirmed live: the node has to be rebuilt and redeployed from this commit for the profile
   to be re-taken. Worth re-running the same 30s profile afterwards to see how far GC marking drops.
 - commit: 0361f3999
+
+## HTN-231
+- title: Updater.InstallUpdate adds to the wait group but installUpdate never calls Done, so Stop
+  blocks forever
+- status: FIXED 2026-09-20, on branch remediation/sept-2026
+- severity: medium (node hangs on shutdown; only reachable with auto-update enabled)
+- area: autoupdate
+- found: incidentally, while wiring HTN-162's verification into the same file.
+- evidence: `InstallUpdate` (updater.go) did `u.wg.Add(1)` and then `go u.installUpdate(version)`.
+  `installUpdate`'s only defer touches statusMutex - it never calls `u.wg.Done()`. `Stop()` does
+  `close(u.shutdownChan); u.cancel(); u.wg.Wait()`, so a single InstallUpdate call leaves the
+  counter permanently above zero and Stop never returns. The node then hangs in shutdown instead of
+  closing its database cleanly, which is the same class of damage HTN-164 is about.
+- why the obvious fix is wrong: adding `defer u.wg.Done()` inside installUpdate panics. downloadUpdate
+  also calls installUpdate, synchronously and with no matching Add, so the counter would go negative
+  ("sync: negative WaitGroup counter") on the auto-install path - the common one.
+- fix: do the Done at the call site, wrapping the goroutine:
+  `u.wg.Add(1); go func() { defer u.wg.Done(); u.installUpdate(version) }()`.
+- tests: TestInstallUpdateDoesNotLeakAWaitGroupCount. Verified to catch the defect - with the wrapper
+  reverted it blocks for its full 30s timeout and fails; with the fix it returns immediately.
+- left alone: the wait group balance elsewhere in the file (Start's two Adds, periodicCheck's Add
+  before checkForUpdates) was checked and is correct; only this one call site was unbalanced.

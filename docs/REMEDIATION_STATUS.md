@@ -93,6 +93,82 @@ record not updated). None claimed a fix that was absent. The one inverse case is
 `needs_human` status is accurate but understates the finding — the verification functions exist,
 which reads like partial progress, but they are dead code, so the defect is total, not partial.
 
+## Workstream C: the four gated rules
+
+All four are implemented in `domain/consensus/utils/hardforks` and wired at their call sites. **Every
+one is unscheduled**, keyed at `math.MaxUint16`, which no network can reach — mainnet's highest
+producible version is `len(POWScores)+1 = 10`.
+
+| Predicate | Ticket | Where it bites | Anchored on |
+|---|---|---|---|
+| `StrictUTXOCommitmentVersion` | HTN-002 / HTN-004 | `verifyUTXO` stops tolerating RuleErrors from the four UTXO checks | selected parent's DAA score (`versionOfChildOf`) |
+| `RefuseMismatchedImportVersion` | HTN-005 | import fails closed; `GetPruningPointUTXOs` refuses to serve a mismatched set | pruning point header's DAA score |
+| `ValidateHeaderBitsVersion` | HTN-007 | `header.Bits()` must equal the computed required difficulty | selected parent's DAA score (`blockversion.OfSelectedParent`) |
+| `ValidateIBDPruningListVersion` | HTN-006 | restores `IsValidPruningPoint` + `ArePruningPointsInValidChain` | pruning point header's DAA score |
+
+None keys on the header's own `Version()` field. That field is peer-supplied, and every rule here
+adds strictness, so keying on it would let any miner opt out by claiming an older version.
+
+### Tests
+
+- `hardforks` package: six tests asserting inertness at every reachable version on every network,
+  at absurd versions, that the placeholder is unreachable, and that a *scheduled* gate must be
+  defined by `POWScores` (fires at activation time, not before).
+- `TestHeaderBitsRuleIsInertUntilItsGateIsScheduled` — a block with wrong bits still lands.
+- `TestHeaderBitsRuleRejectsWrongBitsOnceScheduled` — the same block is refused with
+  `ErrUnexpectedDifficulty` once scheduled, and a block this node built still passes.
+- `TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated` — two consensuses fed identical
+  blocks, built at global version 1 and 9, agree on pruning point, pruning point *list*, finality
+  point, tip status and template bits.
+- `TestValidateAndInsertImportedPruningPoint` — two long-dead commented-out assertions restored under
+  the gate, including the plan's named case: a UTXO set **with one sompi removed** is accepted with
+  the gate off and rejected with `ErrBadPruningPointUTXOSet` with it on.
+- `TestEveryGateIsUnscheduledInAShippedBuild` — belt and braces from outside the package.
+
+### CI
+
+`build_and_test.sh` gained a second check: production code may not assign to a gate or call
+`hardforks.SetForTest`. The gates are `var` rather than `const` only so tests can exercise a rule
+that is otherwise unreachable.
+
+### Corrected assumption
+
+The plan's HTN-006 test ("pruning point list validated after activation") was drafted as
+"accepted before, rejected after". That is **wrong**, and the first draft of the test failed because
+of it. Importing at the wrong pruning point already fails with the gate off — with a bare database
+`not found` raised much later, once something looks for data the syncee does not have. The gate does
+not turn an accepted import into a rejected one; it turns a late, untyped, incidental failure into an
+early typed `ErrUnexpectedPruningPoint`. That is still worth having, but it needed saying accurately.
+The assertion is deliberately **not** made inside `TestValidateAndInsertImportedPruningPoint`,
+because the gate-off path leaves the consensus half-imported and the rest of that long test then runs
+against it. It needs its own test; that is not yet written and is listed below.
+
+### Other disabled consensus checks, now labelled
+
+Six further checks were commented out with no ticket and no activation plan. None was enabled; each
+now carries an explicit label:
+
+| Check | File | Label |
+|---|---|---|
+| `checkParentsIncest` | `pruning_violation_proof_of_work_and_difficulty.go` | disabled, not gated, no ticket |
+| `checkMergeSizeLimit` | `block_header_in_context.go` | disabled, not gated, no ticket |
+| `checkIndirectParents` | `block_header_in_context.go` | disabled, not gated (cost concern, unmeasured) |
+| `checkDAAScore` | `block_header_in_context.go` | disabled, not gated — relates to HTN-006 |
+| `checkBlueWork` | `block_header_in_context.go` | disabled, not gated — HTN-006 |
+| `checkHeaderBlueScore` | `block_header_in_context.go` | disabled, not gated — HTN-006, 62.5% mismatch |
+| `validateHeaderPruningPoint` | `block_header_in_context.go` | disabled, not gated — HTN-001 cites this line |
+
+The "enable these on block v6" note on three of them is **stale**: version 6 activated long ago and
+they are still off, so reaching v6 resolved nothing.
+
+### Not done in Workstream C
+
+- A dedicated test for `ValidateIBDPruningListVersion`'s activated behaviour (see above).
+- The "offset-inherited commitments are rejected only when the gate says so" test for
+  `StrictUTXOCommitmentVersion`. The gate is wired and inert-tested, but its *activated* path is not
+  yet exercised end to end: reaching it needs a consensus actually running on an offset baseline,
+  which is the scenario HTN-002 reproduced in a scratchpad test that was never committed.
+
 ## Hard-rule compliance ledger
 
 | Rule | How this branch complies |

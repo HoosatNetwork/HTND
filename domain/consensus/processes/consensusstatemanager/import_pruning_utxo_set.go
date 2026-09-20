@@ -7,6 +7,8 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
@@ -287,12 +289,29 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 	// Off by default, and it has to be: every peer measured so far serves a set that fails this check,
 	// so a node that refuses them all never syncs. It is for finding a clean peer once one exists,
 	// and for a node that should stay off a broken baseline rather than join it.
-	if csm.refuseMismatchedImportedPruningPointUTXOSet {
+	//
+	// HTN-005, gated at hardforks.RefuseMismatchedImportVersion: from that block version onward this
+	// refusal is not optional and the operator flag is no longer what decides it. The gate is
+	// unscheduled, so today only the flag can trigger this, exactly as before - the flag's default
+	// and meaning are deliberately untouched.
+	refuse := csm.refuseMismatchedImportedPruningPointUTXOSet
+	refusalReason := "this node is configured to refuse an unverifiable set rather than build on it"
+	if !refuse {
+		gateActive, err := csm.refuseMismatchedImportIsActive(stagingArea, newPruningPoint)
+		if err != nil {
+			return nil, false, err
+		}
+		if gateActive {
+			refuse = true
+			refusalReason = "the pruning point's UTXO commitment is treated as law from this block " +
+				"version onward"
+		}
+	}
+	if refuse {
 		return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
 			"imported pruning point %s UTXO set does not match its own header commitment (header %s, "+
-				"fresh multiset over %d stored entries %s) and this node is configured to refuse an "+
-				"unverifiable set rather than build on it",
-			newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
+				"fresh multiset over %d stored entries %s) and %s",
+			newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash(), refusalReason)
 	}
 
 	// The record that every later chain-replay record has to be read against: if the set this node
@@ -308,6 +327,33 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 		nil, nil)
 
 	return recomputedMultiset, false, nil
+}
+
+// refuseMismatchedImportIsActive reports whether newPruningPoint is at or past
+// hardforks.RefuseMismatchedImportVersion, and so may not be imported with a UTXO set that
+// disagrees with its commitment.
+//
+// The version comes from the pruning point header's own DAA score. At import time this node has no
+// resolved DAG to anchor against - that absence is the whole of HTN-005 - so this is the only score
+// available. It decides which rules the imported point is judged under, not what it is judged
+// against, and a peer claiming a low DAA score to stay under the activation version only produces a
+// pruning point that then fails to line up with the headers this node already holds.
+func (csm *consensusStateManager) refuseMismatchedImportIsActive(stagingArea *model.StagingArea,
+	newPruningPoint *externalapi.DomainHash,
+) (bool, error) {
+	if !hardforks.IsScheduled(hardforks.RefuseMismatchedImportVersion) {
+		return false, nil
+	}
+	if len(csm.powScores) == 0 {
+		return false, nil
+	}
+
+	header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
+	if err != nil {
+		return false, err
+	}
+	blockVersion := constants.BlockVersionForDAAScore(csm.powScores, header.DAAScore())
+	return hardforks.Active(hardforks.RefuseMismatchedImportVersion, blockVersion), nil
 }
 
 // spendingTransactionsByOutpoint maps each outpoint the block spends to the transaction that spends

@@ -19,6 +19,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/domain/exodus"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
@@ -39,6 +40,10 @@ type consensus struct {
 	// when the consensus is constructed - see expectedDAAWindowDurationInMilliseconds.
 	targetTimePerBlock             []time.Duration
 	difficultyAdjustmentWindowSize []int
+
+	// powScores is the network's activation table, kept so that a block version can be derived from
+	// a DAA score without going through the process-global (see the hardforks package).
+	powScores []uint64
 
 	blockProcessor        model.BlockProcessor
 	blockBuilder          model.BlockBuilder
@@ -880,11 +885,69 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 			pruningPointHash)
 	}
 
+	// HTN-005's serve half, gated at hardforks.RefuseMismatchedImportVersion: once the pruning
+	// point's commitment is treated as law, a node whose own set does not hash to it must not hand
+	// that set to anyone else.
+	//
+	// This is the loop that makes the condition spread. MuHash is homomorphic, so an offset imported
+	// once propagates unchanged into every block resolved forward, and every peer that syncs from
+	// this node inherits the same gap - which is why the tolerant population grows rather than
+	// shrinks. GetInfo already advertises the same fact through UTXOSetHealth, so a peer can see it
+	// before asking; this is what stops the answer being given anyway.
+	//
+	// The gate is unscheduled, so this is inert today, and it must stay that way until a coordinated
+	// rebaseline: essentially every node currently serves a set that fails this check, so refusing
+	// now would simply stop IBD working for everyone.
+	if err := s.refuseToServeUnverifiableUTXOSet(stagingArea, pruningPointHash); err != nil {
+		return nil, err
+	}
+
 	pruningPointUTXOs, err := s.pruningStore.PruningPointUTXOs(s.databaseContext, fromOutpoint, limit)
 	if err != nil {
 		return nil, err
 	}
 	return pruningPointUTXOs, nil
+}
+
+// refuseToServeUnverifiableUTXOSet returns a rule error when hardforks.RefuseMismatchedImportVersion
+// has activated for pruningPointHash and this node's own UTXO baseline does not hash to that point's
+// header commitment.
+//
+// Caller must hold s.lock: it reads through consensusStateManager.UTXOSetHealth, the same unlocked
+// form the exported UTXOSetHealth wraps.
+//
+// Only a definite negative refuses. Health that was never Checked - a node still on genesis, or one
+// whose pruning point or multiset is not readable - is not evidence of a bad set, and refusing on it
+// would take nodes offline for a bookkeeping gap rather than for serving bad data.
+func (s *consensus) refuseToServeUnverifiableUTXOSet(stagingArea *model.StagingArea,
+	pruningPointHash *externalapi.DomainHash,
+) error {
+	if !hardforks.IsScheduled(hardforks.RefuseMismatchedImportVersion) {
+		return nil
+	}
+	if len(s.powScores) == 0 {
+		return nil
+	}
+
+	header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return err
+	}
+	blockVersion := constants.BlockVersionForDAAScore(s.powScores, header.DAAScore())
+	if !hardforks.Active(hardforks.RefuseMismatchedImportVersion, blockVersion) {
+		return nil
+	}
+
+	health := s.consensusStateManager.UTXOSetHealth(stagingArea)
+	if health == nil || !health.Checked || health.BaselineVerified {
+		return nil
+	}
+
+	return errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		"refusing to serve the pruning point %s UTXO set: this node's stored multiset (%s) does not "+
+			"match the commitment in that point's own header (%s), and serving it would pass this "+
+			"node's own offset on to the peer",
+		pruningPointHash, health.StoredMultiset, health.HeaderCommitment)
 }
 
 // virtualUTXOEntriesChunkSize bounds how long GetVirtualUTXOEntries holds the consensus lock at a
