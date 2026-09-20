@@ -343,12 +343,7 @@ func (d *File) Save() error {
 		return err
 	}
 
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer dirFile.Close()
-	return dirFile.Sync()
+	return syncDir(dir)
 }
 
 const defaultNumThreads = 8
