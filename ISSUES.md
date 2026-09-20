@@ -53,6 +53,33 @@ Severity mapping from the audit: P0 = critical, P1 = high, P2 = medium, P3 = low
 - decision (user, 2026-09-19): keep the tolerance as-is; do not act on this yet. Asked in a survey of all
   open needs_human issues (see AGENT_STATE.md 2026-09-19) - explicitly deferred, not closed. Stays
   needs_human; no code change.
+- STILL LIVE 2026-09-20 (htnd-public, read-only log evidence, user asked "why might a node go to
+  disqualified mode even though other nodes accept the transaction" - this entry is the answer):
+  the node re-entered the offset baseline on this morning's IBD and is now propagating it onward.
+  Sequence, all from docker logs:
+  - 05:32:08 "Imported pruning point 1ca0062e... UTXO set does not match its own header".
+  - 05:34:44 recomputation confirms the served set is genuinely incomplete, not a double-counted
+    chunk: a fresh multiset over 22,812,225 deduplicated stored entries hashes to ce5ebf4c..., the
+    header commits to 35b9c0b4.... The node repairs its trust anchor to its own recomputed multiset
+    and continues, because refusing is off by default (refuseMismatchedImportedPruningPointUTXOSet,
+    wired to --enable-sanity-check-pruning-utxo).
+  - 06:40:25 "this node is on an offset UTXO baseline; inherited per-block commitment mismatches are
+    tolerated" for its own pruning point 637753bd... (stored multiset 459b2de5..., header commitment
+    38c2ba58...).
+  - 06:40:21 "the UTXO set this node now serves does NOT match the chain's commitment for it. Every
+    peer that syncs from this node inherits this set, gap included." - i.e. this node is now a source
+    of the same corruption it received, which is HTN-005's half of the loop.
+  Mechanism, restated for the operator question: MuHash is homomorphic, so the import offset carries
+  unchanged into every block resolved forward. Each block's recomputed UTXO commitment therefore
+  differs from what its miner committed to, validateUTXOCommitment raises a RuleError, and
+  resolveSingleBlockStatus turns that into StatusDisqualifiedFromChain - while a node whose baseline
+  is correct recomputes the same commitment the miner did and accepts the very same block. The block
+  and its transactions are not the problem; the node's starting UTXO snapshot is. Disqualification
+  then cascades by inheritance to every descendant without any of them being checked (see the comment
+  in resolve_block_status.go), which is why a whole segment presents as one failure.
+  No code change made: the standing decision above is to keep the toleration, and the honest fix is a
+  coordinated rebaseline, which is a network decision. Recorded here as current evidence that the
+  condition is active and still spreading, not as a new issue.
 - tests: not run
 - commit: uncommitted
 

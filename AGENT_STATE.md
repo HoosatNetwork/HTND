@@ -585,3 +585,34 @@ notes:
   (non -tags=ci) integration tests here instead of treating them as permanently untestable, but
   still cap systemd-run MemoryMax explicitly and check `free -h` first since other things share
   this host now.
+- 2026-09-20 (same CI session, user then asked: "investigate for real why node might go to
+  disqualified mode even though other nodes accept the transaction", plus "the difficulty is not
+  increasing yet"). Answer: it is HTN-002/HTN-005, already reproduced on 2026-09-15 and explicitly
+  deferred by the user on 2026-09-19 - NOT a new bug. Fresh live evidence added to HTN-002's entry:
+  htnd-public re-imported an offset pruning-point UTXO set at 05:32-05:34 today (fresh multiset over
+  22,812,225 entries ce5ebf4c vs header 35b9c0b4), logged "this node is on an offset UTXO baseline"
+  at 06:40:25, and at 06:40:21 logged that the set it now SERVES does not match the chain's
+  commitment either, so every peer syncing from it inherits the gap. MuHash is homomorphic, so the
+  offset carries into every block resolved forward and each one's recomputed UTXO commitment differs
+  from the miner's - validateUTXOCommitment RuleError -> StatusDisqualifiedFromChain, while a
+  correctly-based node accepts the same block. Nothing to fix in validation; the fix is a coordinated
+  rebaseline (network decision, stays needs_human).
+- HTN-225 FIXED 747365839 (found while reading those same live logs, genuinely new): htnd-public
+  exited at 05:36:56 with "Fatal error in goroutine `consensusEventsHandler 2`:
+  ErrBuildBlockVerboseDataInvalidBlock", 39ms after "Committing the staging consensus" and "Deleting
+  database prefix &{1}" (docker inspect: RestartCount 1, restarted 2s later). StatusInvalid is
+  BlockStatus' ZERO VALUE and GetBlockInfo returns a zero-valued BlockInfo for a block it does not
+  have, so "absent" is indistinguishable from "invalid";
+  PopulateRPCBlockWithVerboseData was the only GetBlockInfo caller in the tree not checking Exists
+  first. notifyBlockAddedToDAG returned that error to initConsensusEventsHandler, which panics, and
+  on a spawned goroutine panics.HandlePanic turns that into os.Exit(1). So a BlockAdded event queued
+  against the consensus an IBD just replaced killed the node. Fixed by checking Exists (truthful
+  error) and by treating a block-added notification as best-effort. Regression test verified to fail
+  without the fix through the same verbosedata.go/manager.go frames as the production stack.
+- STILL NOT DONE (operator action, flagged repeatedly): htnd-public is STILL launched with
+  `--repair-block-statuses true` permanently in its command line, plus `--repair-missing-multisets`.
+  AGENT_STATE's HTN-216 outage note says to run those once and then REMOVE them. Today's log shows
+  "RepairMissingMultisets marked 1456 block(s) for re-verification" once and "marked 1 block(s)" 12
+  more times. RepairBlockStatuses re-walks every block in the store on each start and marks repaired
+  blocks UTXO-valid rather than pending, which is how a node ends up with UTXO-valid blocks that have
+  no UTXO diff and no multiset - the original "Multiset does not exist in db" outage.
