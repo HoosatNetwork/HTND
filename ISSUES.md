@@ -2667,6 +2667,29 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   separate mechanism controlling how fast a collapsed difficulty can climb back out once new,
   un-gapped blocks start entering the window.
 - commit: 5e098a72e
+- CORRECTION 2026-09-20 (measured on the live node, supersedes this entry's recovery model): the
+  claim above - that recovery is gated on the window "naturally aging the gap-adjacent block out",
+  and that this "is slow once collapsed" because "a floor-difficulty block contributes far less blue
+  work than the harder blocks it needs to numerically displace" - is WRONG, and it was used to tell
+  the user that difficulty just needed more time.
+  The window heap orders by GHOSTDAG blue work, and blue work is CUMULATIVE: ghostdagmanager.go sets
+  a block's blueWork to its selected parent's blueWork and then adds the merge set's work, so it
+  increases strictly along the chain. Every new block therefore outranks every block in its own past
+  regardless of its own difficulty, and sizedUpBlockHeap.tryPushWithGHOSTDAGData always evicts the
+  minimum for it. CalcWork ~ 1/target changes the size of the increment, never the ordering.
+  Displacement was never what held difficulty down.
+  Live measurement 2026-09-20 (htnctl GetBlockDagInfo against htnd-public, read-only): difficulty 1
+  (i.e. target == powMax, the floor), virtualDaaScore 227766869 - about 87,000 past the v10
+  activation at 227679830, so roughly 33 window-lengths (mainnet window is 2640) after any outage gap
+  had left the window. Sampling virtualDaaScore over 30s: 25 DAA score, i.e. 0.83 blocks/sec, or
+  1200ms per block, against a 200ms target.
+  That is the whole explanation, and it is not a bug: the retarget multiplies the average target by
+  actualTimeSpan / (targetTimePerBlock * windowSize), which is the window's mean block time divided
+  by the target block time - 6x here, clamped to 4x by this issue's own fix. While the network
+  produces blocks slower than the target, that ratio stays above 1, the target is revised upward
+  every time, and it pins at powMax. Difficulty lifts only when block production actually outpaces
+  targetTimePerBlock; no amount of elapsed time does it on its own.
+  The misleading comment in difficultymanager.go has been corrected in place.
 
 ## HTN-222
 - title: findNextPendingTip re-ran the expensive isViolatingFinality check on the same already-

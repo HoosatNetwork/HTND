@@ -176,10 +176,27 @@ func (dm *difficultyManager) requiredDifficultyFromTargetsWindow(targetsWindow b
 	// multi-hour node outage, a large reorg, clock skew, anything - from producing a target far
 	// beyond what the window's own average target actually implies. Without this, one such gap can
 	// push the computed target to powMax outright (observed on mainnet 2026-09-19: a multi-hour
-	// outage did exactly this), and recovery is then gated on the window's bounded, blue-work-ranked
-	// sampling naturally aging the gap out - which, once collapsed, can take far longer than the
-	// window size to happen, since a newly-mined block at floor difficulty contributes proportionally
-	// far less blue work (CalcWork ~ 1/target) than the harder blocks it would need to displace.
+	// outage did exactly this), and recovery is then gated on the window's sampling aging the gap
+	// out, which takes on the order of the window size.
+	//
+	// An earlier version of this comment claimed that aging the gap out "can take far longer than the
+	// window size" because a floor-difficulty block contributes far less blue work than the blocks it
+	// must displace. That is wrong, and it matters, because it was used to explain away a difficulty
+	// that would not recover. The window heap orders by GHOSTDAG blue work, which is CUMULATIVE -
+	// ghostdag.go sets a block's blueWork to its selected parent's and then adds the merge set's work
+	// - so it increases strictly along the chain and every new block outranks everything in its own
+	// past, whatever its own difficulty. Per-block CalcWork changes the size of the increment, never
+	// the order. Displacement is therefore never the thing holding difficulty down.
+	//
+	// What does hold it down is this formula's own fixed point: the target moves by
+	// actualTimeSpan / (targetTimePerBlock * windowSize), which is just the window's mean block time
+	// divided by the target block time. While the network produces blocks slower than the target, that
+	// ratio stays above 1, the target keeps being revised upward, and once it reaches powMax it stays
+	// pinned there - difficulty ratio 1 - no matter how long the node runs. Measured on mainnet
+	// 2026-09-20: 0.83 blocks/sec against a 5 blocks/sec target, difficulty 1, ~87000 DAA score past
+	// the point where the outage gap had long since left the window. A floor difficulty under those
+	// conditions is this algorithm working, not failing to recover; it lifts only when block
+	// production actually outpaces targetTimePerBlock.
 	expectedTimeSpanMs := targetTimePerBlockMs * int64(targetsWindow.len())
 	const maxTimeSpanMultiple = 4
 	if maxTimeSpanMs := expectedTimeSpanMs * maxTimeSpanMultiple; expectedTimeSpanMs > 0 && actualTimeSpan > maxTimeSpanMs {
