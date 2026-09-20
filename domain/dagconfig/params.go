@@ -244,6 +244,12 @@ func (p *Params) MaxBlockMassForCurrentVersion() uint64 {
 	return p.MaxBlockMass[currentBlockVersionIndexForSlice(len(p.MaxBlockMass))]
 }
 
+// KForCurrentVersion returns GHOSTDAG's K for the process-global block version, clamped the same way
+// as DifficultyAdjustmentWindowSizeForCurrentVersion - see its comment.
+func (p *Params) KForCurrentVersion() externalapi.KType {
+	return p.K[currentBlockVersionIndexForSlice(len(p.K))]
+}
+
 /*
 	Block version index must be -1 because blockVersions start at 1 and index from 0.
 	blockVersion = index

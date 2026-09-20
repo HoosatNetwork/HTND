@@ -214,3 +214,57 @@ func TestPruningDepth(t *testing.T) {
 	}
 	t.Logf("PruningDepth %d", pruningDepth)
 }
+
+// TestPerVersionTablesAreClampedPastTheirEnd pins the HTN-217/HTN-226 hazard: the block version is a
+// process-global one-way ratchet with no relation to the length of any of these tables, so reading
+// one with a raw [version-1] index panics the moment a hard fork takes the version past the table's
+// last entry. Every accessor here must clamp to the final entry instead, for any version, including
+// versions far beyond what any current network defines.
+func TestPerVersionTablesAreClampedPastTheirEnd(t *testing.T) {
+	for _, params := range []*Params{&MainnetParams, &TestnetParams, &SimnetParams, &DevnetParams} {
+		for _, blockVersion := range []uint16{0, 1, 5, 10, 11, 255, math.MaxUint16} {
+			index := blockVersionIndexForSlice(len(params.K), blockVersion)
+			if index < 0 || index >= len(params.K) {
+				t.Fatalf("%s: K index %d for block version %d is outside the table (len %d)",
+					params.Name, index, blockVersion, len(params.K))
+			}
+		}
+
+		// The exported accessors read the process-global version, which cannot be moved backwards
+		// from a test, so they are exercised at whatever it currently is - enough to catch an
+		// accessor that indexes without clamping at all.
+		if got := params.KForCurrentVersion(); got != params.K[blockVersionIndexForSlice(len(params.K), 1)] &&
+			len(params.K) == 1 {
+			t.Fatalf("%s: KForCurrentVersion returned %d for a single-entry table", params.Name, got)
+		}
+		_ = params.MaxBlockMassForCurrentVersion()
+		_ = params.DifficultyAdjustmentWindowSizeForCurrentVersion()
+		_ = params.TargetTimePerBlockForCurrentVersion()
+	}
+}
+
+// TestPerVersionTablesCoverEveryActivatedVersion pins the other half: POWScores defines one more
+// version than it has entries (version 1 is pre-activation), and every per-version table has to be
+// extended in lockstep, or a node reaching the new version silently reuses the previous version's
+// parameter instead of the one the fork intended.
+func TestPerVersionTablesCoverEveryActivatedVersion(t *testing.T) {
+	for _, params := range []*Params{&MainnetParams, &TestnetParams} {
+		highestVersion := len(params.POWScores) + 1
+		tables := map[string]int{
+			"K":                              len(params.K),
+			"TargetTimePerBlock":             len(params.TargetTimePerBlock),
+			"FinalityDuration":               len(params.FinalityDuration),
+			"DifficultyAdjustmentWindowSize": len(params.DifficultyAdjustmentWindowSize),
+			"MaxBlockMass":                   len(params.MaxBlockMass),
+			"MaxBlockParents":                len(params.MaxBlockParents),
+			"MergeDepth":                     len(params.MergeDepth),
+		}
+		for name, length := range tables {
+			if length < highestVersion {
+				t.Errorf("%s: %s has %d entries but POWScores activates block versions up to %d - "+
+					"a node on version %d would reuse entry %d instead of its own",
+					params.Name, name, length, highestVersion, highestVersion, length-1)
+			}
+		}
+	}
+}

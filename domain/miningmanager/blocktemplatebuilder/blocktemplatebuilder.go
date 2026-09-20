@@ -134,6 +134,9 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 		totalFees:   0,
 	}
 	if len(mempoolTransactions) > 0 {
+		// Read once for the whole candidate set rather than per transaction: nextBlockMaxMass asks
+		// consensus for virtual's DAA score, and this loop runs over the entire mempool.
+		massLimit := btb.nextBlockMaxMass()
 		candidateTxs := make([]*candidateTx, len(mempoolTransactions))
 		for i := range mempoolTransactions {
 			gasLimit := uint64(0)
@@ -142,7 +145,7 @@ func (btb *blockTemplateBuilder) BuildBlockTemplate(
 			}
 			candidateTxs[i] = &candidateTx{
 				DomainTransaction: mempoolTransactions[i],
-				txValue:           btb.calcTxValue(mempoolTransactions[i]),
+				txValue:           btb.calcTxValue(mempoolTransactions[i], massLimit),
 				gasLimit:          gasLimit,
 			}
 		}
@@ -230,9 +233,13 @@ func (btb *blockTemplateBuilder) ModifyBlockTemplate(newCoinbaseData *consensuse
 // calcTxValue calculates a value to be used in transaction selection.
 // The higher the number the more likely it is that the transaction will be
 // included in the block.
-func (btb *blockTemplateBuilder) calcTxValue(tx *consensusexternalapi.DomainTransaction) float64 {
-	massLimit := btb.policy.BlockMaxMass[constants.GetBlockVersion()-1]
-
+// massLimit is the limit of the block being built, from nextBlockMaxMass, and is passed in because
+// the caller resolves it once for the whole mempool. It used to be read here as
+// BlockMaxMass[constants.GetBlockVersion()-1]: an unclamped index into a per-version table, using the
+// process-global version - a one-way ratchet that IBD or a relayed header can push ahead of the
+// chain. That skewed selection by the wrong limit, and would have panicked outright at the first
+// version past the end of the table.
+func (btb *blockTemplateBuilder) calcTxValue(tx *consensusexternalapi.DomainTransaction, massLimit uint64) float64 {
 	mass := tx.LoadMass()
 	fee := tx.LoadFee()
 	if subnetworks.IsBuiltInOrNative(tx.SubnetworkID) {

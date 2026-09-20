@@ -194,7 +194,11 @@ func (bp *blockProcessor) validateAndInsertBlock(stagingArea *model.StagingArea,
 	}
 
 	log.Debug(logger.NewLogClosure(func() string {
-		hashrate := difficulty.GetHashrateString(difficulty.CompactToBig(block.Header.Bits()), bp.targetTimePerBlock[constants.GetBlockVersion()-1])
+		// Clamped rather than indexed straight with the process-global version: that global is a
+		// one-way ratchet with no relation to the length of this table, so the raw index panics at the
+		// first version past its end - inside a log line, which is no reason to take the node down.
+		targetTimePerBlockIndex := min(int(constants.GetBlockVersion())-1, len(bp.targetTimePerBlock)-1)
+		hashrate := difficulty.GetHashrateString(difficulty.CompactToBig(block.Header.Bits()), bp.targetTimePerBlock[max(targetTimePerBlockIndex, 0)])
 		return fmt.Sprintf("Block %s validated and inserted, network hashrate: %s", blockHash, hashrate)
 	}))
 

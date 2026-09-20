@@ -8,7 +8,6 @@ import (
 	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/domain"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/infrastructure/config"
 	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
@@ -71,7 +70,7 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 				return err
 			}
 
-			windowSize := context.Config().NetParams().DifficultyAdjustmentWindowSize[constants.GetBlockVersion()-1]
+			windowSize := context.Config().NetParams().DifficultyAdjustmentWindowSizeForCurrentVersion()
 			daaWindowBlocks := make([]*externalapi.TrustedDataDataDAAHeader, 0, windowSize)
 			daaWindowHashesToIndex := make(map[externalapi.DomainHash]int, windowSize)
 			trustedDataDAABlockIndexes := make(map[externalapi.DomainHash][]uint64)
@@ -118,7 +117,7 @@ func HandlePruningPointAndItsAnticoneRequests(context PruningPointAndItsAnticone
 					return err
 				}
 
-				trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]] = make([]uint64, 0, context.Config().NetParams().K[constants.GetBlockVersion()-1])
+				trustedDataGHOSTDAGDataIndexes[*pointAndItsAnticone[i]] = make([]uint64, 0, context.Config().NetParams().KForCurrentVersion())
 				for y := range ghostdagDataBlockHashes {
 					index, exists := ghostdagDataHashToIndex[*ghostdagDataBlockHashes[y]]
 					if !exists {
