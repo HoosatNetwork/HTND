@@ -4,6 +4,7 @@ FLAGS=$@
 
 go version
 
+export GOTOOLCHAIN=go1.27.0
 export PATH="$(go env GOPATH)/bin:$PATH"
 
 go mod download
