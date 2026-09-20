@@ -43,6 +43,52 @@ jobs:
         run: ./build_and_test.sh -v
 
 
+  # Two checks that the main Tests job does not give us.
+  #
+  # The construction-time test is cheap but easy to lose in a 98-package run, and what it pins is the
+  # defect class behind HTN-001/003: depths read once at construction, so a node started fresh and a
+  # node that finished a headers-proof IBD without restarting chose different pruning and finality
+  # points from identical blocks. Running it by name means a failure says what broke.
+  #
+  # The -race packages are the ones whose bugs only appear under concurrency. HTN-213 (Disconnect
+  # racing an in-flight send on the same gRPC stream) is invisible without -race, and the main Tests
+  # job does not use it because a race build costs roughly 10x the memory.
+  targeted:
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -tags=ci
+    name: Construction-time and race tests
+    steps:
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Two-node construction-time agreement
+        run: |
+          go test ./domain/consensus/ -run 'TestPruningAndFinalityDoNotDependOnConstructionTime|TestPruningFollowsTheChainsCurrentBlockVersion' -v -count=1
+
+      - name: Per-version parameter table clamps
+        run: |
+          go test ./domain/dagconfig/ -run 'TestPerVersionTables|TestForceSetBlockVersionPastEveryTableClampsRatherThanPanics' -v -count=1
+
+      # -p 2 keeps memory in check: race binaries use roughly 10x, and these packages start real
+      # in-process servers.
+      - name: Race - rpc and grpc clients
+        run: |
+          go test -race -p 2 -count=1 ./infrastructure/network/rpcclient/...
+
+      - name: Race - protocol flows
+        run: |
+          go test -race -p 2 -count=1 ./app/protocol/...
+
   stability-test-fast:
     timeout-minutes: 30
     runs-on: ubuntu-latest
