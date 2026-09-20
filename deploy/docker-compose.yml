@@ -1,0 +1,47 @@
+# Normal, steady-state htnd node.
+#
+# There is deliberately NO repair flag anywhere in this file. --repair-block-statuses and
+# --repair-missing-multisets are one-shot recovery steps; see docker-compose.repair.yml for how to
+# run one, and deploy/README.md for why leaving one in a launch command caused a live outage.
+
+services:
+  htnd:
+    image: htnd:latest
+    # build: .. # uncomment to build from this checkout instead of a published image
+    container_name: htnd
+
+    # htnd no longer restarts itself after an automatic update (HTN-164): a process cannot hand its
+    # database lock to a child it spawns. The restart policy is what brings the new binary up.
+    restart: unless-stopped
+
+    stop_grace_period: 5m # app.main allows up to 2 minutes for a graceful shutdown; leave headroom
+
+    ports:
+      - "42421:42421" # P2P
+      # RPC is bound to localhost on purpose. Publish it as "42420:42420" only behind
+      # authentication or a trusted network - see HTN-166 in docs/REMEDIATION_STATUS.md.
+      - "127.0.0.1:42420:42420"
+
+    volumes:
+      - htnd-data:/nonexistent/.htnd
+
+    command:
+      - "--utxoindex"
+      - "--saferpc"
+      - "--autoupdate=false"
+      - "--autoupdate-download=false"
+      - "--autoupdate-install=false"
+      - "--autoreport-issues=false"
+
+    environment:
+      # main.go defaults GOMEMLIMIT to 8GB; set it to suit the host.
+      GOMEMLIMIT: "8GiB"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+volumes:
+  htnd-data:

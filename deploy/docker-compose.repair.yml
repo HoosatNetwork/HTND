@@ -1,0 +1,60 @@
+# One-shot repair/migration runs, kept in a SEPARATE file from the steady-state node on purpose.
+#
+# Every service here uses `restart: "no"` and a profile, so nothing in this file can start by
+# accident, and nothing in it can survive into a normal `docker compose up`. That separation is the
+# whole point: the outage these flags caused came from one of them being pasted into a permanent
+# launch command, where it then re-ran on every restart with nothing in the logs tying the symptom
+# back to it.
+#
+# Usage - stop the node first, run exactly one repair, watch it finish, then start normally:
+#
+#   docker compose -f docker-compose.yml down
+#   docker compose -f docker-compose.yml -f docker-compose.repair.yml \
+#       --profile repair run --rm htnd-repair-multisets
+#   docker compose -f docker-compose.yml up -d
+#
+# Never run a repair against a datadir a live node has open.
+
+services:
+  # Fixes: "Multiset <hash> does not exist in db" on every GetBlockTemplate call, which presents to
+  # a pool as miners connected but 0 H/s. See docs/runbooks/stratum-zero-hashrate.md.
+  #
+  # Expect exactly one line before the node starts serving:
+  #   RepairMissingMultisets marked N block(s) for re-verification
+  # N == 0 means this was not the problem. Do not re-run it hoping for a different number.
+  htnd-repair-multisets:
+    image: htnd:latest
+    container_name: htnd-repair-multisets
+    profiles: ["repair"]
+    restart: "no"
+    volumes:
+      - htnd-data:/nonexistent/.htnd
+    command:
+      - "--utxoindex"
+      - "--saferpc"
+      - "--autoupdate=false"
+      - "--repair-missing-multisets"
+
+  # Fixes: a node that has disqualified its own chain and will not advance.
+  #
+  # This one is blunt and slow. It walks every block in the store before the node serves RPC, and it
+  # re-marks every block that is neither invalid nor header-only as UTXO-valid - which is what
+  # leaves blocks with no stored multiset and creates the problem the service above then fixes.
+  # Prefer htnd-repair-multisets unless you know you need this. See
+  # docs/runbooks/htn-002-disqualification.md.
+  htnd-repair-block-statuses:
+    image: htnd:latest
+    container_name: htnd-repair-block-statuses
+    profiles: ["repair"]
+    restart: "no"
+    volumes:
+      - htnd-data:/nonexistent/.htnd
+    command:
+      - "--utxoindex"
+      - "--saferpc"
+      - "--autoupdate=false"
+      - "--repair-block-statuses"
+
+volumes:
+  htnd-data:
+    external: false
