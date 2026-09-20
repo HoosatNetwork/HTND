@@ -10,12 +10,12 @@ import (
 	"io"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
 	"github.com/HoosatNetwork/HTND/version"
 	"github.com/pkg/errors"
 )
@@ -786,34 +786,45 @@ func preservePermissions(src, dest string) error {
 	return os.Chmod(dest, srcInfo.Mode())
 }
 
-// RestartNode restarts the node with the new binary
-// This is a separate function that can be called after an update is installed
+// restartRequestTimeout bounds how long RestartNode waits for the interrupt listener to accept its
+// request. ShutdownRequestChannel is unbuffered, so without this a node running the updater without
+// an InterruptListener - a test, or any embedding that does not call app.main - would block here
+// forever.
+const restartRequestTimeout = 30 * time.Second
+
+// RestartNode asks the node to shut down gracefully so that whatever supervises it can start the
+// replacement binary, which installBinary has already put in place.
+//
+// HTN-164: this used to exec a second htnd and then call os.Exit(0). Both halves were wrong. The
+// new process started while this one still held the database lock, so the replacement raced the
+// incumbent for a datadir that was still open; and os.Exit(0) skipped every deferred shutdown in
+// app.main - componentManager.Stop and, critically, databaseContext.Close - so the database was
+// left to whatever pebble could recover from its WAL rather than being closed cleanly. An update
+// was therefore most likely to corrupt or lock out the datadir at exactly the moment the operator
+// was least watching.
+//
+// Requesting shutdown through signal.ShutdownRequestChannel is the same path the ShutDown RPC uses.
+// The listener accepts repeated requests, so this cannot panic the way closing a channel directly
+// did before HTN-141.
+//
+// htnd deliberately does not start its own replacement. A process cannot hand its database lock to
+// a child it spawns before exiting, and any attempt to sequence that is a race. The supervisor owns
+// the new process: systemd's Restart=always, a docker restart policy, or an equivalent.
 func (u *Updater) RestartNode() error {
-	log.Info("Restarting node...")
+	log.Info("Update installed. Requesting a graceful shutdown so this node's supervisor can start " +
+		"the new binary.")
+	log.Warn("htnd does not start its replacement itself - it cannot hand over the database lock " +
+		"safely. If this node is not running under a supervisor that restarts it, it will now stop " +
+		"and stay stopped until it is started again.")
 
-	// Get the current executable path
-	binaryPath, err := os.Executable()
-	if err != nil {
-		return errors.Wrap(err, "failed to get executable path")
+	select {
+	case signal.ShutdownRequestChannel <- struct{}{}:
+		return nil
+	case <-u.ctx.Done():
+		return errors.New("the updater was stopped before the shutdown request could be delivered")
+	case <-time.After(restartRequestTimeout):
+		return errors.Errorf("no interrupt listener accepted the shutdown request within %s, so "+
+			"the node was left running on the old binary; the new one is installed and will be used "+
+			"at the next restart", restartRequestTimeout)
 	}
-
-	// Build the command to restart
-	args := os.Args[1:] // Keep the same arguments
-	cmd := exec.Command(binaryPath, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = os.Environ()
-
-	// Start the new instance
-	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to start new instance")
-	}
-
-	log.Infof("New instance started with PID: %d", cmd.Process.Pid)
-
-	// Shutdown the current instance
-	log.Info("Shutting down current instance...")
-	os.Exit(0)
-
-	return nil
 }

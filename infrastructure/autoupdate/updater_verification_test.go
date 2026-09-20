@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
 )
 
 // newTestUpdater builds an Updater without touching the network or the running binary's directory.
@@ -167,5 +169,63 @@ func TestInstallUpdateDoesNotLeakAWaitGroupCount(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("Stop blocked after InstallUpdate: the wait group count from InstallUpdate was " +
 			"never released, so a node with auto-update enabled hangs on shutdown")
+	}
+}
+
+// TestRestartNodeRequestsShutdownInsteadOfExiting is HTN-164.
+//
+// RestartNode used to exec a second htnd and then call os.Exit(0): the replacement raced the
+// incumbent for a datadir that was still open, and os.Exit skipped app.main's deferred
+// componentManager.Stop and databaseContext.Close entirely.
+//
+// That this test returns at all is half the assertion - os.Exit(0) in the old code would have
+// ended the whole test binary mid-run.
+func TestRestartNodeRequestsShutdownInsteadOfExiting(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	updater := NewUpdater(cfg)
+	t.Cleanup(updater.Stop)
+
+	// Stand in for app.main's interrupt listener.
+	requested := make(chan struct{}, 1)
+	go func() {
+		<-signal.ShutdownRequestChannel
+		requested <- struct{}{}
+	}()
+
+	if err := updater.RestartNode(); err != nil {
+		t.Fatalf("RestartNode: %+v", err)
+	}
+
+	select {
+	case <-requested:
+	case <-time.After(30 * time.Second):
+		t.Fatal("RestartNode returned without requesting a shutdown, so the node would keep " +
+			"running on the old binary with no indication anything was wrong")
+	}
+}
+
+// TestRestartNodeGivesUpWhenNothingIsListening pins the bound on that request.
+// signal.ShutdownRequestChannel is unbuffered, so a send with no interrupt listener blocks
+// forever - which in the updater's goroutine would wedge it silently for the life of the process.
+func TestRestartNodeGivesUpWhenNothingIsListening(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	updater := NewUpdater(cfg)
+
+	// No listener. Cancelling the updater's context is the path that fires when the node is
+	// already shutting down for an unrelated reason while a restart request is pending.
+	updater.cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- updater.RestartNode() }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("RestartNode reported success although no listener accepted the request")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("RestartNode blocked with no listener and a cancelled context")
 	}
 }
