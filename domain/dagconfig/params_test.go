@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 )
 
 func TestNewHashFromStr(t *testing.T) {
@@ -255,6 +256,7 @@ func TestPerVersionTablesCoverEveryActivatedVersion(t *testing.T) {
 			"TargetTimePerBlock":             len(params.TargetTimePerBlock),
 			"FinalityDuration":               len(params.FinalityDuration),
 			"DifficultyAdjustmentWindowSize": len(params.DifficultyAdjustmentWindowSize),
+			"PruningMultiplier":              len(params.PruningMultiplier),
 			"MaxBlockMass":                   len(params.MaxBlockMass),
 			"MaxBlockParents":                len(params.MaxBlockParents),
 			"MergeDepth":                     len(params.MergeDepth),
@@ -265,6 +267,77 @@ func TestPerVersionTablesCoverEveryActivatedVersion(t *testing.T) {
 					"a node on version %d would reuse entry %d instead of its own",
 					params.Name, name, length, highestVersion, highestVersion, length-1)
 			}
+		}
+	}
+}
+
+// TestForceSetBlockVersionPastEveryTableClampsRatherThanPanics drives the process-global block
+// version past the end of every per-version table and then calls each accessor that reads it.
+//
+// This is the case HTN-217 was actually about. Two call sites (consensus factory.go's dagStores and
+// the mempool's DefaultConfig) used to index a per-version table with constants.GetBlockVersion()-1
+// and no bounds check at all, so the first node whose ambient version reached one past the table
+// end died with an index-out-of-range rather than reusing the last entry. HTN-216's table extension
+// only avoided that for one activation; without a clamp it recurs at every future fork.
+//
+// len(POWScores)+1 is the highest version a network can currently reach (version 1 is
+// pre-activation), so +2 is deliberately one beyond even that: a clamp has to hold for a version
+// that no activation table describes, which is exactly the state a node is in between shipping the
+// gate and shipping the activation score.
+//
+// TestPerVersionTablesAreClampedPastTheirEnd covers blockVersionIndexForSlice directly; this covers
+// the exported accessors at a global the other test cannot reach, since it deliberately never moves
+// the global itself.
+func TestForceSetBlockVersionPastEveryTableClampsRatherThanPanics(t *testing.T) {
+	previousVersion := constants.GetBlockVersion()
+	t.Cleanup(func() { constants.ForceSetBlockVersion(uint(previousVersion)) })
+
+	for _, params := range []*Params{&MainnetParams, &TestnetParams, &SimnetParams, &DevnetParams} {
+		// One past the longest per-version table, and never below len(POWScores)+2. Both bounds are
+		// needed: on mainnet POWScores is the longest thing here, but on simnet the parameter
+		// tables are far longer than POWScores, so len(POWScores)+2 there is an ordinary in-range
+		// index and would assert nothing about clamping at all.
+		beyondEveryTable := len(params.POWScores) + 2
+		for _, length := range []int{
+			len(params.K), len(params.TargetTimePerBlock), len(params.FinalityDuration),
+			len(params.DifficultyAdjustmentWindowSize), len(params.PruningMultiplier),
+			len(params.MaxBlockMass), len(params.MaxBlockParents), len(params.MergeDepth),
+		} {
+			if length+1 > beyondEveryTable {
+				beyondEveryTable = length + 1
+			}
+		}
+		constants.ForceSetBlockVersion(uint(beyondEveryTable))
+
+		// A panic in any of these is the failure this test exists to catch, so they are simply
+		// called. FinalityDepth and PruningDepth are included because they read the global through
+		// their own path rather than through a *ForCurrentVersion helper.
+		_ = params.TargetTimePerBlockForCurrentVersion()
+		_ = params.DifficultyAdjustmentWindowSizeForCurrentVersion()
+		_ = params.MaxBlockMassForCurrentVersion()
+		_ = params.FinalityDepth()
+		_ = params.PruningDepth()
+
+		// Clamping specifically means "reuse the last entry", not "return some other entry" and not
+		// "return a zero value" - a silent zero here would be a consensus parameter of 0.
+		if got, want := params.KForCurrentVersion(), params.K[len(params.K)-1]; got != want {
+			t.Errorf("%s: KForCurrentVersion at block version %d returned %d, want the last table "+
+				"entry %d - the clamp did not reuse the final entry",
+				params.Name, beyondEveryTable, got, want)
+		}
+		if got, want := params.MaxBlockMassForCurrentVersion(), params.MaxBlockMass[len(params.MaxBlockMass)-1]; got != want {
+			t.Errorf("%s: MaxBlockMassForCurrentVersion at block version %d returned %d, want the "+
+				"last table entry %d", params.Name, beyondEveryTable, got, want)
+		}
+		if got, want := params.TargetTimePerBlockForCurrentVersion(),
+			params.TargetTimePerBlock[len(params.TargetTimePerBlock)-1]; got != want {
+			t.Errorf("%s: TargetTimePerBlockForCurrentVersion at block version %d returned %s, want "+
+				"the last table entry %s", params.Name, beyondEveryTable, got, want)
+		}
+		if got, want := params.DifficultyAdjustmentWindowSizeForCurrentVersion(),
+			params.DifficultyAdjustmentWindowSize[len(params.DifficultyAdjustmentWindowSize)-1]; got != want {
+			t.Errorf("%s: DifficultyAdjustmentWindowSizeForCurrentVersion at block version %d "+
+				"returned %d, want the last table entry %d", params.Name, beyondEveryTable, got, want)
 		}
 	}
 }
