@@ -2942,3 +2942,45 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   hashrate/target question for the operator, not a code fix.
 - left alone: the bridge is third-party (htn_bridge_v1.7.0) and not in this repo; nothing in HTND
   reports a wrong number here.
+
+## HTN-229
+- title: Stratum bridge drops block submissions and kicks the miner whenever a mining.submit spans
+  more than one TCP read
+- status: needs_human (EXTERNAL - the defect is in the stratum bridge, not in HTND)
+- severity: high for the pool operator (every occurrence is a found block thrown away plus a miner
+  disconnect), zero for the node
+- area: external/stratum bridge (image eritonica/htn-stratum-bridge:latest, htn_bridge_v1.7.0)
+- reported: 2026-09-20, user: "It's still not mniing..", after being shown that the node was accepting
+  blocks normally.
+- what the node is doing, measured first so the bridge could be ruled in or out: htnd-public accepted
+  876 submitted blocks in a 10-minute window (459 StatusUTXOPendingVerification + 417 StatusUTXOValid)
+  and ZERO invalid, with no disqualifications, no UTXO verification failures and no tolerated issues
+  logged. 280 in the last 5 minutes alone. The node is not rejecting anything and is not the problem.
+- mechanism: the bridge logs "error unmarshalling event" with the raw bytes it tried to parse, and
+  those bytes are mining.submit messages truncated at arbitrary offsets:
+    {"id":4
+    {"id":4,"metho
+    {"id":4,"method":"min
+    {"id":4,"method":"mining.submit",
+    {"id":4,"method":"mining.submit","params":["hoosat:qr3zp82q
+    {"id":4,"method":"mining.submit","params":["hoosat:qr3zp8...RETRO10__101","1559","dda97ddc55ddc415","3e7e8b02...d71b68
+  Cutting at every possible offset, including mid-token and mid-hash, is the signature of a reader
+  that JSON-decodes whatever one socket Read returned instead of buffering to the newline that
+  delimits stratum messages. Whenever a submit crosses a TCP segment boundary the bridge cannot parse
+  it, and the log shows it then disconnects that exact client 0.13ms later:
+    10:18:01.924319 error error unmarshalling event ... client_id 2228 ... raw: {truncated submit}
+    10:18:01.924447 info  disconnecting             ... client_id 2228
+    10:18:01.924525 info  removed client 2228
+  So each occurrence costs a found block AND the miner's session.
+- measured over 36 minutes (10:16:54-10:52:33): 101 unmarshalling errors, 379 client disconnects.
+  Miner uptimes in the summary table are single-digit seconds, which is also why the 1h and 24h
+  hashrate columns read 0,00H/s - the per-worker counters restart on every reconnect.
+- fix (in the bridge, not here): read the stratum socket with a line-oriented reader - bufio.Scanner
+  or bufio.Reader.ReadString('\n') - and decode one complete newline-delimited message at a time,
+  rather than unmarshalling the result of a single Read. A parse failure should also not by itself
+  drop a mining connection.
+- not fixable in this repo: HTND contains no stratum code; the bridge is a separate project and image.
+  Recorded here because it is the answer to a question asked of this node, and because the node-side
+  measurements above are the evidence that clears HTND.
+- see also: HTN-228 (the bridge's 0 H/s and "Mining difficulty 0.000000" display, a separate artifact
+  of floor difficulty) and HTN-221's 2026-09-20 correction (why difficulty is at the floor).
