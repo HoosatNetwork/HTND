@@ -69,6 +69,20 @@ func (d *domain) initStagingConsensus(cfg *consensus.Config) error {
 	d.stagingConsensusLock.Lock()
 	defer d.stagingConsensusLock.Unlock()
 
+	// The datadir-repair passes are one-shot recovery steps for the consensus this node has been
+	// running on, but the factory runs them for every consensus it builds, and a staging consensus is
+	// built fresh on each IBD attempt. They are not expensive here - the staging prefix is empty when
+	// they run, so RepairBlockStatuses reports "No blocks found" in about two milliseconds - but
+	// RepairMissingMultisets still re-marks a block for verification inside a consensus that IBD is in
+	// the middle of constructing, which is not something a recovery flag should be doing unasked. The
+	// log noise is its own problem: on mainnet 2026-09-20 a node that had not restarted once announced
+	// "Starting block status repair (setting all non-invalid blocks to StatusUTXOValid)" every seven
+	// minutes, which reads exactly like the destructive full-store pass that flag is named after.
+	stagingCfg := *cfg
+	stagingCfg.RepairBlockStatuses = false
+	stagingCfg.RepairMissingMultisets = false
+	cfg = &stagingCfg
+
 	_, hasInactivePrefix, err := prefixmanager.InactivePrefix(d.db)
 	if err != nil {
 		return err
