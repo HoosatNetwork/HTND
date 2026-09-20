@@ -2984,3 +2984,53 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   measurements above are the evidence that clears HTND.
 - see also: HTN-228 (the bridge's 0 H/s and "Mining difficulty 0.000000" display, a separate artifact
   of floor difficulty) and HTN-221's 2026-09-20 correction (why difficulty is at the floor).
+
+## HTN-230
+- title: DAGKnight and coinbase hash comparators sorted by hex string, allocating two 64-byte strings
+  per comparison on the consensus critical path
+- status: FIXED
+- severity: high (the single largest avoidable allocation source on a live node; GC marking was over
+  half of all CPU, and the consensus lock it runs under is the one block template requests need)
+- area: consensus/ghostdagmanager, consensus/coinbasemanager
+- reported: 2026-09-20, user: "There is issue in the node. Fix it." - said after node-side block
+  acceptance had been shown healthy, so this was found by profiling rather than by log reading.
+- how it was found: read-only 30s CPU profile of the production node via its own pprof endpoint
+  (HTND_PROFILER already enabled, http://127.0.0.1:6060, node never touched - same approach as
+  HTN-205/206/214/215). runtime.scanObject alone was 41.36% flat / 47.87% cumulative of 87.50s of
+  samples over 30s (291% of a core), and with scanSpan (13.13%), tryDeferToSpanScan (9.89%) and
+  scanObjectsSmall (9.22%) folded in, garbage collection marking was the clear majority of all CPU.
+  The allocation profile then named the source directly: externalapi.DomainHash.String at 150.20GB
+  (4.38% of 3430GB total), of which `pprof -peek` attributed 141.04GB - 91.70% - to
+  ghostdagmanager.makeUMCVotingKey.func1.
+- mechanism: eight comparators decided hash order by rendering both operands to hex text, e.g.
+  `sort.Slice(sortedG, func(i, j int) bool { return sortedG[i].String() < sortedG[j].String() })`.
+  DomainHash.String hex-encodes into a sync.Pool buffer but still allocates the resulting string, so
+  each comparison allocated two 64-character strings and discarded them, O(n log n) times per sort.
+  Seven sites are in dagknight.go (makeUMCVotingKey's G and U sorts, anticoneP, reps, anticone, and
+  two max-selection comparisons) and one in coinbasemanager.go's merge block ordering. All of it runs
+  inside consensus, under the lock that GetBlockTemplate and the RPC serving paths also contend for -
+  which is the link to the observed symptoms: 3 "Consensus has held its lock for longer than 2s"
+  notices and 3 RPC DeadlineExceeded errors to the local stratum bridge in the same 11-minute window.
+- fix: use the existing DomainHash.Less, which is bytes.Compare over the underlying arrays and
+  allocates nothing. No new API.
+- why the substitution is exact, which matters because one of these feeds a cache key and another
+  fixes the order merge set blocks are paid in: DomainHash.String is hex.Encode over the bytes in
+  order with no reversal; lowercase hex is a monotonic encoding; and every DomainHash is the same
+  fixed 32 bytes. So lexicographic order over the hex text and bytes.Compare over the bytes are the
+  same total order, and every sorted sequence - and therefore every derived key and payout order - is
+  unchanged.
+- measured: sorting 64 hashes went from 352443 ns/op, 65735 B/op, 1486 allocs/op to 13822 ns/op,
+  56 B/op, 2 allocs/op - 25x faster, 743x fewer allocations.
+- tests: TestHashLessMatchesHexStringOrder (ghostdagmanager) cross-checks Less against the hex
+  comparison it replaced over all 65536 ordered pairs of 256 hashes, seeded to include bytes on both
+  sides of hex's '0'-'9' and 'a'-'f' digit runs - where a non-monotonic encoding would disagree - and
+  pairs differing only in the final byte, then requires sorting a slice by each comparator to produce
+  the same sequence. Full `go test -tags=ci ./...` green; ./domain/consensus/... green without the ci
+  tag too, which is where the DAGKnight and coinbase coverage lives.
+- left alone: the rest of the allocation profile, which is larger in total and a separate question -
+  DbUtxoEntry.UnmarshalVT (499GB cumulative), util/memory.Malloc of outpoint/entry pairs (304GB),
+  utxo.NewUTXOEntry (250GB) and math/big.nat.make (237GB). Those are UTXO deserialization doing real
+  work on real data; this issue was the part that was pure waste.
+- not yet confirmed live: the node has to be rebuilt and redeployed from this commit for the profile
+  to be re-taken. Worth re-running the same 30s profile afterwards to see how far GC marking drops.
+- commit: 0361f3999
