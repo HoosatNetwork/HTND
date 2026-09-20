@@ -75,7 +75,7 @@ already warned that `ISSUES.md` status fields go stale, and this pass found **ei
 | Repair flags in deploy artefacts | **Clean** — no compose file exists in-repo; `Dockerfile` has no repair flag | `Dockerfile` | Workstream B — add clean compose + one-shot migration examples |
 | systemd unit | **Absent** | — | Workstream B — add sample |
 | `docs/runbooks/` | **Absent** | — | Workstream B — write 4 runbooks |
-| `utxoforensics` canonical artefact tool | **Partial** — tool exists, single `main.go`, references MuHash | `cmd/utxoforensics/main.go` | Workstream E — build the deterministic canonical encoder |
+| `utxoforensics` canonical artefact tool | **Done** — `-canonical` / `-canonical-out` | `cmd/utxoforensics/canonical/`, `canonical_artifact.go` | see Workstream E below |
 | README docs URL | **Broken** — `https://github.com//Hoosat-Oy/docs` (double slash) | `README.md:99` | Workstream F — fix |
 | README Discord link | **Empty** | `README.md:88-90` | Workstream F — TODO, do not invent a link |
 | `letfhook.yml` typo file | **Present**, 75 bytes, alongside the real `lefthook.yml` | `letfhook.yml` | Workstream F — remove |
@@ -168,6 +168,53 @@ they are still off, so reaching v6 resolved nothing.
   `StrictUTXOCommitmentVersion`. The gate is wired and inert-tested, but its *activated* path is not
   yet exercised end to end: reaching it needs a consensus actually running on an offset baseline,
   which is the scenario HTN-002 reproduced in a scratchpad test that was never committed.
+
+## Workstream E: canonical UTXO artefact tool
+
+`utxoforensics -canonical [-canonical-out FILE]`, read-only, against a **copy** of a cleanly shut
+down datadir.
+
+It enumerates the pruning-point UTXO bucket and reports three things: entry count, MuHash, and the
+SHA-256 of a canonical encoding. It also says whether the set matches the pruning point's own header
+commitment — and explicitly **does not** decide which of the two is authoritative, or which pruning
+point to checkpoint. Those are the Step A2 maintainer decisions.
+
+The logic lives in `cmd/utxoforensics/canonical`, separate from the 3350-line `main.go`, so it is
+unit-testable without a datadir.
+
+**What makes the output canonical**
+
+- Ordered by outpoint — transaction ID bytes (via `DomainTransactionID.Less`, not hex strings, per
+  HTN-230), then index. Input order cannot affect output.
+- Each entry serialized with `utxo.SerializeUTXO` — the exact call consensus feeds to
+  `multiset.Add`. So the reported MuHash *is* the value a header's `UTXOCommitment` is compared
+  against, not a second opinion computed a different way. That equivalence is asserted by a test.
+- Length-prefixed entries, so no two different sets can collide by concatenation.
+- A magic + format version header and a trailing entry count, so a future format cannot silently
+  compare equal and a truncated file cannot hash as a shorter valid one.
+
+**Why two hashes.** MuHash is what the chain commits to, but it is order-independent, so it cannot
+distinguish a set from a reordered copy. The encoding SHA-256 is reproducible by anyone with
+`sha256sum` against the published file, without running this tool.
+
+**Streaming.** A mainnet set is tens of millions of entries, so the builder is O(1) in memory and
+requires input already in canonical order — which the pebble bucket iterator provides, since the key
+*is* the serialized outpoint. It verifies that rather than assuming it, and fails loudly on a
+regression instead of publishing an unreproducible hash. `BuildFromUnordered` sorts first, for
+callers holding a slice.
+
+**Tests (11, all passing)**
+
+- Identical output across 8 repeated runs, and across 16 shuffles of the same input.
+- The MuHash equals an independently built consensus multiset.
+- One sompi removed from one entry changes both hashes, with entry count unchanged.
+- A dropped entry changes both hashes.
+- A duplicate outpoint is rejected, not silently deduplicated — a double-count is a finding.
+- Out-of-order input to the streaming builder is rejected.
+- The streaming and sorting entry points produce byte-identical encodings.
+- The encoding is self-describing, and truncation changes the hash.
+- The empty set is well-defined rather than a crash.
+- `BuildFromUnordered` does not reorder the caller's slice.
 
 ## Hard-rule compliance ledger
 

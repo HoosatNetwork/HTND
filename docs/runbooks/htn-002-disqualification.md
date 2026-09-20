@@ -88,6 +88,36 @@ UTXO changed by one sompi** accepts it, reports an offset baseline, and then min
 
 ---
 
+## Establishing exactly what your node holds
+
+`isUtxoSetVerified` gives you a yes/no. When you need to compare your set against someone else's —
+which is the only way to tell "everyone has the same offset" from "each node has a different one" —
+use the canonical artefact tool on a **copy** of a cleanly shut down datadir:
+
+```sh
+# Never against a live node's directory: pebble replays its WAL on open.
+utxoforensics -db /path/to/datadir-COPY -canonical -canonical-out utxo-set.bin
+```
+
+It prints the entry count, the MuHash, and the SHA-256 of a canonical encoding, and says whether the
+set matches the pruning point's header commitment:
+
+```
+  entries:       22812225
+  muhash:        ce5ebf4c...
+  encoding-sha256: 9f3a...
+  => DOES NOT match the pruning point's header commitment
+```
+
+The output is deterministic: two people on two machines, from copies of the same datadir, get
+byte-identical values, so a mismatch is a real difference rather than a difference in method. The
+MuHash is computed with the same serialization consensus uses, so it is directly comparable with a
+header's `UTXOCommitment`; the encoding hash is reproducible by anyone with `sha256sum` against the
+written file, without running the tool.
+
+The tool deliberately does **not** decide whether the historical header commitment or a recomputed
+one is authoritative. That is the rebaseline decision described below.
+
 ## What you can do
 
 ### If this node is strict and is disqualifying the network's chain
