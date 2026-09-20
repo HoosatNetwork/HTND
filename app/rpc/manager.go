@@ -8,6 +8,7 @@ import (
 	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
 	"github.com/HoosatNetwork/HTND/domain"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/infrastructure/config"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
@@ -124,6 +125,18 @@ func (m *Manager) notifyBlockAddedToDAG(block *externalapi.DomainBlock) error {
 	rpcBlock := appmessage.DomainBlockToRPCBlock(&externalapi.DomainBlock{Header: block.Header})
 	err := m.context.PopulateRPCBlockWithVerboseData(rpcBlock, block.Header, block, false)
 	if err != nil {
+		// A block-added notification is best-effort: if the block cannot be described there is nothing
+		// to tell subscribers about, and skipping this one notification is the whole cost. Returning
+		// the error is not an option - initConsensusEventsHandler panics on it, and because that runs
+		// on a spawned goroutine panics.HandlePanic turns it into os.Exit(1), so one undescribable
+		// block takes the entire node down. That is how this node died at the end of an IBD: committing
+		// the staging consensus deletes the previous consensus' database prefix, and a BlockAdded event
+		// queued against the old one then resolves to a block the new one does not have.
+		if errors.Is(err, rpccontext.ErrBuildBlockVerboseDataInvalidBlock) {
+			log.Warnf("Skipping the block added notification for %s: %s",
+				consensushashing.BlockHash(block), err)
+			return nil
+		}
 		return err
 	}
 	blockAddedNotification := appmessage.NewBlockAddedNotificationMessage(rpcBlock)

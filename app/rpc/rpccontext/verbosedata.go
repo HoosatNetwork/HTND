@@ -52,6 +52,17 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 		return err
 	}
 
+	// Checked before the status, because StatusInvalid is BlockStatus' zero value: GetBlockInfo
+	// returns a zero-valued BlockInfo for a block it does not have, so a block that is merely absent
+	// is indistinguishable here from one that was actually found to be invalid. Every other
+	// GetBlockInfo caller consults Exists first; this one used to report "invalid block" for a block
+	// the consensus had simply never heard of - most visibly right after an IBD commits its staging
+	// consensus and deletes the previous one's prefix out from under already-queued notifications.
+	if !blockInfo.Exists {
+		return errors.Wrap(ErrBuildBlockVerboseDataInvalidBlock, "cannot build verbose data for "+
+			"a block that is not in the consensus")
+	}
+
 	if blockInfo.BlockStatus == externalapi.StatusInvalid {
 		return errors.Wrap(ErrBuildBlockVerboseDataInvalidBlock, "cannot build verbose data for "+
 			"invalid block")
