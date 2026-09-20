@@ -2885,3 +2885,60 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   baseline, confirmed live on 2026-09-20 - see HTN-002) and, for nodes on different binaries across a
   hard fork, the reward rules each binary applies to a given version (HTN-216).
 - commit: c517791e2
+
+## HTN-227
+- title: The one-shot datadir repair passes re-run on every staging consensus, and log as if they
+  were rewriting the live chain
+- status: FIXED
+- severity: low (misleading operator-facing logging, plus one unasked-for state mutation inside a
+  consensus IBD is still building - not the performance problem the log line implies)
+- area: app/consensus
+- reported: 2026-09-20, user: "Check the stratum.. Still 10h/s". Found while reading htnd-public's
+  logs for that.
+- mechanism: consensus.NewFactory().NewConsensus runs RepairBlockStatuses and RepairMissingMultisets
+  whenever the config asks for them (factory.go:668). domain.initStagingConsensus copies the node's
+  whole consensus config, repair flags included, so every staging consensus - one per
+  IBD-with-pruning-proof attempt - runs them again. A node left with --repair-block-statuses true in
+  its launch command therefore re-runs them for its whole life, not once. Observed live: "Starting
+  block status repair (setting all non-invalid blocks to StatusUTXOValid)" at 08:56, 09:04, 09:11 and
+  09:18 on a container whose RestartCount was 1 and which had been up since 05:36.
+- correction, recorded because the first reading was wrong: this is NOT a full block-store walk under
+  the consensus lock every seven minutes, and it is not what was starving the stratum bridge. The
+  staging consensus has its own database prefix, which is empty at that point, so the repair's
+  AllBlockHashesIterator finds nothing - the live log shows "No blocks found in database" two
+  milliseconds after each start line. The claim was drafted before checking the following log lines
+  and was refuted by them.
+- fix: initStagingConsensus clears both repair flags on the copy of the config it hands the factory.
+  What remains is RepairMissingMultisets no longer re-marking a block for verification inside a
+  consensus IBD is mid-way through constructing, and the removal of a log line that reads exactly like
+  the destructive pass it is named after running on a loop against the live chain.
+- tests: no new test - the observable difference is the absence of two log lines and of a one-block
+  mutation in a consensus that only exists mid-IBD; a test asserting that would pin the logging rather
+  than the behaviour. Full `go test -tags=ci ./...` green, ./domain/... green, gofmt/vet clean.
+- left alone: both flags still do exactly what they say for the node's own consensus. The operator
+  advice is unchanged and still outstanding - run them once, then remove them from the launch command.
+- commit: a305f334d
+
+## HTN-228
+- title: Stratum bridge reports 0 H/s and "Mining difficulty 0.000000" because network difficulty is
+  pinned at the powMax floor
+- status: NOT A BUG (explained, no code change)
+- severity: n/a
+- area: mining/difficulty
+- reported: 2026-09-20, user: "Check the stratum.. Still 10h/s".
+- finding: mining is working. htn-stratum-bridge's own summary shows acc/stl/inv = 24409/78/1423 over
+  2h28m - i.e. 24,409 accepted blocks - and htnd-public logged 4,074 submitted blocks in the sampled
+  window with statuses 2256 UTXOPendingVerification + 1818 Valid and ZERO Invalid. So the node is
+  rejecting nothing that the bridge submits; the bridge's 1,423 "invalid" are shares it rejected
+  itself (stale/duplicate), not node rejections.
+- mechanism of the display: the bridge derives both "Mining difficulty" and "Est. Network Hashrate"
+  from the network's difficulty, which is at the floor - GetBlockDagInfo reports difficulty 1, meaning
+  target == powMax. The pool difficulty it computes from that underflows to 0.000000, every worker's
+  hashrate is then 0.00 H/s, and the network estimate degenerates to its 10 H/s floor. The number is
+  an artifact of floor difficulty, not a measurement of miners.
+- why difficulty is at the floor: see HTN-221's 2026-09-20 correction. Measured 0.83 blocks/sec
+  against a 5 blocks/sec target, so the retarget ratio stays above 1 and the target stays pinned at
+  powMax. It lifts when block production outpaces targetTimePerBlock, and not before - which is a
+  hashrate/target question for the operator, not a code fix.
+- left alone: the bridge is third-party (htn_bridge_v1.7.0) and not in this repo; nothing in HTND
+  reports a wrong number here.
