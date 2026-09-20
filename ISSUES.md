@@ -2808,3 +2808,57 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   mechanism-demonstration program running concurrently and holding ~28000 sockets, i.e. the experiment
   contaminating its own measurement, not a regression. Re-measured cleanly afterwards.
 - commit: 948b150c2
+
+## HTN-226
+- title: Four per-version parameter tables were still indexed with the process-global block version,
+  one of them weighing mempool selection against the wrong mass limit
+- status: FIXED
+- severity: medium (three are latent panics that fire at the next hard fork; the fourth weighed
+  transaction selection against a mass limit the block being built may not have)
+- area: consensus/mining/p2p
+- reported: 2026-09-20, found while auditing what can make two nodes disagree about a block at the
+  user's request ("continue searching for the issue why nodes disagree on blocks or transactions and
+  why node might start disqualifying blocks"). Not itself a disagreement cause - see the note at the
+  end - but the same block-version-global family that HTN-001/003/009/010 and HTN-217 came from.
+- mechanism: constants.GetBlockVersion() is a process-global one-way ratchet, raised by IBD or by a
+  relayed header, and unrelated to the length of any per-version Params table. HTN-217 added
+  TargetTimePerBlockForCurrentVersion / DifficultyAdjustmentWindowSizeForCurrentVersion /
+  MaxBlockMassForCurrentVersion and converted the two call sites it found; a grep for the raw shape
+  `[constants.GetBlockVersion()-1]` finds four more:
+  - domain/miningmanager/blocktemplatebuilder/blocktemplatebuilder.go calcTxValue - BlockMaxMass.
+  - app/protocol/flows/v8/blockrelay/handle_pruning_point_and_its_anticone_requests.go - two sites,
+    DifficultyAdjustmentWindowSize and K, both only make() capacity hints.
+  - domain/consensus/processes/blockprocessor/validate_and_insert_block.go - targetTimePerBlock, in a
+    lazily-evaluated debug log closure, so it only evaluates on a node running at debug level.
+  Mainnet's per-version tables hold exactly 10 entries and mainnet POWScores activates versions up to
+  10, so every one of these is in range today (index 9) and goes out of range at version 11 - i.e. at
+  the next hard fork, which is exactly when the tables get extended in lockstep or do not.
+  calcTxValue is the one with present-tense consequences: it weighed every mempool transaction by
+  BlockMaxMass at the GLOBAL version, while nextBlockMaxMass directly below it already derives the
+  version from virtual's DAA score, with a comment recording why - the global "can be ahead of the
+  chain (raised by IBD or by a relayed header), which filled templates past their real limit so the
+  node rejected its own blocks". Selection was therefore being weighed against a limit the block being
+  built might not have.
+- fix: calcTxValue takes the mass limit as a parameter, resolved once per template from
+  nextBlockMaxMass - once rather than per transaction, because nextBlockMaxMass asks consensus for
+  virtual's DAA score and the loop covers the whole mempool. The two P2P hints use the clamped
+  accessors (KForCurrentVersion added to Params to match the three that already existed). The debug
+  line clamps inline, because blockProcessor holds the slice rather than Params.
+- tests: TestPerVersionTablesAreClampedPastTheirEnd (domain/dagconfig) walks every network's table at
+  block versions 0, 1, 5, 10, 11, 255 and MaxUint16 and requires the resulting index to stay inside
+  the table. TestPerVersionTablesCoverEveryActivatedVersion pins the lockstep requirement itself:
+  every per-version table must have at least as many entries as POWScores activates versions.
+  Confirmed non-vacuous by printing the lengths - mainnet needs 10 and has exactly 10, testnet needs 9
+  and has exactly 9 - so the next POWScores entry added without extending the tables fails in CI
+  rather than panicking on a live node. Full `go test -tags=ci ./...` green, gofmt/vet/staticcheck
+  clean over ./domain/... and ./app/....
+- left alone: the process-global itself, and every accessor that already clamps. No consensus rule
+  changes: the three hint/log sites compute nothing, and calcTxValue only orders candidates, so a
+  block built before and after this change is equally valid.
+- note on the question it came from: this is NOT why nodes disagree about a block. Validation of an
+  existing block reads that block's OWN header version (coinbasemanager.blockVersion returns
+  header.Version() whenever the header is stored), so two nodes validating the same block agree on its
+  version regardless of their globals. The disagreement causes remain HTN-002/HTN-005 (offset UTXO
+  baseline, confirmed live on 2026-09-20 - see HTN-002) and, for nodes on different binaries across a
+  hard fork, the reward rules each binary applies to a given version (HTN-216).
+- commit: c517791e2
