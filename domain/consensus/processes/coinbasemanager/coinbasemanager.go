@@ -175,7 +175,7 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		allMergeBlocks = append(allMergeBlocks, reds...)
 		// Sort merge set blocks by hash to ensure consistent ordering
 		sort.Slice(allMergeBlocks, func(i, j int) bool {
-			return allMergeBlocks[i].String() < allMergeBlocks[j].String()
+			return allMergeBlocks[i].Less(allMergeBlocks[j])
 		})
 		log.Tracef("Processing %d total merge set blocks (blues + reds)", len(allMergeBlocks))
 

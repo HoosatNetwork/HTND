@@ -16,7 +16,7 @@ func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainH
 	sortedG := make([]*externalapi.DomainHash, len(g))
 	copy(sortedG, g)
 	sort.Slice(sortedG, func(i, j int) bool {
-		return sortedG[i].String() < sortedG[j].String()
+		return sortedG[i].Less(sortedG[j])
 	})
 	for _, gh := range sortedG {
 		h.Write(gh.ByteSlice())
@@ -25,7 +25,7 @@ func makeUMCVotingKey(g, u []*externalapi.DomainHash, e int) externalapi.DomainH
 	sortedU := make([]*externalapi.DomainHash, len(u))
 	copy(sortedU, u)
 	sort.Slice(sortedU, func(i, j int) bool {
-		return sortedU[i].String() < sortedU[j].String()
+		return sortedU[i].Less(sortedU[j])
 	})
 	for _, uh := range sortedU {
 		h.Write(uh.ByteSlice())
@@ -183,7 +183,7 @@ func (gm *ghostdagManager) OrderDAG(stagingArea *model.StagingArea, G []*externa
 	// Sort anticone in hash-based bottom-up topological order
 	// The paper specifies a topological order; we use hash string comparison as a proxy
 	sort.Slice(anticoneP, func(i, j int) bool {
-		return anticoneP[i].String() < anticoneP[j].String()
+		return anticoneP[i].Less(anticoneP[j])
 	})
 
 	ordering = append(ordering, anticoneP...)
@@ -378,7 +378,7 @@ func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []
 	copy(reps, P)
 
 	sort.Slice(reps, func(i, j int) bool {
-		return reps[i].String() < reps[j].String()
+		return reps[i].Less(reps[j])
 	})
 
 	// Step 2: For k = 0, 1, 2, 4, 6, ... until a winning k is found
@@ -520,7 +520,7 @@ func (gm *ghostdagManager) TieBreaking(stagingArea *model.StagingArea, G []*exte
 			var maxB *externalapi.DomainHash
 			for b := range Ci {
 				bb := b
-				if maxB == nil || bb.String() > maxB.String() {
+				if maxB == nil || maxB.Less(&bb) {
 					maxB = &bb
 				}
 			}
@@ -607,7 +607,7 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 	Bmax := P[0]
 	maxBlues := len(parentResults[*Bmax].blues)
 	for _, b := range P[1:] {
-		if len(parentResults[*b].blues) > maxBlues || (len(parentResults[*b].blues) == maxBlues && b.String() > Bmax.String()) {
+		if len(parentResults[*b].blues) > maxBlues || (len(parentResults[*b].blues) == maxBlues && Bmax.Less(b)) {
 			Bmax = b
 			maxBlues = len(parentResults[*b].blues)
 		}
@@ -625,7 +625,7 @@ func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externa
 
 	// Step 7: Sort anticone in topological order (using hash order as proxy)
 	sort.Slice(anticone, func(i, j int) bool {
-		return anticone[i].String() < anticone[j].String()
+		return anticone[i].Less(anticone[j])
 	})
 
 	// Step 8: For each B in anticone of Bmax (in order)
