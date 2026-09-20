@@ -51,7 +51,7 @@ already warned that `ISSUES.md` status fields go stale, and this pass found **ei
 | HTN-159 | needs_human | **Fixed** — appends to the default list and validates with `DecodeAddress` at startup | `app/component_manager.go:mergedAndValidatedFrozenAddresses` (called :176) | correct stale status |
 | HTN-162 | needs_human | **OPEN — confirmed security defect.** `VerifyChecksum` and `VerifyFileSize` exist but have **zero callers**. The download→install path verifies nothing, and there is no signature verification of any kind | `infrastructure/autoupdate/downloader.go:159,195` (dead); `updater.go:233 downloadUpdate` → `:306 installUpdate` | Workstream A — implement |
 | HTN-164 | needs_human | **OPEN** — `os.Exit(0)` in `RestartNode`, bypassing app shutdown | `infrastructure/autoupdate/updater.go:721` | Workstream A — implement |
-| HTN-166 | needs_human (partial) | **Partially open** — only the stale comment was fixed. RPC limit 1 GiB, P2P limit 4 GiB; no public/authenticated split | `grpcserver/rpcserver.go:15`; `grpcserver/p2pserver.go:24` | see "judgment calls" |
+| HTN-166 | needs_human (partial) | **Partly addressed** — limits are now settable (`--p2p-max-message-size`, `--rpc-max-message-size`), defaults deliberately unchanged. The public/authenticated endpoint split is still open | `grpcserver/rpcserver.go:SetMaxMessageSizes`; `netadapter.go:NewNetAdapter` | see "judgment calls" |
 | HTN-168 | needs_human | **Fixed** — neither path bans for this node's own errors | `flowcontext/errors.go:39-63`; `blockrelay/handle_request_anticone.go:52-62` | correct stale status |
 | HTN-177 | needs_human | **OPEN** — 27,607,704-byte ELF still committed, no source | `tools/pebble-tool/pebble-tool` | Workstream A — delete |
 | HTN-204 | REOPENED, do not re-apply | **Open, correctly reopened** — fix is not in the tree | — | Workstream D — design only |
@@ -251,5 +251,12 @@ Carried forward verbatim from the prompt's out-of-scope list, plus what this pas
   auto-install **disabled by default** behind an explicit flag until a key is configured. That
   satisfies "no unsigned archive installs" without this branch fabricating a key.
 - **HTN-166 limits.** Lowering a P2P message ceiling can reject legitimate large IBD messages and
-  partition this node from the network — the same class of risk hard rule 1 exists to prevent. Any
-  number chosen here would be a guess. Deferred with the reasoning recorded, not silently dropped.
+  partition this node from the network — the same class of risk hard rule 1 exists to prevent, and
+  nobody has measured the largest legitimate message on this chain. So the defaults are **not**
+  changed. What shipped instead is the mechanism: both ceilings are settable at runtime
+  (`--p2p-max-message-size`, `--rpc-max-message-size`, `0` = built-in default), the effective values
+  are logged at startup, a value below 16 MiB warns, and a negative one fails startup. That turns
+  "a human must pick a number" into "a human who has measured their traffic can pick one without a
+  rebuild", without this branch guessing on their behalf. Four tests pin that the zero default is a
+  true no-op. **Still open:** separating public from authenticated RPC endpoints, which is an
+  architectural change rather than a limit.

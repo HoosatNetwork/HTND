@@ -63,8 +63,20 @@ only when its checksum appears in a list signed by the key given in `--autoupdat
 `docker-compose.yml` binds RPC to `127.0.0.1` on purpose, and passes `--saferpc`, which disables
 state-changing RPC calls.
 
-The current message-size limits are large — 1 GiB for RPC, 4 GiB for P2P — and there is no
-public/authenticated endpoint split yet (HTN-166, open; see
-[`docs/REMEDIATION_STATUS.md`](../docs/REMEDIATION_STATUS.md)). Until that is resolved, treat an
-exposed RPC port as something to put behind authentication or a trusted network, not as something to
-publish.
+The default message-size limits are large — 1 GiB for RPC, 4 GiB for P2P — so an unauthenticated
+client can make the node buffer a lot. Both are now settable:
+
+```
+--rpc-max-message-size=67108864    # 64 MiB
+--p2p-max-message-size=...         # only if you have measured your own P2P traffic
+```
+
+`0` (the default) means the built-in ceiling; the effective values are logged at startup.
+
+**Lower the RPC one if RPC is reachable beyond localhost.** Be much more careful with the P2P one: a
+ceiling below the largest legitimate message will reject honest peers and stall IBD, and nobody has
+measured what that maximum actually is on this chain — which is exactly why the defaults were left
+alone rather than guessed downward (HTN-166).
+
+There is still no public/authenticated endpoint split. Until there is, treat an exposed RPC port as
+something to put behind authentication or a trusted network, not as something to publish.

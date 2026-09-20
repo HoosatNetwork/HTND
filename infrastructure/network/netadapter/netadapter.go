@@ -51,6 +51,13 @@ func NewNetAdapter(cfg *config.Config) (*NetAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
+	// HTN-166: must happen before either server is built, since gRPC captures the limits at
+	// construction. Both default to 0, meaning "leave the built-in ceiling alone".
+	err = grpcserver.SetMaxMessageSizes(cfg.P2PMaxMessageSize, cfg.RPCMaxMessageSize)
+	if err != nil {
+		return nil, err
+	}
+
 	p2pServer, err := grpcserver.NewP2PServer(cfg.Listeners)
 	if err != nil {
 		return nil, err
