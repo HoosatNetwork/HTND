@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
-	"github.com/Hoosat-Oy/HTND/util/difficulty"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/util/difficulty"
 	"github.com/pkg/errors"
 )
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
 )
 
 type (

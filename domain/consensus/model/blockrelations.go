@@ -1,6 +1,6 @@
 package model
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // BlockRelations represents a block's parent/child relations
 type BlockRelations struct {

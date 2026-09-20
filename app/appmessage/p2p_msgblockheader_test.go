@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/davecgh/go-spew/spew"
 )
 

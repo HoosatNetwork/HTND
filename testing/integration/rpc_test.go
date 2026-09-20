@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
-	routerpkg "github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	routerpkg "github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/rpcclient"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )

@@ -1,13 +1,13 @@
 package rpchandlers
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
-	"github.com/Hoosat-Oy/HTND/util"
-	"github.com/Hoosat-Oy/HTND/version"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/version"
 )
 
 // HandleGetBlockTemplate handles the respectively named RPC command

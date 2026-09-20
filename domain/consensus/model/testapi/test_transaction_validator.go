@@ -1,8 +1,8 @@
 package testapi
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 )
 
 // TestTransactionValidator adds to the main TransactionValidator methods required by tests

@@ -6,12 +6,12 @@ package pow
 import (
 	"math/big"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
-	"github.com/Hoosat-Oy/HTND/util/difficulty"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/serialization"
+	"github.com/HoosatNetwork/HTND/util/difficulty"
 
 	"github.com/pkg/errors"
 )

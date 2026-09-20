@@ -1,10 +1,10 @@
 package blockrelay
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/app/protocol/common"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/protocol/common"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 func (flow *handleRelayInvsFlow) sendGetBlockLocator(highHash *externalapi.DomainHash, limit uint32) error {

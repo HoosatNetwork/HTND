@@ -1,6 +1,6 @@
 package appmessage
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // GetBlockCountRequestMessage is an appmessage corresponding to
 // its respective RPC message

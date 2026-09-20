@@ -1,11 +1,11 @@
 package rpchandlers
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/app/rpc/rpccontext"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
 
 // HandleEstimateNetworkHashesPerSecond handles the respectively named RPC command

@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/version"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/version"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/id"
-	"github.com/Hoosat-Oy/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/util/mstime"
 )
 
 // MaxUserAgentLen is the maximum allowed length for the user agent field in a

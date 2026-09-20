@@ -9,10 +9,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
-	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/util"
 )
 
 // mustParseShortForm parses the passed short form script and returns the

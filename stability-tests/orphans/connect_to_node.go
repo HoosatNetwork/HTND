@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/standalone"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/standalone"
 )
 
 func connectToNode() *standalone.Routes {

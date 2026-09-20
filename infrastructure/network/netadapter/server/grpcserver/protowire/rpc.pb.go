@@ -6524,7 +6524,7 @@ const file_rpc_proto_rawDesc = "" +
 	"\x1cGetCoinSupplyResponseMessage\x12\x1a\n" +
 	"\bmaxSompi\x18\x01 \x01(\x04R\bmaxSompi\x12*\n" +
 	"\x10circulatingSompi\x18\x02 \x01(\x04R\x10circulatingSompi\x12*\n" +
-	"\x05error\x18\xe8\a \x01(\v2\x13.protowire.RPCErrorR\x05errorB%Z#github.com/Hoosat-Oy/HTND/protowireb\x06proto3"
+	"\x05error\x18\xe8\a \x01(\v2\x13.protowire.RPCErrorR\x05errorB%Z#github.com/HoosatNetwork/HTND/protowireb\x06proto3"
 
 var (
 	file_rpc_proto_rawDescOnce sync.Once

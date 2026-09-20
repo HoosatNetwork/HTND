@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/protocol/flows/v7/addressexchange"
+	"github.com/HoosatNetwork/HTND/app/protocol/flows/v7/addressexchange"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
-	"github.com/Hoosat-Oy/HTND/domain/consensus"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/addressmanager"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/domain/consensus"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
 
 type fakeReceiveAddressesContext struct{}

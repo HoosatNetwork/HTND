@@ -5,8 +5,8 @@
 package grpcserver
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-	"github.com/Hoosat-Oy/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/util/panics"
 )
 
 var (

@@ -1,6 +1,6 @@
 package model
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // BlockIterator is an iterator over blocks according to some order.
 type BlockIterator interface {

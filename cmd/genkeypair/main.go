@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/Hoosat-Oy/HTND/util"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/util"
 )
 
 func main() {

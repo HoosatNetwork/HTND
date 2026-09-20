@@ -8,7 +8,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 )
 
 // TestIPTypes ensures the various functions which determine the type of an IP

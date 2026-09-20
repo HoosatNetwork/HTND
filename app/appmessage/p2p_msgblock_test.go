@@ -9,12 +9,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/util/mstime"
 	"github.com/davecgh/go-spew/spew"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // TestBlock tests the MsgBlock API.

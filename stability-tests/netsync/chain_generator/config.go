@@ -3,7 +3,7 @@ package main
 import (
 	"path/filepath"
 
-	"github.com/Hoosat-Oy/HTND/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/stability-tests/common"
 	"github.com/jessevdk/go-flags"
 )
 

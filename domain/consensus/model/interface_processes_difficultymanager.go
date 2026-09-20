@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // DifficultyManager provides a method to resolve the

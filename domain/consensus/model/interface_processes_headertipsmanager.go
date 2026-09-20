@@ -1,6 +1,6 @@
 package model
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // HeadersSelectedTipManager manages the state of the headers selected tip
 type HeadersSelectedTipManager interface {

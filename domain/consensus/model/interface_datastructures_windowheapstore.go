@@ -1,6 +1,6 @@
 package model
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // WindowHeapSliceStore caches the slices that are needed for the heap implementation of DAGTraversalManager.BlockWindow
 type WindowHeapSliceStore interface {

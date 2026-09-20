@@ -3,9 +3,9 @@ package blockrelationstore
 import (
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/testutils"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/testutils"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 func TestBlockRelationStoreRoundTrip(t *testing.T) {

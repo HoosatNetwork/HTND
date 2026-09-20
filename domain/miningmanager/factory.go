@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensusreference"
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
-	"github.com/Hoosat-Oy/HTND/domain/miningmanager/blocktemplatebuilder"
-	mempoolpkg "github.com/Hoosat-Oy/HTND/domain/miningmanager/mempool"
+	"github.com/HoosatNetwork/HTND/domain/consensusreference"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/domain/miningmanager/blocktemplatebuilder"
+	mempoolpkg "github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
 )
 
 // Factory instantiates new mining managers

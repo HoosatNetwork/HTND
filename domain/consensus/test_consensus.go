@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashset"
-	"github.com/Hoosat-Oy/HTND/util/staging"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
+	"github.com/HoosatNetwork/HTND/util/staging"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/testapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/pkg/errors"
 )
 

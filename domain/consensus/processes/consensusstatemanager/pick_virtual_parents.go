@@ -1,15 +1,15 @@
 package consensusstatemanager
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-	"github.com/Hoosat-Oy/HTND/util/math"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/util/math"
 	"github.com/pkg/errors"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashset"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
 )
 
 func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingArea, tips []*externalapi.DomainHash) ([]*externalapi.DomainHash, error) {

@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
 
 	"github.com/pkg/errors"
 )

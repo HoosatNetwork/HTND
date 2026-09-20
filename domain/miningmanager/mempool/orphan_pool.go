@@ -3,16 +3,16 @@ package mempool
 import (
 	"fmt"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/miningmanager/mempool/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool/model"
 	"github.com/pkg/errors"
 )
 

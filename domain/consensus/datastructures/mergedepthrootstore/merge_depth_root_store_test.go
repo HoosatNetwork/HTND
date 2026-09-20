@@ -3,8 +3,8 @@ package mergedepthrootstore
 import (
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/datastructures/testutils"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/testutils"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 )
 
 func TestMergeDepthRootStoreRoundTrip(t *testing.T) {

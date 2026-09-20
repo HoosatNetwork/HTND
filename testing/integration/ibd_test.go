@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/constants"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/mining"
-	"github.com/Hoosat-Oy/HTND/internal/ci"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/mining"
+	"github.com/HoosatNetwork/HTND/internal/ci"
 
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 )
 
 func TestIBD(t *testing.T) {

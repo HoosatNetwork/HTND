@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/pkg/errors"
 )
 

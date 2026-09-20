@@ -1,7 +1,7 @@
 package protocolerrors
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/pkg/errors"
 )
 

@@ -3,7 +3,7 @@ package ldb
 import (
 	"bytes"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/util"

@@ -3,8 +3,8 @@ package consensus_test
 import (
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/domain/consensus"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
 )
 
 func TestPruningDepth(t *testing.T) {

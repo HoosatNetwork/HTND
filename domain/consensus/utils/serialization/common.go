@@ -3,8 +3,8 @@ package serialization
 import (
 	"io"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/util/binaryserializer"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/util/binaryserializer"
 	"github.com/pkg/errors"
 )
 

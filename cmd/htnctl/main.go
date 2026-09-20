@@ -5,14 +5,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/version"
+	"github.com/HoosatNetwork/HTND/version"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
 
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient/grpcclient"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/rpcclient/grpcclient"
 )
 
 func main() {

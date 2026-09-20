@@ -10,12 +10,12 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 
 	// Required for profiling
 	_ "net/http/pprof"
 
-	"github.com/Hoosat-Oy/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/util/panics"
 )
 
 // heapDumpFileName is the name of the heap dump file. We want every run to have its own

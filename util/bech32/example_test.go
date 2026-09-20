@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/Hoosat-Oy/HTND/util/bech32"
+	"github.com/HoosatNetwork/HTND/util/bech32"
 )
 
 // This example demonstrates how to decode a bech32 encoded string.

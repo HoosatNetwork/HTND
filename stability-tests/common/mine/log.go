@@ -1,8 +1,8 @@
 package mine
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-	"github.com/Hoosat-Oy/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/util/panics"
 )
 
 // log is a logger that is initialized with no output filters. This

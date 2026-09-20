@@ -3,7 +3,7 @@ package subnetworks
 import (
 	"bytes"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // Less returns true iff id a is less than id b

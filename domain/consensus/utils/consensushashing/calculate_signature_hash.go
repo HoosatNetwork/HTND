@@ -1,10 +1,10 @@
 package consensushashing
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/hashes"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/serialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
 	"github.com/pkg/errors"
 )
 

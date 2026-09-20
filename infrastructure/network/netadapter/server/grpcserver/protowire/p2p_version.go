@@ -1,9 +1,9 @@
 package protowire
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/id"
-	"github.com/Hoosat-Oy/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/util/mstime"
 	"github.com/pkg/errors"
 )
 

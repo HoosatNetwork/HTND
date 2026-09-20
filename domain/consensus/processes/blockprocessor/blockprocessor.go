@@ -3,10 +3,10 @@ package blockprocessor
 import (
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/processes/blockprocessor/blocklogger"
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/processes/blockprocessor/blocklogger"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 // blockProcessor is responsible for processing incoming blocks

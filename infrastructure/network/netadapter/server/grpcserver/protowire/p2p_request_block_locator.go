@@ -1,7 +1,7 @@
 package protowire
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/pkg/errors"
 )
 

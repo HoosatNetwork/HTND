@@ -4,7 +4,7 @@
 
 package appmessage
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/utils/pow"
+import "github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
 
 // MsgIBDBlock implements the Message interface and represents a hoosat
 // ibdblock message. It is used to deliver block and transaction information in

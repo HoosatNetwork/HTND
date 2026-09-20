@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 )
 
 // Test that exactly MaxCompoundTxPerAddressPerMinute submissions within the 1-minute window

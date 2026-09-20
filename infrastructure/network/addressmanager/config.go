@@ -4,7 +4,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/infrastructure/config"
 )
 
 // Config is a descriptor which specifies the AddressManager instance configuration.

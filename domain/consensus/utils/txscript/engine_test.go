@@ -7,9 +7,9 @@ package txscript
 import (
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // TestBadPC sets the pc to a deliberately bad result then confirms that Step()

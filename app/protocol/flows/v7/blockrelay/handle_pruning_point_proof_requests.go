@@ -1,10 +1,10 @@
 package blockrelay
 
 import (
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
-	"github.com/Hoosat-Oy/HTND/domain"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/domain"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 )
 
 // PruningPointProofRequestsContext is the interface for the context needed for the HandlePruningPointProofRequests flow.

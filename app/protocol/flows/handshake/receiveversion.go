@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	peerpkg "github.com/Hoosat-Oy/HTND/app/protocol/peer"
-	"github.com/Hoosat-Oy/HTND/app/protocol/protocolerrors"
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
 )
 

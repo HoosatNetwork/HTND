@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 // TransactionValidator exposes a set of validation classes, after which

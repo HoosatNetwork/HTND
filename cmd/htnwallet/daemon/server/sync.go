@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
 	"github.com/pkg/errors"
 )
 

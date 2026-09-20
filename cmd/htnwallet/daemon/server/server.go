@@ -8,19 +8,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
-	"github.com/Hoosat-Oy/HTND/version"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/version"
 
-	"github.com/Hoosat-Oy/HTND/util/txmass"
+	"github.com/HoosatNetwork/HTND/util/txmass"
 
-	"github.com/Hoosat-Oy/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/util/profiling"
 
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/Hoosat-Oy/HTND/cmd/htnwallet/keys"
-	"github.com/Hoosat-Oy/HTND/domain/dagconfig"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient"
-	"github.com/Hoosat-Oy/HTND/infrastructure/os/signal"
-	"github.com/Hoosat-Oy/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/rpcclient"
+	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
+	"github.com/HoosatNetwork/HTND/util/panics"
 	"github.com/pkg/errors"
 
 	"google.golang.org/grpc"

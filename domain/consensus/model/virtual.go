@@ -1,6 +1,6 @@
 package model
 
-import "github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 
 // VirtualBlockHash is a marker hash for the virtual block
 var VirtualBlockHash = externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{

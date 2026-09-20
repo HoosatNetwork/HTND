@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 )
 
 func writeKV(t *testing.T, db *LevelDB, m map[string]string) {

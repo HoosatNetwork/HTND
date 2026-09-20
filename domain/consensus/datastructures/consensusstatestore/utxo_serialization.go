@@ -1,8 +1,8 @@
 package consensusstatestore
 
 import (
-	"github.com/Hoosat-Oy/HTND/domain/consensus/database/serialization"
-	"github.com/Hoosat-Oy/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
+	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 )
 
 func serializeOutpoint(outpoint *externalapi.DomainOutpoint) ([]byte, error) {

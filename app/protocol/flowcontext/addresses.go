@@ -1,7 +1,7 @@
 package flowcontext
 
 import (
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
 )
 
 // AddressManager returns the address manager associated to the flow context.

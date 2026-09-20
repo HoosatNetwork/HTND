@@ -3,9 +3,9 @@ package main
 import (
 	"time"
 
-	"github.com/Hoosat-Oy/HTND/app/appmessage"
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
-	"github.com/Hoosat-Oy/HTND/infrastructure/network/rpcclient"
+	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/network/rpcclient"
 	"github.com/pkg/errors"
 )
 

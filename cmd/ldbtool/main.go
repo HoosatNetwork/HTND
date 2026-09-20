@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Hoosat-Oy/HTND/infrastructure/db/database/ldb"
-	"github.com/Hoosat-Oy/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 )
 
 func usage() {
