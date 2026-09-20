@@ -52,6 +52,10 @@ func setupHarness(t *testing.T, params *harnessParams) (harness *appHarness, tea
 	setConfig(t, harness, params.protocolVersion)
 	setDatabaseContext(t, harness)
 	setApp(t, harness)
+	// Dropped as late as possible, immediately before the node binds: holding the reservation until
+	// here is what stops one of this binary's own outgoing connections being assigned these ports.
+	releaseReservedAddress(harness.p2pAddress)
+	releaseReservedAddress(harness.rpcAddress)
 	harness.app.Start()
 	setRPCClient(t, harness)
 

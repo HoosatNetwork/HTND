@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -67,13 +68,68 @@ func initTestAddresses() {
 	})
 }
 
+// Reserved ports are taken from below the lowest ephemeral range any of the platforms these tests run
+// on allocates from - Linux starts at 32768, Windows at 49152 - so that the kernel can never hand one
+// of them out on its own.
+const (
+	minReservedPort = 20000
+	maxReservedPort = 32000
+)
+
+// reservedListeners keeps every address handed out by reserveLoopbackAddress bound until the node that
+// was given it is ready to listen on it, guarded by reservedListenersLock because harnesses are torn
+// down from teardown goroutines.
+var (
+	reservedListenersLock sync.Mutex
+	reservedListeners     = make(map[string]net.Listener)
+	// Offset by pid so that two test binaries running at once - go test builds one per package, and CI
+	// runs several packages in parallel - do not march through the same ports in the same order.
+	nextPortToTry = minReservedPort + os.Getpid()%(maxReservedPort-minReservedPort)
+)
+
+// reserveLoopbackAddress finds a free loopback port and keeps holding it until releaseReservedAddress
+// hands it over to the node that was given it.
+//
+// This used to listen on "127.0.0.1:0" and close the listener immediately, keeping only the address.
+// That draws from the kernel's ephemeral range - the very range it also assigns to outgoing
+// connections, which these tests make by the hundred - and left the port free from then until a node
+// bound it. A client connection that happened to be assigned that exact port made the node's own bind
+// fail with "address already in use", which kills the whole test binary rather than one test.
 func reserveLoopbackAddress() string {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		panic(err)
+	reservedListenersLock.Lock()
+	defer reservedListenersLock.Unlock()
+
+	portCount := maxReservedPort - minReservedPort
+	for attempt := 0; attempt < portCount; attempt++ {
+		port := minReservedPort + (nextPortToTry-minReservedPort+attempt)%portCount
+		address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			// Taken by something else on this machine - including another test binary's reservation.
+			continue
+		}
+
+		nextPortToTry = port + 1
+		reservedListeners[address] = listener
+		return address
 	}
-	defer listener.Close()
-	return listener.Addr().String()
+
+	panic("no free loopback port in the reserved range")
+}
+
+// releaseReservedAddress drops the reservation on address so the node about to start can bind it. It
+// is a no-op for an address that was never reserved, or whose reservation was already released by an
+// earlier harness reusing the same address.
+func releaseReservedAddress(address string) {
+	reservedListenersLock.Lock()
+	defer reservedListenersLock.Unlock()
+
+	listener, ok := reservedListeners[address]
+	if !ok {
+		return
+	}
+	delete(reservedListeners, address)
+	listener.Close()
 }
 
 func mustSchnorrAddressFromPrivateKeyHex(privateKeyHex string) string {
