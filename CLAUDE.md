@@ -46,7 +46,7 @@ go test -tags=ci ./...                      # what CI runs; skips tests guarded 
 | `infrastructure/autoupdate/` | GitHub release auto-updater and panic issue reporting. |
 | `util/` | Addresses (bech32 `hoosat:` / `hoosattest:`), amounts, difficulty, `mstime`, `txmass`, `staging.CommitAllChanges`. |
 | `cmd/` | `htnctl` (RPC CLI), `htnwallet` (wallet plus gRPC daemon), `htnminer` (CPU miner), `genkeypair`, `htnexodus`, `ldbtool`, `utxoforensics` (offline datadir forensics). |
-| `tools/` | `pebble-tool` (inspect or modify a pebble DB), `pruningproof-harness`. |
+| `tools/` | `pruningproof-harness`. (`pebble-tool` was removed in HTN-177 — an ELF with no source; see `tools/pebble-tool/README.md`.) |
 | `docs/` | `script-engine.md` (txscript VM), `utxo-survey.md` (`HTND_UTXO_SURVEY*` IBD failure JSONL), `exodus-pruning-point.md`, `running-a-node-in-ubuntu.md`. |
 
 Untracked or ignored local artifacts: `c5-runs/` (survey/forensics run outputs with copied datadirs), `utxoforensics`, and `cmd/htnctl/htnctl` binaries.
@@ -112,5 +112,5 @@ Touch every layer, following an existing command such as `GetBlockCount`:
 
 ## Safety notes
 
-- `utxoforensics`, `pebble-tool`, `ldbtool` and `htnexodus import` open datadirs directly. Pebble replays its WAL on open, so run them on a **copy** of the datadir, never on a live node's directory. Opening a pebble datadir with the leveldb engine destroys it.
+- `utxoforensics`, `ldbtool` and `htnexodus import` open datadirs directly. Pebble replays its WAL on open, so run them on a **copy** of the datadir, never on a live node's directory. Opening a pebble datadir with the leveldb engine destroys it.
 - Consensus changes can split the network. Prefer measuring and logging first, and include the reasoning in the commit.
