@@ -230,7 +230,7 @@ func (gc *GitHubClient) isReleaseValidForChannel(release *GitHubRelease, channel
 }
 
 // GetAssetForPlatform returns the download URL for the asset matching the current platform
-func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
+func (release *GitHubRelease) GetAssetForPlatform() (string, string, error) {
 	platform := runtime.GOOS
 	arch := runtime.GOARCH
 
@@ -273,7 +273,7 @@ func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
 		assetName := fmt.Sprintf(pattern, version)
 		for _, asset := range release.Assets {
 			if asset.Name == assetName {
-				return asset.DownloadURL, nil
+				return asset.Name, asset.DownloadURL, nil
 			}
 		}
 	}
@@ -284,7 +284,7 @@ func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
 		assetName := fmt.Sprintf(pattern, versionNoV)
 		for _, asset := range release.Assets {
 			if asset.Name == assetName {
-				return asset.DownloadURL, nil
+				return asset.Name, asset.DownloadURL, nil
 			}
 		}
 	}
@@ -301,7 +301,7 @@ func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
 		assetName := fmt.Sprintf(pattern, version)
 		for _, asset := range release.Assets {
 			if asset.Name == assetName {
-				return asset.DownloadURL, nil
+				return asset.Name, asset.DownloadURL, nil
 			}
 		}
 	}
@@ -310,7 +310,7 @@ func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
 		assetName := fmt.Sprintf(pattern, versionNoV)
 		for _, asset := range release.Assets {
 			if asset.Name == assetName {
-				return asset.DownloadURL, nil
+				return asset.Name, asset.DownloadURL, nil
 			}
 		}
 	}
@@ -325,7 +325,7 @@ func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
 			// If we have an architecture, prefer assets that match both
 			if strings.Contains(nameLower, archLower) {
 				log.Warnf("Using heuristic match for asset: %s", asset.Name)
-				return asset.DownloadURL, nil
+				return asset.Name, asset.DownloadURL, nil
 			}
 		}
 	}
@@ -333,10 +333,10 @@ func (release *GitHubRelease) GetAssetForPlatform() (string, error) {
 	// Last resort: try to find any asset (should not happen)
 	if len(release.Assets) > 0 {
 		log.Warnf("Using first available asset as fallback: %s", release.Assets[0].Name)
-		return release.Assets[0].DownloadURL, nil
+		return release.Assets[0].Name, release.Assets[0].DownloadURL, nil
 	}
 
-	return "", errors.Errorf("no asset found for platform %s/%s in release %s", platform, arch, release.TagName)
+	return "", "", errors.Errorf("no asset found for platform %s/%s in release %s", platform, arch, release.TagName)
 }
 
 // GetCurrentVersion returns the current version from the running binary

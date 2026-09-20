@@ -195,6 +195,10 @@ type Flags struct {
 	AutoUpdateDownload      Bool          `long:"autoupdate-download" description:"Automatically download available updates (opt-in, disabled by default)"`
 	AutoUpdateInstall       Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download) (opt-in, disabled by default)"`
 	AutoReportIssues        Bool          `long:"autoreport-issues" description:"Automatically report issues to GitHub (opt-in, disabled by default)"`
+	// HTN-162: an update is installed only if its checksum appears in a list signed by this key.
+	// No key is built in, so auto-install refuses to run until one is set here.
+	AutoUpdatePublicKey       string `long:"autoupdate-public-key" description:"Hex-encoded ed25519 public key that release checksum lists are signed with. Required for automatic installs"`
+	AutoUpdateAllowUnverified Bool   `long:"autoupdate-allow-unverified" description:"Install updates without verifying their signature. Unsafe: anyone able to serve a release asset can then run code as this node's user"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -278,6 +282,8 @@ func defaultFlags() *Flags {
 		AutoUpdateDownload:                false,
 		AutoUpdateInstall:                 false,
 		AutoReportIssues:                  false,
+		AutoUpdatePublicKey:               "",
+		AutoUpdateAllowUnverified:         false,
 	}
 }
 

@@ -227,6 +227,9 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 			AutoInstall:      bool(cfg.AutoUpdateInstall),
 			NotifyOnly:       false,
 			AutoReportIssues: bool(cfg.AutoReportIssues),
+
+			ReleasePublicKey:       cfg.AutoUpdatePublicKey,
+			AllowUnverifiedInstall: bool(cfg.AutoUpdateAllowUnverified),
 		}
 		updater = autoupdate.NewUpdater(updaterConfig)
 		log.Infof("Auto-updater initialized (channel: %s, interval: %v, autoreport: %v)", updaterConfig.UpdateChannel, updaterConfig.CheckInterval, updaterConfig.AutoReportIssues)
