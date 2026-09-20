@@ -216,6 +216,52 @@ callers holding a slice.
 - The empty set is well-defined rather than a crash.
 - `BuildFromUnordered` does not reorder the caller's slice.
 
+## Workstream D: HTN-204 — design only
+
+`docs/design/HTN-204.md`. **No consensus code was written**, per the plan.
+
+The refutation was re-verified against this branch rather than trusted. The attempt patch is not in
+the repository, so it was reconstructed from the ticket and run A/B:
+
+| Tree | Runs | Outcome |
+|---|---|---|
+| With the attempt patch | 3 | **3/3 FAIL** (~34s, IBD timeout) |
+| Unpatched control | 2 | **2/2 pass** (~6.3s) |
+
+The central finding: **the bug and the thing preventing a worse bug are the same line.**
+`calculateBlockWindowHeap` serves both difficulty (wants the true trusted window) and trusted-data
+serving (must only enumerate what it can serve). The empty window was accidentally what kept the
+serving path consistent.
+
+The document's main conclusion is that the plan's two options are **not alternatives** to separating
+those two uses — both require it, because both make the difficulty window non-empty and the serving
+path shares it.
+
+**Awaiting your choice before any implementation.**
+
+## Final state of this branch
+
+| Workstream | State |
+|---|---|
+| A — non-consensus fixes | Done. HTN-166 partly (limits settable, defaults unchanged; endpoint split still open) |
+| B — repair tooling and deploy artefacts | Done |
+| C — gated hard-fork code | Implemented and green; two of four required tests not written (below) |
+| D — HTN-204 | Design document only, as instructed. Awaiting a decision |
+| E — canonical UTXO artefact tool | Done |
+| F — hygiene and CI | Done |
+
+### Still outstanding
+
+1. **C: a dedicated test for `ValidateIBDPruningListVersion`'s activated path.** The gate is wired
+   and inert-tested; the activated assertion cannot live in
+   `TestValidateAndInsertImportedPruningPoint` because the gate-off path leaves the consensus
+   half-imported and the rest of that long test runs against it.
+2. **C: `StrictUTXOCommitmentVersion`'s activated path end to end.** Reaching it needs a consensus
+   actually running on an offset baseline — HTN-002 reproduced exactly that in a scratchpad test
+   that was never committed.
+3. **HTN-166: the public/authenticated RPC endpoint split.** Architectural, not a limit.
+4. **D: implementation**, pending the option choice.
+
 ## Hard-rule compliance ledger
 
 | Rule | How this branch complies |
