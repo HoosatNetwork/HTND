@@ -2692,3 +2692,92 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   repeated, avoidable work inside findNextPendingTip.
 - commit: b45692455
 - commit: cd2b11676
+
+## HTN-223
+- title: File.Save fsynced the keys file's containing directory, which Windows refuses, so every
+  wallet keys save failed there
+- status: FIXED
+- severity: high (on Windows the wallet could not save a keys file at all - no new address, no change
+  address, no new wallet - and it broke every Windows CI run; Unix unaffected)
+- area: htnwallet
+- reported: 2026-09-20, user: "Continue fixing CI, there is a issue that github CI fails", later
+  narrowed with a pasted Windows job excerpt showing three cmd/htnwallet/keys tests and
+  cmd/htnwallet's TestSendDoesNotRebuildAfterBroadcastError all failing with
+  "Save: sync C:\Users\RUNNER~1\AppData\Local\Temp\...\001: Access is denied."
+- mechanism: HTN-153's atomic-save change (03f6b7b6f) ends File.Save by opening the keys file's
+  containing directory and calling Sync on it, so the rename is durable and not only the replacement
+  file's contents. That is correct and necessary on Unix. Windows has no directory flush at all:
+  Go's File.Sync maps to FlushFileBuffers, which the OS refuses on a directory handle, returning
+  ERROR_ACCESS_DENIED - surfaced by Go as a *PathError with Op "sync", which is exactly the
+  "sync <dir>: Access is denied" in the log. Save therefore returned an error on Windows on every
+  call, after the rename had already happened, so callers treated a completed save as a failure.
+  The push that introduced it (03f6b7b6f, pushed together with the docs-only 76f7bcf9d) is the first
+  failing CI run, and Windows failed 6 of 6 runs from then until this fix. This was initially hard to
+  see because the one ubuntu failure in that same window had a different, unrelated cause (HTN-224),
+  and that was the log excerpt available first.
+- fix: syncDir split into cmd/htnwallet/keys/syncdir_unix.go (//go:build !windows - the original
+  open-and-Sync, unchanged) and syncdir_windows.go (//go:build windows - returns nil), following the
+  _unix.go/_windows.go pattern the repo already uses for infrastructure/rlimit, util/memory and
+  infrastructure/os/limits. Chosen over swallowing the error inline or branching on runtime.GOOS so
+  that the Unix durability barrier is untouched and the Windows no-op is explicit and documented.
+- tests: no new test - the three existing cmd/htnwallet/keys save tests and cmd/htnwallet's
+  TestSendDoesNotRebuildAfterBroadcastError are already exactly this defect's reproduction on Windows
+  and all four were failing there. Verified GOOS=windows and GOOS=linux each select the intended
+  syncdir file via go list, and that both files compile for their target. Full cmd/htnwallet/... suite
+  green on Linux, whole-tree gofmt/staticcheck clean, go test ./... green with and without -tags=ci.
+  Not executed on a Windows host from here - the Windows verification is the CI run this commit
+  triggers.
+- left alone: the rename itself stays atomic on Windows (MoveFileEx replaces the destination in one
+  step), so the crash-safety of the swap is intact there; only the extra directory-level durability
+  barrier is unavailable. Every other Sync call in the tree is on a regular file, which Windows
+  flushes fine, so none were touched.
+- remaining tension: on Windows a crash in the window immediately after the rename can still leave the
+  directory entry unflushed, and there is no OS primitive to prevent that.
+- commit: 0b1c55abd
+
+## HTN-224
+- title: Integration harness addresses were reserved by binding port 0 and closing, so the kernel
+  could reissue the port before the node bound it
+- status: FIXED
+- severity: medium (test-infrastructure only, no production impact, but it kills the whole
+  testing/integration binary rather than one test, and it did so in CI)
+- area: testing/integration
+- reported: 2026-09-20, user pasted the ubuntu-latest failure:
+  "Exiting: Error starting the net adapter: listen tcp 127.0.0.1:41179: bind: address already in use"
+  with a stack through gRPCServer.listenOn -> NetAdapter.Start -> ComponentManager.Start ->
+  setupHarness -> standardSetup -> TestAddressExchange, and "FAIL testing/integration 0.954s".
+- mechanism: reserveLoopbackAddress listened on "127.0.0.1:0", kept the resulting address and closed
+  the listener immediately (defer listener.Close()), and the port was only bound again later, when a
+  harness started a node - for the first harness, a whole test later. "127.0.0.1:0" allocates from the
+  kernel's ephemeral range, which is the same range it assigns to outgoing connections; these tests
+  make those by the hundred (TestRPCMaxInboundConnections alone opens 500 RPC clients, against a range
+  28231 ports wide on Linux). If any of them was assigned a reserved-but-currently-unbound port, the
+  node's own bind failed with EADDRINUSE. That error reaches panics.Exit, which calls os.Exit(1), so
+  it takes the entire test binary down rather than failing one test - hence a sub-second package FAIL
+  with a goroutine dump.
+- reproduction: the flake never reproduced in ~20 unloaded local runs (ubuntu failed only 1 of 6 CI
+  runs), so the mechanism was confirmed directly instead: a standalone program using the old
+  reserve-then-close pattern had its released port reissued by the kernel after 510 ephemeral
+  allocations, after which rebinding that address failed with exactly the CI error. The same program
+  holding the listener survived 27743 competing allocations without losing the port.
+- fix: reservations now come from 20000-32000, below the lowest ephemeral range any platform here
+  allocates from (Linux 32768, Windows 49152), so the kernel cannot hand one out on its own; and the
+  listener is held until releaseReservedAddress passes the port to the node that was given it, called
+  in setupHarness immediately before app.Start(). The starting port is offset by pid so that parallel
+  test binaries do not march through the range in the same order, and a port already taken by anything
+  else is skipped rather than fatal. Holding alone was tried first and rejected as insufficient: it
+  still leaves the RPC port free while the P2P port is being bound.
+- tests: no new test - a reliable failing test would have to win a kernel port race on demand. Instead
+  the fix was measured against a generator holding the ephemeral range under sustained churn,
+  alternating runs between this tree and a pristine checkout under identical conditions: without the
+  change 0 of 4 runs passed, all four dying on "address already in use" at an ephemeral port; with it
+  4 of 4 passed with no bind failure at all. The existing suite is a regression guard, not a
+  reproduction, and passed unchanged. go test ./... green with and without -tags=ci; full race suite
+  (-race -p 2 -tags=ci) green.
+- left alone: the window between one test's node stopping and the next test rebinding the same address
+  is not re-reserved. It stays narrow, it is not what CI hit, and closing it would mean tracking node
+  lifetime through teardown with no evidence of need.
+- note: an earlier local measurement appeared to show this fix failing 5 runs in a row. That was the
+  mechanism-demonstration program running concurrently and holding ~28000 sockets, i.e. the experiment
+  contaminating its own measurement, not a regression. Re-measured cleanly afterwards.
+- commit: 948b150c2

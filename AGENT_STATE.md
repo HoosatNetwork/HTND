@@ -228,7 +228,45 @@ active_issue: HTN-197..HTN-213 all landed and pushed to origin/master (see git l
   Full consensusstatemanager suite (17 functions) + full domain/consensus/... suite green,
   gofmt/vet/staticcheck clean, whole-tree build clean with and without -tags=ci.
   All three (HTN-220/221/222) documented in ISSUES.md with full mechanism/fix/test/left-alone detail.
-next_action: push this commit (b45692455) and the ISSUES.md/AGENT_STATE.md docs update, then tell the
+- 2026-09-20 (CI repair session): user reported "Continue fixing CI, there is a issue that github CI
+  fails". Two genuinely separate bugs, both now FIXED and pushed. Note for next time: this host has no
+  `gh` CLI and no GitHub token, and the Actions logs API returns 403 "Must have admin rights" even for
+  this public repo, so CI logs can only be read by the user pasting them. The runs/jobs LIST endpoints
+  DO work unauthenticated, and per-job conclusions across runs were what actually cracked this open -
+  use `curl .../actions/workflows/88123438/runs` and `.../runs/<id>/jobs` early.
+  The decisive data: Tests failed on every run from 76f7bcf9d3 onward, but split by job it was
+  windows-latest 6/6 failing and ubuntu-latest only 1/6. That ruled out the "which commit broke it"
+  framing three docs-only commits in the failing range had already made suspicious.
+  - HTN-223 FIXED 0b1c55abd (the actual CI breakage): HTN-153's atomic keys-file save (03f6b7b6f, the
+    only code in the first failing push) ends File.Save with an fsync of the containing directory.
+    Windows has no directory flush - File.Sync maps to FlushFileBuffers, refused on a directory handle
+    - so every Save there failed with "sync <dir>: Access is denied" after the rename had already
+    happened. Fixed with the repo's existing _unix.go/_windows.go split (syncdir_unix.go keeps the
+    real fsync, syncdir_windows.go returns nil). Unix behavior byte-identical.
+  - HTN-224 FIXED 948b150c2 (the 1-of-6 ubuntu flake, unrelated to the above): reserveLoopbackAddress
+    bound "127.0.0.1:0", closed the listener and reused the address later, so the port sat free in the
+    kernel's ephemeral range - the same range these tests draw hundreds of client connections from -
+    until a node bound it. A stolen port makes the node's bind fail, and that error goes through
+    panics.Exit, killing the whole test binary. Reservations now come from 20000-32000 (below Linux's
+    32768 and Windows' 49152 ephemeral floors) and the listener is held until the node takes the port.
+  Method notes worth keeping: (1) the flake never reproduced in ~20 unloaded local runs, so it was
+  proven by reproducing the MECHANISM standalone - a released port was reissued after 510 ephemeral
+  allocations and then failed to rebind with exactly the CI error - and the fix measured under a
+  sustained port-churn generator, alternating against a pristine checkout: old 0/4 pass, fixed 4/4.
+  (2) An intermediate measurement appeared to show the fix failing 5 runs straight; that was the
+  demonstration program itself holding ~28000 sockets concurrently, i.e. the experiment contaminating
+  its own result. Always check what else of yours is running before believing a local regression.
+  (3) `go test ./...` WITHOUT -tags=ci needs more than a 14G cap - it was SIGTERMed at 14G/-p 4 and
+  passed clean at 60G/-p 2.
+next_action: watch the CI run triggered by 0b1c55abd/948b150c2 and confirm BOTH jobs go green -
+  windows-latest is the real test of HTN-223, since it could not be executed from this host (Linux
+  only; cross-compiling the package is blocked by cgo deps go-muhash/go-secp256k1, so only build-tag
+  selection and standalone compilation were verified). If windows-latest still fails, the next thing
+  to check is whether any OTHER Windows-hostile syscall is reachable from the wallet save path. If
+  ubuntu-latest shows another sub-second testing/integration FAIL, HTN-224 did not cover it and the
+  remaining un-reserved window (node stop -> next test rebind, deliberately left alone) is the first
+  suspect. Older, still-open context follows below.
+superseded_next_action: push this commit (b45692455) and the ISSUES.md/AGENT_STATE.md docs update, then tell the
   user to redeploy and keep watching docker logs / GetBlockDagInfo (difficulty, virtualDaaScore) and
   the "Resolving virtual. Estimated progress" lines to confirm: (a) the backlog actually finishes,
   (b) mining resumes normally afterward, (c) difficulty climbs off the floor once fresh blocks displace
