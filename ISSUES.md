@@ -3097,3 +3097,24 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - left alone: Options (i) persist a compact trusted window at prune time and (ii) derive from
   retained headers plus a release checkpoint. Both are about robustness where Option 0 does not
   reach, not about the reported symptom, and both still require Option 0 underneath them.
+
+## HTN-204 follow-up (2026-09-21): the first fix only worked for one hop
+- The first HTN-204 change on this branch left the SERVED window truncated. A node syncing from a
+  genesis-synced peer was fixed; a node syncing from a headers-proof peer received that peer's
+  truncated window and still computed genesis difficulty. Reported by the user as "still not
+  working, even on the correct branch".
+- Why it was missed: "TestIBDWithPruning 3/3" was cited as verifying the fix, but that test runs on
+  simnet with DisableDifficultyAdjustment, so it never computes a difficulty. It verified serving,
+  not difficulty. That was an overstated claim.
+- Reproduced with a real end-to-end test (difficulty enabled, small window): one hop 20/20 correct,
+  two hops 15/20 at genesis bits - the live symptom.
+- Fixed with three changes, each shown failing without it: DAABlockWindow serves the trusted window;
+  TrustedDataDataDAAHeader finds trusted-window blocks by hash instead of trusting a served-list index
+  that does not match the stored one (the real cause of the original patch's failure); and the lookup
+  searches the anchor block whose trusted window the walk actually used, which after a pruning-point
+  advance is the OLD pruning point, not the one being served.
+- Verified: one, two and three hops plus a pruning-point-advance-then-serve case all 20/20 with
+  matching bits; TestIBDWithPruning 3/3; go test -tags=ci ./... 114 ok, 0 fail.
+- Limitation: a node syncing from an OLD-code peer still receives a truncated window. Deploy to the
+  nodes others sync from first.
+- Full detail: docs/design/HTN-204.md section 11.

@@ -1677,8 +1677,9 @@ func (s *consensus) TrustedDataDataDAAHeader(trustedBlockHash, daaBlockHash *ext
 		}, nil
 	}
 
-	// GHOSTDAG data not found in store, try to get it from blocksWithTrustedDataDAAWindowStore
-	ghostdagDataHashPair, err := s.blocksWithTrustedDataDAAWindowStore.DAAWindowBlock(s.databaseContext, stagingArea, trustedBlockHash, daaBlockWindowIndex)
+	// GHOSTDAG data not found in store: the block is below this node's pruning point and exists here
+	// only as an entry in trustedBlockHash's trusted DAA window.
+	ghostdagData, err = s.trustedWindowGHOSTDAGData(stagingArea, trustedBlockHash, daaBlockHash, daaBlockWindowIndex)
 	if err != nil {
 		log.Infof("TrustedDataDataDAAHeader failed to retrieve with %s\n", daaBlockHash)
 		return nil, err
@@ -1686,8 +1687,105 @@ func (s *consensus) TrustedDataDataDAAHeader(trustedBlockHash, daaBlockHash *ext
 
 	return &externalapi.TrustedDataDataDAAHeader{
 		Header:       header,
-		GHOSTDAGData: ghostdagDataHashPair.GHOSTDAGData,
+		GHOSTDAGData: ghostdagData,
 	}, nil
+}
+
+// trustedWindowGHOSTDAGData finds daaBlockHash's GHOSTDAG data in trustedBlockHash's stored trusted
+// DAA window.
+//
+// HTN-204. This used to read the entry at daaBlockWindowIndex and return it without checking which
+// block it was. daaBlockWindowIndex is the position of daaBlockHash in the list being SERVED; the
+// store is indexed by position in the window as it was originally RECEIVED. Those only coincide
+// while the served window happens to be exactly the received one, in the same order - which was only
+// true because a headers-proof node's served window was truncated at its pruning point and never
+// contained trusted-window blocks at all.
+//
+// Once a headers-proof node serves its full window, as it must for the next node to compute the
+// right difficulty, the two orders diverge. Reading by index then either returns a DIFFERENT block's
+// GHOSTDAG data under this block's header - silently wrong trusted data handed to a syncing peer - or
+// runs past the end of the stored window, which is the "DAA window <hash> does not exist in db"
+// failure that sank the original HTN-204 patch.
+//
+// The index is still tried first, because on the common path it is correct and costs one read. It
+// is only trusted if the entry it names is actually daaBlockHash; otherwise the window is searched by
+// hash. Nothing is returned for a hash the window does not contain.
+func (s *consensus) trustedWindowGHOSTDAGData(stagingArea *model.StagingArea,
+	trustedBlockHash, daaBlockHash *externalapi.DomainHash, daaBlockWindowIndex uint64,
+) (*externalapi.BlockGHOSTDAGData, error) {
+	pair, err := s.blocksWithTrustedDataDAAWindowStore.DAAWindowBlock(
+		s.databaseContext, stagingArea, trustedBlockHash, daaBlockWindowIndex)
+	if err != nil && !database.IsNotFoundError(err) {
+		return nil, err
+	}
+	if err == nil && pair.Hash.Equal(daaBlockHash) {
+		return pair.GHOSTDAGData, nil
+	}
+
+	// The trusted part of trustedBlockHash's window is not necessarily trustedBlockHash's OWN trusted
+	// window. calculateBlockWindowHeap walks down the selected chain and takes the trusted window of
+	// the first block it reaches that has one - so once a headers-proof node's pruning point has
+	// advanced past the one it synced to, the new pruning point has no trusted window of its own, and
+	// the bottom of its window is the OLD pruning point's trusted window, stored under the old hash.
+	//
+	// So this finds that same anchor by the same rule, rather than assuming it is trustedBlockHash.
+	// Searching trustedBlockHash alone is what made a node serve correctly right after its IBD and
+	// then fail to serve anyone as soon as its pruning point moved on.
+	anchor, found, err := s.trustedWindowAnchor(stagingArea, trustedBlockHash)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		for i := uint64(0); ; i++ {
+			pair, err := s.blocksWithTrustedDataDAAWindowStore.DAAWindowBlock(
+				s.databaseContext, stagingArea, anchor, i)
+			if database.IsNotFoundError(err) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			if pair.Hash.Equal(daaBlockHash) {
+				return pair.GHOSTDAGData, nil
+			}
+		}
+	}
+
+	return nil, errors.Wrapf(database.ErrNotFound,
+		"block %s is not in the trusted DAA window reachable from %s", daaBlockHash, trustedBlockHash)
+}
+
+// trustedWindowAnchor returns the block whose stored trusted DAA window forms the bottom of
+// blockHash's DAA window: blockHash itself if it has one, otherwise the first block down its selected
+// chain that does. This must follow exactly the rule calculateBlockWindowHeap uses to decide where to
+// take the trusted window from, or the server will look for a block in a different window from the
+// one it served it out of.
+func (s *consensus) trustedWindowAnchor(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
+) (*externalapi.DomainHash, bool, error) {
+	current := blockHash
+	for {
+		_, err := s.blocksWithTrustedDataDAAWindowStore.DAAWindowBlock(s.databaseContext, stagingArea, current, 0)
+		if err == nil {
+			return current, true, nil
+		}
+		if !database.IsNotFoundError(err) {
+			return nil, false, err
+		}
+
+		ghostdagData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, current, false)
+		if database.IsNotFoundError(err) {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		selectedParent := ghostdagData.SelectedParent()
+		if selectedParent == nil || selectedParent.Equal(s.genesisHash) ||
+			selectedParent.Equal(model.VirtualGenesisBlockHash) {
+			return nil, false, nil
+		}
+		current = selectedParent
+	}
 }
 
 func (s *consensus) TrustedBlockAssociatedGHOSTDAGDataBlockHashes(blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {

@@ -94,17 +94,23 @@ func TestDifficultyWindowReachesTheTrustedWindowOfAPrunedBlock(t *testing.T) {
 	})
 }
 
-// TestServingWindowStopsAtThePruningBoundary is the other half, and the reason the original fix was
-// reverted. It must keep the OLD behaviour.
+// TestNonTrustedWindowStopsAtThePruningBoundary pins the includeTrustedWindow=false mode, which must
+// keep the OLD behaviour.
 //
-// The serving path answers a peer's pruning-point-anticone request. If it names the blocks in a
-// pruned block's trusted window, the serving node is then asked for TrustedDataDataDAAHeader for
-// each of them - and it has neither their GHOSTDAG data nor their trusted-window entries, so it
-// returns not-found and the peer's IBD dies. Reproduced 3/3 for docs/design/HTN-204.md.
-func TestServingWindowStopsAtThePruningBoundary(t *testing.T) {
+// This was first written as "the SERVING window stops at the boundary", because the first HTN-204
+// change left serving truncated. That turned out to be the wrong half to leave alone: it made the fix
+// work for exactly one hop, since a node syncing from a headers-proof peer received that peer's
+// truncated window. Serving now uses the trusted window too - see DAABlockWindow and
+// consensus.trustedWindowGHOSTDAGData - and the end-to-end proof lives in blockprocessor's
+// htn204_difficulty_sync_test.go.
+//
+// What still uses false, and why it must: pastMedianTimeManager, which feeds validateMedianTime - an
+// ENABLED check, so widening its window would change which blocks this node accepts - and
+// pruningManager.blocksToKeep.
+func TestNonTrustedWindowStopsAtThePruningBoundary(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		tc, tearDown, err := consensus.NewFactory().NewTestConsensus(consensusConfig,
-			"TestServingWindowStopsAtThePruningBoundary")
+			"TestNonTrustedWindowStopsAtThePruningBoundary")
 		if err != nil {
 			t.Fatalf("NewTestConsensus: %+v", err)
 		}
@@ -113,8 +119,7 @@ func TestServingWindowStopsAtThePruningBoundary(t *testing.T) {
 		stagingArea := model.NewStagingArea()
 		prunedBlock := stagePrunedBlockWithTrustedWindow(t, tc, stagingArea)
 
-		// false = the serving path, and everything else that must not change: past median time and
-		// the pruning manager's blocksToKeep.
+		// false = past median time and the pruning manager's blocksToKeep.
 		window, err := tc.DAGTraversalManager().BlockWindowHeapSlice(
 			stagingArea, prunedBlock, trustedWindowSize*2, false)
 		if err != nil {
@@ -122,9 +127,9 @@ func TestServingWindowStopsAtThePruningBoundary(t *testing.T) {
 		}
 
 		if len(window) != 0 {
-			t.Fatalf("the serving window walked into the trusted window and returned %d blocks. "+
-				"Serving these to a peer kills its IBD, because this node cannot answer "+
-				"TrustedDataDataDAAHeader for any of them.", len(window))
+			t.Fatalf("the non-trusted window walked into the trusted window and returned %d blocks. "+
+				"Past median time reads this window, and validateMedianTime is enabled, so widening it "+
+				"changes which blocks this node accepts.", len(window))
 		}
 	})
 }
@@ -179,7 +184,7 @@ func TestTheTwoWindowsDoNotShareACacheEntry(t *testing.T) {
 						"answer leaked into it", len(difficultyWindow), trustedWindowSize)
 				}
 				if len(servingWindow) != 0 {
-					t.Errorf("serving window has %d blocks, want 0 - the difficulty path's cached "+
+					t.Errorf("non-trusted window has %d blocks, want 0 - the trusted window's cached "+
 						"answer leaked into it", len(servingWindow))
 				}
 			})

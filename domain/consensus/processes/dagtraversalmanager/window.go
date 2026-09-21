@@ -18,7 +18,29 @@ func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, h
 		return nil, err
 	}
 	windowSize := dtm.difficultyAdjustmentWindowSize[blockversion.Index(blockVersion, len(dtm.difficultyAdjustmentWindowSize))]
-	return dtm.BlockWindow(stagingArea, highHash, windowSize)
+
+	// HTN-204: serve the SAME window difficulty is computed from, trusted part included.
+	//
+	// This was deliberately left truncated by the first HTN-204 change, and that turned out to be the
+	// half that mattered on a real network. Serving a truncated window made the fix work for exactly
+	// one hop: a node syncing from a genesis-synced peer got a full window, but a node syncing from a
+	// headers-proof peer got that peer's truncated one, and computed genesis difficulty regardless of
+	// how correctly it read what it was given. Most peers on a live network were themselves
+	// headers-proof synced, so the truncation propagated hop to hop.
+	//
+	// Serving the full window is only safe together with consensus.trustedWindowGHOSTDAGData, which
+	// finds each trusted-window block by hash. Without it, the served list's indices no longer line
+	// up with the stored window's, and serving returns another block's GHOSTDAG data or runs off the
+	// end - the failure that sank the original patch.
+	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize, true)
+	if err != nil {
+		return nil, err
+	}
+	window := make([]*externalapi.DomainHash, len(windowHeapSlice))
+	for i, pair := range windowHeapSlice {
+		window[i] = pair.Hash
+	}
+	return window, nil
 }
 
 // BlockWindowHeapSlice returns the cached or computed heap slice for the given
@@ -55,17 +77,17 @@ func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingA
 func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
 	windowSize int,
 ) ([]*externalapi.DomainHash, error) {
-	// includeTrustedWindow is false here on purpose, and this is the whole of HTN-204's containment.
+	// includeTrustedWindow is false here on purpose. BlockWindow's remaining callers must not walk
+	// into a pruned block's trusted window:
+	//   - pastMedianTimeManager, which feeds validateMedianTime - a check that IS enabled, unlike the
+	//     difficulty one, so widening its window would change which blocks this node accepts.
+	//   - pruningManager.blocksToKeep. It decides which blocks' bodies, multisets and UTXO diffs
+	//     survive pruning. It does not need to retain the trusted-window blocks: pruning never
+	//     deletes headers or GHOSTDAG data (see pruningManager.deleteBlock) and the trusted-window
+	//     store has no delete at all, so everything serving reads for those blocks survives anyway.
 	//
-	// BlockWindow has three callers and none of them may walk into a pruned block's trusted window:
-	//   - DAABlockWindow, which is what this node SERVES to a syncing peer as trusted data. It must
-	//     only ever name blocks this node can actually answer TrustedDataDataDAAHeader for.
-	//   - pastMedianTimeManager, which feeds validateMedianTime - a check that IS enabled, unlike
-	//     the difficulty one, so changing it would change which blocks this node accepts.
-	//   - pruningManager.blocksToKeep, which deliberately mirrors "the window DAABlockWindow serves
-	//     for it" when deciding what to retain.
-	//
-	// Only difficultyManager wants the trusted window, and it asks for it directly.
+	// The difficulty window and the served window (DAABlockWindow) both ask for the trusted window
+	// directly - they must be the same window, or a node serves one thing and computes from another.
 	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize, false)
 	if err != nil {
 		return nil, err
@@ -155,10 +177,11 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 		// cached slice, and a freshly synced node mines at genesis difficulty until a full window of
 		// new blocks accumulates.
 		//
-		// Only the difficulty path may walk through into the trusted window. The serving path must
-		// not: it would then enumerate blocks this node has no trusted data for, and answering a
-		// peer's pruning-point-anticone request with them kills that peer's IBD. That failure is
-		// what sank the original fix, reproduced 3/3 for docs/design/HTN-204.md.
+		// The difficulty window and the served window (DAABlockWindow) walk through into the trusted
+		// window; BlockWindow's remaining callers stop here. Serving the trusted window is only safe
+		// because consensus.trustedWindowGHOSTDAGData finds each of its blocks by hash, in the window
+		// of the same anchor this walk takes it from - see that function for why reading by index was
+		// what sank the original fix.
 		if !includeTrustedWindow && selectedParent.Equal(model.VirtualGenesisBlockHash) {
 			break
 		}
