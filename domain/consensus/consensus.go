@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"math"
 	"math/big"
 	"os"
 	"runtime"
@@ -17,6 +18,8 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/util/staging"
 	"github.com/pkg/errors"
@@ -756,6 +759,166 @@ func (s *consensus) GetVirtualUTXOs(expectedVirtualParents []*externalapi.Domain
 	return virtualUTXOs, nil
 }
 
+// IterateUTXOSetAtBlock streams the full UTXO set as of the given (past, UTXO-valid) block,
+// invoking callback once for every outpoint/entry pair, while holding the consensus lock for
+// the duration of the iteration. See externalapi.Consensus for details.
+func (s *consensus) IterateUTXOSetAtBlock(blockHash *externalapi.DomainHash,
+	callback func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error,
+) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+
+	utxoSetIterator, err := s.consensusStateManager.RestorePastUTXOSetIterator(stagingArea, blockHash)
+	if err != nil {
+		return err
+	}
+	defer utxoSetIterator.Close()
+
+	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
+		outpoint, entry, err := utxoSetIterator.Get()
+		if err != nil {
+			return err
+		}
+		err = callback(outpoint, entry)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// IterateUTXOSetAtBlockFromAcceptanceData streams the UTXO set as of blockHash the way the block
+// headers' UTXO commitments define it: the pruning point's UTXO set with every accepted
+// transaction between the pruning point and blockHash applied on top, taken from the acceptance
+// data the node recorded when it resolved each of those blocks.
+//
+// This is deliberately a second, independent derivation from IterateUTXOSetAtBlock, which reads
+// virtual's materialised UTXO table and walks the stored UTXO-diff chain back to blockHash. The
+// two are meant to be the same set, and are not: the materialised table is maintained by applying
+// UTXO diffs and never recomputed, so any diff that was mis-applied stays mis-applied forever,
+// while the acceptance data is what the per-block multiset chain - the thing block headers
+// actually commit to - is computed from.
+//
+// For anything whose purpose is to become a trusted floor - an exodus pruning point candidate
+// above all - this is the derivation to use, because it is the one that reproduces header
+// commitments.
+//
+// Memory is bounded by activity between the pruning point and blockHash (the outputs created and
+// the outpoints spent in that window), not by the size of the UTXO set: entries surviving from the
+// pruning point are streamed straight off disk.
+//
+// The whole iteration runs under the consensus lock, so callback must not call back into this
+// Consensus instance.
+func (s *consensus) IterateUTXOSetAtBlockFromAcceptanceData(blockHash *externalapi.DomainHash,
+	callback func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error,
+) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+
+	pruningPoint, err := s.pruningStore.PruningPoint(s.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+
+	var chain []*externalapi.DomainHash
+	for current := blockHash; !current.Equal(pruningPoint); {
+		chain = append(chain, current)
+		blockGHOSTDAGData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, current, false)
+		if err != nil {
+			return errors.Wrapf(err, "failed to walk the selected chain from %s down to the pruning point "+
+				"%s: no GHOSTDAG data for %s", blockHash, pruningPoint, current)
+		}
+		current = blockGHOSTDAGData.SelectedParent()
+		if current == nil || current.Equal(model.VirtualGenesisBlockHash) {
+			return errors.Errorf("block %s is not a selected chain block at or above the pruning point %s, "+
+				"so its UTXO set cannot be derived from acceptance data", blockHash, pruningPoint)
+		}
+	}
+
+	created := make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry)
+	spentFromPruningPointSet := make(map[externalapi.DomainOutpoint]struct{})
+	for i := len(chain) - 1; i >= 0; i-- {
+		mergingBlockHash := chain[i]
+		mergingBlockDAAScore, err := s.blockOwnDAAScore(stagingArea, mergingBlockHash)
+		if err != nil {
+			return err
+		}
+		acceptanceData, err := s.acceptanceDataStore.Get(s.databaseContext, stagingArea, mergingBlockHash)
+		if err != nil {
+			return errors.Wrapf(err, "no acceptance data for chain block %s, so the UTXO set of %s cannot "+
+				"be derived from acceptance data", mergingBlockHash, blockHash)
+		}
+		for _, blockAcceptanceData := range acceptanceData {
+			for _, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
+				if !transactionAcceptanceData.IsAccepted {
+					continue
+				}
+				transaction := transactionAcceptanceData.Transaction
+				for _, input := range transaction.Inputs {
+					if _, createdInWindow := created[input.PreviousOutpoint]; createdInWindow {
+						delete(created, input.PreviousOutpoint)
+						continue
+					}
+					spentFromPruningPointSet[input.PreviousOutpoint] = struct{}{}
+				}
+				transactionID := *consensushashing.TransactionID(transaction)
+				for outputIndex, output := range transaction.Outputs {
+					if outputIndex > math.MaxUint32 {
+						return errors.Errorf("output index %d cannot be represented as uint32", outputIndex)
+					}
+					outpoint := externalapi.DomainOutpoint{TransactionID: transactionID, Index: uint32(outputIndex)}
+					delete(spentFromPruningPointSet, outpoint)
+					created[outpoint] = utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey,
+						transactionhelper.IsCoinBase(transaction), mergingBlockDAAScore)
+				}
+			}
+		}
+	}
+
+	pruningPointUTXOIterator, err := s.pruningStore.PruningPointUTXOIterator(s.databaseContext)
+	if err != nil {
+		return err
+	}
+	defer pruningPointUTXOIterator.Close()
+
+	for ok := pruningPointUTXOIterator.First(); ok; ok = pruningPointUTXOIterator.Next() {
+		outpoint, entry, err := pruningPointUTXOIterator.Get()
+		if err != nil {
+			return err
+		}
+		if _, spent := spentFromPruningPointSet[*outpoint]; spent {
+			continue
+		}
+		if windowEntry, ok := created[*outpoint]; ok {
+			err = callback(outpoint, windowEntry)
+			if err != nil {
+				return err
+			}
+			delete(created, *outpoint)
+			continue
+		}
+		err = callback(outpoint, entry)
+		if err != nil {
+			return err
+		}
+	}
+
+	for outpoint, entry := range created {
+		outpointCopy := outpoint
+		err = callback(&outpointCopy, entry)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *consensus) PruningPoint() (*externalapi.DomainHash, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -1304,6 +1467,18 @@ func (s *consensus) isNearlySyncedNoLock() (bool, error) {
 	log.Debugf("The selected tip timestamp is old (%d), so IsNearlySynced returns false",
 		virtualSelectedParentHeader.TimeInMilliseconds())
 	return false, nil
+}
+
+// blockOwnDAAScore returns blockHash's own DAA score, preferring its header - the same lookup
+// consensusstatemanager uses when stamping the UTXO entries a block's resolution creates.
+func (s *consensus) blockOwnDAAScore(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash,
+) (uint64, error) {
+	header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, blockHash)
+	if err != nil {
+		return s.daaBlocksStore.DAAScore(s.databaseContext, stagingArea, blockHash)
+	}
+	return header.DAAScore(), nil
 }
 
 func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTransactionID) (*externalapi.DomainBlock, error) {
