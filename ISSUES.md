@@ -3034,3 +3034,24 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - not yet confirmed live: the node has to be rebuilt and redeployed from this commit for the profile
   to be re-taken. Worth re-running the same 30s profile afterwards to see how far GC marking drops.
 - commit: 0361f3999
+
+## HTN-231
+- title: Multiset duplicate-coinbase dedup missed coins already held only in virtual, so normal relay could disagree on UTXO commitment
+- status: FIXED (e6126620b)
+- severity: critical (ErrBadUTXOCommitment on a correct relayed block → StatusDisqualifiedFromChain → inheritance down the selected chain → no usable tip / VirtualGenesis)
+- area: consensus/utils/utxo (ApplyAcceptanceDataToMultiset), consensusstatemanager/multisets.go
+- reported: 2026-09-21 — cascade can start during ordinary block relay, not only IBD/repair
+- mechanism:
+  - Byte-identical coinbases share a transaction ID and can be accepted by more than one chain block (mainnet survey: 8,174 such txs; see HTN prior notes / ApplyAcceptanceDataToMultiset comments).
+  - The UTXO diff refuses a second add; MuHash Add is not idempotent, so the multiset must refuse too.
+  - Dedup only checked selectedParentPastUTXO.ToAdd(). That catches "in past, not in virtual".
+  - When the selected parent is the tip, restorePastUTXO returns a diff relative to virtual: a coin in both past and virtual is in neither ToAdd nor ToRemove. Dedup missed it and hashed again.
+  - Whether the same already-held coin appears in ToAdd vs only in virtual depends on each node''s diff-child path. Two honest nodes on the same DAG therefore computed different UTXO commitments for the same block.
+  - verifyUTXO → ErrBadUTXOCommitment → StatusDisqualifiedFromChain; descendants inherit without re-verify (resolve_block_status.go); tips become unusable.
+- fix:
+  - ApplyAcceptanceDataToMultiset takes baseUTXO(outpoint) (entry, bool, error). Resolve held coin via ToRemove (not held) / ToAdd / base (virtual). Same DAA stamp: skip. Different stamp: Remove(old serialization)+Add(new) so the multiset matches addEntry restamp (closes HTN-005-shaped table-vs-multiset drift on duplicate coinbases).
+  - calculateMultiset passes HasUTXOByOutpoint + UTXOByOutpoint as baseUTXO (virtual).
+- tests: TestMultisetSkipsACoinHeldOnlyInTheBase; TestMultisetRestampsWhenDAADiffers (base and ToAdd paths). utxo Multiset* + consensusstatemanager packages green on 2026-09-21.
+- left alone: RepairBlockStatuses (recovery-only; not this cascade), HTN-002 offset baseline (needs_human), HTN-004 algebra tolerances (parked; this fix closes the tip-child multiset half of the path dependency).
+- operator verify: after rebuild, relayed blocks that previously logged ErrBadUTXOCommitment with no other rule failure should stay Valid; GetBlockDagInfo should keep a non-VirtualGenesis selected tip; SubmitBlock of a locally built template should remain Valid.
+- commit: e6126620b
