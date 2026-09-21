@@ -3118,3 +3118,53 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - Limitation: a node syncing from an OLD-code peer still receives a truncated window. Deploy to the
   nodes others sync from first.
 - Full detail: docs/design/HTN-204.md section 11.
+
+## HTN-232
+- title: The v10 activation DAA score (227679830) was already in the past when it was chosen, so
+  the network's chain contains version-9 blocks that v10 rules reject, and no node can sync it fresh
+- status: needs_human (consensus / release-captain decision - hard rules 2 and 4)
+- severity: critical (no node validating history under v10 rules can complete IBD)
+- area: consensus / activation
+- found: 2026-09-21, investigating "not syncing" on htnd-public. Read-only throughout: docker logs,
+  docker inspect, and read-only RPC to public nodes. Nothing on production was modified.
+- evidence:
+  - htnd-public's IBD loops: every attempt reaches ~60% of headers, rejects header
+    f147f18d051edaa8d933a8941bba4e3e13196110b10c0a5778bac385f1385531 with "The block version 9
+    should be 10: ErrWrongBlockVersion", discards the staging consensus and restarts. 10+ loops since
+    08:10, always the same header, always from 51.89.232.58.
+  - That message is produced by blockValidator.checkBlockVersion only when the header's own DAA
+    score is >= 227679830 (expectedBlockVersion == 10) and its version is 9. So the block has DAA
+    >= 227679830 and version 9 - certain from the code, not inferred.
+  - The headers processed immediately before the rejection are timestamped 2026-09-18 22:14:54,
+    22:14:58 and 22:15:05 UTC, so f147f18d was mined around 2026-09-18 22:15 UTC.
+  - The activation commit 252e0adc5 ("activate block version 10 on mainnet at DAA score 227679830")
+    is dated 2026-09-19 10:37 +0300 = 07:37 UTC - roughly nine hours AFTER the network had already
+    mined past DAA 227679830.
+  - The peer 51.89.232.58 runs 2.17.2-2ad931ee7, which DOES contain 252e0adc5. So it is not a node on
+    old rules: it holds a v9 block past 227679830 that its own current rules would reject. Most likely
+    it accepted that block while still on pre-activation code, then upgraded in place - and stored
+    blocks are never re-validated against new rules.
+- mechanism: choosing an activation score the chain has already passed retroactively invalidates
+  every block mined between that score and the moment nodes upgraded. Those blocks were valid under
+  the rules in force when they were mined. Nodes that were running through the activation and
+  upgraded in place keep them; any node that validates history fresh under v10 rules rejects them.
+  So in-place-upgraded nodes and freshly synced nodes can never agree, and no fresh v10 node can
+  complete IBD against the network's chain.
+- network state observed (read-only RPC): 51.89.232.58 isSynced=false, virtualDaaScore 227776293,
+  unchanged across checks ~15 minutes apart; 219.88.72.130 isSynced=false at 227212294 (below the
+  activation point entirely); 188.241.30.193, 85.222.101.54, 84.50.246.239, 85.128.3.70 unreachable.
+  No reachable node reports synced.
+- why neither obvious remedy works:
+  - "upgrade the rest of the network to v10 at 227679830" does not help - the peer IS upgraded, and a
+    fresh v10 node still cannot sync the chain it serves.
+  - an activation score is only safe if it is in the FUTURE when the release ships, for every node.
+- options (all consensus changes, for the release captain):
+  - move the v10 activation to a future DAA score, past the last version-9 block on the chain the
+    network actually built, and release it coordinated;
+  - or remove the v10 activation (back to v9), which conflicts with hard rule 2 and with the user's
+    2026-09-19 "don't revert" - only the user can override those.
+  - a grace window accepting v9 past 227679830 is also possible but is itself a consensus rule change
+    with the same coordination requirement.
+- not verified: the exact DAA score of f147f18d and of the last v9 block on the network's chain. The
+  peer's RPC returns null for every GetBlock, including its own tip, so headers could not be fetched
+  from it. Pinning the last v9 block needs a node whose RPC serves blocks, or a datadir COPY.
