@@ -79,6 +79,12 @@ func runDiff(args []string) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to open bundle at %s", *bundleBDir)
 		}
+		if readerA.Manifest().BlockHash != readerB.Manifest().BlockHash ||
+			readerA.Manifest().DAAScore != readerB.Manifest().DAAScore {
+			return errors.Errorf("bundle A targets block %s at DAA score %d, but bundle B targets block %s at DAA score %d; diffing bundles only makes sense for the same snapshot",
+				readerA.Manifest().BlockHash, readerA.Manifest().DAAScore,
+				readerB.Manifest().BlockHash, readerB.Manifest().DAAScore)
+		}
 		sourceB = readerB.AsSource()
 		labelB = *bundleBDir
 	}

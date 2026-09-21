@@ -420,9 +420,6 @@ func (w *Writer) Finalize(meta BundleMeta) (*externalapi.DomainHash, error) {
 		Chunks:         w.chunks,
 	}
 
-	// Persist an in-progress manifest first so a crash between the two writes still leaves a
-	// resumable (non-finalized) manifest rather than nothing at all. This is best-effort;
-	// Finalize is expected to be the last step of a successful `exodus create` run.
 	err = writeManifest(w.dir, manifest)
 	if err != nil {
 		return nil, err
