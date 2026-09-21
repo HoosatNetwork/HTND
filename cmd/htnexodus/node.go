@@ -39,10 +39,14 @@ func netParamsByName(network string) (*dagconfig.Params, error) {
 }
 
 func openDatabase(dbPath string, dbType string) (infrastructuredatabase.Database, error) {
-	if strings.EqualFold(dbType, "leveldb") {
+	switch {
+	case strings.EqualFold(dbType, "leveldb"):
 		return ldb.NewLevelDB(dbPath, leveldbCacheSizeMiB)
+	case dbType == "", strings.EqualFold(dbType, "pebble"):
+		return pebble.NewPebbleDB(dbPath, pebbledbCacheSizeMiB)
+	default:
+		return nil, errors.Errorf("unknown database engine %q (expected \"pebble\" or \"leveldb\")", dbType)
 	}
-	return pebble.NewPebbleDB(dbPath, pebbledbCacheSizeMiB)
 }
 
 // openConsensus opens the node's own on-disk database directly. `create`, `verify` and

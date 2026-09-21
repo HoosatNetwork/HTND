@@ -221,6 +221,64 @@ func TestWriterResume(t *testing.T) {
 	}
 }
 
+func TestSaveProgressOnlyRecordsDurableChunks(t *testing.T) {
+	dir := t.TempDir()
+	blockHash := testBlockHash(t, 0xDD)
+	target := BundleTarget{BlockHash: blockHash, DAAScore: 111}
+
+	w, err := NewWriter(dir, target, 5)
+	if err != nil {
+		t.Fatalf("NewWriter: %s", err)
+	}
+	for i := 0; i < 7; i++ {
+		err := w.AddEntry(testOutpoint(t, byte(i+1), uint32(i)), testEntry(uint64(i), 1, false, 0))
+		if err != nil {
+			t.Fatalf("AddEntry: %s", err)
+		}
+	}
+	err = w.SaveProgress()
+	if err != nil {
+		t.Fatalf("SaveProgress: %s", err)
+	}
+
+	manifest, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatalf("ReadManifest: %s", err)
+	}
+	if manifest.EntryCount != 5 {
+		t.Fatalf("expected only the 5 durable entries to be recorded, got %d", manifest.EntryCount)
+	}
+	if len(manifest.Chunks) != 1 {
+		t.Fatalf("expected 1 durable chunk to be recorded, got %d", len(manifest.Chunks))
+	}
+}
+
+func TestWriterResumeRejectsMismatchedDAAScore(t *testing.T) {
+	dir := t.TempDir()
+	blockHash := testBlockHash(t, 0xEF)
+	target := BundleTarget{BlockHash: blockHash, DAAScore: 123}
+
+	w, err := NewWriter(dir, target, 5)
+	if err != nil {
+		t.Fatalf("NewWriter: %s", err)
+	}
+	for i := 0; i < 5; i++ {
+		err := w.AddEntry(testOutpoint(t, byte(i+1), uint32(i)), testEntry(uint64(i), 1, false, 0))
+		if err != nil {
+			t.Fatalf("AddEntry: %s", err)
+		}
+	}
+	err = w.SaveProgress()
+	if err != nil {
+		t.Fatalf("SaveProgress: %s", err)
+	}
+
+	_, err = NewWriter(dir, BundleTarget{BlockHash: blockHash, DAAScore: 124}, 5)
+	if err == nil {
+		t.Fatalf("expected mismatched DAA score to be rejected")
+	}
+}
+
 func TestDiffIdentical(t *testing.T) {
 	dirA := t.TempDir()
 	dirB := t.TempDir()

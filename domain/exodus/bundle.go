@@ -244,6 +244,12 @@ func NewWriter(dir string, target BundleTarget, chunkEntryCount int) (*Writer, e
 				"remove it or choose a different directory before targeting block %s",
 			dir, existing.BlockHash, target.BlockHash.String())
 	}
+	if existing.DAAScore != target.DAAScore {
+		return nil, errors.Errorf(
+			"bundle at %s has an in-progress export for block %s at DAA score %d; "+
+				"remove it or choose a different directory before targeting DAA score %d",
+			dir, existing.BlockHash, existing.DAAScore, target.DAAScore)
+	}
 
 	// Recompute the digest of every previously recorded chunk and only trust the contiguous
 	// verified prefix; anything after the first mismatch (or missing file) is re-generated.
@@ -428,12 +434,16 @@ func (w *Writer) Finalize(meta BundleMeta) (*externalapi.DomainHash, error) {
 // SaveProgress writes a non-finalized manifest reflecting the chunks completed so far, so that
 // a subsequent run can resume even if the process is interrupted before Finalize is called.
 func (w *Writer) SaveProgress() error {
+	durableEntryCount := uint64(0)
+	for _, chunk := range w.chunks {
+		durableEntryCount += chunk.EntryCount
+	}
 	manifest := &Manifest{
 		FormatVersion: FormatVersion,
 		BlockHash:     w.target.BlockHash.String(),
 		DAAScore:      w.target.DAAScore,
 		GeneratedAt:   time.Now().UTC(),
-		EntryCount:    w.entryCount,
+		EntryCount:    durableEntryCount,
 		Finalized:     false,
 		Chunks:        w.chunks,
 	}

@@ -23,26 +23,37 @@ func TestIterateUTXOSetAtBlockSmoke(t *testing.T) {
 		}
 		defer teardown(false)
 
-		countAt := func(blockHash *externalapi.DomainHash) int {
+		countAt := func(iterate func(*externalapi.DomainHash, func(*externalapi.DomainOutpoint, externalapi.UTXOEntry) error) error,
+			blockHash *externalapi.DomainHash) int {
 			count := 0
-			err := tc.IterateUTXOSetAtBlock(blockHash, func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
+			err := iterate(blockHash, func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
 				count++
 				return nil
 			})
 			if err != nil {
-				t.Fatalf("IterateUTXOSetAtBlock: %+v", err)
+				t.Fatalf("iterate UTXO set at %s: %+v", blockHash, err)
 			}
 			return count
 		}
 
-		genesisCount := countAt(consensusConfig.GenesisHash)
+		genesisCount := countAt(tc.IterateUTXOSetAtBlock, consensusConfig.GenesisHash)
+		genesisAcceptanceCount := countAt(tc.IterateUTXOSetAtBlockFromAcceptanceData, consensusConfig.GenesisHash)
+		if genesisAcceptanceCount != genesisCount {
+			t.Fatalf("acceptance-data iteration at genesis (%d) disagrees with materialised iteration (%d)",
+				genesisAcceptanceCount, genesisCount)
+		}
 
 		blockHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
 		if err != nil {
 			t.Fatalf("AddBlock: %+v", err)
 		}
 
-		tipCount := countAt(blockHash)
+		tipCount := countAt(tc.IterateUTXOSetAtBlock, blockHash)
+		tipAcceptanceCount := countAt(tc.IterateUTXOSetAtBlockFromAcceptanceData, blockHash)
+		if tipAcceptanceCount != tipCount {
+			t.Fatalf("acceptance-data iteration at the tip (%d) disagrees with materialised iteration (%d)",
+				tipAcceptanceCount, tipCount)
+		}
 
 		virtualParent, err := tc.GetVirtualSelectedParent()
 		if err != nil {
@@ -60,8 +71,12 @@ func TestIterateUTXOSetAtBlockSmoke(t *testing.T) {
 
 		// Re-querying the strictly earlier genesis block must still work and be unaffected by
 		// mining a descendant block.
-		if got := countAt(consensusConfig.GenesisHash); got != genesisCount {
+		if got := countAt(tc.IterateUTXOSetAtBlock, consensusConfig.GenesisHash); got != genesisCount {
 			t.Fatalf("genesis UTXO count changed after mining a child block: was %d, now %d", genesisCount, got)
+		}
+		if got := countAt(tc.IterateUTXOSetAtBlockFromAcceptanceData, consensusConfig.GenesisHash); got != genesisAcceptanceCount {
+			t.Fatalf("genesis acceptance-data UTXO count changed after mining a child block: was %d, now %d",
+				genesisAcceptanceCount, got)
 		}
 	})
 }
