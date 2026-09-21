@@ -23,9 +23,9 @@ func New(cacheSize int, preallocate bool) model.WindowHeapSliceStore {
 }
 
 // Stage stages the given blockStatus for the given blockHash
-func (bss *blockWindowHeapSliceStore) Stage(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, windowSize int, heapSlice []*externalapi.BlockGHOSTDAGDataHashPair) {
+func (bss *blockWindowHeapSliceStore) Stage(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool, heapSlice []*externalapi.BlockGHOSTDAGDataHashPair) {
 	stagingShard := bss.stagingShard(stagingArea)
-	stagingShard.toAdd[newShardKey(blockHash, windowSize)] = heapSlice
+	stagingShard.toAdd[newShardKey(blockHash, windowSize, includeTrustedWindow)] = heapSlice
 }
 
 func (bss *blockWindowHeapSliceStore) IsStaged(stagingArea *model.StagingArea) bool {
@@ -37,17 +37,17 @@ func (bss *blockWindowHeapSliceStore) UnstageAll(stagingArea *model.StagingArea)
 	stagingShard.UnstageAll()
 }
 
-func (bss *blockWindowHeapSliceStore) Get(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
+func (bss *blockWindowHeapSliceStore) Get(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	stagingShard := bss.stagingShard(stagingArea)
 
-	heapSlice, ok := stagingShard.toAdd[newShardKey(blockHash, windowSize)]
+	heapSlice, ok := stagingShard.toAdd[newShardKey(blockHash, windowSize, includeTrustedWindow)]
 
 	if ok && heapSlice != nil {
-		bss.cache.Add(blockHash, windowSize, heapSlice)
+		bss.cache.Add(blockHash, windowSize, includeTrustedWindow, heapSlice)
 		return heapSlice, nil
 	}
 
-	heapSliceCached, ok := bss.cache.Get(blockHash, windowSize)
+	heapSliceCached, ok := bss.cache.Get(blockHash, windowSize, includeTrustedWindow)
 	if ok && heapSliceCached != nil {
 		return heapSliceCached, nil
 	}

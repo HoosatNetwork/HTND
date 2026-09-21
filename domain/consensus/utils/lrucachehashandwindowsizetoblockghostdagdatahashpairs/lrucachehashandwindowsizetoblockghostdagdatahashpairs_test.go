@@ -38,13 +38,13 @@ func TestLRUCache_AddGetHasRemove_NoEvictionWithinCapacity(t *testing.T) {
 	p2 := newPair(t, 11, 2)
 	value := []*externalapi.BlockGHOSTDAGDataHashPair{p1, p2}
 
-	cache.Add(blockHash, windowSize, value)
+	cache.Add(blockHash, windowSize, false, value)
 
-	if !cache.Has(blockHash, windowSize) {
+	if !cache.Has(blockHash, windowSize, false) {
 		t.Fatalf("expected entry to exist")
 	}
 
-	got, ok := cache.Get(blockHash, windowSize)
+	got, ok := cache.Get(blockHash, windowSize, false)
 	if !ok {
 		t.Fatalf("expected get to succeed")
 	}
@@ -52,8 +52,8 @@ func TestLRUCache_AddGetHasRemove_NoEvictionWithinCapacity(t *testing.T) {
 		t.Fatalf("unexpected returned slice")
 	}
 
-	cache.Remove(blockHash, windowSize)
-	if cache.Has(blockHash, windowSize) {
+	cache.Remove(blockHash, windowSize, false)
+	if cache.Has(blockHash, windowSize, false) {
 		t.Fatalf("expected removed")
 	}
 }
@@ -65,14 +65,14 @@ func TestLRUCache_DistinguishesWindowSize(t *testing.T) {
 	p1 := newPair(t, 10, 1)
 	p2 := newPair(t, 11, 2)
 
-	cache.Add(blockHash, 1, []*externalapi.BlockGHOSTDAGDataHashPair{p1})
-	cache.Add(blockHash, 2, []*externalapi.BlockGHOSTDAGDataHashPair{p2})
+	cache.Add(blockHash, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{p1})
+	cache.Add(blockHash, 2, false, []*externalapi.BlockGHOSTDAGDataHashPair{p2})
 
-	got1, ok := cache.Get(blockHash, 1)
+	got1, ok := cache.Get(blockHash, 1, false)
 	if !ok || len(got1) != 1 || got1[0] != p1 {
 		t.Fatalf("unexpected get for windowSize=1")
 	}
-	got2, ok := cache.Get(blockHash, 2)
+	got2, ok := cache.Get(blockHash, 2, false)
 	if !ok || len(got2) != 1 || got2[0] != p2 {
 		t.Fatalf("unexpected get for windowSize=2")
 	}
@@ -85,9 +85,9 @@ func TestLRUCache_KeyEqualityByValue(t *testing.T) {
 	h2 := newTestHash(t, 7) // same bytes
 
 	p := newPair(t, 10, 1)
-	cache.Add(h1, 5, []*externalapi.BlockGHOSTDAGDataHashPair{p})
+	cache.Add(h1, 5, false, []*externalapi.BlockGHOSTDAGDataHashPair{p})
 
-	got, ok := cache.Get(h2, 5)
+	got, ok := cache.Get(h2, 5, false)
 	if !ok || len(got) != 1 || got[0] != p {
 		t.Fatalf("expected value-keyed lookup to succeed")
 	}
@@ -100,17 +100,17 @@ func TestLRUCache_OverwriteDoesNotGrow(t *testing.T) {
 	p1 := newPair(t, 10, 1)
 	p2 := newPair(t, 11, 2)
 
-	cache.Add(h, 1, []*externalapi.BlockGHOSTDAGDataHashPair{p1})
+	cache.Add(h, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{p1})
 	if got := len(cache.cache); got != 1 {
 		t.Fatalf("expected len=1, got %d", got)
 	}
 
-	cache.Add(h, 1, []*externalapi.BlockGHOSTDAGDataHashPair{p2})
+	cache.Add(h, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{p2})
 	if got := len(cache.cache); got != 1 {
 		t.Fatalf("expected len=1 after overwrite, got %d", got)
 	}
 
-	got, ok := cache.Get(h, 1)
+	got, ok := cache.Get(h, 1, false)
 	if !ok || len(got) != 1 || got[0] != p2 {
 		t.Fatalf("unexpected overwritten value")
 	}
@@ -127,13 +127,13 @@ func TestLRUCache_EvictsExactlyOneWhenOverCapacity(t *testing.T) {
 	p2 := newPair(t, 11, 2)
 	p3 := newPair(t, 12, 3)
 
-	cache.Add(h1, 1, []*externalapi.BlockGHOSTDAGDataHashPair{p1})
-	cache.Add(h2, 1, []*externalapi.BlockGHOSTDAGDataHashPair{p2})
+	cache.Add(h1, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{p1})
+	cache.Add(h2, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{p2})
 	if got := len(cache.cache); got != 2 {
 		t.Fatalf("expected len=2, got %d", got)
 	}
 
-	cache.Add(h3, 1, []*externalapi.BlockGHOSTDAGDataHashPair{p3})
+	cache.Add(h3, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{p3})
 	if got := len(cache.cache); got != 2 {
 		t.Fatalf("expected len=2 after eviction, got %d", got)
 	}
@@ -147,7 +147,7 @@ func TestLRUCache_EvictsExactlyOneWhenOverCapacity(t *testing.T) {
 		{h2, p2},
 		{h3, p3},
 	} {
-		got, ok := cache.Get(tc.h, 1)
+		got, ok := cache.Get(tc.h, 1, false)
 		if ok {
 			present++
 			if len(got) != 1 || got[0] != tc.p {
@@ -178,16 +178,16 @@ func TestLRUCache_RandomEvictionVariesAcrossTrials(t *testing.T) {
 		h2 := newTestHash(t, 2)
 		h3 := newTestHash(t, 3)
 
-		cache.Add(h1, 1, []*externalapi.BlockGHOSTDAGDataHashPair{newPair(t, 10, 1)})
-		cache.Add(h2, 1, []*externalapi.BlockGHOSTDAGDataHashPair{newPair(t, 11, 2)})
-		cache.Add(h3, 2, []*externalapi.BlockGHOSTDAGDataHashPair{newPair(t, 12, 3)})
+		cache.Add(h1, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{newPair(t, 10, 1)})
+		cache.Add(h2, 1, false, []*externalapi.BlockGHOSTDAGDataHashPair{newPair(t, 11, 2)})
+		cache.Add(h3, 2, false, []*externalapi.BlockGHOSTDAGDataHashPair{newPair(t, 12, 3)})
 
 		missingCount := 0
 		var missing key
 		checks := []key{{1, 1}, {2, 1}, {3, 2}}
 		for _, k := range checks {
 			h := newTestHash(t, k.h)
-			if !cache.Has(h, k.w) {
+			if !cache.Has(h, k.w, false) {
 				missing = k
 				missingCount++
 			}

@@ -18,17 +18,39 @@ func (dtm *dagTraversalManager) DAABlockWindow(stagingArea *model.StagingArea, h
 		return nil, err
 	}
 	windowSize := dtm.difficultyAdjustmentWindowSize[blockversion.Index(blockVersion, len(dtm.difficultyAdjustmentWindowSize))]
-	return dtm.BlockWindow(stagingArea, highHash, windowSize)
+
+	// HTN-204: serve the SAME window difficulty is computed from, trusted part included.
+	//
+	// This was deliberately left truncated by the first HTN-204 change, and that turned out to be the
+	// half that mattered on a real network. Serving a truncated window made the fix work for exactly
+	// one hop: a node syncing from a genesis-synced peer got a full window, but a node syncing from a
+	// headers-proof peer got that peer's truncated one, and computed genesis difficulty regardless of
+	// how correctly it read what it was given. Most peers on a live network were themselves
+	// headers-proof synced, so the truncation propagated hop to hop.
+	//
+	// Serving the full window is only safe together with consensus.trustedWindowGHOSTDAGData, which
+	// finds each trusted-window block by hash. Without it, the served list's indices no longer line
+	// up with the stored window's, and serving returns another block's GHOSTDAG data or runs off the
+	// end - the failure that sank the original patch.
+	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize, true)
+	if err != nil {
+		return nil, err
+	}
+	window := make([]*externalapi.DomainHash, len(windowHeapSlice))
+	for i, pair := range windowHeapSlice {
+		window[i] = pair.Hash
+	}
+	return window, nil
 }
 
 // BlockWindowHeapSlice returns the cached or computed heap slice for the given
 // block window. The returned slice must be treated as read-only by callers.
 func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
-	windowSize int,
+	windowSize int, includeTrustedWindow bool,
 ) ([]*externalapi.BlockGHOSTDAGDataHashPair, error) {
 	// Fast path: if the heap slice is already cached in the staging-area-aware
 	// store, return it directly without cloning or extracting a hash-only view.
-	cachedSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, highHash, windowSize)
+	cachedSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, highHash, windowSize, includeTrustedWindow)
 	if err == nil {
 		return cachedSlice, nil
 	}
@@ -37,13 +59,13 @@ func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingA
 	}
 
 	// Slow path: full computation (cache miss)
-	windowHeap, err := dtm.calculateBlockWindowHeap(stagingArea, highHash, windowSize)
+	windowHeap, err := dtm.calculateBlockWindowHeap(stagingArea, highHash, windowSize, includeTrustedWindow)
 	if err != nil {
 		return nil, err
 	}
 
 	if !highHash.Equal(model.VirtualBlockHash) {
-		dtm.windowHeapSliceStore.Stage(stagingArea, highHash, windowSize, windowHeap.impl.slice)
+		dtm.windowHeapSliceStore.Stage(stagingArea, highHash, windowSize, includeTrustedWindow, windowHeap.impl.slice)
 	}
 
 	return windowHeap.impl.slice, nil
@@ -55,7 +77,18 @@ func (dtm *dagTraversalManager) BlockWindowHeapSlice(stagingArea *model.StagingA
 func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, highHash *externalapi.DomainHash,
 	windowSize int,
 ) ([]*externalapi.DomainHash, error) {
-	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize)
+	// includeTrustedWindow is false here on purpose. BlockWindow's remaining callers must not walk
+	// into a pruned block's trusted window:
+	//   - pastMedianTimeManager, which feeds validateMedianTime - a check that IS enabled, unlike the
+	//     difficulty one, so widening its window would change which blocks this node accepts.
+	//   - pruningManager.blocksToKeep. It decides which blocks' bodies, multisets and UTXO diffs
+	//     survive pruning. It does not need to retain the trusted-window blocks: pruning never
+	//     deletes headers or GHOSTDAG data (see pruningManager.deleteBlock) and the trusted-window
+	//     store has no delete at all, so everything serving reads for those blocks survives anyway.
+	//
+	// The difficulty window and the served window (DAABlockWindow) both ask for the trusted window
+	// directly - they must be the same window, or a node serves one thing and computes from another.
+	windowHeapSlice, err := dtm.BlockWindowHeapSlice(stagingArea, highHash, windowSize, false)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +102,7 @@ func (dtm *dagTraversalManager) BlockWindow(stagingArea *model.StagingArea, high
 }
 
 func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.StagingArea,
-	highHash *externalapi.DomainHash, windowSize int,
+	highHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool,
 ) (*sizedUpBlockHeap, error) {
 	if highHash.Equal(dtm.genesisHash) {
 		return dtm.newSizedUpHeap(stagingArea, windowSize), nil
@@ -98,7 +131,7 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 	}
 
 	if isNonTrustedBlock && currentGHOSTDAGData.SelectedParent() != nil {
-		windowHeapSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, currentGHOSTDAGData.SelectedParent(), windowSize)
+		windowHeapSlice, err := dtm.windowHeapSliceStore.Get(stagingArea, currentGHOSTDAGData.SelectedParent(), windowSize, includeTrustedWindow)
 		selectedParentNotCached := database.IsNotFoundError(err)
 		if !selectedParentNotCached && err != nil {
 			return nil, err
@@ -130,7 +163,26 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 		if selectedParent.Equal(nil) {
 			break
 		}
-		if selectedParent.Equal(dtm.genesisHash) || selectedParent.Equal(model.VirtualGenesisBlockHash) {
+		if selectedParent.Equal(dtm.genesisHash) {
+			break
+		}
+
+		// HTN-204. The virtual-genesis marker is what a pruned selected parent is replaced with by
+		// validateAndInsertBlockWithTrustedData, so the pruning point is precisely the block whose
+		// selected parent is this marker AND whose window exists only as trusted data.
+		//
+		// Breaking here - before the daaWindowStore lookup below - means the walk stops one
+		// statement before the data it came for, and the pruning point's window comes back empty.
+		// BlockWindowHeapSlice then caches that, every child builds from its selected parent's
+		// cached slice, and a freshly synced node mines at genesis difficulty until a full window of
+		// new blocks accumulates.
+		//
+		// The difficulty window and the served window (DAABlockWindow) walk through into the trusted
+		// window; BlockWindow's remaining callers stop here. Serving the trusted window is only safe
+		// because consensus.trustedWindowGHOSTDAGData finds each of its blocks by hash, in the window
+		// of the same anchor this walk takes it from - see that function for why reading by index was
+		// what sank the original fix.
+		if !includeTrustedWindow && selectedParent.Equal(model.VirtualGenesisBlockHash) {
 			break
 		}
 
@@ -159,6 +211,13 @@ func (dtm *dagTraversalManager) calculateBlockWindowHeap(stagingArea *model.Stag
 				// We can optimize it if we make sure that daaWindowStore stores sorted windows, and
 				// then return from this function once one block was not added to the heap.
 			}
+			break
+		}
+
+		// The guard the break above used to provide, kept where it is still needed: the marker is
+		// not a real block, so looking up its GHOSTDAG data would fail. Reached only when
+		// includeTrustedWindow is set and this block carried no trusted window after all.
+		if selectedParent.Equal(model.VirtualGenesisBlockHash) {
 			break
 		}
 

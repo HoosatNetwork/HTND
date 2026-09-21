@@ -6,6 +6,8 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockversion"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/virtual"
 	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
@@ -39,6 +41,11 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		return err
 	}
 
+	// DISABLED, not gated: no ticket and no recorded reason. checkParentsIncest rejects a block one
+	// of whose parents is an ancestor of another, which is a structural rule rather than a
+	// UTXO-state one, so the chain either satisfies it or it does not - that is a cheap thing to
+	// measure and has not been. Until it is, this cannot be switched on, for the same reason as
+	// everything in the hardforks package: a rule turned on for existing versions rejects history.
 	// err = v.checkParentsIncest(stagingArea, blockHash)
 	// if err != nil {
 	// 	return err
@@ -75,13 +82,71 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		}
 	}
 
-	// Ensure the difficulty specified in the block header is within the acceptable range
-	// based on the previous block and difficulty retarget rules.
-	err = v.difficultyManager.StageDAAData(stagingArea, blockHash, isBlockWithTrustedData)
+	// Stage the DAA window, and - from hardforks.ValidateHeaderBitsVersion onward - check that the
+	// difficulty the header claims is the one this node computes.
+	//
+	// HTN-007: the comment that used to sit here said the header's difficulty was validated "within
+	// the acceptable range based on the previous block and difficulty retarget rules". It was not.
+	// StageDAAData stages the window and discards the required difficulty, and
+	// ruleerrors.ErrUnexpectedDifficulty was declared but unused anywhere in production code, so a
+	// header could claim any bits at all. Proof of work is still checked against the header's own
+	// bits, so a miner cannot claim easy work and skip doing it - but it can claim a difficulty the
+	// rest of the network never agreed on, and nothing here noticed.
+	//
+	// The gate is unscheduled, so this is inert for every block version any network can produce
+	// today. It must stay that way until activation: HTN-221 deliberately changed the retarget
+	// formula without a version gate, on the reasoning that bits are never strictly validated, so
+	// turning this on for existing versions would now reject blocks this very node would build.
+	//
+	// StageDAADataAndReturnRequiredDifficulty is not more expensive than StageDAAData - it computes
+	// the same window and returns the difficulty that was derived from it anyway - so it is used
+	// unconditionally and only the comparison is gated.
+	expectedBits, err := v.difficultyManager.StageDAADataAndReturnRequiredDifficulty(
+		stagingArea, blockHash, isBlockWithTrustedData)
 	if err != nil {
 		return err
 	}
 
+	err = v.checkHeaderBits(stagingArea, blockHash, header, expectedBits)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// checkHeaderBits enforces HTN-007's rule once hardforks.ValidateHeaderBitsVersion has activated.
+//
+// The version is derived from the block's selected parent's DAA score, as this node computed it,
+// never from the header's own version field: the field is peer-supplied, and a rule that adds
+// strictness must not be one a miner can decline by claiming an older version. A block whose
+// selected parent has no DAA score yet (genesis, trusted-data bootstrap) falls back to the
+// process-global version, which cannot matter while the gate is unscheduled because no version
+// satisfies an unscheduled gate.
+func (v *blockValidator) checkHeaderBits(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash, header externalapi.BlockHeader, expectedBits uint32,
+) error {
+	if !hardforks.IsScheduled(hardforks.ValidateHeaderBitsVersion) {
+		return nil
+	}
+	if blockHash.Equal(v.genesisHash) {
+		return nil
+	}
+
+	blockVersion, err := blockversion.OfSelectedParent(v.databaseContext, stagingArea,
+		v.ghostdagDataStores[0], v.daaBlocksStore, v.POWScores, blockHash)
+	if err != nil {
+		return err
+	}
+	if !hardforks.Active(hardforks.ValidateHeaderBitsVersion, blockVersion) {
+		return nil
+	}
+
+	if header.Bits() != expectedBits {
+		return errors.Wrapf(ruleerrors.ErrUnexpectedDifficulty,
+			"block %s has difficulty bits %08x, but the required difficulty is %08x",
+			blockHash, header.Bits(), expectedBits)
+	}
 	return nil
 }
 

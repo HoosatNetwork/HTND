@@ -8,6 +8,9 @@ import (
 type shardKey struct {
 	hash       externalapi.DomainHash
 	windowSize int
+	// See the same field on the LRU cache's key: the trusted-window and pruning-boundary windows
+	// are different answers for the same block and size, so they need separate entries (HTN-204).
+	includeTrustedWindow bool
 }
 
 type blockWindowHeapSliceStagingShard struct {
@@ -26,7 +29,7 @@ func (bss *blockWindowHeapSliceStore) stagingShard(stagingArea *model.StagingAre
 
 func (bsss *blockWindowHeapSliceStagingShard) Commit(_ model.DBTransaction) error {
 	for key, heapSlice := range bsss.toAdd {
-		bsss.store.cache.Add(&key.hash, key.windowSize, heapSlice)
+		bsss.store.cache.Add(&key.hash, key.windowSize, key.includeTrustedWindow, heapSlice)
 	}
 
 	return nil
@@ -40,9 +43,10 @@ func (bsss *blockWindowHeapSliceStagingShard) UnstageAll() {
 	bsss.toAdd = make(map[shardKey][]*externalapi.BlockGHOSTDAGDataHashPair)
 }
 
-func newShardKey(hash *externalapi.DomainHash, windowSize int) shardKey {
+func newShardKey(hash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool) shardKey {
 	return shardKey{
-		hash:       *hash,
-		windowSize: windowSize,
+		hash:                 *hash,
+		windowSize:           windowSize,
+		includeTrustedWindow: includeTrustedWindow,
 	}
 }

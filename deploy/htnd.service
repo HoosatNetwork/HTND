@@ -1,0 +1,71 @@
+# Sample systemd unit for htnd.
+#
+# Install:
+#   sudo useradd --system --home-dir /var/lib/htnd --create-home --shell /usr/sbin/nologin htnd
+#   sudo install -m 0755 HTND /usr/local/bin/HTND
+#   sudo install -m 0644 deploy/htnd.service /etc/systemd/system/htnd.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now htnd
+#
+# There is deliberately no repair flag in ExecStart. Those are one-shot recovery steps; run one with
+#   sudo systemctl stop htnd
+#   sudo -u htnd /usr/local/bin/HTND --appdir=/var/lib/htnd --utxoindex --saferpc \
+#        --repair-missing-multisets
+#   sudo systemctl start htnd
+# and never leave one in this file.
+
+[Unit]
+Description=Hoosat Network full node (htnd)
+Documentation=https://github.com/HoosatNetwork/HTND
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=htnd
+Group=htnd
+
+ExecStart=/usr/local/bin/HTND \
+    --appdir=/var/lib/htnd \
+    --utxoindex \
+    --saferpc \
+    --autoupdate=false \
+    --autoupdate-download=false \
+    --autoupdate-install=false \
+    --autoreport-issues=false
+
+# htnd shuts down on SIGINT. app.main's deferred sequence stops the component manager and then
+# closes the database; killing it before that finishes is what leaves a datadir needing WAL
+# recovery, so the stop timeout must exceed app.main's own 2-minute graceful-shutdown budget.
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=300
+
+# This unit is what owns restarts. htnd does not start its own replacement after an automatic
+# update (HTN-164) - it asks for a graceful shutdown and relies on being restarted here.
+Restart=always
+RestartSec=10
+
+# main.go defaults GOMEMLIMIT to 8GB. Raise or lower to suit the host; a node with --utxoindex on
+# mainnet wants headroom well above this.
+Environment=GOMEMLIMIT=8GiB
+
+# Uncomment to expose pprof on 127.0.0.1:6060.
+#Environment=HTND_PROFILER=1
+
+LimitNOFILE=65535
+
+# Hardening. Loosen anything that conflicts with a non-default --appdir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/htnd
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

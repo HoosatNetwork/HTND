@@ -33,14 +33,14 @@ func TestBlockWindowHeapSliceStoreStageCommitAndGet(t *testing.T) {
 	heapSlice := []*externalapi.BlockGHOSTDAGDataHashPair{pair}
 
 	stagingArea := model.NewStagingArea()
-	store.Stage(stagingArea, blockHash, windowSize, heapSlice)
+	store.Stage(stagingArea, blockHash, windowSize, false, heapSlice)
 	if !store.IsStaged(stagingArea) {
 		t.Fatalf("expected IsStaged to be true after Stage")
 	}
 	testutils.Commit(t, dbManager, stagingArea)
 
 	stagingArea = model.NewStagingArea()
-	got, err := store.Get(stagingArea, blockHash, windowSize)
+	got, err := store.Get(stagingArea, blockHash, windowSize, false)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestBlockWindowHeapSliceStoreStageCommitAndGet(t *testing.T) {
 		t.Fatalf("unexpected heap slice")
 	}
 
-	_, err = store.Get(stagingArea, testutils.Hash(9), windowSize)
+	_, err = store.Get(stagingArea, testutils.Hash(9), windowSize, false)
 	if err == nil || !database.IsNotFoundError(err) {
 		t.Fatalf("expected not-found for missing heap slice, got %v", err)
 	}

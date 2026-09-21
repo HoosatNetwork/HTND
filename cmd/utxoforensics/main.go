@@ -209,6 +209,17 @@ var (
 		"range that can be compared against the candidate depths. Also reports which candidate finality "+
 		"interval the stored pruning point sequence is consistent with. Answers whether this node selects "+
 		"pruning points with the same parameters as its peers.")
+
+	canonicalArtifactFlag = flag.Bool("canonical", false, "produce the canonical artefact for this "+
+		"datadir's pruning point UTXO set: entry count, MuHash, and the SHA-256 of a canonical, "+
+		"sorted, self-describing encoding. Deterministic - two people running this on copies of the "+
+		"same datadir get byte-identical output, which is what makes \"is this the same UTXO set\" a "+
+		"checkable question rather than an argument. Also reports whether the set matches the pruning "+
+		"point's own header commitment, without deciding which of the two is authoritative.")
+
+	canonicalEncodingOut = flag.String("canonical-out", "", "with -canonical, also write the canonical "+
+		"encoding itself to this path, so its SHA-256 can be reproduced by anyone with sha256sum and "+
+		"without this tool.")
 )
 
 type stores struct {
@@ -290,6 +301,10 @@ func main() {
 			os.Exit(1)
 		}
 		diffPruningPointSets(s, s2, sa)
+	}
+
+	if *canonicalArtifactFlag {
+		canonicalArtifact(s, sa, *canonicalEncodingOut)
 	}
 
 	if *replayCheck {

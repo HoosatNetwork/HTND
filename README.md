@@ -87,7 +87,12 @@ $ htnd
 
 ## Discord
 
-Join our discord server using the following link:
+<!-- TODO: the invite link is missing. Add the project's real Discord invite here; it was not
+     recorded anywhere in this repository, and inviting people to a guessed URL would be worse
+     than an honest gap. -->
+
+The Discord invite link is currently missing from this README. Until it is restored, please use the
+[issue tracker](https://github.com/HoosatNetwork/HTND/issues).
 
 ## Issue Tracker
 
@@ -96,7 +101,7 @@ is used for this project.
 
 ## Documentation
 
-The [documentation](https://github.com//Hoosat-Oy/docs) is a work-in-progress
+The [documentation](https://github.com/Hoosat-Oy/docs) is a work-in-progress
 
 ## License
 

@@ -195,6 +195,17 @@ type Flags struct {
 	AutoUpdateDownload      Bool          `long:"autoupdate-download" description:"Automatically download available updates (opt-in, disabled by default)"`
 	AutoUpdateInstall       Bool          `long:"autoupdate-install" description:"Automatically install downloaded updates (requires autoupdate-download) (opt-in, disabled by default)"`
 	AutoReportIssues        Bool          `long:"autoreport-issues" description:"Automatically report issues to GitHub (opt-in, disabled by default)"`
+	// HTN-162: an update is installed only if its checksum appears in a list signed by this key.
+	// No key is built in, so auto-install refuses to run until one is set here.
+	// HTN-166: 0 means the built-in default. The defaults are deliberately unchanged - a P2P
+	// ceiling that is too low rejects legitimate large IBD messages and partitions this node - so
+	// these exist for an operator who has measured their own traffic, particularly one exposing RPC
+	// beyond localhost.
+	P2PMaxMessageSize int `long:"p2p-max-message-size" description:"Maximum P2P message size in bytes (0 = built-in default, 4GiB). Lowering this bounds what an unauthenticated peer can make this node buffer, but a value below the largest legitimate message will reject honest peers and stall IBD"`
+	RPCMaxMessageSize int `long:"rpc-max-message-size" description:"Maximum RPC message size in bytes (0 = built-in default, 1GiB). Lower this when RPC is reachable beyond localhost"`
+
+	AutoUpdatePublicKey       string `long:"autoupdate-public-key" description:"Hex-encoded ed25519 public key that release checksum lists are signed with. Required for automatic installs"`
+	AutoUpdateAllowUnverified Bool   `long:"autoupdate-allow-unverified" description:"Install updates without verifying their signature. Unsafe: anyone able to serve a release asset can then run code as this node's user"`
 
 	NetworkFlags
 	ServiceOptions *ServiceOptions
@@ -278,6 +289,8 @@ func defaultFlags() *Flags {
 		AutoUpdateDownload:                false,
 		AutoUpdateInstall:                 false,
 		AutoReportIssues:                  false,
+		AutoUpdatePublicKey:               "",
+		AutoUpdateAllowUnverified:         false,
 	}
 }
 

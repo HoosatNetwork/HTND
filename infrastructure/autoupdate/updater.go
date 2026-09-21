@@ -10,12 +10,12 @@ import (
 	"io"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
 	"github.com/HoosatNetwork/HTND/version"
 	"github.com/pkg/errors"
 )
@@ -58,6 +58,16 @@ type Updater struct {
 	updateDir            string
 	currentBinaryPath    string
 	downloadedBinaryPath string
+
+	// Verification (HTN-162). verifier is nil only if the configured key was malformed, in which
+	// case verifierErr says why and every install is refused rather than silently unverified.
+	//
+	// verifiedBinaryPath is the exact path VerifyArchive last approved. installUpdate compares
+	// against it rather than against a bool, so a later download that failed verification cannot
+	// leave a stale "yes" behind for a different file.
+	verifier           *ReleaseVerifier
+	verifierErr        error
+	verifiedBinaryPath string
 }
 
 // NewUpdater creates a new auto-updater instance
@@ -92,10 +102,23 @@ func NewUpdater(cfg *Config) *Updater {
 		githubClient.SetToken(cfg.GitHubToken)
 	}
 
+	// A malformed key is kept rather than ignored: falling back to "no key" would turn an operator's
+	// typo into a silent downgrade to unverified installs.
+	verifier, verifierErr := NewReleaseVerifier(cfg.ReleasePublicKey, cfg.AllowUnverifiedInstall)
+	if verifierErr != nil {
+		log.Errorf("Auto-update release key is unusable, so no update can be installed: %v", verifierErr)
+	} else if !verifier.HasPinnedKey() && cfg.AutoInstall && !cfg.AllowUnverifiedInstall {
+		log.Warnf("Auto-install is enabled but no release signing key is configured, so downloaded " +
+			"updates will be refused at install time. Set --autoupdate-public-key to the project's " +
+			"release key.")
+	}
+
 	return &Updater{
 		config:              cfg,
 		github:              githubClient,
 		downloader:          NewDownloader(),
+		verifier:            verifier,
+		verifierErr:         verifierErr,
 		updateAvailableChan: make(chan struct{}, 1),
 		shutdownChan:        make(chan struct{}),
 		ctx:                 ctx,
@@ -250,8 +273,9 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 
 	log.Infof("Downloading update: %s", release.TagName)
 
-	// Get the download URL for the current platform
-	assetURL, err := release.GetAssetForPlatform()
+	// Get the asset name and download URL for the current platform. The name is what the signed
+	// checksum list is keyed by, so verification needs it and not just the URL.
+	assetName, assetURL, err := release.GetAssetForPlatform()
 	if err != nil {
 		u.statusMutex.Lock()
 		u.status.LastUpdateError = err.Error()
@@ -279,6 +303,21 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 
 	log.Infof("Update downloaded to: %s", downloadPath)
 
+	// HTN-162: nothing downloaded is installable until it has been verified. This runs on the
+	// download path rather than inside installUpdate so that a bad archive is reported when it
+	// arrives, and so the file is never recorded as installable in the first place.
+	if err := u.verifyDownloadedArchive(release, assetName, downloadPath); err != nil {
+		u.statusMutex.Lock()
+		u.status.LastUpdateError = err.Error()
+		u.statusMutex.Unlock()
+		log.Errorf("Refusing the downloaded update %s: %v", release.TagName, err)
+		u.reportErrorToGitHub(err)
+		if removeErr := os.Remove(downloadPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			log.Warnf("Failed to remove the unverified archive %s: %v", downloadPath, removeErr)
+		}
+		return
+	}
+
 	u.statusMutex.Lock()
 	u.status.DownloadProgress = 100
 	u.status.DownloadCompleted = true
@@ -300,6 +339,39 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 		time.Sleep(delay)
 		u.installUpdate(release.TagName)
 	}
+}
+
+// verifyDownloadedArchive establishes that archivePath is the file the release publisher signed,
+// and records it as installable if so.
+//
+// HTN-162: before this existed, downloadUpdate handed whatever it fetched straight to
+// installUpdate. downloader.go's VerifyChecksum and VerifyFileSize were present but had no callers
+// anywhere in the tree, so the node extracted and ran an archive whose only provenance was the URL
+// it came from.
+func (u *Updater) verifyDownloadedArchive(release *GitHubRelease, assetName, archivePath string) error {
+	if u.verifierErr != nil {
+		return errors.Wrap(u.verifierErr, "the configured release signing key cannot be used, so "+
+			"this archive cannot be verified")
+	}
+
+	verifyDir := filepath.Join(u.updateDir, "verify")
+	if err := os.MkdirAll(verifyDir, 0755); err != nil {
+		return errors.Wrap(err, "failed to create the verification working directory")
+	}
+	defer func() {
+		if err := os.RemoveAll(verifyDir); err != nil {
+			log.Warnf("Failed to clean up the verification directory %s: %v", verifyDir, err)
+		}
+	}()
+
+	err := u.verifier.VerifyArchive(u.ctx, u.downloader.DownloadFile, release, assetName,
+		archivePath, verifyDir)
+	if err != nil {
+		u.verifiedBinaryPath = ""
+		return err
+	}
+	u.verifiedBinaryPath = archivePath
+	return nil
 }
 
 // installUpdate installs the downloaded update
@@ -325,6 +397,22 @@ func (u *Updater) installUpdate(version string) {
 		u.statusMutex.Lock()
 		u.status.LastUpdateError = err.Error()
 		u.statusMutex.Unlock()
+		if u.onUpdateComplete != nil {
+			u.onUpdateComplete("", err)
+		}
+		return
+	}
+
+	// HTN-162: the last line of defence. downloadUpdate already refuses to record an unverified
+	// archive, but InstallUpdate is exported and can be called directly, so the check is repeated
+	// here against the exact path that was approved rather than against a flag.
+	if u.verifiedBinaryPath != downloadPath {
+		err := errors.Errorf("refusing to install %s: it has not been verified against a signed "+
+			"checksum list", downloadPath)
+		u.statusMutex.Lock()
+		u.status.LastUpdateError = err.Error()
+		u.statusMutex.Unlock()
+		log.Error(err.Error())
 		if u.onUpdateComplete != nil {
 			u.onUpdateComplete("", err)
 		}
@@ -482,8 +570,15 @@ func (u *Updater) InstallUpdate() {
 		return
 	}
 
+	// HTN-231: the Done has to happen at the call site, not inside installUpdate. downloadUpdate
+	// also calls installUpdate, synchronously and without an Add, so a defer inside it would drive
+	// the counter negative and panic. Without this wrapper the Add below was never matched at all,
+	// and one InstallUpdate call made Stop's wg.Wait block forever.
 	u.wg.Add(1)
-	go u.installUpdate(version)
+	go func() {
+		defer u.wg.Done()
+		u.installUpdate(version)
+	}()
 }
 
 // GetStatus returns the current update status
@@ -691,34 +786,45 @@ func preservePermissions(src, dest string) error {
 	return os.Chmod(dest, srcInfo.Mode())
 }
 
-// RestartNode restarts the node with the new binary
-// This is a separate function that can be called after an update is installed
+// restartRequestTimeout bounds how long RestartNode waits for the interrupt listener to accept its
+// request. ShutdownRequestChannel is unbuffered, so without this a node running the updater without
+// an InterruptListener - a test, or any embedding that does not call app.main - would block here
+// forever.
+const restartRequestTimeout = 30 * time.Second
+
+// RestartNode asks the node to shut down gracefully so that whatever supervises it can start the
+// replacement binary, which installBinary has already put in place.
+//
+// HTN-164: this used to exec a second htnd and then call os.Exit(0). Both halves were wrong. The
+// new process started while this one still held the database lock, so the replacement raced the
+// incumbent for a datadir that was still open; and os.Exit(0) skipped every deferred shutdown in
+// app.main - componentManager.Stop and, critically, databaseContext.Close - so the database was
+// left to whatever pebble could recover from its WAL rather than being closed cleanly. An update
+// was therefore most likely to corrupt or lock out the datadir at exactly the moment the operator
+// was least watching.
+//
+// Requesting shutdown through signal.ShutdownRequestChannel is the same path the ShutDown RPC uses.
+// The listener accepts repeated requests, so this cannot panic the way closing a channel directly
+// did before HTN-141.
+//
+// htnd deliberately does not start its own replacement. A process cannot hand its database lock to
+// a child it spawns before exiting, and any attempt to sequence that is a race. The supervisor owns
+// the new process: systemd's Restart=always, a docker restart policy, or an equivalent.
 func (u *Updater) RestartNode() error {
-	log.Info("Restarting node...")
+	log.Info("Update installed. Requesting a graceful shutdown so this node's supervisor can start " +
+		"the new binary.")
+	log.Warn("htnd does not start its replacement itself - it cannot hand over the database lock " +
+		"safely. If this node is not running under a supervisor that restarts it, it will now stop " +
+		"and stay stopped until it is started again.")
 
-	// Get the current executable path
-	binaryPath, err := os.Executable()
-	if err != nil {
-		return errors.Wrap(err, "failed to get executable path")
+	select {
+	case signal.ShutdownRequestChannel <- struct{}{}:
+		return nil
+	case <-u.ctx.Done():
+		return errors.New("the updater was stopped before the shutdown request could be delivered")
+	case <-time.After(restartRequestTimeout):
+		return errors.Errorf("no interrupt listener accepted the shutdown request within %s, so "+
+			"the node was left running on the old binary; the new one is installed and will be used "+
+			"at the next restart", restartRequestTimeout)
 	}
-
-	// Build the command to restart
-	args := os.Args[1:] // Keep the same arguments
-	cmd := exec.Command(binaryPath, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = os.Environ()
-
-	// Start the new instance
-	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to start new instance")
-	}
-
-	log.Infof("New instance started with PID: %d", cmd.Process.Pid)
-
-	// Shutdown the current instance
-	log.Info("Shutting down current instance...")
-	os.Exit(0)
-
-	return nil
 }

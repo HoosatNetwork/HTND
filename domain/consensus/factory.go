@@ -520,6 +520,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 	blockProcessor := blockprocessor.New(
 		genesisHash,
+		config.POWScores,
 		config.TargetTimePerBlock,
 		config.MaxBlockLevel,
 		dbManager,
@@ -588,6 +589,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		// would ever recompute it. See consensus.expectedDAAWindowDurationInMilliseconds.
 		targetTimePerBlock:             config.TargetTimePerBlock,
 		difficultyAdjustmentWindowSize: config.DifficultyAdjustmentWindowSize,
+		powScores:                      config.POWScores,
 
 		blockProcessor:        blockProcessor,
 		blockBuilder:          blockBuilder,

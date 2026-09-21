@@ -1,42 +1,16 @@
-# EXAMPLE USAGE:
+# lefthook configuration.
 #
-#   Refer for explanation to following link:
-#   https://lefthook.dev/configuration/
+# This content used to live in letfhook.yml - a typo lefthook never reads, since it looks for
+# lefthook.yml/.yaml (or a .lefthook variant). Meanwhile this file held nothing but lefthook's
+# commented-out example template. So the pre-commit hook was configured, committed, and documented,
+# but had never actually run for anyone.
 #
-# pre-push:
-#   jobs:
-#     - name: packages audit
-#       tags:
-#         - frontend
-#         - security
-#       run: yarn audit
+# .hooks/pre-commit runs gofmt and staticcheck over the staged packages. It is not a substitute for
+# build_and_test.sh, which is what CI gates on.
 #
-#     - name: gems audit
-#       tags:
-#         - backend
-#         - security
-#       run: bundle audit
-#
-# pre-commit:
-#   parallel: true
-#   jobs:
-#     - run: yarn eslint {staged_files}
-#       glob: "*.{js,ts,jsx,tsx}"
-#
-#     - name: rubocop
-#       glob: "*.rb"
-#       exclude:
-#         - config/application.rb
-#         - config/routes.rb
-#       run: bundle exec rubocop --force-exclusion {all_files}
-#
-#     - name: govet
-#       files: git ls-files -m
-#       glob: "*.go"
-#       run: go vet {files}
-#
-#     - script: "hello.js"
-#       runner: node
-#
-#     - script: "hello.go"
-#       runner: go run
+# Install with: lefthook install
+
+pre-commit:
+  commands:
+    custom-pre-commit:
+      run: .hooks/pre-commit

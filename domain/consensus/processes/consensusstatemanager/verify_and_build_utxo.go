@@ -14,6 +14,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
 	"github.com/pkg/errors"
 )
 
@@ -38,6 +39,29 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
 	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+
+	// HTN-002/HTN-004, gated at hardforks.StrictUTXOCommitmentVersion: from that block version
+	// onward the toleration above stops applying, and these four checks fail closed as they were
+	// always meant to.
+	//
+	// The gate is unscheduled, so this is inert for every block version any network can produce
+	// today - see the hardforks package. It must stay that way until a coordinated rebaseline:
+	// essentially every mainnet node currently runs on an offset baseline, so a node that stopped
+	// tolerating would disqualify the live chain and fall off the network alone.
+	//
+	// utxoCommitmentIsStrictFor derives the version from the selected parent's DAA score, never from
+	// the block's own header version field, which is peer-supplied: this gate adds strictness, so
+	// keying it on a field the miner chooses would let any miner opt out by claiming an older
+	// version.
+	if tolerate {
+		strict, err := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
+		if err != nil {
+			return err
+		}
+		if strict {
+			tolerate = false
+		}
+	}
 
 	// firstError is what the caller sees: the first failure that was not tolerated, exactly as
 	// before. stop reports whether verification should abandon the remaining checks - it does unless
@@ -417,6 +441,35 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 //     is current.
 //
 // Needs no persisted marker; works on an already-synced database.
+// utxoCommitmentIsStrictFor reports whether blockHash is at or past
+// hardforks.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
+//
+// The version comes from the block's selected parent's DAA score, as this node computed it - the
+// same anchoring HTN-001/003 established for every other version-dependent rule. A block's own
+// header version is not used: it is peer-supplied, and every rule gated in the hardforks package
+// adds strictness, so a miner could otherwise opt out of this one by claiming an older version.
+//
+// A block whose selected parent has no DAA score yet (genesis, trusted-data bootstrap) falls back
+// to the process-global version, exactly as versionOfChildOf does. While the gate is unscheduled
+// that fallback cannot matter, because no version at all satisfies an unscheduled gate.
+func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash,
+) (bool, error) {
+	if !hardforks.IsScheduled(hardforks.StrictUTXOCommitmentVersion) {
+		return false, nil
+	}
+
+	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
+	if err != nil {
+		return false, err
+	}
+	blockVersion, err := csm.versionOfChildOf(stagingArea, ghostdagData.SelectedParent())
+	if err != nil {
+		return false, err
+	}
+	return hardforks.Active(hardforks.StrictUTXOCommitmentVersion, blockVersion), nil
+}
+
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) bool {

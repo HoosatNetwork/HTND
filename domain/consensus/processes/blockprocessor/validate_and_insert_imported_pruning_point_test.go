@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/internal/ci"
@@ -19,7 +21,74 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	infralogger "github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/pkg/errors"
 )
+
+// assertImportedPruningPointVerdict stages utxoSet as the imported pruning point UTXO set, imports
+// it at pruningPointHash, and asserts the verdict. wantErr nil means the import must succeed.
+//
+// It always clears the staged data first and leaves nothing behind on failure, so the caller can
+// run several of these back to back against the same consensus.
+func assertImportedPruningPointVerdict(t *testing.T, synceeStaging testapi.TestConsensus,
+	utxoSet []*externalapi.OutpointAndUTXOEntryPair, pruningPointHash *externalapi.DomainHash,
+	wantErr error,
+) {
+	t.Helper()
+
+	if err := synceeStaging.ClearImportedPruningPointData(); err != nil {
+		t.Fatalf("ClearImportedPruningPointData: %+v", err)
+	}
+	if err := synceeStaging.AppendImportedPruningPointUTXOs(utxoSet); err != nil {
+		t.Fatalf("AppendImportedPruningPointUTXOs: %+v", err)
+	}
+
+	err := synceeStaging.ValidateAndInsertImportedPruningPoint(pruningPointHash)
+	switch {
+	case wantErr == nil && err != nil:
+		t.Fatalf("ValidateAndInsertImportedPruningPoint was expected to succeed, got: %+v", err)
+	case wantErr != nil && err == nil:
+		t.Fatalf("ValidateAndInsertImportedPruningPoint was expected to fail with %v, but it succeeded",
+			wantErr)
+	case wantErr != nil && !errors.Is(err, wantErr):
+		t.Fatalf("ValidateAndInsertImportedPruningPoint failed with %+v, want %v", err, wantErr)
+	}
+}
+
+// withOneSompiRemoved copies a UTXO set with a single sompi taken off one entry's amount.
+//
+// This is the minimal corruption: every outpoint is still present, every script is unchanged, and
+// nothing but the MuHash can tell the difference. It is also not a contrived case - a set that is
+// short by one coin is exactly what an incomplete snapshot produces.
+func withOneSompiRemoved(t *testing.T, utxoSet []*externalapi.OutpointAndUTXOEntryPair,
+) []*externalapi.OutpointAndUTXOEntryPair {
+	t.Helper()
+
+	if len(utxoSet) == 0 {
+		t.Fatal("cannot remove a sompi from an empty UTXO set")
+	}
+
+	modified := make([]*externalapi.OutpointAndUTXOEntryPair, len(utxoSet))
+	copy(modified, utxoSet)
+
+	for i, pair := range modified {
+		if pair.UTXOEntry.Amount() == 0 {
+			continue
+		}
+		modified[i] = &externalapi.OutpointAndUTXOEntryPair{
+			Outpoint: pair.Outpoint,
+			UTXOEntry: utxo.NewUTXOEntry(
+				pair.UTXOEntry.Amount()-1,
+				pair.UTXOEntry.ScriptPublicKey(),
+				pair.UTXOEntry.IsCoinbase(),
+				pair.UTXOEntry.BlockDAAScore(),
+			),
+		}
+		return modified
+	}
+
+	t.Fatal("every entry in the UTXO set has amount 0, so a sompi cannot be removed")
+	return nil
+}
 
 func addBlock(tc testapi.TestConsensus, parentHashes []*externalapi.DomainHash, t *testing.T) *externalapi.DomainHash {
 	block, _, err := tc.BuildBlockWithParents(parentHashes, nil, nil)
@@ -234,32 +303,47 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 				t.Fatalf("AppendImportedPruningPointUTXOs: %+v", err)
 			}
 
-			// DISABLE this test because the validation is disabled.
-			// virtualSelectedParent, err := tcSyncer.GetVirtualSelectedParent()
-			// if err != nil {
-			// 	t.Fatalf("GetVirtualSelectedParent: %+v", err)
-			// }
+			// These two checks were commented out with "DISABLE this test because the validation is
+			// disabled" - HTN-006 and HTN-005 respectively. Both validations now exist again behind
+			// unscheduled hardfork gates, so each assertion is run twice: once with the gate off,
+			// pinning today's documented (permissive) behaviour, and once with it scheduled at
+			// version 1, pinning the behaviour the fork will bring.
+			//
+			// All blocks here are version 1 (POWScores is math.MaxUint64 above), so scheduling a
+			// gate at version 1 activates it for everything this test builds.
 
-			// Check that ValidateAndInsertImportedPruningPoint fails for invalid pruning point
-			// err = synceeStaging.ValidateAndInsertImportedPruningPoint(virtualSelectedParent)
-			// if !errors.Is(err, ruleerrors.ErrUnexpectedPruningPoint) {
-			// 	t.Fatalf("Unexpected error: %+v", err)
-			// }
+			// HTN-006's own assertion is deliberately NOT made here. The original commented-out check
+			// imported at tcSyncer's virtual selected parent and expected ErrUnexpectedPruningPoint;
+			// with the gate off that import does fail, but with a bare database "not found" from much
+			// further down, once something looks for data the syncee does not have for that hash. So
+			// the gate does not turn an accepted import into a rejected one - it turns a late,
+			// untyped, incidental failure into an early typed rule error. That is worth having and
+			// worth testing, but it needs a consensus this test is not free to leave half-imported,
+			// so it belongs in its own test rather than in the middle of this one.
 
-			err = synceeStaging.ClearImportedPruningPointData()
-			if err != nil {
-				t.Fatalf("ClearImportedPruningPointData: %+v", err)
-			}
-			err = synceeStaging.AppendImportedPruningPointUTXOs(makeFakeUTXOs())
-			if err != nil {
-				t.Fatalf("AppendImportedPruningPointUTXOs: %+v", err)
-			}
+			// HTN-005, gate off: a UTXO set that cannot hash to the pruning point's commitment is
+			// accepted anyway - the node repairs its own trust anchor and carries on. This is the
+			// behaviour every mainnet node relies on today.
+			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint, nil)
 
-			// Check that ValidateAndInsertImportedPruningPoint fails if the UTXO commitment doesn't fit the provided UTXO set.
-			// err = synceeStaging.ValidateAndInsertImportedPruningPoint(pruningPoint)
-			// if !errors.Is(err, ruleerrors.ErrBadPruningPointUTXOSet) {
-			// 	t.Fatalf("Unexpected error: %+v", err)
-			// }
+			// HTN-005, gate on: the same set is refused with ErrBadPruningPointUTXOSet.
+			restoreImportGate := hardforks.SetForTest(&hardforks.RefuseMismatchedImportVersion, 1)
+			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint,
+				ruleerrors.ErrBadPruningPointUTXOSet)
+
+			// The plan's specific case: not a wholly fabricated set, but the real one with a single
+			// sompi removed from one entry. That is the smallest possible corruption, and the one a
+			// commitment check exists to catch - it is indistinguishable from the real set by any
+			// means other than the MuHash.
+			assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
+				pruningPoint, ruleerrors.ErrBadPruningPointUTXOSet)
+			restoreImportGate()
+
+			// And with the gate off again, that same one-sompi-short set is accepted - which is
+			// precisely how a node ends up on an offset baseline without anything going wrong
+			// loudly.
+			assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
+				pruningPoint, nil)
 
 			err = synceeStaging.ClearImportedPruningPointData()
 			if err != nil {

@@ -35,6 +35,33 @@ func checkedDurationFromHours(value uint64) (time.Duration, error) {
 	return time.Duration(parsedValue) * time.Hour, nil
 }
 
+// warnAboutPersistentRepairFlags says loudly, at every start, that a one-shot recovery flag is set.
+//
+// Both flags are one-shot recovery steps, not settings. --repair-block-statuses in particular
+// caused a live outage: it was baked permanently into a docker-compose launch command instead of
+// being run once, and because it re-marks every non-invalid block as UTXO-valid it leaves blocks
+// that have no stored multiset. Virtual's own selected parent was one, so every GetBlockTemplate
+// call failed with "Multiset <hash> does not exist in db" and the pool's miners saw 0 H/s - with
+// nothing in the logs connecting that to a flag set weeks earlier.
+//
+// This is deliberately a warning on every boot rather than a startup refusal: a node mid-recovery
+// legitimately needs the flag, and failing to start would be worse than the problem. The point is
+// that leaving it in a launch command can no longer be silent.
+func warnAboutPersistentRepairFlags(cfg *config.Config) {
+	if cfg.RepairBlockStatuses {
+		log.Warnf("--repair-block-statuses is set. This is a ONE-SHOT recovery step, not a setting: " +
+			"it re-marks every block that is neither invalid nor header-only as UTXO-valid, which " +
+			"delays startup on a mature node and leaves UTXO-valid blocks with no stored multiset. " +
+			"Remove it from this node's launch command once the recovery run has finished - leaving " +
+			"it in place re-runs it on every restart.")
+	}
+	if cfg.RepairMissingMultisets {
+		log.Warnf("--repair-missing-multisets is set. This is a ONE-SHOT recovery step: remove it " +
+			"from this node's launch command after the run that reports how many blocks it marked " +
+			"for re-verification.")
+	}
+}
+
 // mergedAndValidatedFrozenAddresses combines the mempool's built-in frozen addresses with the ones
 // given via --freeze-address.
 //
@@ -140,6 +167,8 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	if err != nil {
 		return nil, err
 	}
+	warnAboutPersistentRepairFlags(cfg)
+
 	consensusConfig := consensus.Config{
 		Params:                            *cfg.ActiveNetParams,
 		IsArchival:                        cfg.IsArchivalNode,
@@ -227,6 +256,9 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 			AutoInstall:      bool(cfg.AutoUpdateInstall),
 			NotifyOnly:       false,
 			AutoReportIssues: bool(cfg.AutoReportIssues),
+
+			ReleasePublicKey:       cfg.AutoUpdatePublicKey,
+			AllowUnverifiedInstall: bool(cfg.AutoUpdateAllowUnverified),
 		}
 		updater = autoupdate.NewUpdater(updaterConfig)
 		log.Infof("Auto-updater initialized (channel: %s, interval: %v, autoreport: %v)", updaterConfig.UpdateChannel, updaterConfig.CheckInterval, updaterConfig.AutoReportIssues)

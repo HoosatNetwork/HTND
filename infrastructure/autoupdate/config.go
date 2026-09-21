@@ -55,6 +55,16 @@ type Config struct {
 	// When enabled (default), panics and update errors will create GitHub issues
 	// Requires GitHubToken to be set for reporting to work
 	AutoReportIssues bool
+
+	// ReleasePublicKey is the hex-encoded ed25519 public key that release checksum lists are
+	// signed with. Empty falls back to the build's pinnedReleasePublicKey, which is itself empty
+	// unless a release captain set it - see verify.go.
+	ReleasePublicKey string
+
+	// AllowUnverifiedInstall permits installing an archive whose authenticity was never
+	// established. It exists only because no signing key ships in this repository; it must never
+	// be on by default. See ReleaseVerifier.
+	AllowUnverifiedInstall bool
 }
 
 // DefaultConfig returns the default auto-update configuration
@@ -72,6 +82,10 @@ func DefaultConfig() *Config {
 		InstallDelayMax:  180 * time.Minute,
 		GitHubToken:      "",
 		AutoReportIssues: false,
+
+		// No key ships here, and unverified installs are never a default (HTN-162).
+		ReleasePublicKey:       "",
+		AllowUnverifiedInstall: false,
 	}
 }
 

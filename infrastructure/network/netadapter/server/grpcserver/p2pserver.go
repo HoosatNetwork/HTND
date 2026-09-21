@@ -21,7 +21,21 @@ type p2pServer struct {
 	gRPCServer
 }
 
-const p2pMaxMessageSize = 1024 * 1024 * 1024 * 4 // 4GiB, raised from 1GiB by cff75920a
+// DefaultP2PMaxMessageSize is the built-in P2P message ceiling: 4GiB, raised from 1GiB by
+// cff75920a.
+//
+// HTN-166: this is very large, and an unauthenticated peer can make this node buffer up to it. The
+// default is deliberately NOT changed here. A P2P ceiling that is too low rejects legitimate large
+// IBD messages and partitions this node from the network, and nobody has measured what the real
+// maximum legitimate message is on this chain - so any smaller number chosen here would be a guess
+// with a network-split failure mode. What this does instead is make the ceiling settable, so an
+// operator who HAS measured their traffic can lower it without rebuilding, and so the value is
+// visible in the startup log rather than buried in a constant.
+const DefaultP2PMaxMessageSize = 1024 * 1024 * 1024 * 4
+
+// p2pMaxMessageSize is the effective ceiling. Set once at startup via SetMaxMessageSizes, before
+// any server is created.
+var p2pMaxMessageSize = DefaultP2PMaxMessageSize
 
 // p2pMaxInboundConnections is the max amount of inbound connections for the P2P server.
 // Note that inbound connections are not limited by the gRPC server. (A value of 0 means

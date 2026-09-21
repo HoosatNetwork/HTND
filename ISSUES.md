@@ -3036,6 +3036,166 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - commit: 0361f3999
 
 ## HTN-231
+- title: Updater.InstallUpdate adds to the wait group but installUpdate never calls Done, so Stop
+  blocks forever
+- status: FIXED 2026-09-20, on branch remediation/sept-2026
+- severity: medium (node hangs on shutdown; only reachable with auto-update enabled)
+- area: autoupdate
+- found: incidentally, while wiring HTN-162's verification into the same file.
+- evidence: `InstallUpdate` (updater.go) did `u.wg.Add(1)` and then `go u.installUpdate(version)`.
+  `installUpdate`'s only defer touches statusMutex - it never calls `u.wg.Done()`. `Stop()` does
+  `close(u.shutdownChan); u.cancel(); u.wg.Wait()`, so a single InstallUpdate call leaves the
+  counter permanently above zero and Stop never returns. The node then hangs in shutdown instead of
+  closing its database cleanly, which is the same class of damage HTN-164 is about.
+- why the obvious fix is wrong: adding `defer u.wg.Done()` inside installUpdate panics. downloadUpdate
+  also calls installUpdate, synchronously and with no matching Add, so the counter would go negative
+  ("sync: negative WaitGroup counter") on the auto-install path - the common one.
+- fix: do the Done at the call site, wrapping the goroutine:
+  `u.wg.Add(1); go func() { defer u.wg.Done(); u.installUpdate(version) }()`.
+- tests: TestInstallUpdateDoesNotLeakAWaitGroupCount. Verified to catch the defect - with the wrapper
+  reverted it blocks for its full 30s timeout and fails; with the fix it returns immediately.
+- left alone: the wait group balance elsewhere in the file (Start's two Adds, periodicCheck's Add
+  before checkForUpdates) was checked and is correct; only this one call site was unbalanced.
+
+## HTN-204 (RESOLVED 2026-09-21, branch remediation/sept-2026)
+- title: A block whose selected parent was pruned never gets its trusted DAA window, so a freshly
+  synced node mines at genesis difficulty
+- status: FIXED via Option 0 (separate the two uses of calculateBlockWindowHeap). See
+  docs/design/HTN-204.md for the full analysis; this entry records the outcome only.
+- what was wrong with the ORIGINAL recorded fix: it changed calculateBlockWindowHeap for BOTH its
+  callers at once. Difficulty wants a pruned block's trusted window; the trusted-data serving path
+  must only ever name blocks it can answer TrustedDataDataDAAHeader for. Making the window non-empty
+  for both meant a serving node offered a peer blocks it had no trusted data for, and the peer's IBD
+  died. Re-verified on this branch before changing anything: the reconstructed attempt patch fails
+  TestIBDWithPruning 3/3 (~34s, IBD timeout), the unpatched control passes 2/2 (~6.3s).
+- fix: an includeTrustedWindow parameter. difficultyManager.blockWindow passes true; BlockWindow
+  passes false for all three of its callers (DAABlockWindow/serving, pastMedianTimeManager,
+  pruningManager.blocksToKeep), so the ONLY behaviour that changes anywhere is the difficulty window.
+  The conditional break is paired with a narrower guard immediately before the ghostdagDataStore.Get
+  on the virtual-genesis marker - the guard the old break happened to provide.
+- the cache had to change with it: windowHeapSliceStore was keyed by (blockHash, windowSize), and the
+  two paths now return different answers for that key, so whichever ran first would have silently
+  decided what the other saw. includeTrustedWindow is part of both the staging-shard key and the LRU
+  key. Also fixed LRUCache.evictRandom, which rebuilt the key from its own fields - pointless with
+  two fields, but with a third it would evict the wrong entry or none at all, letting the cache grow
+  past capacity.
+- tests: TestDifficultyWindowReachesTheTrustedWindowOfAPrunedBlock (verified to fail with 0 blocks
+  instead of 10 when the fix is reverted - the same 0-vs-10 reproduction the original attempt's test
+  produced), TestServingWindowStopsAtThePruningBoundary (serving must still return 0), and
+  TestTheTwoWindowsDoNotShareACacheEntry (both warm-up orders). Needed a test-only
+  BlocksWithTrustedDataDAAWindowStore() accessor on testapi.TestConsensus, as the original attempt
+  also did. TestIBDWithPruning 3/3 pass with the fix.
+- NEEDS A HUMAN DECISION BEFORE DEPLOYING: this changes more than bits. The difficulty window also
+  feeds stageDAAScoreAndAddedBlocks, where daaScore = selectedParentDAAScore + len(daaAddedBlocks)
+  and daaAddedBlocks is the merge set intersected with the window - so a larger window can raise a
+  block's computed DAA score, which selects the block version and through it K, finality depth,
+  pruning depth and the HTN-216 coinbase gate. It is convergence rather than divergence (a
+  genesis-synced node already computes the higher, correct score; only headers-proof nodes were
+  truncated), which is the same argument HTN-221 was deployed on - but HTN-221 only moved bits.
+  daaBlocksStore is persistent, so an already-synced node keeps its old scores for blocks it has
+  already processed; only a resync makes a node's whole history consistent with the fix.
+- left alone: Options (i) persist a compact trusted window at prune time and (ii) derive from
+  retained headers plus a release checkpoint. Both are about robustness where Option 0 does not
+  reach, not about the reported symptom, and both still require Option 0 underneath them.
+
+## HTN-204 follow-up (2026-09-21): the first fix only worked for one hop
+- The first HTN-204 change on this branch left the SERVED window truncated. A node syncing from a
+  genesis-synced peer was fixed; a node syncing from a headers-proof peer received that peer's
+  truncated window and still computed genesis difficulty. Reported by the user as "still not
+  working, even on the correct branch".
+- Why it was missed: "TestIBDWithPruning 3/3" was cited as verifying the fix, but that test runs on
+  simnet with DisableDifficultyAdjustment, so it never computes a difficulty. It verified serving,
+  not difficulty. That was an overstated claim.
+- Reproduced with a real end-to-end test (difficulty enabled, small window): one hop 20/20 correct,
+  two hops 15/20 at genesis bits - the live symptom.
+- Fixed with three changes, each shown failing without it: DAABlockWindow serves the trusted window;
+  TrustedDataDataDAAHeader finds trusted-window blocks by hash instead of trusting a served-list index
+  that does not match the stored one (the real cause of the original patch's failure); and the lookup
+  searches the anchor block whose trusted window the walk actually used, which after a pruning-point
+  advance is the OLD pruning point, not the one being served.
+- Verified: one, two and three hops plus a pruning-point-advance-then-serve case all 20/20 with
+  matching bits; TestIBDWithPruning 3/3; go test -tags=ci ./... 114 ok, 0 fail.
+- Limitation: a node syncing from an OLD-code peer still receives a truncated window. Deploy to the
+  nodes others sync from first.
+- Full detail: docs/design/HTN-204.md section 11.
+
+## HTN-232
+- title: The v10 activation DAA score (227679830) was already in the past when it was chosen, so
+  the network's chain contains version-9 blocks that v10 rules reject, and no node can sync it fresh
+- status: needs_human (consensus / release-captain decision - hard rules 2 and 4)
+- severity: critical (no node validating history under v10 rules can complete IBD)
+- area: consensus / activation
+- found: 2026-09-21, investigating "not syncing" on htnd-public. Read-only throughout: docker logs,
+  docker inspect, and read-only RPC to public nodes. Nothing on production was modified.
+- evidence:
+  - htnd-public's IBD loops: every attempt reaches ~60% of headers, rejects header
+    f147f18d051edaa8d933a8941bba4e3e13196110b10c0a5778bac385f1385531 with "The block version 9
+    should be 10: ErrWrongBlockVersion", discards the staging consensus and restarts. 10+ loops since
+    08:10, always the same header, always from 51.89.232.58.
+  - That message is produced by blockValidator.checkBlockVersion only when the header's own DAA
+    score is >= 227679830 (expectedBlockVersion == 10) and its version is 9. So the block has DAA
+    >= 227679830 and version 9 - certain from the code, not inferred.
+  - The headers processed immediately before the rejection are timestamped 2026-09-18 22:14:54,
+    22:14:58 and 22:15:05 UTC, so f147f18d was mined around 2026-09-18 22:15 UTC.
+  - The activation commit 252e0adc5 ("activate block version 10 on mainnet at DAA score 227679830")
+    is dated 2026-09-19 10:37 +0300 = 07:37 UTC - roughly nine hours AFTER the network had already
+    mined past DAA 227679830.
+  - The peer 51.89.232.58 runs 2.17.2-2ad931ee7, which DOES contain 252e0adc5. So it is not a node on
+    old rules: it holds a v9 block past 227679830 that its own current rules would reject. Most likely
+    it accepted that block while still on pre-activation code, then upgraded in place - and stored
+    blocks are never re-validated against new rules.
+- mechanism: choosing an activation score the chain has already passed retroactively invalidates
+  every block mined between that score and the moment nodes upgraded. Those blocks were valid under
+  the rules in force when they were mined. Nodes that were running through the activation and
+  upgraded in place keep them; any node that validates history fresh under v10 rules rejects them.
+  So in-place-upgraded nodes and freshly synced nodes can never agree, and no fresh v10 node can
+  complete IBD against the network's chain.
+- network state observed (read-only RPC): 51.89.232.58 isSynced=false, virtualDaaScore 227776293,
+  unchanged across checks ~15 minutes apart; 219.88.72.130 isSynced=false at 227212294 (below the
+  activation point entirely); 188.241.30.193, 85.222.101.54, 84.50.246.239, 85.128.3.70 unreachable.
+  No reachable node reports synced.
+- why neither obvious remedy works:
+  - "upgrade the rest of the network to v10 at 227679830" does not help - the peer IS upgraded, and a
+    fresh v10 node still cannot sync the chain it serves.
+  - an activation score is only safe if it is in the FUTURE when the release ships, for every node.
+- options (all consensus changes, for the release captain):
+  - move the v10 activation to a future DAA score, past the last version-9 block on the chain the
+    network actually built, and release it coordinated;
+  - or remove the v10 activation (back to v9), which conflicts with hard rule 2 and with the user's
+    2026-09-19 "don't revert" - only the user can override those.
+  - a grace window accepting v9 past 227679830 is also possible but is itself a consensus rule change
+    with the same coordination requirement.
+- not verified: the exact DAA score of f147f18d and of the last v9 block on the network's chain. The
+  peer's RPC returns null for every GetBlock, including its own tip, so headers could not be fetched
+  from it. Pinning the last v9 block needs a node whose RPC serves blocks, or a datadir COPY.
+
+## HTN-232 correction (2026-09-21, later same day)
+- The claim "no node can sync it fresh" was WRONG and is retracted. Cause: htnd-public's peer list at
+  the time (foztor.net hosts, 192.168.1.199) only offered chains it rejected; that is peer selection,
+  not a network-wide fork.
+- Retested against peer 89.171.13.82 (serverVersion 2.20.0, isSynced=true, virtualDaaScore
+  227910423): headers-proof IBD completed 0->143642 headers (100%), ZERO ErrWrongBlockVersion
+  rejections throughout. htnd-public CAN sync fresh under v10 against this peer.
+- A separate, already-known condition then appeared, unrelated to version rejection: the imported
+  pruning-point UTXO set (1ca0062e2d9cc4030eaef40707fc06eecc6c38c82356f788e70cd389bf905fa6) did not
+  match its header commitment (35b9c0b45a...), recomputation still did not match, and the node
+  repaired its trust anchor and proceeded - this is HTN-002/HTN-005's tolerated offset-baseline path
+  operating exactly as designed (the strict/refuse gates are both off), not a new defect. UTXO index
+  rebuild then proceeded normally (15M+ entries processed).
+- corrected mechanism: the version-9-past-227679830 block(s) some peers hold are real (evidence in
+  the original entry stands), but they are not universal on the network - other peers, including
+  89.171.13.82, apparently do not serve that history as their canonical chain, or its own pruning
+  point already lies past that point. The severity and scope in the original entry were overstated;
+  this is at minimum peer-dependent, not network-wide.
+- revised recommendation: point htnd-public at known-good, synced peers (89.171.13.82 confirmed
+  working) rather than treating this as requiring a new coordinated activation. Whether 51.89.232.58
+  and the foztor.net hosts need investigation/exclusion, or whether they will themselves reconcile
+  onto the majority chain, is still open and not re-tested here.
+- left open: whether 51.89.232.58's version-9-past-activation block is itself on a minority/stale
+  chain that will get reorganized away, or reflects a genuine, still-unresolved chain split. Not
+  determined in this session.
+
+## HTN-233
 - title: Multiset duplicate-coinbase dedup missed coins already held only in virtual, so normal relay could disagree on UTXO commitment
 - status: FIXED (e6126620b)
 - severity: critical (ErrBadUTXOCommitment on a correct relayed block → StatusDisqualifiedFromChain → inheritance down the selected chain → no usable tip / VirtualGenesis)
@@ -3055,3 +3215,4 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - left alone: RepairBlockStatuses (recovery-only; not this cascade), HTN-002 offset baseline (needs_human), HTN-004 algebra tolerances (parked; this fix closes the tip-child multiset half of the path dependency).
 - operator verify: after rebuild, relayed blocks that previously logged ErrBadUTXOCommitment with no other rule failure should stay Valid; GetBlockDagInfo should keep a non-VirtualGenesis selected tip; SubmitBlock of a locally built template should remain Valid.
 - commit: e6126620b
+- note: briefly numbered HTN-231 on master (e6126620b / 2a223b46f) before merge; remediation/sept-2026 already used HTN-231 for the autoupdate WaitGroup leak, so this multiset tip-child fix is renumbered HTN-233 on merge.
