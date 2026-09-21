@@ -48,7 +48,21 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	// utxo.AcceptedUTXOBlockDAAScore for the rule and why it is a consensus rule rather than a
 	// choice. applyMergeSetBlocks builds this block's UTXO diff from the same daaScore, so the diff
 	// and the multiset stay two representations of one UTXO set.
-	err = utxo.ApplyAcceptanceDataToMultiset(ms, acceptanceData, daaScore, selectedParentPastUTXO)
+	// selectedParentPastUTXO is a diff from virtual to the selected parent's past. A coin that is
+	// already in both is absent from ToAdd/ToRemove, so ApplyAcceptanceDataToMultiset needs virtual
+	// itself to know the set already holds it (tip-child case). When the DAA stamp differs, Remove+Add.
+	baseUTXO := func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error) {
+		has, err := csm.consensusStateStore.HasUTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
+		if err != nil || !has {
+			return nil, false, err
+		}
+		entry, _, err := csm.consensusStateStore.UTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
+		if err != nil {
+			return nil, false, err
+		}
+		return entry, true, nil
+	}
+	err = utxo.ApplyAcceptanceDataToMultiset(ms, acceptanceData, daaScore, selectedParentPastUTXO, baseUTXO)
 	if err != nil {
 		return nil, err
 	}
