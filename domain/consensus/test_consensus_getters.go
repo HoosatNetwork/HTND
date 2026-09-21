@@ -150,3 +150,13 @@ func (tc *testConsensus) DAABlocksStore() model.DAABlocksStore {
 func (tc *testConsensus) Consensus() externalapi.Consensus {
 	return tc
 }
+
+// BlocksWithTrustedDataDAAWindowStore exposes the trusted DAA window store so a test can stage the
+// shape validateAndInsertBlockWithTrustedData leaves a pruning point in: GHOSTDAG selected parent
+// replaced by the virtual-genesis marker, and the real window present only as trusted data.
+//
+// Test-only. Nothing in production needs this store from outside consensus, and HTN-204 could not be
+// regression-tested without it.
+func (tc *testConsensus) BlocksWithTrustedDataDAAWindowStore() model.BlocksWithTrustedDataDAAWindowStore {
+	return tc.blocksWithTrustedDataDAAWindowStore
+}

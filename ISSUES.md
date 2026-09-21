@@ -3056,3 +3056,44 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   reverted it blocks for its full 30s timeout and fails; with the fix it returns immediately.
 - left alone: the wait group balance elsewhere in the file (Start's two Adds, periodicCheck's Add
   before checkForUpdates) was checked and is correct; only this one call site was unbalanced.
+
+## HTN-204 (RESOLVED 2026-09-21, branch remediation/sept-2026)
+- title: A block whose selected parent was pruned never gets its trusted DAA window, so a freshly
+  synced node mines at genesis difficulty
+- status: FIXED via Option 0 (separate the two uses of calculateBlockWindowHeap). See
+  docs/design/HTN-204.md for the full analysis; this entry records the outcome only.
+- what was wrong with the ORIGINAL recorded fix: it changed calculateBlockWindowHeap for BOTH its
+  callers at once. Difficulty wants a pruned block's trusted window; the trusted-data serving path
+  must only ever name blocks it can answer TrustedDataDataDAAHeader for. Making the window non-empty
+  for both meant a serving node offered a peer blocks it had no trusted data for, and the peer's IBD
+  died. Re-verified on this branch before changing anything: the reconstructed attempt patch fails
+  TestIBDWithPruning 3/3 (~34s, IBD timeout), the unpatched control passes 2/2 (~6.3s).
+- fix: an includeTrustedWindow parameter. difficultyManager.blockWindow passes true; BlockWindow
+  passes false for all three of its callers (DAABlockWindow/serving, pastMedianTimeManager,
+  pruningManager.blocksToKeep), so the ONLY behaviour that changes anywhere is the difficulty window.
+  The conditional break is paired with a narrower guard immediately before the ghostdagDataStore.Get
+  on the virtual-genesis marker - the guard the old break happened to provide.
+- the cache had to change with it: windowHeapSliceStore was keyed by (blockHash, windowSize), and the
+  two paths now return different answers for that key, so whichever ran first would have silently
+  decided what the other saw. includeTrustedWindow is part of both the staging-shard key and the LRU
+  key. Also fixed LRUCache.evictRandom, which rebuilt the key from its own fields - pointless with
+  two fields, but with a third it would evict the wrong entry or none at all, letting the cache grow
+  past capacity.
+- tests: TestDifficultyWindowReachesTheTrustedWindowOfAPrunedBlock (verified to fail with 0 blocks
+  instead of 10 when the fix is reverted - the same 0-vs-10 reproduction the original attempt's test
+  produced), TestServingWindowStopsAtThePruningBoundary (serving must still return 0), and
+  TestTheTwoWindowsDoNotShareACacheEntry (both warm-up orders). Needed a test-only
+  BlocksWithTrustedDataDAAWindowStore() accessor on testapi.TestConsensus, as the original attempt
+  also did. TestIBDWithPruning 3/3 pass with the fix.
+- NEEDS A HUMAN DECISION BEFORE DEPLOYING: this changes more than bits. The difficulty window also
+  feeds stageDAAScoreAndAddedBlocks, where daaScore = selectedParentDAAScore + len(daaAddedBlocks)
+  and daaAddedBlocks is the merge set intersected with the window - so a larger window can raise a
+  block's computed DAA score, which selects the block version and through it K, finality depth,
+  pruning depth and the HTN-216 coinbase gate. It is convergence rather than divergence (a
+  genesis-synced node already computes the higher, correct score; only headers-proof nodes were
+  truncated), which is the same argument HTN-221 was deployed on - but HTN-221 only moved bits.
+  daaBlocksStore is persistent, so an already-synced node keeps its old scores for blocks it has
+  already processed; only a resync makes a node's whole history consistent with the fix.
+- left alone: Options (i) persist a compact trusted window at prune time and (ii) derive from
+  retained headers plus a release checkpoint. Both are about robustness where Option 0 does not
+  reach, not about the reported symptom, and both still require Option 0 underneath them.

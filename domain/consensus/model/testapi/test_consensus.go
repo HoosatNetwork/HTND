@@ -74,6 +74,7 @@ type TestConsensus interface {
 	UTXODiffStore() model.UTXODiffStore
 	HeadersSelectedChainStore() model.HeadersSelectedChainStore
 	DAABlocksStore() model.DAABlocksStore
+	BlocksWithTrustedDataDAAWindowStore() model.BlocksWithTrustedDataDAAWindowStore
 
 	BlockBuilder() TestBlockBuilder
 	BlockProcessor() model.BlockProcessor

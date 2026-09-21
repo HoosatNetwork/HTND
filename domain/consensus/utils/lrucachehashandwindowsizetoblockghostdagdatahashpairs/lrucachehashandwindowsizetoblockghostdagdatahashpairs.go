@@ -9,12 +9,18 @@ import (
 type lruKey struct {
 	blockHash  externalapi.DomainHash
 	windowSize int
+	// includeTrustedWindow separates the two windows a block can have. The difficulty path walks
+	// into a pruned block's trusted DAA window; every other caller stops at the pruning boundary.
+	// They are different answers for the same (hash, windowSize), so they must not share an entry -
+	// see dagtraversalmanager.calculateBlockWindowHeap (HTN-204).
+	includeTrustedWindow bool
 }
 
-func newKey(blockHash *externalapi.DomainHash, windowSize int) lruKey {
+func newKey(blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool) lruKey {
 	return lruKey{
-		blockHash:  *blockHash,
-		windowSize: windowSize,
+		blockHash:            *blockHash,
+		windowSize:           windowSize,
+		includeTrustedWindow: includeTrustedWindow,
 	}
 }
 
@@ -42,10 +48,10 @@ func New(capacity int, preallocate bool) *LRUCache {
 }
 
 // Add adds an entry to the LRUCache
-func (c *LRUCache) Add(blockHash *externalapi.DomainHash, windowSize int, value []*externalapi.BlockGHOSTDAGDataHashPair) {
+func (c *LRUCache) Add(blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool, value []*externalapi.BlockGHOSTDAGDataHashPair) {
 	// c.lock.Lock()
 	// defer c.lock.Unlock()
-	key := newKey(blockHash, windowSize)
+	key := newKey(blockHash, windowSize, includeTrustedWindow)
 	c.cache[key] = value
 
 	if len(c.cache) > c.capacity {
@@ -54,10 +60,10 @@ func (c *LRUCache) Add(blockHash *externalapi.DomainHash, windowSize int, value 
 }
 
 // Get returns the entry for the given key, or (nil, false) otherwise
-func (c *LRUCache) Get(blockHash *externalapi.DomainHash, windowSize int) ([]*externalapi.BlockGHOSTDAGDataHashPair, bool) {
+func (c *LRUCache) Get(blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool) ([]*externalapi.BlockGHOSTDAGDataHashPair, bool) {
 	// c.lock.RLock()
 	// defer c.lock.RUnlock()
-	key := newKey(blockHash, windowSize)
+	key := newKey(blockHash, windowSize, includeTrustedWindow)
 	value, ok := c.cache[key]
 	if !ok {
 		return nil, false
@@ -66,20 +72,20 @@ func (c *LRUCache) Get(blockHash *externalapi.DomainHash, windowSize int) ([]*ex
 }
 
 // Has returns whether the LRUCache contains the given key
-func (c *LRUCache) Has(blockHash *externalapi.DomainHash, windowSize int) bool {
+func (c *LRUCache) Has(blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool) bool {
 	// c.lock.RLock()
 	// defer c.lock.RUnlock()
-	key := newKey(blockHash, windowSize)
+	key := newKey(blockHash, windowSize, includeTrustedWindow)
 	dagdata, ok := c.cache[key]
 	return ok && dagdata != nil
 }
 
 // Remove removes the entry for the the given key. Does nothing if
 // the entry does not exist
-func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, windowSize int) {
+func (c *LRUCache) Remove(blockHash *externalapi.DomainHash, windowSize int, includeTrustedWindow bool) {
 	// c.lock.Lock()
 	// defer c.lock.Unlock()
-	key := newKey(blockHash, windowSize)
+	key := newKey(blockHash, windowSize, includeTrustedWindow)
 	delete(c.cache, key)
 }
 
@@ -89,8 +95,11 @@ func (c *LRUCache) evictRandom() {
 		keyToEvict = key
 		break
 	}
-	key := newKey(&keyToEvict.blockHash, keyToEvict.windowSize)
-	delete(c.cache, key)
+	// Delete the key itself rather than rebuilding one from its fields. Rebuilding was merely
+	// pointless while the key was (hash, windowSize); once includeTrustedWindow joined it, a rebuild
+	// that forgot the new field would evict a different entry than the one chosen - or none at all,
+	// letting the cache grow past its capacity.
+	delete(c.cache, keyToEvict)
 }
 
 func (c *LRUCache) Len() int {
