@@ -3168,3 +3168,29 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - not verified: the exact DAA score of f147f18d and of the last v9 block on the network's chain. The
   peer's RPC returns null for every GetBlock, including its own tip, so headers could not be fetched
   from it. Pinning the last v9 block needs a node whose RPC serves blocks, or a datadir COPY.
+
+## HTN-232 correction (2026-09-21, later same day)
+- The claim "no node can sync it fresh" was WRONG and is retracted. Cause: htnd-public's peer list at
+  the time (foztor.net hosts, 192.168.1.199) only offered chains it rejected; that is peer selection,
+  not a network-wide fork.
+- Retested against peer 89.171.13.82 (serverVersion 2.20.0, isSynced=true, virtualDaaScore
+  227910423): headers-proof IBD completed 0->143642 headers (100%), ZERO ErrWrongBlockVersion
+  rejections throughout. htnd-public CAN sync fresh under v10 against this peer.
+- A separate, already-known condition then appeared, unrelated to version rejection: the imported
+  pruning-point UTXO set (1ca0062e2d9cc4030eaef40707fc06eecc6c38c82356f788e70cd389bf905fa6) did not
+  match its header commitment (35b9c0b45a...), recomputation still did not match, and the node
+  repaired its trust anchor and proceeded - this is HTN-002/HTN-005's tolerated offset-baseline path
+  operating exactly as designed (the strict/refuse gates are both off), not a new defect. UTXO index
+  rebuild then proceeded normally (15M+ entries processed).
+- corrected mechanism: the version-9-past-227679830 block(s) some peers hold are real (evidence in
+  the original entry stands), but they are not universal on the network - other peers, including
+  89.171.13.82, apparently do not serve that history as their canonical chain, or its own pruning
+  point already lies past that point. The severity and scope in the original entry were overstated;
+  this is at minimum peer-dependent, not network-wide.
+- revised recommendation: point htnd-public at known-good, synced peers (89.171.13.82 confirmed
+  working) rather than treating this as requiring a new coordinated activation. Whether 51.89.232.58
+  and the foztor.net hosts need investigation/exclusion, or whether they will themselves reconcile
+  onto the majority chain, is still open and not re-tested here.
+- left open: whether 51.89.232.58's version-9-past-activation block is itself on a minority/stale
+  chain that will get reorganized away, or reflects a genuine, still-unresolved chain split. Not
+  determined in this session.
