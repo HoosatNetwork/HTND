@@ -4,6 +4,8 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
+	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
 	"github.com/pkg/errors"
 )
@@ -30,12 +32,28 @@ func (csm *consensusStateManager) updateVirtual(stagingArea *model.StagingArea, 
 		oldVirtualSelectedParent = oldVirtualGHOSTDAGData.SelectedParent()
 	}
 
+	// Captured before pickVirtualParents: bounded-merge GHOSTDAG writes virtual's parents as it
+	// checks them, so a read afterwards is no longer the pre-update set.
+	previousVirtualParents, previousParentsErr := csm.dagTopologyManager.Parents(stagingArea, model.VirtualBlockHash)
+	if previousParentsErr != nil && !database.IsNotFoundError(previousParentsErr) {
+		return nil, nil, previousParentsErr
+	}
+
 	log.Debugf("Picking virtual parents from tips len: %d", len(tips))
 	virtualParents, err := csm.pickVirtualParents(stagingArea, tips)
 	if err != nil {
 		return nil, nil, err
 	}
 	log.Debugf("Picked virtual parents: %s", virtualParents)
+
+	// Virtual's GHOSTDAG data, DAA window, acceptance data, multiset and UTXO diff are a function of
+	// its parent set. GHOSTDAG sorts the merge set, so parent order does not enter the result. A new
+	// tip that is not selected — the common case while syncing bodies that are already in the
+	// selected parent's past — leaves that set unchanged, and rebuilding it is the same state.
+	if previousParentsErr == nil && sameParentSet(previousVirtualParents, virtualParents) {
+		log.Debugf("Virtual parents unchanged (%d), skipping GHOSTDAG and UTXO rebuild", len(virtualParents))
+		return &externalapi.SelectedChainPath{}, utxo.NewUTXODiff(), nil
+	}
 
 	virtualUTXODiff, err := csm.updateVirtualWithParents(stagingArea, virtualParents)
 	if err != nil {
@@ -60,6 +78,23 @@ func (csm *consensusStateManager) updateVirtual(stagingArea *model.StagingArea, 
 	}
 
 	return selectedParentChainChanges, virtualUTXODiff, nil
+}
+
+// sameParentSet reports whether a and b contain the same blocks, regardless of order.
+func sameParentSet(a, b []*externalapi.DomainHash) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := hashset.New()
+	for _, hash := range a {
+		set.Add(hash)
+	}
+	for _, hash := range b {
+		if !set.Contains(hash) {
+			return false
+		}
+	}
+	return true
 }
 
 func (csm *consensusStateManager) updateVirtualWithParents(

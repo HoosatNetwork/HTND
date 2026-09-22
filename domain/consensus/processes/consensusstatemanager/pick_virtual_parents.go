@@ -90,6 +90,27 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 		log.Debugf("Attempting to add %s to the virtual parents", candidate)
 		log.Debugf("The current merge set size is %d", mergeSetSize)
 
+		// mergeSetIncrease starts from the candidate's parents on the documented assumption that the
+		// candidate itself is not an ancestor of the selected parents. A body synced for a block whose
+		// children are still header-only becomes a tip even though it is buried in the selected
+		// parent's past. Treating it as a parent makes every such body rerun GHOSTDAG and the UTXO
+		// rebuild, and the template built from those parents fails checkParentsIncest
+		// (ErrInvalidParentsRelation). It is already merged. Skip the walk.
+		candidateInPast := knownPastOfSelectedVirtualParents.Contains(candidate)
+		if !candidateInPast {
+			candidateInPast, err = csm.dagTopologyManager.IsAncestorOfAny(stagingArea, candidate, selectedVirtualParents)
+			if err != nil {
+				return nil, err
+			}
+			if candidateInPast {
+				knownPastOfSelectedVirtualParents.Add(candidate)
+			}
+		}
+		if candidateInPast {
+			log.Debugf("Skipping block %s because it is in the past of the selected virtual parents", candidate)
+			continue
+		}
+
 		canBeParent, newCandidate, mergeSetIncrease, err := csm.mergeSetIncrease(
 			stagingArea, candidate, selectedVirtualParents, mergeSetSize, knownPastOfSelectedVirtualParents)
 		if err != nil {
@@ -116,6 +137,19 @@ func (csm *consensusStateManager) pickVirtualParents(stagingArea *model.StagingA
 		}
 		candidates = append(candidates, newCandidate)
 		log.Debugf("Block %s increases merge set too much, instead adding its ancestor %s", candidate, newCandidate)
+	}
+
+	// The stored virtual parents are the result of this function's previous call. Reaching the same
+	// set again means bounded-merge GHOSTDAG would recolor virtual identically and then remove
+	// nothing further. Return the stored parents so updateVirtual can skip the UTXO rebuild, and so
+	// this call does not pay for that GHOSTDAG either.
+	currentVirtualParents, currentParentsErr := csm.dagTopologyManager.Parents(stagingArea, model.VirtualBlockHash)
+	if currentParentsErr != nil && !database.IsNotFoundError(currentParentsErr) {
+		return nil, currentParentsErr
+	}
+	if currentParentsErr == nil && sameParentSet(currentVirtualParents, selectedVirtualParents) {
+		log.Debugf("Virtual parent set unchanged (%d parents), skipping bounded-merge GHOSTDAG", len(currentVirtualParents))
+		return currentVirtualParents, nil
 	}
 
 	boundedMergeBreakingParents, err := csm.boundedMergeBreakingParents(stagingArea, selectedVirtualParents)
