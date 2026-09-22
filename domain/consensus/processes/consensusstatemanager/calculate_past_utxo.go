@@ -370,9 +370,22 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable())
 	if err != nil {
 		csm.noteAcceptanceRejection(blockHash, transactionIDPtr, len(transaction.Inputs), err)
-		// The cascade path. Not an error here by design - the transaction simply cannot be accepted
-		// against a set that lacks its input - but it is the one rejection reason that means this
-		// node's own gap just got bigger.
+		// An input this view has already spent is a double spend and stays rejected. An input that is
+		// simply not in the set, on a chain whose pruning-point UTXO set is already missing coins, is
+		// the hole itself. Rejecting the transaction for that writes nothing, so every output it
+		// creates is missing too, and the next transaction that spends one of them is rejected for the
+		// same reason. Accept it and write the outputs. The inputs that were found are still spent.
+		if acceptDespiteMissingInputs(err, csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)) {
+			transaction.StoreFee(0)
+			err = accumulatedUTXODiff.AddOutputsSpendingResolvedInputs(transaction, utxo.AcceptedUTXOBlockDAAScore(blockDAAScore))
+			if err != nil {
+				return false, 0, nil, errors.Wrapf(err, "failed to add outputs of transaction %s in block %s "+
+					"after a missing input", transactionID, blockHash)
+			}
+			log.Debugf("Transaction %s in block %s spends coins this set does not hold; its outputs are "+
+				"kept so the gap does not spread", transactionID, blockHash)
+			return true, accumulatedMassBefore, nil, nil
+		}
 		return false, accumulatedMassBefore, newTransactionRejection("missing-input", err), nil
 	}
 
@@ -462,6 +475,21 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	}
 
 	return true, accumulatedMassAfter, nil, nil
+}
+
+// acceptDespiteMissingInputs reports whether a populate failure is an absent coin on a chain that
+// already has a hole in its UTXO set, rather than a double spend or any other rule failure. Only the
+// first kind may be accepted: its outputs have to be written or every later spend of them is missing
+// too. inheritsOffset is blockInheritsKnownUTXOCommitmentOffset for the merging block.
+func acceptDespiteMissingInputs(err error, inheritsOffset bool) bool {
+	if !inheritsOffset {
+		return false
+	}
+	var missingTxOut ruleerrors.ErrMissingTxOut
+	if !errors.As(err, &missingTxOut) {
+		return false
+	}
+	return !missingTxOut.HasDoubleSpend()
 }
 
 // transactionRejection is why one merge-set transaction was not accepted, and - for the case that

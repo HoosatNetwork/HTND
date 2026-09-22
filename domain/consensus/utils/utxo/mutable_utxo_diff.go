@@ -161,6 +161,19 @@ func (mud *mutableUTXODiff) restore(u *utxoDiffUndoEntry) {
 // error every snapshot taken so far is restored in reverse (LIFO) order, undoing exactly the
 // mutations this call made and leaving the diff exactly as it was found.
 func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransaction, blockDAAScore uint64) error {
+	return mud.addTransaction(transaction, blockDAAScore, false)
+}
+
+// AddOutputsSpendingResolvedInputs applies a transaction whose inputs this set only partly holds.
+// Inputs that have a UTXO entry are spent. Inputs that do not are absent from the set, not spent, and
+// recording a removal for them would invent a spend of a coin that was never here. Every output is
+// still created: those are the coins a later transaction spends, and dropping them because one input
+// was already missing is how a single hole becomes every output after it.
+func (mud *mutableUTXODiff) AddOutputsSpendingResolvedInputs(transaction *externalapi.DomainTransaction, blockDAAScore uint64) error {
+	return mud.addTransaction(transaction, blockDAAScore, true)
+}
+
+func (mud *mutableUTXODiff) addTransaction(transaction *externalapi.DomainTransaction, blockDAAScore uint64, skipMissingInputs bool) error {
 	mud.invalidateImmutableReferences()
 
 	var undoLog []utxoDiffUndoEntry
@@ -171,6 +184,9 @@ func (mud *mutableUTXODiff) AddTransaction(transaction *externalapi.DomainTransa
 	}
 
 	for _, input := range transaction.Inputs {
+		if skipMissingInputs && input.UTXOEntry == nil {
+			continue
+		}
 		undoLog = append(undoLog, mud.snapshot(&input.PreviousOutpoint))
 		err := mud.removeEntry(&input.PreviousOutpoint, input.UTXOEntry)
 		if err != nil {

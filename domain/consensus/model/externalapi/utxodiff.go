@@ -30,4 +30,7 @@ type MutableUTXODiff interface {
 
 	WithDiffInPlace(other UTXODiff) error
 	AddTransaction(transaction *DomainTransaction, blockDAAScore uint64) error
+	// AddOutputsSpendingResolvedInputs spends inputs that have a UTXO entry and creates every
+	// output. Inputs with no entry are left untouched: they are not in this set.
+	AddOutputsSpendingResolvedInputs(transaction *DomainTransaction, blockDAAScore uint64) error
 }

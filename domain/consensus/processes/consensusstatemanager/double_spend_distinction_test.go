@@ -64,6 +64,27 @@ func TestErrMissingTxOutSeparatesDoubleSpendFromAbsentCoin(t *testing.T) {
 	})
 }
 
+func TestAcceptDespiteMissingInputsOnlyOnAnOffsetChain(t *testing.T) {
+	absent := ruleerrors.NewErrMissingTxOut([]*externalapi.DomainOutpoint{outpoint(5, 0)})
+	spent := ruleerrors.NewErrMissingOrSpentTxOut(
+		[]*externalapi.DomainOutpoint{outpoint(6, 0)},
+		[]*externalapi.DomainOutpoint{outpoint(6, 0)})
+	other := errors.New("database closed")
+
+	if !acceptDespiteMissingInputs(absent, true) {
+		t.Fatal("an absent coin on an offset chain must be accepted so its outputs are written")
+	}
+	if acceptDespiteMissingInputs(absent, false) {
+		t.Fatal("an absent coin on a complete set is a real rejection")
+	}
+	if acceptDespiteMissingInputs(spent, true) {
+		t.Fatal("a double spend stays rejected on an offset chain")
+	}
+	if acceptDespiteMissingInputs(other, true) {
+		t.Fatal("a non-missing-input failure stays rejected")
+	}
+}
+
 // TestRejectionReasonNamesADoubleSpend checks the acceptance path labels the two apart. Before this,
 // a transaction rejected as an ordinary duplicate - the same transaction in several blocks, which a
 // DAG produces constantly - was recorded identically to one this node could not accept because it

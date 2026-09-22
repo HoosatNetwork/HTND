@@ -56,6 +56,45 @@ func TestAddTransactionAtomicity(t *testing.T) {
 	}
 }
 
+func TestAddOutputsSpendingResolvedInputsKeepsOutputsWhenAnInputIsAbsent(t *testing.T) {
+	_, _, _, heldOutpoint, _, missing, heldEntry, _, _, _ := testFixtures()
+	const daaScore = 9
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
+
+	transaction := &externalapi.DomainTransaction{
+		Version: 0,
+		Inputs: []*externalapi.DomainTransactionInput{
+			{PreviousOutpoint: *heldOutpoint, UTXOEntry: heldEntry},
+			{PreviousOutpoint: *missing, UTXOEntry: nil},
+		},
+		Outputs: []*externalapi.DomainTransactionOutput{
+			{Value: 40, ScriptPublicKey: script},
+		},
+		Payload: []byte{},
+	}
+
+	diff := newMutableUTXODiff()
+	diff.toAdd.add(heldOutpoint, heldEntry)
+	if err := diff.AddOutputsSpendingResolvedInputs(transaction, daaScore); err != nil {
+		t.Fatalf("AddOutputsSpendingResolvedInputs: %+v", err)
+	}
+
+	if diff.toAdd.Contains(heldOutpoint) {
+		t.Fatal("the input this set holds must be spent")
+	}
+	if diff.toRemove.Contains(missing) || diff.toAdd.Contains(missing) {
+		t.Fatal("the input this set does not hold must not be recorded as a spend or a coin")
+	}
+	created := externalapi.DomainOutpoint{TransactionID: *consensushashing.TransactionID(transaction), Index: 0}
+	entry, ok := diff.toAdd.Get(&created)
+	if !ok {
+		t.Fatal("the transaction's output must be written even though one input is absent")
+	}
+	if entry.Amount() != 40 || entry.BlockDAAScore() != daaScore {
+		t.Fatalf("output entry = amount %d daa %d, want 40 / %d", entry.Amount(), entry.BlockDAAScore(), daaScore)
+	}
+}
+
 // TestCollisionOnDifferentCoinDoesNotLoseIt covers both directions of the (outpoint, BlockDAAScore)
 // collision that put six coins into a mainnet node's UTXO set that its own acceptance history says
 // were never created, and left out one 629,814 HTN output that it says was. containsWithDAAScore
