@@ -92,6 +92,9 @@ func TestUnorphanCarriesThePriorityTheOrphanEarned(t *testing.T) {
 			t.Fatalf("test setup: a compound orphan is expected to be raised to high priority while it waits")
 		}
 
+		if err := testutils.StageCreatedOutputsToVirtual(tc, parent, 0); err != nil {
+			t.Fatalf("StageCreatedOutputsToVirtual(parent): %+v", err)
+		}
 		if accepted, err := mp.ValidateAndInsertTransaction(parent, false, true, false); err != nil || len(accepted) != 2 {
 			t.Fatalf("expected parent and the now-unorphaned transaction to be accepted, got %d accepted, err %+v",
 				len(accepted), err)

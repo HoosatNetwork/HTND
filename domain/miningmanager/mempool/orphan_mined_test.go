@@ -43,8 +43,11 @@ func TestMinedOrphanPromotesItsOrphanChild(t *testing.T) {
 			t.Fatalf("expected 2 orphans, got %d", mp.orphansPool.orphanTransactionCount())
 		}
 
-		// A block mines parent. The child's input is filled from parent's outputs when parent is
-		// processed, so consensus does not need to hold them for the child to be validated.
+		// A UTXO-valid block has accepted parent, so its outputs are in virtual. Only then can
+		// the child be promoted.
+		if err := testutils.StageCreatedOutputsToVirtual(tc, parent, 0); err != nil {
+			t.Fatalf("StageCreatedOutputsToVirtual(parent): %+v", err)
+		}
 		coinbase := testutils.CreateTransactionWithOutput(1)
 		accepted, err := mp.HandleNewBlockTransactions([]*externalapi.DomainTransaction{coinbase, parent})
 		if err != nil {

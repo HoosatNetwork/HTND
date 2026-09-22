@@ -39,6 +39,9 @@ func TestReplacementCannotSpendEvictedOutput(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateTransaction(redeemer): %+v", err)
 		}
+		if err := testutils.StageCreatedOutputsToVirtual(tc, conflict, 0); err != nil {
+			t.Fatalf("StageCreatedOutputsToVirtual(conflict): %+v", err)
+		}
 		for _, transaction := range []*externalapi.DomainTransaction{conflict, redeemer} {
 			if _, err := mp.ValidateAndInsertTransaction(transaction, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction: %+v", err)

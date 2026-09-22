@@ -9,8 +9,6 @@ import (
 
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool/model"
 	"github.com/pkg/errors"
@@ -152,47 +150,49 @@ func (op *orphansPool) processOrphansAfterAcceptedTransaction(acceptedTransactio
 
 		currentTransactionID := consensushashing.TransactionID(current)
 		outpoint := externalapi.DomainOutpoint{TransactionID: *currentTransactionID}
-		for i, output := range current.Outputs {
+		for i := range current.Outputs {
 			outpoint.Index = checkedOutpointIndex(i)
 			orphan, ok := op.orphansByPreviousOutpoint[outpoint]
 			if !ok {
 				continue
 			}
+			// Promote only when every input is an output a UTXO-valid block has accepted into
+			// virtual. A parent that is merely in the mempool, or in a block that was not
+			// UTXO-valid, does not make its outputs spendable.
 			for _, input := range orphan.Transaction().Inputs {
-				if input.PreviousOutpoint.Equal(&outpoint) && input.UTXOEntry == nil {
-					input.UTXOEntry = utxo.NewUTXOEntry(output.Value, output.ScriptPublicKey, false,
-						constants.UnacceptedDAAScore)
-					break
+				if input.UTXOEntry != nil && input.UTXOEntry.BlockDAAScore() == constants.UnacceptedDAAScore {
+					input.UTXOEntry = nil
 				}
 			}
-			if countUnfilledInputs(orphan) == 0 {
-				err := op.unorphanTransaction(orphan)
-				if err != nil {
-					if errors.As(err, &RuleError{}) {
-						log.Infof("Failed to unorphan transaction %s due to rule error: %s",
-							currentTransactionID, err)
-						continue
-					}
-					return nil, err
+			_, missing, err := op.mempool.fillInputsAndGetMissingParents(orphan.Transaction())
+			if err != nil {
+				if errors.As(err, &RuleError{}) {
+					log.Infof("Failed to unorphan transaction %s due to rule error: %s",
+						currentTransactionID, err)
+					continue
 				}
-				acceptedOrphans = append(acceptedOrphans, orphan.Transaction().Clone()) // these pointers leave the mempool, hence the clone
-				// The promoted transaction may itself be the missing parent of further orphans.
-				queue = append(queue, orphan.Transaction())
+				return nil, err
 			}
+			if len(missing) > 0 {
+				continue
+			}
+			err = op.unorphanTransaction(orphan)
+			if err != nil {
+				if errors.As(err, &RuleError{}) {
+					log.Infof("Failed to unorphan transaction %s due to rule error: %s",
+						currentTransactionID, err)
+					continue
+				}
+				return nil, err
+			}
+			acceptedOrphans = append(acceptedOrphans, orphan.Transaction().Clone()) // these pointers leave the mempool, hence the clone
+			// The promoted transaction may itself be the missing parent of further orphans,
+			// once its outputs are in the UTXO set of a UTXO-valid block.
+			queue = append(queue, orphan.Transaction())
 		}
 	}
 
 	return acceptedOrphans, nil
-}
-
-func countUnfilledInputs(orphan *model.OrphanTransaction) int {
-	unfilledInputs := 0
-	for _, input := range orphan.Transaction().Inputs {
-		if input.UTXOEntry == nil {
-			unfilledInputs++
-		}
-	}
-	return unfilledInputs
 }
 
 func (op *orphansPool) unorphanTransaction(transaction *model.OrphanTransaction) error {

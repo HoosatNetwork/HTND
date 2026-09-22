@@ -54,6 +54,9 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(conflictTx): %+v", err)
 			}
+			if err := testutils.StageCreatedOutputsToVirtual(tc, conflictTx, 0); err != nil {
+				t.Fatalf("StageCreatedOutputsToVirtual(conflictTx): %+v", err)
+			}
 
 			descendantTx, err := testutils.CreateTransaction(conflictTx, 1_000)
 			if err != nil {
@@ -116,6 +119,9 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(conflictTx): %+v", err)
 			}
+			if err := testutils.StageCreatedOutputsToVirtual(tc, conflictTx, 0); err != nil {
+				t.Fatalf("StageCreatedOutputsToVirtual(conflictTx): %+v", err)
+			}
 
 			descendantTx, err := testutils.CreateTransaction(conflictTx, 1_000)
 			if err != nil {
@@ -170,6 +176,9 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 			}
 			if _, err := mp.ValidateAndInsertTransaction(conflictTx, true, false, true); err != nil {
 				t.Fatalf("ValidateAndInsertTransaction(conflictTx): %+v", err)
+			}
+			if err := testutils.StageCreatedOutputsToVirtual(tc, conflictTx, 0); err != nil {
+				t.Fatalf("StageCreatedOutputsToVirtual(conflictTx): %+v", err)
 			}
 
 			descendantTx, err := testutils.CreateTransaction(conflictTx, 200_000)
