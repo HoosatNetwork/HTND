@@ -146,8 +146,9 @@ func (m *Manager) handleIncomingMessages(router *router.Router, incomingRoute *r
 			return errors.Errorf("unknown RPC command %s", request.Command())
 		}
 
-		// Record the RPC request for statistics
-		RPCStats.RecordRequest(clientAddress, request.Command().String())
+		if m.context.Config != nil && m.context.Config.EnableRPCStats {
+			RPCStats.RecordRequest(clientAddress, request.Command().String())
+		}
 
 		if _, ok := addressIndexCommands[request.Command()]; ok {
 			addressIndexRequests <- request

@@ -201,8 +201,9 @@ type Flags struct {
 	// ceiling that is too low rejects legitimate large IBD messages and partitions this node - so
 	// these exist for an operator who has measured their own traffic, particularly one exposing RPC
 	// beyond localhost.
-	P2PMaxMessageSize int `long:"p2p-max-message-size" description:"Maximum P2P message size in bytes (0 = built-in default, 4GiB). Lowering this bounds what an unauthenticated peer can make this node buffer, but a value below the largest legitimate message will reject honest peers and stall IBD"`
-	RPCMaxMessageSize int `long:"rpc-max-message-size" description:"Maximum RPC message size in bytes (0 = built-in default, 1GiB). Lower this when RPC is reachable beyond localhost"`
+	P2PMaxMessageSize int  `long:"p2p-max-message-size" description:"Maximum P2P message size in bytes (0 = built-in default, 4GiB). Lowering this bounds what an unauthenticated peer can make this node buffer, but a value below the largest legitimate message will reject honest peers and stall IBD"`
+	RPCMaxMessageSize int  `long:"rpc-max-message-size" description:"Maximum RPC message size in bytes (0 = built-in default, 1GiB). Lower this when RPC is reachable beyond localhost"`
+	EnableRPCStats    bool `long:"enable-rpc-stats" description:"Log RPC request rates, top client addresses and top methods once a minute"`
 
 	AutoUpdatePublicKey       string `long:"autoupdate-public-key" description:"Hex-encoded ed25519 public key that release checksum lists are signed with. Required for automatic installs"`
 	AutoUpdateAllowUnverified Bool   `long:"autoupdate-allow-unverified" description:"Install updates without verifying their signature. Unsafe: anyone able to serve a release asset can then run code as this node's user"`
@@ -291,6 +292,7 @@ func defaultFlags() *Flags {
 		AutoReportIssues:                  false,
 		AutoUpdatePublicKey:               "",
 		AutoUpdateAllowUnverified:         false,
+		EnableRPCStats:                    false,
 	}
 }
 

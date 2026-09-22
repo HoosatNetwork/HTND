@@ -57,8 +57,11 @@ func NewManager(
 
 	manager.initConsensusEventsHandler(consensusEventsChan)
 
-	// Start RPC statistics tracking
-	RPCStats.Start()
+	// The per-minute RPCSTATS report is opt-in. Recording every request takes the stats lock on
+	// the RPC read path, and the report itself is noise unless someone is looking at who is calling.
+	if cfg != nil && cfg.EnableRPCStats {
+		RPCStats.Start()
+	}
 
 	return &manager
 }
