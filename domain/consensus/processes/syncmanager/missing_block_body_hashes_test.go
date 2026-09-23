@@ -12,7 +12,7 @@ import (
 // Fakes for the three stores missingBlockBodyHashes reads on the path to its virtual-genesis
 // give-up branch: a pruning point that is not on highHash's selected parent chain, and whose
 // selected-parent walk (via findLowHashInHighHashSelectedParentChain) reaches virtual genesis
-// before finding a shared ancestor - the exact shape HTN-196 reproduced on a live node.
+// before finding a shared ancestor.
 
 type fixedPruningPointOnlyStore struct {
 	model.PruningStore
@@ -60,17 +60,12 @@ func missingBodyTestHash(b byte) *externalapi.DomainHash {
 	return externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{b})
 }
 
-// TestMissingBlockBodyHashesFailsWhenChainsOnlyShareVirtualGenesis is HTN-196: when this node's
-// pruning point cannot be reconciled with the syncer chain it's asked to fill in bodies for - not on
-// its selected parent chain, and the only shared ancestor reachable is virtual genesis (which is "on"
-// every chain by construction, so anchoring there would request every header-only block including
-// ones no peer has a body for) - missingBlockBodyHashes must report that as a failure the caller can
-// recognise, not an empty success.
-//
-// It used to return ([]DomainHash{}, nil), which read as "there is nothing to sync" and let IBD
-// report success indefinitely: on the live node this looped 26+ times with zero forward progress,
-// because block relay can never add a block below a gap it can't validate.
-func TestMissingBlockBodyHashesFailsWhenChainsOnlyShareVirtualGenesis(t *testing.T) {
+// TestMissingBlockBodyHashesSkipsWhenChainsOnlyShareVirtualGenesis: when this node's pruning point
+// is not on highHash's selected parent chain and the only shared ancestor reachable is virtual
+// genesis, missingBlockBodyHashes skips that segment. Anchoring on virtual genesis would request
+// every header-only block, including pruning-proof headers no peer has a body for. Returning an
+// error here aborts a clean sync whose pruning point and the peer tip only meet there.
+func TestMissingBlockBodyHashesSkipsWhenChainsOnlyShareVirtualGenesis(t *testing.T) {
 	pruningPoint := missingBodyTestHash(1)
 	intermediate := missingBodyTestHash(2)
 	highHash := missingBodyTestHash(3)
@@ -84,12 +79,11 @@ func TestMissingBlockBodyHashesFailsWhenChainsOnlyShareVirtualGenesis(t *testing
 		}},
 	}
 
-	_, err := sm.missingBlockBodyHashes(model.NewStagingArea(), highHash)
-	if err == nil {
-		t.Fatal("expected an error when the pruning point and highHash's chain only meet at virtual " +
-			"genesis, got a nil error (the old infinite-loop behavior)")
+	hashes, err := sm.missingBlockBodyHashes(model.NewStagingArea(), highHash)
+	if err != nil {
+		t.Fatalf("expected body sync to be skipped, got: %+v", err)
 	}
-	if !errors.Is(err, externalapi.ErrPruningPointDataDoesNotReconcile) {
-		t.Errorf("expected errors.Is(err, externalapi.ErrPruningPointDataDoesNotReconcile), got: %+v", err)
+	if len(hashes) != 0 {
+		t.Fatalf("expected no missing bodies, got %d", len(hashes))
 	}
 }
