@@ -1537,6 +1537,50 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   htnd5-fresh datadir in the evidence) needs anything beyond restarting IBD against a peer once this fix
   is deployed - the fix only changes what happens on the NEXT IBD attempt that hits this branch, it does
   not retroactively unstick a node sitting on a bad commit from before the fix existed.
+- 2026-09-23: b4dd98dab put the virtual-genesis branch back to returning no bodies with a nil error,
+  so the loop described above is possible again on that branch. The root cause below removes the
+  condition that reaches it.
+- ROOT CAUSE FOUND 2026-09-23 (fix in tree, uncommitted). The served pruning point was never wrong:
+  a P2P survey of five mainnet peers showed one shared pruning-point history, and bbe3a609 (the
+  pruning point in the 2026-09-23 error, which hit within 14 minutes of bbe3a609 taking effect at
+  06:22 +0300) is a regular entry in it. What diverged was the syncee's rebuild: headers-proof IBD
+  recolors every header above the imported pruning point, and three defects made that recoloring
+  differ from the syncer's. When the extra blue work fell on a branch outside the pruning point's
+  chain, a selected parent flipped, the tip's chain skipped the pruning point, and since the pruning
+  point's own selected parent had been replaced by virtual genesis the walk met the chain only there.
+  1. blockprocessor.isPruned (7b4a9248b, 2026-08-18) counted every header-only block as pruned. All
+     proof headers are header-only, so the imported pruning point and its anticone lost their
+     selected parents (-> virtual genesis) and merge sets, and the blue-candidate walk stopped at the
+     pruning point, undercounted anticones and colored extra blocks blue. Restored kaspad's rule: a
+     block is pruned only if this node has no GHOSTDAG data for it.
+  2. pruningManager.PruningPointAndItsAnticone sorted the anticone by header-claimed blue work, which
+     nothing validates (HTN-006). A child could be served before its parent; the syncee then treats
+     the parent as pruned. Now sorted by the node's own GHOSTDAG blue work (strictly increasing along
+     parent edges), and the IBD flow reorders what it receives by parent links before inserting
+     (orderBlocksWithTrustedDataTopologically), so old peers' order cannot break it either.
+  3. ApplyPruningPointProof colors proof headers with their header-claimed blue score/work, so the
+     proof chain below the pruning point could select different parents than the syncer did. The
+     syncee now adopts the syncer's trusted GHOSTDAG data for those header-only blocks (the K+1 chain
+     the syncer already sends with every trusted block), filtered like the trusted block's own data.
+  - live evidence that the rebuild diverged on mainnet: header claims show a group of miners whose blue
+    scores are exactly +5 against everyone else (302 claims +5 and 149 claims -5 of 44,430
+    single-parent headers), only from 00:27 to ~04:06 +0300 on 2026-09-23, about 50 minutes after
+    965a9ab0 became the pruning point - the signature of nodes that synced then and colored extra
+    blues. A real replay of a sync from 188.241.30.226 at pruning point 2c573069 (one anticone block)
+    is exact with or without these fixes, so that pruning point never triggered it.
+  - tests: domain/consensus/processes/blockprocessor/headers_proof_sync_exactness_test.go
+    (TestHeadersProofSyncReproducesSyncerGHOSTDAG, TestPruningPointAnticoneIsServedInTopologicalOrder)
+    at block version 10; app/protocol/flows/v8/blockrelay/trusted_blocks_order_test.go. Each of the
+    three fixes, undone alone, makes at least one of them fail; undoing the sort reproduces "pruning
+    point not on the tip's selected chain". Randomized harness (not committed): before, 26 of 40 seeds
+    diverged and some flipped selected parents; after, 0 of 90 across versions 1 and 10, wide DAGs,
+    small proofs and reversed anticone order.
+  - left alone: nodes that already synced through the bug keep their shifted GHOSTDAG data, and a
+    syncee now reproduces its syncer exactly, so such nodes keep handing their view on. They need a
+    resync from an unaffected node after upgrading. The duplicate pruning point in the tips list
+    reproduces with and without the fix and is a separate bug (ApplyPruningPointProof stages the
+    pruning point as a tip and the trusted insert adds it again). b4dd98dab's empty-result branch is
+    unchanged.
 
 ## HTN-197
 - title: Header IBD rejects every header with "blockHash is nil" while retrying an unfinished pruning point UTXO set update
