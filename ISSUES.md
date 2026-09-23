@@ -1581,6 +1581,16 @@ IDs 101+ are used here so they never collide with the consensus audit above.
     reproduces with and without the fix and is a separate bug (ApplyPruningPointProof stages the
     pruning point as a tip and the trusted insert adds it again). b4dd98dab's empty-result branch is
     unchanged.
+- ACCEPTANCE GUARD 2026-09-23 (008a897f4): independent of the root cause, a headers-proof IBD now
+  refuses a pruning point that is not on the selected parent chain of the syncer's headers selected
+  tip, the relay block or its own headers selected tip. The check runs after the headers are in the
+  staging consensus and before the UTXO set is downloaded, so a refusal only deletes the staging
+  consensus: nothing is committed, the node keeps its state and tries another peer, nobody is
+  banned. That is the state HTN-196 nodes used to commit and could not leave. The serving side
+  refuses to hand out a proof when its own pruning point is not on its own headers selected chain.
+  Tests: app/protocol/flows/v8/blockrelay/pruning_point_chain_check_test.go - on a real consensus
+  left with the pruning point off the tip's chain (anticone inserted children-first) the IBD check
+  refuses it without a ban, and it accepts the same DAG synced parent-first.
 
 ## HTN-197
 - title: Header IBD rejects every header with "blockHash is nil" while retrying an unfinished pruning point UTXO set update
