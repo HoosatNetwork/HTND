@@ -25,6 +25,11 @@ func HandlePruningPointProofRequests(context PruningPointProofRequestsContext, i
 
 		log.Debugf("Got request for pruning point proof from %s", peer)
 
+		err = checkOwnPruningPointMeetsHeadersChain(context.Domain().Consensus())
+		if err != nil {
+			return err
+		}
+
 		pruningPointProof, err := context.Domain().Consensus().BuildPruningPointProof()
 		if err != nil {
 			return err

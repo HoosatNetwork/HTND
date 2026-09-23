@@ -261,6 +261,22 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 		return err
 	}
 
+	// Accept the pruning point only if it is the root of the chain just downloaded, while refusing it
+	// still means nothing more than deleting the staging consensus. See checkPruningPointMeetsChains.
+	stagingHeadersSelectedTip, err := stagingConsensus.GetHeadersSelectedTip()
+	if err != nil {
+		return err
+	}
+	err = checkPruningPointMeetsChains(stagingConsensus, proofPruningPoint, []namedBlock{
+		{name: "the syncer's headers selected tip", hash: syncerHeaderSelectedTipHash},
+		{name: "the relay block", hash: relayBlockHash},
+		{name: "this node's headers selected tip", hash: stagingHeadersSelectedTip},
+	})
+	if err != nil {
+		log.Warnf("IBD with pruning proof from %s: %s", flow.peer, err)
+		return err
+	}
+
 	log.Debugf("Syncing the current pruning point UTXO set")
 	syncedPruningPointUTXOSetSuccessfully, err := flow.syncPruningPointUTXOSet(stagingConsensus, proofPruningPoint)
 	if err != nil {
