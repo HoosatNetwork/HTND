@@ -332,6 +332,9 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 		return err
 	}
 
+	// The rest of the anticone is collected first and inserted only once it is in topological order:
+	// see orderBlocksWithTrustedDataTopologically for why the peer's order cannot be used as is.
+	var anticoneBlocks []*appmessage.MsgBlockWithTrustedDataV4
 	i := 0
 	for ; ; i++ {
 		blockWithTrustedData, done, err := flow.receiveBlockWithTrustedData()
@@ -343,10 +346,7 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 			break
 		}
 
-		err = flow.processBlockWithTrustedData(flow.Domain().StagingConsensus(), blockWithTrustedData, msgTrustedData)
-		if err != nil {
-			return err
-		}
+		anticoneBlocks = append(anticoneBlocks, blockWithTrustedData)
 
 		// We're using i+2 because we want to check if the next block will belong to the next batch, but we already downloaded
 		// the pruning point outside the loop so we use i+2 instead of i+1.
@@ -356,6 +356,13 @@ func (flow *handleIBDFlow) syncPruningPointsAndPruningPointAnticone(proofPruning
 			if err != nil {
 				return err
 			}
+		}
+	}
+
+	for _, blockWithTrustedData := range orderBlocksWithTrustedDataTopologically(anticoneBlocks) {
+		err = flow.processBlockWithTrustedData(flow.Domain().StagingConsensus(), blockWithTrustedData, msgTrustedData)
+		if err != nil {
+			return err
 		}
 	}
 

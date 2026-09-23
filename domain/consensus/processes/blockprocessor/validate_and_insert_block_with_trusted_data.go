@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
 )
 
 func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *model.StagingArea,
@@ -37,7 +38,55 @@ func (bp *blockProcessor) validateAndInsertBlockWithTrustedData(stagingArea *mod
 	}
 	bp.ghostdagDataStore.Stage(stagingArea, blockHash, blockReplacedGHOSTDAGData, false)
 
+	err = bp.adoptTrustedGHOSTDAGDataOfProofBlocks(stagingArea, block.GHOSTDAGData[1:])
+	if err != nil {
+		return nil, externalapi.StatusInvalid, err
+	}
+
 	return bp.validateAndInsertBlock(stagingArea, block.Block, false, validateUTXO, true, true, true)
+}
+
+// adoptTrustedGHOSTDAGDataOfProofBlocks replaces the GHOSTDAG data of the header-only blocks below a
+// trusted block with the syncer's own GHOSTDAG data for them, as sent with the trusted block.
+//
+// Those blocks are pruning point proof headers, and ApplyPruningPointProof colored them over the
+// proof's partial DAG with the blue score and blue work written in their headers. Nothing validates
+// those header values (HTN-006), and mainnet headers do misstate them, so the parents the proof
+// coloring selected and the merge sets it built can differ from the syncer's. Coloring the headers
+// above the imported pruning point walks down exactly these blocks - the trusted block's selected
+// chain, K+1 deep, which is what the syncer sends GHOSTDAG data for - so a node that kept the
+// proof-derived data could color those headers differently from the syncer (HTN-196).
+//
+// Blocks this node has no GHOSTDAG data for are left alone, and references to blocks it cannot
+// color with are dropped the same way they are for the trusted block itself.
+func (bp *blockProcessor) adoptTrustedGHOSTDAGDataOfProofBlocks(stagingArea *model.StagingArea,
+	pairs []*externalapi.BlockGHOSTDAGDataHashPair,
+) error {
+	for _, pair := range pairs {
+		isPruned, err := bp.isPruned(stagingArea, pair.Hash)
+		if err != nil {
+			return err
+		}
+		if isPruned {
+			continue
+		}
+		status, err := bp.blockStatusStore.Get(bp.databaseContext, stagingArea, pair.Hash)
+		if err != nil {
+			if database.IsNotFoundError(err) {
+				continue
+			}
+			return err
+		}
+		if status != externalapi.StatusHeaderOnly {
+			continue
+		}
+		replaced, err := bp.ghostdagDataWithoutPrunedBlocks(stagingArea, pair.GHOSTDAGData)
+		if err != nil {
+			return err
+		}
+		bp.ghostdagDataStore.Stage(stagingArea, pair.Hash, replaced, false)
+	}
+	return nil
 }
 
 func (bp *blockProcessor) ghostdagDataWithoutPrunedBlocks(stagingArea *model.StagingArea,
@@ -93,35 +142,27 @@ func (bp *blockProcessor) ghostdagDataWithoutPrunedBlocks(stagingArea *model.Sta
 	), nil
 }
 
+// isPruned reports whether blockHash is outside what this consensus can color with: a block with no
+// GHOSTDAG data of its own. Only such a block is dropped from a trusted block's GHOSTDAG data, and
+// a dropped selected parent is replaced by virtual genesis.
+//
+// A header-only block is NOT pruned. Every header the pruning point proof delivers is header-only,
+// and those headers carry the GHOSTDAG data ApplyPruningPointProof computed for them, including the
+// pruning point's real selected parent and the blocks it merges. Counting them as pruned (as this
+// function did from 7b4a9248b until HTN-196's root cause was found) gave the imported pruning point
+// and its anticone virtual genesis as selected parent and emptied their merge sets. GHOSTDAG's blue
+// candidate walk then stopped at the pruning point, undercounted anticones and colored blocks blue
+// that every other node colors red. The syncing node's blue work above the pruning point came out
+// higher than the network's, often enough to pick a different selected parent, and when that parent
+// was not a chain descendant of the pruning point the tip's selected chain missed the pruning point
+// and met it only at virtual genesis.
 func (bp *blockProcessor) isPruned(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
-	status, err := bp.blockStatusStore.Get(bp.databaseContext, stagingArea, blockHash)
-	if err != nil {
-		// If the status doesn't exist, check if the block header exists
-		// If the header doesn't exist, the block is pruned
-		hasHeader, err := bp.blockHeaderStore.HasBlockHeader(bp.databaseContext, stagingArea, blockHash)
-		if err != nil {
-			return false, err
-		}
-		if !hasHeader {
-			// Block header doesn't exist, so the block is pruned
-			return true, nil
-		}
-		// Header exists but status doesn't - check if it has reachability data
-		// If it doesn't have reachability data, treat it as pruned for the purpose of
-		// GHOSTDAG data filtering during pruning point import
-		hasReachabilityData, err := bp.reachabilityDataStore.HasReachabilityData(bp.databaseContext, stagingArea, blockHash)
-		if err != nil {
-			return false, err
-		}
-		if !hasReachabilityData {
-			// Block doesn't have reachability data, treat as pruned
-			return true, nil
-		}
-		// Header exists and has reachability data, but no status - assume not pruned
-		return false, nil
-	}
-	if status == externalapi.StatusHeaderOnly {
+	_, err := bp.ghostdagDataStore.Get(bp.databaseContext, stagingArea, blockHash, false)
+	if database.IsNotFoundError(err) {
 		return true, nil
+	}
+	if err != nil {
+		return false, err
 	}
 	return false, nil
 }

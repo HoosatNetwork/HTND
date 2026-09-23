@@ -2,6 +2,7 @@ package pruningmanager
 
 import (
 	"fmt"
+	"math/big"
 	"slices"
 	"sort"
 	"time"
@@ -2341,26 +2342,33 @@ func (pm *pruningManager) PruningPointAndItsAnticone() ([]*externalapi.DomainHas
 		return nil, err
 	}
 
-	// Sorting the blocks in topological order
-	var sortErr error
-	sort.Slice(pruningPointAnticone, func(i, j int) bool {
-		headerI, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointAnticone[i])
+	// Sort the anticone topologically: a syncee inserts these blocks in this order, and a block
+	// inserted before one of its parents treats that parent as pruned, so its selected parent, merge
+	// set and reachability come out wrong and every block colored on top of it can differ from this
+	// node's DAG (HTN-196).
+	//
+	// The key is this node's own GHOSTDAG blue work, which strictly increases from every parent to
+	// its child. It used to be the blue work written in each header, which nothing validates
+	// (HTN-006) and which mainnet headers are known to misstate, so it did not guarantee this order.
+	// Ties are broken by hash, so the order is total and the same on every node.
+	blueWork := make(map[externalapi.DomainHash]*big.Int, len(pruningPointAnticone))
+	for _, blockHash := range pruningPointAnticone {
+		ghostdagData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, blockHash, false)
 		if err != nil {
-			sortErr = err
-			return false
+			return nil, err
 		}
-
-		headerJ, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointAnticone[j])
-		if err != nil {
-			sortErr = err
-			return false
-		}
-
-		return headerI.BlueWork().Cmp(headerJ.BlueWork()) < 0
-	})
-	if sortErr != nil {
-		return nil, sortErr
+		blueWork[*blockHash] = ghostdagData.BlueWork()
 	}
+	sort.Slice(pruningPointAnticone, func(i, j int) bool {
+		switch blueWork[*pruningPointAnticone[i]].Cmp(blueWork[*pruningPointAnticone[j]]) {
+		case -1:
+			return true
+		case 1:
+			return false
+		default:
+			return pruningPointAnticone[i].Less(pruningPointAnticone[j])
+		}
+	})
 
 	pm.cachedPruningPoint = pruningPoint
 	pm.cachedPruningPointAnticone = pruningPointAnticone
