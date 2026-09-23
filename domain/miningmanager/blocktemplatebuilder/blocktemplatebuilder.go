@@ -198,8 +198,12 @@ func (btb *blockTemplateBuilder) ModifyBlockTemplate(newCoinbaseData *consensuse
 		return nil, err
 	}
 	coinbaseTx.Payload = newPayload
-	if blockTemplateToModify.CoinbaseHasRedReward {
-		// The last output is always the coinbase red blocks reward
+	// Version 1 puts every red block's reward in one trailing output paid to this block's miner,
+	// so a new pay address replaces that script. From version 2 each merge-set block is paid on
+	// its own, miner output then dev-fee output, and the trailing output is the dev fee of
+	// whichever block sorts last. Replacing that script pays the dev fee to the miner, and the
+	// block then fails its own coinbase check.
+	if blockTemplateToModify.CoinbaseHasRedReward && blockVersion < 2 {
 		coinbaseTx.Outputs[len(coinbaseTx.Outputs)-1].ScriptPublicKey = newCoinbaseData.ScriptPublicKey
 	}
 	// Update the hash merkle root according to the modified transactions

@@ -825,17 +825,12 @@ func TestModifyBlockTemplate(t *testing.T) {
 			if !blockTemplate.CoinbaseHasRedReward {
 				t.Fatalf("Expected block template to have red reward")
 			}
-			// TODO: There is a known issue with ModifyBlockTemplate when red rewards are present
-			// (related to CoinbaseHasRedReward flag not being updated during modification).
-			// Skip the modify tests for testnet when red rewards are present.
-			// https://github.com/kaspanet/kapsad/issues/XXXX
-		} else {
-			if blockTemplate.CoinbaseHasRedReward {
-				t.Fatalf("Expected block template to NOT have red reward")
-			}
-			// For mainnet, no red reward, so we can safely test ModifyBlockTemplate
-			sweepCompareModifiedTemplateToBuilt(t, consensusConfig, miningManager.GetBlockTemplateBuilder())
+		} else if blockTemplate.CoinbaseHasRedReward {
+			t.Fatalf("Expected block template to NOT have red reward")
 		}
+		// Includes the red-reward case on testnet: modifying the pay address must leave the
+		// dev-fee output in place, so the modified template still matches one built directly.
+		sweepCompareModifiedTemplateToBuilt(t, consensusConfig, miningManager.GetBlockTemplateBuilder())
 	})
 }
 
