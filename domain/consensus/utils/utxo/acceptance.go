@@ -230,6 +230,13 @@ func applyTransactionToMultiset(ms MultisetWriter, transaction *externalapi.Doma
 	// Forward order is inputs-then-outputs; reversing an addition means outputs-then-inputs, but the
 	// multiset is commutative so only the add/remove direction actually matters here.
 	for _, input := range transaction.Inputs {
+		// An accepted transaction has an input with no entry only when it was accepted despite
+		// spending a coin this set does not hold (see AddOutputsSpendingResolvedInputs). The diff
+		// records no spend for such an input, so the multiset must not either: removing a coin that
+		// was never added would drift the commitment, and there is no entry to serialize anyway.
+		if input.UTXOEntry == nil {
+			continue
+		}
 		err := removeUTXO(input.UTXOEntry, &input.PreviousOutpoint)
 		if err != nil {
 			return err

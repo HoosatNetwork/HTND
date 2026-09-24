@@ -16,7 +16,7 @@ func DomainAcceptanceDataToDbAcceptanceData(domainAcceptanceData externalapi.Acc
 
 			dbTransactionInputUTXOEntries := make([]*DbUtxoEntry, len(transactionAcceptanceData.TransactionInputUTXOEntries))
 			for k, transactionInputUTXOEntry := range transactionAcceptanceData.TransactionInputUTXOEntries {
-				dbTransactionInputUTXOEntries[k] = UTXOEntryToDBUTXOEntry(transactionInputUTXOEntry)
+				dbTransactionInputUTXOEntries[k] = acceptedInputUTXOEntryToDB(transactionInputUTXOEntry)
 			}
 
 			dbTransactionAcceptanceData[j] = &DbTransactionAcceptanceData{
@@ -55,7 +55,7 @@ func DbAcceptanceDataToDomainAcceptanceData(dbAcceptanceData *DbAcceptanceData) 
 
 			domainTransactionInputUTXOEntries := make([]externalapi.UTXOEntry, len(dbTransactionAcceptanceData.TransactionInputUtxoEntries))
 			for k, transactionInputUTXOEntry := range dbTransactionAcceptanceData.TransactionInputUtxoEntries {
-				domainTransactionInputUTXOEntry, err := DBUTXOEntryToUTXOEntry(transactionInputUTXOEntry)
+				domainTransactionInputUTXOEntry, err := dbAcceptedInputUTXOEntryToDomain(transactionInputUTXOEntry)
 				if err != nil {
 					return nil, err
 				}
@@ -87,4 +87,23 @@ func DbAcceptanceDataToDomainAcceptanceData(dbAcceptanceData *DbAcceptanceData) 
 	}
 
 	return domainAcceptanceData, nil
+}
+
+// acceptedInputUTXOEntryToDB converts one input entry of an accepted transaction. The entry is nil
+// for an input spending a coin the set does not hold, which a transaction can have when it is accepted
+// on a chain whose UTXO set is known to be missing coins. That is stored as an entry with no script
+// public key: a real entry always has one, so dbAcceptedInputUTXOEntryToDomain can tell them apart.
+func acceptedInputUTXOEntryToDB(entry externalapi.UTXOEntry) *DbUtxoEntry {
+	if entry == nil {
+		return &DbUtxoEntry{}
+	}
+	return UTXOEntryToDBUTXOEntry(entry)
+}
+
+// dbAcceptedInputUTXOEntryToDomain is the inverse of acceptedInputUTXOEntryToDB.
+func dbAcceptedInputUTXOEntryToDomain(dbEntry *DbUtxoEntry) (externalapi.UTXOEntry, error) {
+	if dbEntry == nil || dbEntry.ScriptPublicKey == nil {
+		return nil, nil
+	}
+	return DBUTXOEntryToUTXOEntry(dbEntry)
 }
