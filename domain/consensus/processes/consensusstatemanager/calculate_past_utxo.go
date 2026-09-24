@@ -375,7 +375,13 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		// the hole itself. Rejecting the transaction for that writes nothing, so every output it
 		// creates is missing too, and the next transaction that spends one of them is rejected for the
 		// same reason. Accept it and write the outputs. The inputs that were found are still spent.
-		if acceptDespiteMissingInputs(err, csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)) {
+		resolvedInputs := 0
+		for _, input := range transaction.Inputs {
+			if input.UTXOEntry != nil {
+				resolvedInputs++
+			}
+		}
+		if acceptDespiteMissingInputs(err, csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash), resolvedInputs) {
 			transaction.StoreFee(0)
 			err = accumulatedUTXODiff.AddOutputsSpendingResolvedInputs(transaction, utxo.AcceptedUTXOBlockDAAScore(blockDAAScore))
 			if err != nil {
@@ -481,8 +487,17 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 // already has a hole in its UTXO set, rather than a double spend or any other rule failure. Only the
 // first kind may be accepted: its outputs have to be written or every later spend of them is missing
 // too. inheritsOffset is blockInheritsKnownUTXOCommitmentOffset for the merging block.
-func acceptDespiteMissingInputs(err error, inheritsOffset bool) bool {
-	if !inheritsOffset {
+//
+// resolvedInputs is how many of the transaction's inputs this view does hold, and at least one is
+// required. That input is what makes the acceptance happen once. A DAG carries the same transaction
+// in parallel blocks all the time, and every copy after the first is rejected because its inputs are
+// already spent. A transaction with no resolved input has nothing to spend, so no copy of it ever
+// looks like a double spend: each merging block that carries it accepts it again, re-creating
+// outputs that may already have been spent since - and restamping the ones that were not, so the
+// block's diff and acceptance data stop agreeing and it is disqualified. Such a transaction stays
+// rejected, as it was before any of this.
+func acceptDespiteMissingInputs(err error, inheritsOffset bool, resolvedInputs int) bool {
+	if !inheritsOffset || resolvedInputs == 0 {
 		return false
 	}
 	var missingTxOut ruleerrors.ErrMissingTxOut

@@ -71,17 +71,21 @@ func TestAcceptDespiteMissingInputsOnlyOnAnOffsetChain(t *testing.T) {
 		[]*externalapi.DomainOutpoint{outpoint(6, 0)})
 	other := errors.New("database closed")
 
-	if !acceptDespiteMissingInputs(absent, true) {
+	if !acceptDespiteMissingInputs(absent, true, 1) {
 		t.Fatal("an absent coin on an offset chain must be accepted so its outputs are written")
 	}
-	if acceptDespiteMissingInputs(absent, false) {
+	if acceptDespiteMissingInputs(absent, false, 1) {
 		t.Fatal("an absent coin on a complete set is a real rejection")
 	}
-	if acceptDespiteMissingInputs(spent, true) {
+	if acceptDespiteMissingInputs(spent, true, 1) {
 		t.Fatal("a double spend stays rejected on an offset chain")
 	}
-	if acceptDespiteMissingInputs(other, true) {
+	if acceptDespiteMissingInputs(other, true, 1) {
 		t.Fatal("a non-missing-input failure stays rejected")
+	}
+	if acceptDespiteMissingInputs(absent, true, 0) {
+		t.Fatal("a transaction with no resolved input must stay rejected: nothing marks it as spent, " +
+			"so every parallel copy of it would be accepted again")
 	}
 }
 
