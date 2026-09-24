@@ -7,6 +7,8 @@ package app
 
 import (
 	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/util/panics"
 )
 
 var log = logger.RegisterSubSystem("HSATD")
+var spawn = panics.GoroutineWrapperFunc(log)

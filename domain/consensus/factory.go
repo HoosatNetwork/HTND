@@ -119,6 +119,14 @@ type Config struct {
 
 	// PastMedianTimeValidationTolerance is the tolerance in milliseconds for past median time validation
 	PastMedianTimeValidationTolerance int
+
+	// MaxConsecutiveDisqualifiedBlocks is how many blocks in a row may come out of a virtual-updating
+	// insertion as StatusDisqualifiedFromChain before OnDisqualifiedBlockStreak is called. Zero
+	// disables the check.
+	MaxConsecutiveDisqualifiedBlocks int
+	// OnDisqualifiedBlockStreak is called once, under the consensus lock, when the streak reaches
+	// MaxConsecutiveDisqualifiedBlocks. It must not block or call back into consensus.
+	OnDisqualifiedBlockStreak func(streak int, lastBlock *externalapi.DomainHash)
 }
 
 // Factory instantiates new Consensuses
@@ -630,6 +638,11 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 
 		consensusEventsChan: consensusEventsChan,
 		virtualNotUpdated:   true,
+
+		disqualificationStreak: disqualificationStreak{
+			threshold: config.MaxConsecutiveDisqualifiedBlocks,
+			onReached: config.OnDisqualifiedBlockStreak,
+		},
 	}
 
 	if isOldReachabilityInitialized {

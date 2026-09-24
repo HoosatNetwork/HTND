@@ -87,6 +87,8 @@ type consensus struct {
 	// virtualChangeSetDropped is set when a change set describing an already committed virtual
 	// change was not delivered, and reported on the next one that is. Guarded by lock.
 	virtualChangeSetDropped bool
+	// disqualificationStreak watches for a node that disqualifies every block it adds. Guarded by lock.
+	disqualificationStreak disqualificationStreak
 }
 
 func (s *consensus) exportPruningPointExodusBundle(pruningPoint *externalapi.DomainHash, exportRoot, network string) {
@@ -503,6 +505,9 @@ func (s *consensus) validateAndInsertBlockNoLock(block *externalapi.DomainBlock,
 	// If block has a body, and yet virtual was not updated -- signify that virtual is in non-updated state
 	if !updateVirtual && blockStatus != externalapi.StatusHeaderOnly {
 		s.virtualNotUpdated = true
+	}
+	if updateVirtual && blockStatus != externalapi.StatusHeaderOnly {
+		s.noteInsertedBlockStatus(consensushashing.BlockHash(block))
 	}
 
 	err = s.sendBlockAddedEvent(block, blockStatus)

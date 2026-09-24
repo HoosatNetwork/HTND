@@ -183,6 +183,8 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		AutoExodusExportDir:               cfg.AutoExodusExportDir,
 		UseHoohashCLibrary:                cfg.UseHoohashCLibrary,
 		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
+		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
+		OnDisqualifiedBlockStreak:         stopNodeOnDisqualifiedBlockStreak,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
