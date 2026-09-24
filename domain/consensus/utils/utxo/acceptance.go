@@ -147,10 +147,15 @@ func RemoveAcceptanceDataFromMultiset(ms MultisetWriter, acceptanceData external
 // ApplyAcceptanceDataToMultiset and must stay stamped identically to it - the diff and the multiset
 // are two representations of the same UTXO set, and a block's own UTXO commitment is only meaningful
 // if they agree entry for entry.
+//
+// An accepted transaction may carry an input with no UTXO entry: it was accepted despite spending a
+// coin the set does not hold. That input is skipped here, as it is by the multiset and by the diff
+// that accepted it. Every other accepted transaction has all its entries, so for those this is
+// exactly AddTransaction.
 func ApplyAcceptanceDataToDiff(diff externalapi.MutableUTXODiff, acceptanceData externalapi.AcceptanceData,
 	mergingBlockDAAScore uint64) error {
 	return forEachAcceptedTransaction(acceptanceData, func(transaction *externalapi.DomainTransaction, _ bool) error {
-		return diff.AddTransaction(transaction, AcceptedUTXOBlockDAAScore(mergingBlockDAAScore))
+		return diff.AddOutputsSpendingResolvedInputs(transaction, AcceptedUTXOBlockDAAScore(mergingBlockDAAScore))
 	})
 }
 

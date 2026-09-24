@@ -55,3 +55,37 @@ func TestMultisetSkipsAnInputTheSetDoesNotHold(t *testing.T) {
 		t.Fatalf("removing the acceptance data did not restore the starting multiset")
 	}
 }
+
+// TestDiffSkipsAnInputTheSetDoesNotHold is the diff side of the same transaction. The pruning manager
+// replays chain acceptance data into a diff when the pruning point moves; the absent input's nil entry
+// panicked removeEntry there. It must spend the held input, record nothing for the absent one, and
+// create every output - the same set the multiset test above commits to.
+func TestDiffSkipsAnInputTheSetDoesNotHold(t *testing.T) {
+	_, _, _, heldOutpoint, missing, _, heldEntry, _, _, _ := testFixtures()
+	const daaScore = 9
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
+	transaction := &externalapi.DomainTransaction{
+		Inputs: []*externalapi.DomainTransactionInput{
+			{PreviousOutpoint: *heldOutpoint, UTXOEntry: heldEntry},
+			{PreviousOutpoint: *missing, UTXOEntry: nil},
+		},
+		Outputs: []*externalapi.DomainTransactionOutput{{Value: 40, ScriptPublicKey: script}},
+		Payload: []byte{},
+	}
+
+	diff := NewMutableUTXODiff()
+	if err := ApplyAcceptanceDataToDiff(diff, acceptanceOf(transaction), daaScore); err != nil {
+		t.Fatalf("ApplyAcceptanceDataToDiff: %+v", err)
+	}
+
+	toRemove := diff.ToRemove()
+	if toRemove.Len() != 1 || !toRemove.Contains(heldOutpoint) {
+		t.Fatalf("toRemove = %v, want only the held input", toRemove)
+	}
+	created := externalapi.NewDomainOutpoint(consensushashing.TransactionID(transaction), 0)
+	toAdd := diff.ToAdd()
+	entry, ok := toAdd.Get(created)
+	if toAdd.Len() != 1 || !ok || !entry.Equal(NewUTXOEntry(40, script, false, AcceptedUTXOBlockDAAScore(daaScore))) {
+		t.Fatalf("toAdd = %v, want only the created output", toAdd)
+	}
+}
