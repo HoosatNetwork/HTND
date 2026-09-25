@@ -3270,3 +3270,45 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - operator verify: after rebuild, relayed blocks that previously logged ErrBadUTXOCommitment with no other rule failure should stay Valid; GetBlockDagInfo should keep a non-VirtualGenesis selected tip; SubmitBlock of a locally built template should remain Valid.
 - commit: e6126620b
 - note: briefly numbered HTN-231 on master (e6126620b / 2a223b46f) before merge; remediation/sept-2026 already used HTN-231 for the autoupdate WaitGroup leak, so this multiset tip-child fix is renumbered HTN-233 on merge.
+
+## HTN-234
+- title: A locally disqualified chain pinned the node (cascade over an offset baseline, untyped no-pending-tip, repair stopping at pending tips, peer bans for local status); streak shutdown was a remote kill switch
+- status: FIXED (4a236eed0, cb27e7470, af5ee7dbe, 5de1eb476, b13ed3596, 2e3c98674)
+- severity: critical (node stops following the network; e867d337d added a remotely triggerable shutdown)
+- area: consensusstatemanager (resolve_block_status.go, resolve.go), consensus.go (ValidateAndInsertBlock, RepairDisqualifiedTipChains), blockrelay (ibd.go, handle_relay_invs.go), rpchandlers/submit_block.go, app streak wiring, config
+- reported: 2026-09-25, review of continue-disagreeement-research (base e867d337d)
+- mechanism:
+  - ResolveBlockStatus disqualifies a child of a disqualified selected parent without verifyUTXO. On an offset baseline (HTN-002/005/208) this bypassed the per-block offset toleration, so one local disqualification disqualified every later block. Virtual pins onto the disqualified processing point, so every relayed block cascades.
+  - findNextPendingTip returned a plain "no pending tip" error. consensus.ResolveVirtual returned it before its own ErrVirtualHasNoUsableTip check, so ibd.go's repair never ran. ValidateAndInsertBlock returned it for every block while virtual was not updated.
+  - RepairDisqualifiedTipChains stopped at pending tips, so it reset nothing after IBD had synced bodies above a locally disqualified hash.
+  - Resetting virtual's selected parent while blocks above it were re-resolved created a UTXO-diff-child cycle, and restorePastUTXO then OOMed. This was reachable at e867d337d (disqualified tip above a disqualified virtual selected parent).
+  - wrapResolveVirtualError banned on RuleError, and the IBD timeout banned. Both were verdicts on local work.
+  - The relay flow raised the global block-version ratchet from an unvalidated header. SubmitBlock read the global for the PoW path and indexed the window table with it unclamped.
+  - e867d337d's 15-block streak shutdown: disqualified blocks can have valid PoW, and at powMax-floor difficulty (HTN-228) any miner can trigger it on every node.
+- fix:
+  - Offset baseline only (strict nodes unchanged): the child of a disqualified parent gets its own verdict. The strict-commitment fork gate still wins.
+  - No pending tip is wrapped in ErrVirtualHasNoUsableTip, and the block is inserted anyway.
+  - The repair walks through pending/header-only blocks and resets disqualified blocks to Pending, never Valid. It never resets virtual's selected parent from below.
+  - IBD resolve errors and the timeout no longer ban.
+  - SetBlockVersion runs after processBlock succeeds. SubmitBlock uses the block's own version and a clamped window (Params.DifficultyAdjustmentWindowSizeForBlockVersion).
+  - The streak is still logged critical. Stopping is opt-in via the hidden --stop-on-disqualified-streak flag.
+- tests:
+  - TestChildOfDisqualifiedParentOnOffsetBaseline (offset + strict control; fails at base)
+  - TestOldVersionBlockAfterNewerVersionWasSeen and TestBlockVersionForDAAScoreIgnoresTheGlobal (pins; pass at base too)
+  - TestRepairReachesDisqualifiedSegmentBelowPendingTip, TestRepairDoesNotResetVirtualSelectedParentFromBelow and TestBlockIsInsertedWhenVirtualHasNoUsableTip (all fail at base)
+  - TestIBDDoesNotBanPeerForLocallyDisqualifiedChain, TestIBDRepairsOnConsensusStateManagerNoPendingTip and TestIBDTimeoutDoesNotBan
+  - TestDisqualifiedBlockStreakStopIsOptIn
+  - TestWrapResolveVirtualErrorRuleError now expects no ban.
+  - `go test ./domain/consensus/... ./app/protocol/...` gives the same package results as base. Only TestFinality fails, and it fails identically at e867d337d.
+- left alone:
+  - the strict-node cascade
+  - calculateNewTips dropping valid parents of disqualified tips
+  - RepairBlockStatuses (opt-in; marks Valid without a diff)
+  - the maxZoomSteps RemoveAddress
+  - the IBD goroutine outliving its timeout
+  - HTN-002 toleration policy (needs_human)
+  - 183d5f6af's offset-only acceptance/fee divergence
+  - b4dd98dab's "IBD syncs nothing" return
+  - TestFinality
+- operator verify: an offset-baseline node that logged a disqualified block should keep its selected tip moving with the network. Peers should not be banned after "resolve virtual failed during IBD". No shutdown on a streak unless the flag is set.
+- commit: 4a236eed0, cb27e7470, af5ee7dbe, 5de1eb476, b13ed3596, 2e3c98674
