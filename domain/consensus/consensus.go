@@ -453,6 +453,17 @@ func (s *consensus) ValidateAndInsertBlock(block *externalapi.DomainBlock, updat
 			// We enter the loop in locked state
 			for {
 				_, isCompletelyResolved, err := s.resolveVirtualChunkNoLock(virtualResolveChunk)
+				if errors.Is(err, externalapi.ErrVirtualHasNoUsableTip) {
+					// Nothing is left to resolve: every tip is disqualified or invalid. Refusing the
+					// block for that froze the node - a new block is the only thing that can give
+					// virtual a usable tip again, and every insertion failed on this same error before
+					// it got the chance. Insert it; it gets its own status below.
+					log.Warnf("Inserting block %s although virtual has no usable tip to resolve: %s",
+						consensushashing.BlockHash(block), err)
+					s.virtualNotUpdated = false
+					err = nil
+					isCompletelyResolved = true
+				}
 				if err != nil {
 					s.lock.Unlock()
 					return err
@@ -1971,9 +1982,11 @@ func mapLegacyBlockStatus(oldStatus externalapi.BlockStatus) externalapi.BlockSt
 }
 
 // RepairDisqualifiedTipChains resets the blocks that keep virtual pinned at the virtual genesis
-// marker, and only those: it walks the selected parent chain down from every tip that is
-// StatusDisqualifiedFromChain and marks each disqualified block StatusUTXOPendingVerification,
-// stopping at the first block that is not disqualified.
+// marker, and only those: it walks the selected parent chain down from every tip, through blocks
+// that are pending verification or header-only, marks each disqualified block
+// StatusUTXOPendingVerification, and stops at the first UTXO-valid (or invalid) block. It never marks
+// anything UTXO-valid: every block it touches keeps the UTXO diff, multiset and acceptance data it
+// was stored with, and gets fresh ones when the next resolve re-verifies it.
 //
 // It differs from RepairBlockStatuses in the two ways that matter for running unattended:
 //
@@ -1984,8 +1997,9 @@ func mapLegacyBlockStatus(oldStatus externalapi.BlockStatus) externalapi.BlockSt
 //     re-resolved and gets a real UTXO diff, while one marked valid is taken at its word and never
 //     gets one - which is how a repaired node ends up with UTXO-valid blocks that have no diff.
 //
-// Blocks that deserve their disqualification simply get it back on the next resolve, with a diff
-// this time. It returns how many blocks it reset.
+// It stops at virtual's current selected parent unless that block is itself the tip being walked
+// (see the comment in the body). Blocks that deserve their disqualification simply get it back on
+// the next resolve, with a diff this time. It returns how many blocks it reset.
 func (s *consensus) RepairDisqualifiedTipChains() (uint64, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -1996,11 +2010,34 @@ func (s *consensus) RepairDisqualifiedTipChains() (uint64, error) {
 		return 0, err
 	}
 
+	// Virtual's selected parent is never reset from below. Its UTXO diff is the one stored relative
+	// to virtual, and everything else's restore path ends there. Re-resolved as a non-tip block of a
+	// longer chain it gets a temporary diff pointing at its selected parent, whose own diff still
+	// points back at it, and the restorePastUTXO the resolve tip then runs on it walks that cycle
+	// until the process runs out of memory. That was reachable before the walk-through below (a
+	// disqualified tip above a disqualified virtual selected parent) and the walk-through would have
+	// made it the common case. Reset as a tip it is safe: then it is the resolve tip itself.
+	var virtualSelectedParent *externalapi.DomainHash
+	virtualGHOSTDAGData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, model.VirtualBlockHash, false)
+	if err != nil && !database.IsNotFoundError(err) {
+		return 0, err
+	}
+	if err == nil {
+		virtualSelectedParent = virtualGHOSTDAGData.SelectedParent()
+	}
+
 	reset := make(map[externalapi.DomainHash]struct{})
+	walked := make(map[externalapi.DomainHash]struct{})
 	for _, tip := range tips {
 		current := tip
 		for {
 			if _, alreadyReset := reset[*current]; alreadyReset {
+				break
+			}
+			if current.Equal(s.genesisHash) {
+				break
+			}
+			if !current.Equal(tip) && current.Equal(virtualSelectedParent) {
 				break
 			}
 			status, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, current)
@@ -2010,12 +2047,27 @@ func (s *consensus) RepairDisqualifiedTipChains() (uint64, error) {
 			if err != nil {
 				return 0, err
 			}
-			if status != externalapi.StatusDisqualifiedFromChain {
+			switch status {
+			case externalapi.StatusDisqualifiedFromChain:
+				s.blockStatusStore.Stage(stagingArea, current, externalapi.StatusUTXOPendingVerification)
+				reset[*current] = struct{}{}
+			case externalapi.StatusUTXOPendingVerification, externalapi.StatusHeaderOnly:
+				// Not reset, walked through. A pending tip above a disqualified segment is the normal
+				// shape after IBD or relay: stopping at it, as this used to, left the segment below it
+				// untouched, so the tip was cascade-disqualified again on the very next resolve.
+				// getUnverifiedChainBlocks walks through the same two statuses.
+				if _, alreadyWalked := walked[*current]; alreadyWalked {
+					current = nil
+				} else {
+					walked[*current] = struct{}{}
+				}
+			default:
+				// UTXO-valid (or invalid): below here the chain is not what keeps virtual pinned.
+				current = nil
+			}
+			if current == nil {
 				break
 			}
-
-			s.blockStatusStore.Stage(stagingArea, current, externalapi.StatusUTXOPendingVerification)
-			reset[*current] = struct{}{}
 
 			ghostdagData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, current, false)
 			if database.IsNotFoundError(err) {

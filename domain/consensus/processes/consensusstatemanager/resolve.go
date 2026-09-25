@@ -183,7 +183,13 @@ func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingA
 		log.Infof("Status: %s", status)
 	}
 
-	return nil, externalapi.StatusInvalid, errors.Errorf(
+	// Wrapped in ErrVirtualHasNoUsableTip so callers can tell "nothing left that can become virtual's
+	// selected parent" - a statement about this node's recorded statuses - from a real failure. It used
+	// to be a plain error: consensus.ResolveVirtual returned it before reaching its own
+	// ErrVirtualHasNoUsableTip check, so the IBD flow's status repair (which keys on that sentinel)
+	// never ran in exactly the state it was written for, and every block insertion that first drains
+	// virtual resolution failed with it.
+	return nil, externalapi.StatusInvalid, errors.Wrapf(externalapi.ErrVirtualHasNoUsableTip,
 		"no pending tip: all %d tips are disqualified/invalid", len(orderedTips))
 }
 
