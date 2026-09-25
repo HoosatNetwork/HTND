@@ -19,6 +19,25 @@ import (
 // UTXO-valid block in between resets it.
 const maxConsecutiveDisqualifiedBlocks = 15
 
+// disqualifiedBlockStreakHandler returns the callback consensus runs when the streak is reached: the
+// shutdown below when the operator asked for it with --stop-on-disqualified-streak, and nothing
+// otherwise (consensus logs the streak at critical level either way).
+//
+// Stopping is opt-in because a streak is not proof that this node is the one that is wrong. A block
+// resolves to DisqualifiedFromChain when its UTXO commitment, coinbase or accepted-ID merkle root does
+// not match; its header, proof of work included, can still be valid. Anyone who mines 15 such blocks
+// on top of the tip faster than the network mines one good block - cheap while difficulty sits at the
+// powMax floor (HTN-228) - would take every node running with the stop down at once, and a restart
+// policy turns that into a loop. It also hides the condition from the operator instead of recovering
+// from it: RepairDisqualifiedTipChains and the offset-baseline rules re-verify a disqualified chain;
+// a stopped node re-verifies nothing.
+func disqualifiedBlockStreakHandler(stop bool) func(streak int, lastBlock *externalapi.DomainHash) {
+	if !stop {
+		return nil
+	}
+	return stopNodeOnDisqualifiedBlockStreak
+}
+
 // stopNodeOnDisqualifiedBlockStreak requests a shutdown through the interrupt listener. It runs under
 // the consensus lock, so the request is sent from its own goroutine: the listener's channel is
 // unbuffered, and the shutdown it starts needs that lock.
