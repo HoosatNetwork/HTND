@@ -3312,3 +3312,52 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   - TestFinality
 - operator verify: an offset-baseline node that logged a disqualified block should keep its selected tip moving with the network. Peers should not be banned after "resolve virtual failed during IBD". No shutdown on a streak unless the flag is set.
 - commit: 4a236eed0, cb27e7470, af5ee7dbe, 5de1eb476, b13ed3596, 2e3c98674
+- note (2026-09-25): this entry covers what happens after a first disqualification, not what causes it. The disagreement observed on 2026-09-24 started with HTN-235: a patched block template paid a dev fee to the miner.
+
+## HTN-235
+- title: Root cause of the 2026-09-24 relay disagreement: a cached block template patched for another pay address paid its last dev fee to the miner; offset-baseline nodes tolerate the resulting coinbase mismatch, while strict nodes disqualify it
+- status: FIX EXISTS ON THIS BRANCH (b54d3eaff), NOT IN MASTER. Repro/regression test cdadecec9. Deploying to mining nodes is still to do.
+- severity: critical. Two honest nodes on the same code reach different verdicts on the same block (StatusUTXOValid on offset-baseline nodes, StatusDisqualifiedFromChain on strict ones). HTN-234's cascade then amplifies that one disagreement into a node that no longer follows the network.
+- area: miningmanager (miningmanager.go GetBlockTemplate cache, blocktemplatebuilder.go ModifyBlockTemplate), coinbasemanager (v2 per-merge-set-block outputs), consensusstatemanager/verify_and_build_utxo.go (offset toleration)
+- reported: 2026-09-25, from runtime logs of the receiving node
+- evidence (receiving node, 2026-09-24 20:49 EEST):
+  - This came right after its pruning point moved to 78817f09130111c4ab8bfd193fe8e913ea85b69499badd5703b49a2e87b65e5b, whose served UTXO set matched its commitment.
+  - Block 7a7bd83182d1d048b16fb864c91d2cbbc01b1dbc3616e8c11c9e6ca50aa10807 logged `Output 5 script differs: actual=20ace11d…ac, expected=206bd6ab…ac`, then `coinbase a8978dc6… != expected 45c47a2c…`.
+  - The coinbase has 6 outputs: a miner output and a dev-fee output for each of 3 merge-set blocks. Only output 5 differs. That is the last block's dev fee of 66754666 (5% of 1335093333), and it was paid to the miner's script instead of the dev address.
+  - The coinbase payload shows the block came from `2.17.2-2e085c087` (master), mined through htn-stratum-bridge v1.8.2-FozPool.
+- mechanism:
+  - The patch:
+    - miningmanager.GetBlockTemplate caches the template for 250 ms (miningmanager.go:67-81).
+    - A request with different coinbase data within that window (another pay address, or the same address with different extra data, as stratum bridges send) goes through ModifyBlockTemplate instead of a rebuild.
+  - The bug:
+    - On master (blocktemplatebuilder.go:201 at 2e085c087), ModifyBlockTemplate rewrites the LAST coinbase output's script to the new pay address when the template has CoinbaseHasRedReward.
+    - That is right for v1, where the last output is the red reward paid to this block's miner.
+    - From v2, ExpectedCoinbaseTransactionInternal pays every merge-set block, blue or red and sorted by hash, a miner output from that block's own payload followed by a dev-fee output to the constant dev address (coinbasemanager.go:176-282).
+    - It still returns hasRedReward = len(MergeSetReds()) > 0 (coinbasemanager.go:290).
+    - So in v2 the patch pays the dev fee of the block that sorts last to the pool. A v2 block never pays its own miner directly (that happens when it is merged), so no output should change on a pay-address patch.
+  - Why the mining node accepts it:
+    - verifyUTXO downgrades any RuleError, including ErrBadCoinbaseTransaction, to a logged issue when blockInheritsKnownUTXOCommitmentOffset holds (verify_and_build_utxo.go:41, 101-110, coinbase step :133).
+    - That is the state of the mining node and of most of mainnet (HTN-002/208), so it accepts its own bad block and so do its peers.
+  - Why the receiving node disqualifies it:
+    - A node whose current pruning point's stored UTXO multiset matches the header is strict. It recomputes the coinbase and disqualifies.
+    - The per-output dump only prints on the strict path (verify_and_build_utxo.go:686-698), so the receiver's own log line shows it was strict.
+    - It had just become strict: the offset verdict is keyed per pruning point, and the new pruning point's served set matched its commitment. The same binary therefore moves between tolerant and strict when the pruning point changes.
+  - Checked and ruled out: the creator and the validator computing different dev-fee scripts on the same code.
+    - The dev-fee script is a constant (constants.DevFeeAddress).
+    - Miner scripts come from each merge-set block's own coinbase payload, and the version from that block's own header (c.blockVersion).
+    - Nothing on this path reads pruned data, virtual-only data or process globals. The only path that produced a different output was master's patch.
+- fix: b54d3eaff, which adds `&& blockVersion < 2` (blocktemplatebuilder.go:206). In v2, the patch changes only the payload and the merkle root.
+- tests: TestModifiedTemplateDevFeeIsValidOnAnotherNode (domain/miningmanager/modified_template_dev_fee_test.go, cdadecec9). The setup:
+  - three nodes, with every block v2 and K=0, so a template that merges two siblings has a red block;
+  - a template is built on the mining node, then requested again with a second pay address inside the cache window;
+  - the patched template must be StatusUTXOValid on a separate strict node (the regression check);
+  - master's patch is replayed on the same template: StatusUTXOValid on an offset-baseline node and DisqualifiedFromChain on a strict one (the split itself).
+  - With b54d3eaff's condition reverted to master's, the regression check fails in every run (5 of 5). The test passes in 10 of 10 runs on this branch.
+- needs_human:
+  - Merge b54d3eaff into master and release it. Until mining nodes (pools behind stratum bridges in particular) run it, such blocks keep being produced.
+  - Blocks already mined like this stay valid on tolerant nodes and disqualified on strict ones.
+  - The offset toleration accepts any coinbase, including one that pays the dev fee elsewhere. Coinbase output scripts and structure do not depend on the UTXO baseline, so this could be narrowed. That is consensus-splitting and needs a fork gate (StrictUTXOCommitmentVersion or its own).
+  - Strictness changes silently at pruning-point updates. At minimum it should be logged. Better, it should not depend on node-local pruning timing.
+- related, not proven here: the missing-input acceptance of 183d5f6af/1660ff6/7bdf387/8c23529 also depends on the node-local blockInheritsKnownUTXOCommitmentOffset (including the in-memory boundary flag), so it can diverge the same way.
+- correction to HTN-234: HTN-234 described the cascade that pinned a node after its first disqualification. It is the amplifier, not the origin. The origin of the observed disagreement is this entry.
+- commit: b54d3eaff (fix), cdadecec9 (repro/regression test)
