@@ -1,8 +1,8 @@
 package consensus
 
 import (
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
-	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
 )
 
 var (

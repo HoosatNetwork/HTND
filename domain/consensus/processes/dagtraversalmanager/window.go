@@ -3,10 +3,10 @@ package dagtraversalmanager
 import (
 	"slices"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockversion"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 // DAABlockWindow returns highHash's DAA window, sized for highHash's own block version rather than the process-global

@@ -3,14 +3,14 @@ package main
 import (
 	"strings"
 
-	"github.com/HoosatNetwork/HTND/domain"
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
-	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
+	"github.com/HoosatNetwork/HTND/v2/domain"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
+	infrastructuredatabase "github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/pebble"
 	"github.com/pkg/errors"
 )
 

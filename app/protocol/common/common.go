@@ -3,8 +3,8 @@ package common
 import (
 	"time"
 
-	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
-	routerpkg "github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
+	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 
 	"github.com/pkg/errors"
 )

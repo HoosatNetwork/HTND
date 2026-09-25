@@ -3,8 +3,8 @@ package netadapter
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
 
 // TestP2PBroadcastSkipsFullRoutes pins that one peer whose outgoing route is full does not stop a

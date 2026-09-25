@@ -4,13 +4,13 @@ import (
 	"math"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 )
 
 // daaStampRule selects which DAA score gets stamped into the UTXOEntries a block's resolution

@@ -1,6 +1,6 @@
 package rpcclient
 
-import "github.com/HoosatNetwork/HTND/app/appmessage"
+import "github.com/HoosatNetwork/HTND/v2/app/appmessage"
 
 // GetBlockByTransactionID sends an RPC request respective to the function's name and returns the RPC server's response.
 func (c *RPCClient) GetBlockByTransactionID(transactionID string, includeTransactions bool) (

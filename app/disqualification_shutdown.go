@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 )
 
 // maxConsecutiveDisqualifiedBlocks is how many blocks in a row the node may disqualify from the chain

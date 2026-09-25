@@ -1,8 +1,8 @@
 package consensusstatemanager
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxosurvey"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
 
 var log = logger.RegisterSubSystem("BDAG")

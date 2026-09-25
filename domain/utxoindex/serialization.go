@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/serialization"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
 

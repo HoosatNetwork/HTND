@@ -3,7 +3,7 @@ package handshake
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/pkg/errors"
 )
 

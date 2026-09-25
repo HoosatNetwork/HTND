@@ -4,10 +4,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/rpcclient"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/rpcclient"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 const defaultRPCServer = "localhost"

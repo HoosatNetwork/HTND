@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 func newTestFile(t *testing.T, path string, minSignatures uint32) *File {

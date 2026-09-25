@@ -6,13 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
 )
 
 // virtualUTXOSource is the part of consensus this file needs: what virtual's UTXO set holds.

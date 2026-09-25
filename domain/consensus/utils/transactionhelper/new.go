@@ -1,8 +1,8 @@
 package transactionhelper
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
 )
 
 // NewSubnetworkTransaction returns a new trsnactions in the specified subnetwork with specified gas and payload

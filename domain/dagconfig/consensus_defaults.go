@@ -3,7 +3,7 @@ package dagconfig
 import (
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 )
 
 // The documentation refers to the following constants which aren't explicated in the code:

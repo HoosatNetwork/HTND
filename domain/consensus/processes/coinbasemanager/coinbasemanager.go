@@ -7,17 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashset"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionhelper"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 )
 

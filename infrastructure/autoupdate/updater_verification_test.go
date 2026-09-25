@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 )
 
 // newTestUpdater builds an Updater without touching the network or the running binary's directory.

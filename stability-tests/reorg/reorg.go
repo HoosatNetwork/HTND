@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 func checkedUint64FromInt63(value int64) uint64 {

@@ -1,9 +1,9 @@
 package transactionvalidator
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 )
 
 type testTransactionValidator struct {

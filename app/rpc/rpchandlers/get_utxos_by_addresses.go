@@ -4,13 +4,13 @@ import (
 	"encoding/hex"
 	"math"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/domain/utxoindex"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
-	"github.com/HoosatNetwork/HTND/util"
-	"github.com/HoosatNetwork/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/util"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 	"github.com/pkg/errors"
 )
 

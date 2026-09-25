@@ -1,8 +1,8 @@
 package model
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 )
 
 // Mempool maintains a set of known transactions that

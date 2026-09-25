@@ -1,11 +1,11 @@
 package mempool
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/util"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 const (

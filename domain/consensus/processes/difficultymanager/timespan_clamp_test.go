@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/util/difficulty"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/util/difficulty"
 )
 
 // TestRequiredDifficultyClampsAnAnomalousTimeSpan is the regression test for the mainnet difficulty

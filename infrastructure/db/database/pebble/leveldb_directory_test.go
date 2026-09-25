@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
 )
 
 // TestNewPebbleDBLeavesLevelDBDirectoryIntact checks that starting the node's pebble engine on a LevelDB datadir

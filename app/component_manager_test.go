@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/util"
 )
 
 // TestMergedAndValidatedFrozenAddresses is HTN-159's regression test.

@@ -3,7 +3,7 @@ package connmanager
 import (
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
 )
 
 const (

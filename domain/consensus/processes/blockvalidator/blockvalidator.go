@@ -4,11 +4,11 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/util/txmass"
+	"github.com/HoosatNetwork/HTND/v2/util/txmass"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/util/difficulty"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/util/difficulty"
 )
 
 // blockValidator exposes a set of validation classes, after which

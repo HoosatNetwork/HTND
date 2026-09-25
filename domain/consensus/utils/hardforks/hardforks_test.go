@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 // gates is every activation constant this package defines, by name, so a new gate added without a

@@ -3,16 +3,16 @@ package libhtnwallet_test
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/domain/consensusreference"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensusreference"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 )
 
 // TestAddressTypeMatrix walks every source x destination single-sig address type combination through

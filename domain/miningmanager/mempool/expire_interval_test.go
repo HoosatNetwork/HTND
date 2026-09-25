@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 // TestExpireIntervalIsAUnitConversion pins that a mempool lifetime expressed in seconds is turned

@@ -3,7 +3,7 @@ package integration
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 )
 
 func setOnBlockAddedHandler(t *testing.T, harness *appHarness, handler func(notification *appmessage.BlockAddedNotificationMessage)) {

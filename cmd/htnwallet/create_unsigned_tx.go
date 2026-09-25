@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/client"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/utils"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/client"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 )
 
 func createUnsignedTransaction(conf *createUnsignedTransactionConfig) error {

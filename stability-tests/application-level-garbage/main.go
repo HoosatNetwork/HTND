@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/standalone"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/util/panics"
-	"github.com/HoosatNetwork/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/standalone"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 )
 
 func main() {

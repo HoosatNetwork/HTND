@@ -3,12 +3,12 @@ package standalone
 import (
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
 
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
 
 // Routes holds the incoming and outgoing routes of a connection created by MinimalNetAdapter

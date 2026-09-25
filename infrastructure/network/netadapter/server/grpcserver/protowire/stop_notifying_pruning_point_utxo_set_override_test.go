@@ -3,7 +3,7 @@ package protowire
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 )
 
 // TestStopNotifyingPruningPointUTXOSetOverrideResponseWire pins that the stop response can be put on the wire. It had

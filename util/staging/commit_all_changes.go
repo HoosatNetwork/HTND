@@ -3,8 +3,8 @@ package staging
 import (
 	"sync/atomic"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
 
 // CommitAllChanges creates a transaction in `databaseContext`, and commits all changes in `stagingArea` through it.

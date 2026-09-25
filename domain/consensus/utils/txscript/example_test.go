@@ -8,11 +8,11 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/util"
 )
 
 // This example demonstrates creating a script which pays to a hoosat address.

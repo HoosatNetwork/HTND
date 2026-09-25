@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"math/rand"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/pow"
 	"github.com/pkg/errors"
 )
 

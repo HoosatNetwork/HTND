@@ -3,13 +3,13 @@ package mempool
 import (
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/util/txmass"
+	"github.com/HoosatNetwork/HTND/v2/util/txmass"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 )
 
 const (

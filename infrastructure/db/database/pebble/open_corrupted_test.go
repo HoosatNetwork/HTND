@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	crdberrors "github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/v2"
 )

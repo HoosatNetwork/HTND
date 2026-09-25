@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockheader"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
 )
 
 type blockToCompare struct {

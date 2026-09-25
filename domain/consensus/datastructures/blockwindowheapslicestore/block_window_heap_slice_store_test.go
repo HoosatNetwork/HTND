@@ -4,10 +4,10 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/testutils"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/datastructures/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 func TestBlockWindowHeapSliceStoreStageCommitAndGet(t *testing.T) {

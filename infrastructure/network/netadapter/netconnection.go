@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	routerpkg "github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server"
 )
 
 // NetConnection is a wrapper to a server connection for use by services external to NetAdapter

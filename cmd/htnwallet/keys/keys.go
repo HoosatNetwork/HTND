@@ -14,10 +14,10 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/utils"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"

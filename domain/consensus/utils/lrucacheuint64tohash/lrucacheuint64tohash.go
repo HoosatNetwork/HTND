@@ -1,7 +1,7 @@
 package lrucacheuint64tohash
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // entry holds the value + intrusive doubly-linked list pointers

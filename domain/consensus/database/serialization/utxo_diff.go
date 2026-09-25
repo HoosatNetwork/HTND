@@ -1,9 +1,9 @@
 package serialization
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 // UTXODiffToDBUTXODiff converts UTXODiff to DbUtxoDiff

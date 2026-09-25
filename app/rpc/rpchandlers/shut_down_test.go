@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 )
 
 // TestHandleShutDownTwice pins that repeated ShutDown calls request the shutdown without crashing. The

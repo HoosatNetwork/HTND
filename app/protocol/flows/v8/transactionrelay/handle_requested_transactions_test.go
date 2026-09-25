@@ -3,20 +3,20 @@ package transactionrelay_test
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/flowcontext"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/transactionrelay"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flowcontext"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/transactionrelay"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/domain"
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
-	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/domain"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
 	"github.com/pkg/errors"
 )
 

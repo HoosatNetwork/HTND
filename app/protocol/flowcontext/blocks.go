@@ -6,14 +6,14 @@ import (
 	"strconv"
 	"time"
 
-	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 )
 
 // OnNewBlock updates the mempool after a new block arrival, and

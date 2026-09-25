@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockheader"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/mine"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/pebble"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/mine"
 	"github.com/pkg/errors"
 )
 

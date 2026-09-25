@@ -3,7 +3,7 @@ package serialization
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // TestBlueAnticoneSizesSize tests that no data can be loss when converting externalapi.KType to the corresponding type in

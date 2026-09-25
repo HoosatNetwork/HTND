@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/domain/prefixmanager/prefix"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/prefixmanager/prefix"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
 )
 
 // TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated is Workstream C's agreement test.

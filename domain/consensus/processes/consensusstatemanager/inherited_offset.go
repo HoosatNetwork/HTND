@@ -3,9 +3,9 @@ package consensusstatemanager
 import (
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 )
 
 // blockOnlyCarriesTheInheritedOffset reports whether a block's UTXO commitment mismatch is fully

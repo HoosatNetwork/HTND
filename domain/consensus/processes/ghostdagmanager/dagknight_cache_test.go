@@ -3,10 +3,10 @@ package ghostdagmanager
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
-	"github.com/HoosatNetwork/HTND/internal/ci"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/v2/internal/ci"
 )
 
 type dagKnightCacheTopologyStub struct {

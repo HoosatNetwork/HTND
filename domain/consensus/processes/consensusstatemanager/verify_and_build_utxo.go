@@ -5,16 +5,16 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionhelper"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/merkle"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/merkle"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hardforks"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/pkg/errors"
 )
 

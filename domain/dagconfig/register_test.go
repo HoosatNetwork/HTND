@@ -3,7 +3,7 @@ package dagconfig_test
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 // Define some of the required parameters for a user-registered

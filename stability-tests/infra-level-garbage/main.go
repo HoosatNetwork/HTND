@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 )
 
 func main() {

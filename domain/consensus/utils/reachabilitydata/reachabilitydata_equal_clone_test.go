@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 func TestReachabilityData_Equal(t *testing.T) {

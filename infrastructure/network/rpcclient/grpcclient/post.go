@@ -1,8 +1,8 @@
 package grpcclient
 
 import (
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server/grpcserver/protowire"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
 )

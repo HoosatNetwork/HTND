@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/util"
 
-	"github.com/HoosatNetwork/HTND/version"
+	"github.com/HoosatNetwork/HTND/v2/version"
 
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
-	"github.com/HoosatNetwork/HTND/util/panics"
-	"github.com/HoosatNetwork/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 )
 
 func main() {

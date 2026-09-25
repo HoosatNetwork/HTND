@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
 	"github.com/jessevdk/go-flags"
 )
 

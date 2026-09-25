@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/rpc"
 	"github.com/pkg/errors"
 )
 

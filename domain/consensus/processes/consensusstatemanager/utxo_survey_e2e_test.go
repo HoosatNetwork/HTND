@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxosurvey"
-	"github.com/HoosatNetwork/HTND/util/staging"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxosurvey"
+	"github.com/HoosatNetwork/HTND/v2/util/staging"
 )
 
 // chainLength is how many blocks after genesis each fixture builds. The first is the one whose

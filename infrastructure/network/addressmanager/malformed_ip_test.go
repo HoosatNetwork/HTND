@@ -4,8 +4,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 )
 
 // TestMalformedIPLengthIsNotRoutable pins that an address whose IP is neither 4 nor 16 bytes is rejected. Peers

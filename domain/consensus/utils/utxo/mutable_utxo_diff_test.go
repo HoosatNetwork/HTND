@@ -3,8 +3,8 @@ package utxo
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 )
 
 // TestAddTransactionAtomicity ensures that when AddTransaction fails partway through - here on a

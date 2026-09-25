@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/id"
 	"github.com/davecgh/go-spew/spew"
 )
 

@@ -4,8 +4,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // GHOSTDAGManagerConstructor is the function signature for a constructor of a type implementing model.GHOSTDAGManager

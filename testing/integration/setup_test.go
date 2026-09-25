@@ -4,14 +4,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/pebble"
 
-	"github.com/HoosatNetwork/HTND/app"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/app"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 )
 
 type appHarness struct {

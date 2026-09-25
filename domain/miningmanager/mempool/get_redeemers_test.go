@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool/model"
 )
 
 // TestGetRedeemersDiamond builds a chain of diamonds - A spends into B and C, D spends both, D

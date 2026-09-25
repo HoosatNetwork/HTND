@@ -7,14 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/davecgh/go-spew/spew"
 
-	routerpkg "github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server/grpcserver/protowire"
 )
 
 func (c *gRPCConnection) connectionLoops() error {

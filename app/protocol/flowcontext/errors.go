@@ -5,11 +5,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 )
 
 // ErrPingTimeout signifies that a ping operation timed out.

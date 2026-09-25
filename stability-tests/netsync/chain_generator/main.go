@@ -5,8 +5,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/mine"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/mine"
 	"github.com/pkg/errors"
 )
 

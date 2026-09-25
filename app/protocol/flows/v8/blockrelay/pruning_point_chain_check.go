@@ -1,8 +1,8 @@
 package blockrelay
 
 import (
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // selectedChainReader is the part of a consensus the pruning point chain checks read.

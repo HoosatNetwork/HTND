@@ -4,13 +4,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/id"
-	mathUtil "github.com/HoosatNetwork/HTND/util/math"
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/id"
+	mathUtil "github.com/HoosatNetwork/HTND/v2/util/math"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 )
 
 // Peer holds data about a peer.

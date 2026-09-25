@@ -9,15 +9,15 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockheader"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/pow"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashes"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/pow"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionid"
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionid"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 )
 
 func checkedUint32ToUint16(value uint32) uint16 {

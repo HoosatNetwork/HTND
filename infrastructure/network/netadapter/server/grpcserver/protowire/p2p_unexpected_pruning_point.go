@@ -1,6 +1,6 @@
 package protowire
 
-import "github.com/HoosatNetwork/HTND/app/appmessage"
+import "github.com/HoosatNetwork/HTND/v2/app/appmessage"
 
 func (x *HoosatdMessage_UnexpectedPruningPoint) toAppMessage() (appmessage.Message, error) {
 	return &appmessage.MsgUnexpectedPruningPoint{}, nil

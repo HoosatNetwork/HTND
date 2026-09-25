@@ -3,8 +3,8 @@ package flowcontext
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/pkg/errors"
 )
 

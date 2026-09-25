@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/HoosatNetwork/HTND/cmd/utxoforensics/canonical"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/cmd/utxoforensics/canonical"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 )
 
 // canonicalArtifact enumerates the pruning-point UTXO bucket and reports the canonical artefact:

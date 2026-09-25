@@ -4,10 +4,10 @@ import (
 	"math"
 	"math/big"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/util/difficulty"
-	"github.com/HoosatNetwork/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/util/difficulty"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 type difficultyBlock struct {

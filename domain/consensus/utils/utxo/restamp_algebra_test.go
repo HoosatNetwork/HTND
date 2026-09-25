@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 )
 
 // One outpoint, and the only thing that varies is which merging block's DAA score a view stamps it

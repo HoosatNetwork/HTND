@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 	"github.com/jessevdk/go-flags"
 	"github.com/pkg/errors"
 )

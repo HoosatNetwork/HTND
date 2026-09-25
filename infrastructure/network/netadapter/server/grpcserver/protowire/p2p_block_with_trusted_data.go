@@ -3,8 +3,8 @@ package protowire
 import (
 	"math/big"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/pkg/errors"
 )
 

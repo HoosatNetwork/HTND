@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // MutableReachabilityData represents a node in the reachability tree

@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 )
 
 func TestAddressKeySerialization(t *testing.T) {

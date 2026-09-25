@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 func prepareDatabaseForTest(t *testing.T, testName string) (ldb *LevelDB, teardownFunc func()) {

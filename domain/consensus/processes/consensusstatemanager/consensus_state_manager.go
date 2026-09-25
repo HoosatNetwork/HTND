@@ -1,17 +1,17 @@
 package consensusstatemanager
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/database"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"sync"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashset"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/multiset"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashset"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 )
 
 // resolveBlockStatusCacheEntry stores the cached result of ResolveBlockStatus

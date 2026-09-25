@@ -7,9 +7,9 @@ package winservice
 import (
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/os/signal"
-	"github.com/HoosatNetwork/HTND/version"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
+	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/btcsuite/winsvc/eventlog"
 	"github.com/btcsuite/winsvc/svc"
 )

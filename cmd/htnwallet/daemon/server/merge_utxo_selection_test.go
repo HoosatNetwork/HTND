@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/keys"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 )
 
 // TestSelectMoreUTXOsForMergeTransaction pins which coins a merge transaction may add as extra funds: never

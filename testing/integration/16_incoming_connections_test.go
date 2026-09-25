@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/internal/ci"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/internal/ci"
 )
 
 func Test16IncomingConnections(t *testing.T) {

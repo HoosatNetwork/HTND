@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/app/protocol/protocolerrors"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 // TestProcessBlockWithTrustedDataRejectsOutOfRangeIndices pins that trusted-data indices pointing past

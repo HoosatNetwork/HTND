@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server/grpcserver/protowire"
 )
 
 var commandTypes = []reflect.Type{

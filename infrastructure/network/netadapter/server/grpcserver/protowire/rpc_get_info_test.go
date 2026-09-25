@@ -3,7 +3,7 @@ package protowire
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 )
 
 // TestGetInfoResponseRoundTrip pins every field of GetInfo across the wire in both directions.

@@ -3,11 +3,11 @@ package reachabilitydatastore
 import (
 	"testing"
 
-	consensusdb "github.com/HoosatNetwork/HTND/domain/consensus/database"
-	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/testutils"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/reachabilitydata"
+	consensusdb "github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/datastructures/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/reachabilitydata"
 )
 
 func TestReachabilityDataStoreRoundTripHasAndDelete(t *testing.T) {

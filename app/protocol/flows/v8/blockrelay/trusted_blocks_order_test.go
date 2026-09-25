@@ -4,10 +4,10 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/blockheader"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 )
 
 func trustedBlockWithParents(nonce uint64, blueWork int64, parents ...*externalapi.DomainHash) (

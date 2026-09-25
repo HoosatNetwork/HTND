@@ -3,9 +3,9 @@ package rpchandlers
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 )
 
 // TestHandleStopNotifyingUTXOsChangedParseErrorResponseType pins that an unparseable address is answered

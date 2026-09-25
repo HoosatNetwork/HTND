@@ -3,12 +3,12 @@ package blockstore
 import (
 	"sync"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/database"
-	"github.com/HoosatNetwork/HTND/domain/consensus/database/serialization"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/lrucache"
-	"github.com/HoosatNetwork/HTND/util/staging"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/serialization"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
 )
 

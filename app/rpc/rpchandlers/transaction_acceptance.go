@@ -1,9 +1,9 @@
 package rpchandlers
 
 import (
-	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 )
 
 // maxChainBlocksSearchedForAcceptance bounds how far up the selected chain to look for the chain

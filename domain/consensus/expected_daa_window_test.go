@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 )
 
 // TestExpectedDAAWindowDurationFollowsActiveBlockVersion pins that the nearly-synced threshold is

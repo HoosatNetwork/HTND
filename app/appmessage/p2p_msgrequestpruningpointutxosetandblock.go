@@ -1,7 +1,7 @@
 package appmessage
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // MsgRequestPruningPointUTXOSet represents a hoosat RequestPruningPointUTXOSet message

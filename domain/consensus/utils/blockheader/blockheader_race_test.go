@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // TestBlockLevelConcurrentCalls guards the lazy block level cache against data

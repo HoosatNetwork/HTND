@@ -11,17 +11,17 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	pb2 "github.com/HoosatNetwork/HTND/infrastructure/network/dnsseed/pb"
-	"github.com/HoosatNetwork/HTND/util/random"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	pb2 "github.com/HoosatNetwork/HTND/v2/infrastructure/network/dnsseed/pb"
+	"github.com/HoosatNetwork/HTND/v2/util/random"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 const (

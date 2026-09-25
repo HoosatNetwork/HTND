@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pb2 "github.com/HoosatNetwork/HTND/infrastructure/network/dnsseed/pb"
+	pb2 "github.com/HoosatNetwork/HTND/v2/infrastructure/network/dnsseed/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

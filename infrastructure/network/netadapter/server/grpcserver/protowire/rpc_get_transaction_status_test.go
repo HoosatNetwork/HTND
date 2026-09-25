@@ -3,7 +3,7 @@ package protowire
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 )
 
 // TestTransactionStatusRoundTrips is the guard on the conversion that was a raw numeric cast between

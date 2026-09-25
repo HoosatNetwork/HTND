@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
 
 func usage() {

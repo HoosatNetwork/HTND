@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/HoosatNetwork/HTND/version"
+	"github.com/HoosatNetwork/HTND/v2/version"
 )
 
 func showVersion() {

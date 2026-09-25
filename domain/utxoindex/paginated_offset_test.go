@@ -3,11 +3,11 @@ package utxoindex
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/database/binaryserialization"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	consensusutxo "github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
-	"github.com/HoosatNetwork/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/binaryserialization"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	consensusutxo "github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 // TestPaginatedUTXOsOffset pins that offset counts the UTXOs to skip. Entries used to be collected only once the

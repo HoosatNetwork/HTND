@@ -4,9 +4,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/processes/ghostdagmanager"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/processes/ghostdagmanager"
 )
 
 // fakeGHOSTDAGDataStore serves canned GHOSTDAG data so a specific blue-work/blue-score arrangement

@@ -5,15 +5,15 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/HoosatNetwork/HTND/domain/consensusreference"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensusreference"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager/mempool"
-	"github.com/HoosatNetwork/HTND/domain/prefixmanager"
-	"github.com/HoosatNetwork/HTND/domain/prefixmanager/prefix"
-	infrastructuredatabase "github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
+	"github.com/HoosatNetwork/HTND/v2/domain/prefixmanager"
+	"github.com/HoosatNetwork/HTND/v2/domain/prefixmanager/prefix"
+	infrastructuredatabase "github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/pkg/errors"
 )
 

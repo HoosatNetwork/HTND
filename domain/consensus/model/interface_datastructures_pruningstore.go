@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // PruningStore represents a store for the current pruning state

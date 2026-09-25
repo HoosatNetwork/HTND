@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/os/limits"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/limits"
 )
 
 // Initialize initializes the execution environment required to run htnd

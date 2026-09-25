@@ -4,11 +4,11 @@ import (
 	"math"
 	"sort"
 
-	consensusexternalapi "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
-	"github.com/HoosatNetwork/HTND/util/random"
+	consensusexternalapi "github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
+	"github.com/HoosatNetwork/HTND/v2/util/random"
 )
 
 const (

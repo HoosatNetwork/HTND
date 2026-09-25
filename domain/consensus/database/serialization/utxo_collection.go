@@ -1,9 +1,9 @@
 package serialization
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/util/memory"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection, buffer *memory.Block[*DbUtxoCollectionItem]) ([]*DbUtxoCollectionItem, *memory.Block[*DbUtxoCollectionItem], error) {

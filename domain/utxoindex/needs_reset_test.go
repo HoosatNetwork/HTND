@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/database/binaryserialization"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	consensusutxo "github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/binaryserialization"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	consensusutxo "github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
 )
 
 // TestDroppedVirtualChangeSetForcesRebuild pins that an index which learns it missed a diff is

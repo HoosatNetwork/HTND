@@ -4,11 +4,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/rpcclient"
-	"github.com/HoosatNetwork/HTND/internal/ci"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/util/panics"
-	"github.com/HoosatNetwork/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/rpcclient"
+	"github.com/HoosatNetwork/HTND/v2/internal/ci"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 )
 
 const (

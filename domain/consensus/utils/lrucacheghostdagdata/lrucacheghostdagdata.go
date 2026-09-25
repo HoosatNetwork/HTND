@@ -1,7 +1,7 @@
 package lrucacheghostdagdata
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // lruKey identifies a cache entry (hash + trusted flag)

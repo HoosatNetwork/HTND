@@ -3,21 +3,21 @@ package server
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/serialization"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/keys"
-	"github.com/HoosatNetwork/HTND/util/txmass"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/v2/util/txmass"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
 )
 
 func TestEstimateMassAfterSignatures(t *testing.T) {

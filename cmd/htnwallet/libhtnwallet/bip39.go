@@ -3,8 +3,8 @@ package libhtnwallet
 import (
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet/bip32"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/bip32"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39"
 )

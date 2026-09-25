@@ -7,18 +7,18 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/app/rpc/rpchandlers"
-	"github.com/HoosatNetwork/HTND/domain/consensus"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/testapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/hashes"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
-	"github.com/HoosatNetwork/HTND/domain/miningmanager"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpchandlers"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/testapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashes"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 )
 
 type fakeDomain struct {

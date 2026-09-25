@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/pebble"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/pebble"
 )
 
 // TestNewLevelDBLeavesPebbleDirectoryIntact pins that opening a pebble datadir with the LevelDB engine is refused

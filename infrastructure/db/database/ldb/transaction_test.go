@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 func TestTransactionCloseErrors(t *testing.T) {

@@ -11,9 +11,9 @@ import (
 	runtimepprof "runtime/pprof"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 
-	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
 )
 
 // heapDumpFileName is the name of the heap dump file. We want every run to have its own

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server/grpcserver/protowire"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

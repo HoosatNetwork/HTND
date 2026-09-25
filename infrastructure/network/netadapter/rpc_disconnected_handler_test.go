@@ -3,7 +3,7 @@ package netadapter
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
 
 // TestRPCConnectedHandlerDoesNotClobberRouterInitializersDisconnectedHandler is part of the fix for

@@ -3,9 +3,9 @@ package dagtraversalmanager
 import (
 	"container/heap"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 func blockGHOSTDAGDataHashPairLess(left, right *externalapi.BlockGHOSTDAGDataHashPair, gm model.GHOSTDAGManager) bool {

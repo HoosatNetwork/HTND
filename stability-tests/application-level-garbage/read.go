@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
 	"github.com/pkg/errors"
 )
 

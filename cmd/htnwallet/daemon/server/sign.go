@@ -3,9 +3,9 @@ package server
 import (
 	"context"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 )
 
 func (s *server) Sign(_ context.Context, request *pb.SignRequest) (*pb.SignResponse, error) {

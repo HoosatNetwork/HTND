@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
 
 	"github.com/jessevdk/go-flags"
 )

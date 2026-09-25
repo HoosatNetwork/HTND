@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/common"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	"github.com/pkg/errors"
 )
 

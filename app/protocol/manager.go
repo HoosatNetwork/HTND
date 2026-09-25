@@ -5,20 +5,20 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/common"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/domain"
+	"github.com/HoosatNetwork/HTND/v2/domain"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 
-	"github.com/HoosatNetwork/HTND/app/protocol/flowcontext"
-	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/connmanager"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flowcontext"
+	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/connmanager"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
 )
 
 // Manager manages the p2p protocol

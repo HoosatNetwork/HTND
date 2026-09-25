@@ -1,6 +1,6 @@
 package model
 
-import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 
 // ReachabilityDataStore represents a store of ReachabilityData
 type ReachabilityDataStore interface {

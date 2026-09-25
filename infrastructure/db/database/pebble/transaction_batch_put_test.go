@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 // TestTransactionBatchPutIsVisibleInTransaction pins that values written with BatchPut are read back

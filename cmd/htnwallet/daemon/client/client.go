@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/server"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/server"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	pb "github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 )
 
 // Connect connects to htnwalletd with a 2-second timeout.

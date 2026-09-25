@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/util"
 )
 
 // TestMinRelayTxFeeIsValid pins that --minrelaytxfee must be positive. util.Amount is unsigned, so

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/client"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/keys"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/utils"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/client"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 	"github.com/pkg/errors"
 )
 

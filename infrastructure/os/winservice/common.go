@@ -1,6 +1,6 @@
 package winservice
 
-import "github.com/HoosatNetwork/HTND/infrastructure/config"
+import "github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 
 // ServiceDescription contains information about a service, needed to administer it
 type ServiceDescription struct {

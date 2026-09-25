@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/libhtnwallet"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 )
 

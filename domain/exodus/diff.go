@@ -1,7 +1,7 @@
 package exodus
 
 import (
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // EntryDiff describes a single outpoint whose UTXO entry differs between two sources, or is

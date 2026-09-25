@@ -3,8 +3,8 @@ package finalitystore
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/datastructures/testutils"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/datastructures/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 )
 
 func TestFinalityStoreRoundTrip(t *testing.T) {

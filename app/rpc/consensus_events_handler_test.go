@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/rpc/rpccontext"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 // TestWaitForConsensusEventsHandlerDrainsQueuedEvents pins that shutdown can wait for the consensus events handler to

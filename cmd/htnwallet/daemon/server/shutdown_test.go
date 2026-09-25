@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 )
 
 // TestShutdownTwice pins that a repeated Shutdown request is harmless. The handler closed the shutdown

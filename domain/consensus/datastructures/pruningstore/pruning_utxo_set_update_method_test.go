@@ -3,9 +3,9 @@ package pruningstore
 import (
 	"testing"
 
-	consensusdatabase "github.com/HoosatNetwork/HTND/domain/consensus/database"
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database/ldb"
+	consensusdatabase "github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
 )
 
 // TestPruningPointUTXOSetUpdateMethodBelongsToItsPruningPoint pins the contract interrupted pruning point UTXO set

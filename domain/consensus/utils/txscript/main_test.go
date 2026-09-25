@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
 
 func TestMain(m *testing.M) {

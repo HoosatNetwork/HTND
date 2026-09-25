@@ -3,10 +3,10 @@ package main
 import (
 	"time"
 
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
-	"github.com/HoosatNetwork/HTND/util/panics"
-	"github.com/HoosatNetwork/HTND/util/profiling"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 	"github.com/pkg/errors"
 )
 

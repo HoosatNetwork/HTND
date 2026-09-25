@@ -16,11 +16,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app"
-	"github.com/HoosatNetwork/HTND/infrastructure/autoupdate"
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
-	"github.com/HoosatNetwork/HTND/infrastructure/rlimit"
-	"github.com/HoosatNetwork/HTND/version"
+	"github.com/HoosatNetwork/HTND/v2/app"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/autoupdate"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/rlimit"
+	"github.com/HoosatNetwork/HTND/v2/version"
 )
 
 // defaultMemoryLimit is the soft memory limit htnd uses when GOMEMLIMIT is not set.

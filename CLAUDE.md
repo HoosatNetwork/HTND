@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-HTND is the Hoosat Network full node, written in Go (module `github.com/HoosatNetwork/HTND`). It is a fork of kaspad, which descends from btcd. It is a GHOSTDAG BlockDAG with Hoohash proof-of-work. Many identifiers, comments and patterns still follow kaspad upstream, so kaspad knowledge usually applies.
+HTND is the Hoosat Network full node, written in Go (module `github.com/HoosatNetwork/HTND/v2`). It is a fork of kaspad, which descends from btcd. It is a GHOSTDAG BlockDAG with Hoohash proof-of-work. Many identifiers, comments and patterns still follow kaspad upstream, so kaspad knowledge usually applies.
 
 ## Build, lint, test
 

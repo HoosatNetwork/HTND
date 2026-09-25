@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/client"
-	"github.com/HoosatNetwork/HTND/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/client"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/pkg/errors"
 )
 

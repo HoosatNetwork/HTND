@@ -5,13 +5,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server/grpcserver/protowire"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server/grpcserver/protowire"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server"
 	"google.golang.org/grpc"
 )
 

@@ -6,9 +6,9 @@ import (
 
 	"golang.org/x/crypto/blake2b"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 )
 
 func newMinimalTestTxWith(sigScript []byte, lockTime uint64, sequence uint64) *externalapi.DomainTransaction {

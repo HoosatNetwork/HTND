@@ -3,7 +3,7 @@ package blockrelay
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
 
 func TestIBDBatchSizeLessThanRouteCapacity(t *testing.T) {

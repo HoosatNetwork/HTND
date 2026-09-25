@@ -9,17 +9,17 @@ import (
 	"math"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensusreference"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensusreference"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/txscript"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 )
 

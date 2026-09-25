@@ -3,7 +3,7 @@ package pebble
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/db/database"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 // TestCloseClosesAllCursors pins that closing the database closes every cursor still open on it.

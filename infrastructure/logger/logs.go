@@ -39,7 +39,7 @@ import (
 	"runtime"
 	"sync/atomic"
 
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 )
 
 // Logger is a subsystem logger for a Backend.

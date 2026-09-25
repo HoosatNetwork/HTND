@@ -1,6 +1,6 @@
 package model
 
-import "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+import "github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 
 // BlockBuilder is responsible for creating blocks from the current state
 type BlockBuilder interface {

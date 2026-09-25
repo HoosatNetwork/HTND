@@ -1,17 +1,17 @@
 package v8
 
 import (
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/app/protocol/common"
-	"github.com/HoosatNetwork/HTND/app/protocol/flowcontext"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/addressexchange"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/blockrelay"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/ping"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/rejects"
-	"github.com/HoosatNetwork/HTND/app/protocol/flows/v8/transactionrelay"
-	peerpkg "github.com/HoosatNetwork/HTND/app/protocol/peer"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter"
-	routerpkg "github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flowcontext"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/addressexchange"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/blockrelay"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/ping"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/rejects"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/transactionrelay"
+	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
+	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
 
 type protocolManager interface {

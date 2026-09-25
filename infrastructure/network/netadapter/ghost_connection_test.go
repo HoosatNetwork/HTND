@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/router"
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server"
 )
 
 // disconnectableConnection behaves like a gRPC connection for the adapter's bookkeeping: Disconnect runs

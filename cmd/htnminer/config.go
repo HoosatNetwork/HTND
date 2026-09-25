@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 
-	"github.com/HoosatNetwork/HTND/version"
+	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/jessevdk/go-flags"
 )
 

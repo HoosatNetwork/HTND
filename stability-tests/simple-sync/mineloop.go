@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
-	"github.com/HoosatNetwork/HTND/util"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/kaspanet/go-secp256k1"
 	"github.com/pkg/errors"
 )

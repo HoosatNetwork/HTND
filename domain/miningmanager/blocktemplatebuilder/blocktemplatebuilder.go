@@ -4,19 +4,19 @@ import (
 	"math"
 	"sort"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/processes/coinbasemanager"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/merkle"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/transactionhelper"
-	"github.com/HoosatNetwork/HTND/domain/consensusreference"
-	"github.com/HoosatNetwork/HTND/util/mstime"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/processes/coinbasemanager"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/merkle"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionhelper"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensusreference"
+	"github.com/HoosatNetwork/HTND/v2/util/mstime"
 
-	"github.com/HoosatNetwork/HTND/util/difficulty"
+	"github.com/HoosatNetwork/HTND/v2/util/difficulty"
 
-	consensusexternalapi "github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/domain/consensus/utils/subnetworks"
-	miningmanagerapi "github.com/HoosatNetwork/HTND/domain/miningmanager/model"
+	consensusexternalapi "github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
+	miningmanagerapi "github.com/HoosatNetwork/HTND/v2/domain/miningmanager/model"
 	"github.com/pkg/errors"
 )
 

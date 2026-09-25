@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/domain/exodus"
-	"github.com/HoosatNetwork/HTND/version"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/exodus"
+	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/pkg/errors"
 )
 

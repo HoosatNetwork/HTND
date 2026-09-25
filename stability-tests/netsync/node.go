@@ -8,14 +8,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
-	"github.com/HoosatNetwork/HTND/stability-tests/common"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/mine"
-	"github.com/HoosatNetwork/HTND/stability-tests/common/rpc"
-	"github.com/HoosatNetwork/HTND/util"
-	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/mine"
+	"github.com/HoosatNetwork/HTND/v2/stability-tests/common/rpc"
+	"github.com/HoosatNetwork/HTND/v2/util"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
 	"github.com/pkg/errors"
 )
 

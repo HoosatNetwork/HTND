@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/addressmanager"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/addressmanager"
 )
 
 func TestAddressExchange(t *testing.T) {

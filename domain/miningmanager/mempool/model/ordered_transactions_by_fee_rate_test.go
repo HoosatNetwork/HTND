@@ -3,7 +3,7 @@ package model
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
 // feeRateTestTransaction builds a MempoolTransaction with a distinct ID (via its payload) and a fee

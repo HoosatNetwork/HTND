@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 )
 
 func TestNeedsMoreOutboundPeers(t *testing.T) {

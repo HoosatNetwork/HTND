@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/infrastructure/network/netadapter/server"
-	"github.com/HoosatNetwork/HTND/util/panics"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server"
+	"github.com/HoosatNetwork/HTND/v2/util/panics"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

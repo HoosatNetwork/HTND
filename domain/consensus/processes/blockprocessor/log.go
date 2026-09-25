@@ -1,7 +1,7 @@
 package blockprocessor
 
 import (
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
 
 var log = logger.RegisterSubSystem("BDAG")

@@ -3,8 +3,8 @@ package rpccontext
 import (
 	"testing"
 
-	"github.com/HoosatNetwork/HTND/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
 )
 
 // TestStopPropagatingLastUTXOsChangedAddress pins what removing addresses does to a UTXOsChanged

@@ -5,7 +5,7 @@
 package autoupdate
 
 import (
-	"github.com/HoosatNetwork/HTND/infrastructure/logger"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
 
 // log is the package logger for the autoupdate subsystem

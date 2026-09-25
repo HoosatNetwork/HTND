@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 )
 
 // AddressRandomize implements addressRandomizer interface
