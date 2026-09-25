@@ -19,6 +19,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+// wrapResolveVirtualError turns a ResolveVirtual failure into a protocol error that ends this IBD
+// attempt without banning the peer.
+//
+// It used to ban whenever the failure was a RuleError. ResolveVirtual only re-derives statuses and
+// UTXO state for blocks this node has already validated and stored; it receives nothing from the
+// peer. A rule error there is a verdict about this node's own recorded data - a disqualified chain, a
+// baseline it cannot reproduce - and the peer that happened to trigger the IBD round is no more at
+// fault than any other. Banning it burnt through honest peers one IBD round at a time, and a node
+// with a locally disqualified chain ended up with no peers to recover from.
 func wrapResolveVirtualError(err error) error {
 	if err == nil {
 		return nil
@@ -26,10 +35,14 @@ func wrapResolveVirtualError(err error) error {
 	if database.IsNotFoundError(err) {
 		return err
 	}
-	if errors.As(err, &ruleerrors.RuleError{}) {
-		return protocolerrors.Wrapf(true, err, "resolve virtual failed during IBD")
-	}
 	return protocolerrors.Wrapf(false, err, "resolve virtual failed during IBD")
+}
+
+// ibdTimeoutError is what an IBD round that ran past its deadline ends with. Not banning: the
+// deadline covers this node's own work as well as the peer's, including virtual resolution and the
+// status repair after it, which on a node with a long disqualified segment is the slow part.
+func ibdTimeoutError() error {
+	return protocolerrors.Errorf(false, "IBD timed out, nothing to worry, we will find another peer soon!")
 }
 
 // IBDContext is the interface for the context needed for the HandleIBD flow.
@@ -143,7 +156,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 		}
 	case <-time.After(timeout):
 		if !flow.Config().DisableIBDTimeout || timeout == 0 {
-			log.Warnf("IBD with peer %s timed out after %v, disconnecting and trying to ban the peer depending on --enablebanning setting", flow.peer, timeout)
+			log.Warnf("IBD with peer %s timed out after %v, disconnecting (not banning: the timeout covers this node's own work too)", flow.peer, timeout)
 			// Disconnect & Remove the peer from address manager to prevent immediate reconnection
 			if err := flow.logIBDFinished(false, protocolerrors.Errorf(false, "IBD timed out")); err != nil {
 				log.Warnf("logIBDFinished returned error: %v", err)
@@ -153,7 +166,7 @@ func (flow *handleIBDFlow) runIBDIfNotRunning(block *externalapi.DomainBlock) er
 				log.Warnf("Failed to remove address %s from address manager: %v", netAddress, err)
 			}
 			flow.peer.Connection().Disconnect()
-			return protocolerrors.Errorf(true, "IBD timed out, nothing to worry, we will find another peer soon!")
+			return ibdTimeoutError()
 		}
 	}
 

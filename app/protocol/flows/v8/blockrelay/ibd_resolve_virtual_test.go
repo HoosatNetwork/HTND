@@ -8,6 +8,9 @@ import (
 	"github.com/HoosatNetwork/HTND/domain/consensus/ruleerrors"
 )
 
+// A rule error out of ResolveVirtual is a verdict on blocks this node had already validated and
+// stored - its own statuses and UTXO state - not on anything the peer sent in this round, so it ends
+// the IBD round without a ban.
 func TestWrapResolveVirtualErrorRuleError(t *testing.T) {
 	err := wrapResolveVirtualError(ruleerrors.ErrBadMerkleRoot)
 
@@ -15,8 +18,8 @@ func TestWrapResolveVirtualErrorRuleError(t *testing.T) {
 	if !stderrors.As(err, &protocolErr) {
 		t.Fatalf("expected ProtocolError, got %T", err)
 	}
-	if !protocolErr.ShouldBan {
-		t.Fatalf("expected rule error to be bannable")
+	if protocolErr.ShouldBan {
+		t.Fatalf("expected a rule error from resolving local state not to ban the peer")
 	}
 }
 
