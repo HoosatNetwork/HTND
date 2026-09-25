@@ -238,6 +238,13 @@ func (p *Params) DifficultyAdjustmentWindowSizeForCurrentVersion() int {
 	return p.DifficultyAdjustmentWindowSize[currentBlockVersionIndexForSlice(len(p.DifficultyAdjustmentWindowSize))]
 }
 
+// DifficultyAdjustmentWindowSizeForBlockVersion returns the difficulty-adjustment window size of the
+// given block version, clamped the same way. Use it whenever a specific block is being judged: that
+// block's own version, not the process-global, decides which window applies to it.
+func (p *Params) DifficultyAdjustmentWindowSizeForBlockVersion(blockVersion uint16) int {
+	return p.DifficultyAdjustmentWindowSize[blockVersionIndexForSlice(len(p.DifficultyAdjustmentWindowSize), blockVersion)]
+}
+
 // MaxBlockMassForCurrentVersion returns the max block mass for the process-global block version,
 // safely clamped the same way as DifficultyAdjustmentWindowSizeForCurrentVersion - see its comment.
 func (p *Params) MaxBlockMassForCurrentVersion() uint64 {

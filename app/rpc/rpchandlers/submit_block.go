@@ -95,7 +95,10 @@ func checkedUint64FromInt(value int) (uint64, error) {
 
 // validatePoW checks if the Proof of Work is valid for the block
 func validatePoW(_ *rpccontext.Context, req *appmessage.SubmitBlockRequestMessage) error {
-	if constants.GetBlockVersion() < constants.PoWIntegrityMinVersion {
+	// The submitted block's own version (validateBlockVersion has already checked it against the
+	// block's DAA score), not the process-global, which depends on uptime and on what this node last
+	// saw or built.
+	if uint16(req.Block.Header.Version) < constants.PoWIntegrityMinVersion {
 		return nil
 	}
 
@@ -152,7 +155,11 @@ func validateDAAScore(context *rpccontext.Context, block *externalapi.DomainBloc
 		return fmt.Errorf("failed to get virtual DAA score: %w", err)
 	}
 
-	daaWindowSize, err := checkedUint64FromInt(context.Config.NetParams().DifficultyAdjustmentWindowSize[int(constants.GetBlockVersion())-1])
+	// The window of the submitted block's own version, clamped. Indexing the table with the
+	// process-global version judged the same block by a different window depending on uptime, and
+	// panicked once the global passed the table's end.
+	blockVersion := constants.BlockVersionForDAAScore(context.Config.ActiveNetParams.POWScores, block.Header.DAAScore())
+	daaWindowSize, err := checkedUint64FromInt(context.Config.NetParams().DifficultyAdjustmentWindowSizeForBlockVersion(blockVersion))
 	if err != nil {
 		return err
 	}
