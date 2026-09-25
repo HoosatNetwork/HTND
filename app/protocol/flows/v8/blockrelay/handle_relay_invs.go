@@ -307,7 +307,12 @@ func (flow *handleRelayInvsFlow) start() error {
 			flow.banConnection(false)
 		}
 		version := blockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, block.Header.DAAScore())
-		constants.SetBlockVersion(version)
+		// The process-global version is raised only once the block has been validated and inserted
+		// (below). Raising it here, from a header nothing had checked yet - not even its proof of
+		// work - let any peer ratchet this node's process state to whatever version a made-up DAA
+		// score maps to. No consensus rule reads the global any more (HTN-003), but the nearly-synced
+		// window, mempool expiry and the SubmitBlock gates still do, and the ratchet never goes back.
+		//
 		// Compare against this block's own correctly-computed version, not the ambient
 		// constants.GetBlockVersion() - SetBlockVersion is a one-way ratchet that never decreases,
 		// so once it's been bumped higher by anything else (this node building its own candidate
@@ -390,6 +395,8 @@ func (flow *handleRelayInvsFlow) start() error {
 				continue
 			}
 		}
+
+		constants.SetBlockVersion(version)
 
 		oldVirtualParents := hashset.New()
 		for _, parent := range oldVirtualInfo.ParentHashes {
