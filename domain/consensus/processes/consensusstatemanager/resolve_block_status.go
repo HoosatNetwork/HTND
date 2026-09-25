@@ -72,7 +72,16 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			stagingAreaForCurrentBlock = model.NewStagingArea()
 		}
 
+		inheritDisqualification := false
 		if selectedParentStatus == externalapi.StatusDisqualifiedFromChain {
+			ownVerdict, err := csm.childOfDisqualifiedParentGetsOwnVerdict(stagingAreaForCurrentBlock, unverifiedBlockHash)
+			if err != nil {
+				return 0, nil, err
+			}
+			inheritDisqualification = !ownVerdict
+		}
+
+		if inheritDisqualification {
 			blockStatus = externalapi.StatusDisqualifiedFromChain
 			if previousBlockUTXOSet == nil {
 				return 0, nil, errors.Errorf("missing selected parent past UTXO for disqualified block %s (selected parent %s)", unverifiedBlockHash, previousBlockHash)
@@ -158,6 +167,46 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 	}
 
 	return blockStatus, reversalData, nil
+}
+
+// childOfDisqualifiedParentGetsOwnVerdict reports whether blockHash, whose selected parent is
+// StatusDisqualifiedFromChain, must be verified on its own instead of inheriting the
+// disqualification.
+//
+// Inheritance is the right rule for a node whose UTXO baseline is verified: a block built on a
+// parent whose UTXO commitment this node recomputed and found wrong cannot be valid either, and
+// this node has no reason to doubt its own recomputation. It is the wrong rule for a node whose
+// pruning-point baseline is already known to be offset (pruningPointBaselineIsOffset). On such a
+// node no commitment can be reproduced, which is why verifyUTXO tolerates an inherited offset for
+// every block whose own acceptance data and UTXO diff agree. The inheritance branch never calls
+// verifyUTXO, so a single disqualification - one this node reached for reasons of its own, for
+// example before it had learnt that its baseline was offset, or because of a local diff-algebra
+// disagreement - disqualified every later block on that chain without a single one of them being
+// checked. Every new block extends the chain, so the node pins virtual below the network's tip and
+// never follows it again, while every node with a clean baseline accepts the same blocks.
+//
+// Only the baseline-level signal is consulted. The parent-level signal of
+// blockInheritsKnownUTXOCommitmentOffset (selected parent's multiset differs from its header) is
+// true for every parent disqualified for its commitment, so using it here would turn the rule off
+// on strict nodes too. The strict-commitment hard fork gate still applies. The child gets exactly
+// the checks any other block on this node gets - it is disqualified again if it fails anything that
+// is not tolerated, and the parent keeps its own status.
+func (csm *consensusStateManager) childOfDisqualifiedParentGetsOwnVerdict(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash,
+) (bool, error) {
+	if !csm.pruningPointBaselineIsOffset(stagingArea) {
+		return false, nil
+	}
+	strict, err := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
+	if err != nil {
+		return false, err
+	}
+	if strict {
+		return false, nil
+	}
+	log.Debugf("Block %s: selected parent is disqualified, but this node's UTXO baseline is offset, so the "+
+		"block is verified on its own instead of inheriting the disqualification", blockHash)
+	return true, nil
 }
 
 // selectedParentInfo returns the hash and status of the selectedParent of the last block in the unverifiedBlocks
