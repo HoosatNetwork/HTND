@@ -64,7 +64,7 @@ type miningManager struct {
 // Miners poll GetBlockTemplate many times a second; each build takes the consensus lock. Reusing
 // the template for 250ms, and rebuilding whenever a new block clears the cache, keeps that lock
 // off the polling path. A new block still invalidates the cache immediately through ClearBlockTemplate.
-const blockTemplateCacheMaxAge = 250 * time.Millisecond
+const blockTemplateCacheMaxAge = 100 * time.Millisecond
 
 // GetBlockTemplate obtains a block template for a miner to consume
 func (mm *miningManager) GetBlockTemplate(coinbaseData *externalapi.DomainCoinbaseData) (block *externalapi.DomainBlock, isNearlySynced bool, err error) {
