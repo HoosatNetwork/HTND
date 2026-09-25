@@ -152,7 +152,6 @@ func TestMultisetSkipsACoinTheSetAlreadyHeld(t *testing.T) {
 	}
 }
 
-
 // TestMultisetSkipsACoinHeldOnlyInTheBase covers the tip-child shape that ToAdd-only dedup missed.
 //
 // After an earlier chain block accepted a coinbase and became the selected tip, the coin sits in
