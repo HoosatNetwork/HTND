@@ -1311,3 +1311,14 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 	flow.peer.Connection().Disconnect()
 	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
 }
+
+
+func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
+	if flow.peer.IBDCoinSetForbidden() {
+		return false
+	}
+	if flow.Config().AllowIBDFromUnverifiedPeer {
+		return true
+	}
+	return flow.peer.UTXOBaselineAdvertised() == "ok"
+}

@@ -76,6 +76,8 @@ type Config struct {
 	IsArchival bool
 	// EnableSanityCheckPruningUTXOSet checks the full pruning point utxo set against the commitment at every pruning movement
 	EnableSanityCheckPruningUTXOSet bool
+	// RefuseMismatchedImportedPruningPointUTXOSet rejects an imported coin set that does not match the header.
+	RefuseMismatchedImportedPruningPointUTXOSet bool
 	// EnableUTXODebugDiagnostics runs the expensive [UTXO-DEBUG] startup self-consistency checks
 	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) - each pass can take
 	// 15-20+ minutes on a mature chain. Off by default; only for actively investigating a UTXO
@@ -383,7 +385,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		mergeDepthRootStore,
 		windowHeapSliceStore,
 		5000,
-		config.EnableSanityCheckPruningUTXOSet,
+		config.RefuseMismatchedImportedPruningPointUTXOSet,
 		config.POWScores)
 	if err != nil {
 		return nil, false, err
