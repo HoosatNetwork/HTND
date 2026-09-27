@@ -519,21 +519,25 @@ func (flow *handleIBDFlow) syncPruningPointUTXOSet(consensus externalapi.Consens
 	// }
 
 	if !flow.peerMaySupplyCoinSet() {
-		log.Warnf("Not fetching pruning-point coin set from peer %s (no clean-floor advertisement and this node already has a floor). Headers and bodies are unchanged.", flow.peer)
-		flow.peer.ForbidIBDCoinSet()
+		log.Warnf("Not fetching pruning-point coin set from peer %s (utxobase=%s empty=%v forbidden=%v)",
+			flow.peer, flow.peer.UTXOBaselineAdvertised(), flow.localFloorIsGenesis(), flow.peer.IBDCoinSetForbidden())
 		return false, nil
 	}
 	log.Info("Fetching the pruning point UTXO set")
 	isSuccessful, err := flow.fetchMissingUTXOSet(consensus, pruningPoint)
 	if err != nil {
 		log.Infof("An error occurred while fetching the pruning point UTXO set. Stopping IBD. (%s)", err)
-		flow.peer.ForbidIBDCoinSet()
+		if !flow.localFloorIsGenesis() {
+			flow.peer.ForbidIBDCoinSet()
+		}
 		return false, err
 	}
 
 	if !isSuccessful {
 		log.Infof("Couldn't successfully fetch the pruning point UTXO set. Stopping IBD.")
-		flow.peer.ForbidIBDCoinSet()
+		if !flow.localFloorIsGenesis() {
+			flow.peer.ForbidIBDCoinSet()
+		}
 		return false, nil
 	}
 

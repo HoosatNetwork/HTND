@@ -28,7 +28,7 @@ const shortCommitLength = 9
 // toolchain stamps into the binary at build time. The commit must be resolved at
 // build time: a running node generally has neither the source repository nor a
 // git binary available, so it cannot be looked up on startup.
-var appBuild = "8"
+var appBuild = "9"
 
 var version = "" // string used for memoization of version
 

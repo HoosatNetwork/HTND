@@ -1326,7 +1326,9 @@ func (flow *handleIBDFlow) localFloorIsGenesis() bool {
 }
 
 func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
-	if flow.peer.IBDCoinSetForbidden() {
+	// An empty node must keep retrying the coin set. Forbidding the only
+	// --connect peer after UnexpectedPruningPoint left fresh IBD dead.
+	if flow.peer.IBDCoinSetForbidden() && !flow.localFloorIsGenesis() {
 		return false
 	}
 	if flow.Config().AllowIBDFromUnverifiedPeer {
@@ -1335,6 +1337,5 @@ func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
 	if flow.peer.UTXOBaselineAdvertised() == "ok" {
 		return true
 	}
-	// First floor on an empty node: take the set even from stock 2.17.3.
 	return flow.localFloorIsGenesis()
 }
