@@ -68,6 +68,19 @@ type consensusStateManager struct {
 	// multi-minute full-scan on top of the failure itself.
 	expensiveDiagnosticRunsRemaining int
 
+	// lastInheritedDisqualification remembers the last block logged as inheriting a disqualification
+	// and the root it traced back to, so a block relayed on top of it finds the root in one step
+	// instead of re-walking the whole disqualified selected chain.
+	lastInheritedDisqualification struct {
+		block, root *externalapi.DomainHash
+	}
+
+	// onDisqualification, when set, is called with the reason every time ResolveBlockStatus
+	// disqualifies a block from the chain, whether by a failed verifyUTXO or by inheritance. It runs
+	// on the resolving goroutine under the consensus lock, before the status is committed. Nil in
+	// tests, which disqualify blocks on purpose.
+	onDisqualification func(blockHash *externalapi.DomainHash, reason string)
+
 	// toleratedIssuesLogged tracks which inherited-offset toleration points (keyed by a short step
 	// label) have already emitted their one warn line, so a full re-sync on top of an incomplete
 	// imported pruning-point UTXO set logs each kind of tolerated issue once at warn and the rest at
@@ -172,12 +185,14 @@ func New(
 	resolveBlockStatusCacheSize int,
 	refuseMismatchedImportedPruningPointUTXOSet bool,
 	powScores []uint64,
+	onDisqualification func(blockHash *externalapi.DomainHash, reason string),
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
-		powScores:         powScores,
-		maxBlockParents:   maxBlockParents,
-		mergeSetSizeLimit: mergeSetSizeLimit,
-		genesisHash:       genesisHash,
+		powScores:          powScores,
+		onDisqualification: onDisqualification,
+		maxBlockParents:    maxBlockParents,
+		mergeSetSizeLimit:  mergeSetSizeLimit,
+		genesisHash:        genesisHash,
 
 		databaseContext: databaseContext,
 

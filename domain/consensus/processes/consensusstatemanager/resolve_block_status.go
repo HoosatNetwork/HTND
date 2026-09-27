@@ -62,6 +62,10 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 	previousBlockUTXOSet := selectedParentUTXOSet
 	var oneBeforeLastResolvedBlockUTXOSet externalapi.UTXODiff
 	var oneBeforeLastResolvedBlockHash *externalapi.DomainHash
+	// rootDisqualifiedHere is the block this call itself disqualified by failing verifyUTXO (which
+	// logs why); inheritedCount is how many blocks the cascade branch disqualified after it.
+	var rootDisqualifiedHere *externalapi.DomainHash
+	inheritedCount := 0
 
 	for i, unverifiedBlockHash := range slices.Backward(unverifiedBlocks) {
 
@@ -111,14 +115,18 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			csm.stageDiff(stagingAreaForCurrentBlock, unverifiedBlockHash, utxoDiff, previousBlockHash)
 
 			previousBlockUTXOSet = pastUTXOSet
+			inheritedCount++
 		} else {
 			oneBeforeLastResolvedBlockUTXOSet = previousBlockUTXOSet
 			oneBeforeLastResolvedBlockHash = previousBlockHash
 
 			blockStatus, previousBlockUTXOSet, err = csm.resolveSingleBlockStatus(
-				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockHash, previousBlockUTXOSet, isResolveTip)
+				stagingAreaForCurrentBlock, unverifiedBlockHash, previousBlockHash, previousBlockUTXOSet, isResolveTip, true)
 			if err != nil {
 				return 0, nil, err
+			}
+			if blockStatus == externalapi.StatusDisqualifiedFromChain {
+				rootDisqualifiedHere = unverifiedBlockHash
 			}
 		}
 
@@ -134,6 +142,11 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 			}
 		}
 		previousBlockHash = unverifiedBlockHash
+	}
+
+	if inheritedCount > 0 {
+		csm.logInheritedDisqualification(stagingArea, blockHash, unverifiedBlocks, selectedParentHash,
+			rootDisqualifiedHere, inheritedCount)
 	}
 
 	var reversalData *model.UTXODiffReversalData
@@ -158,6 +171,79 @@ func (csm *consensusStateManager) ResolveBlockStatus(stagingArea *model.StagingA
 	}
 
 	return blockStatus, reversalData, nil
+}
+
+// logInheritedDisqualification explains why blockHash - the tip of a ResolveBlockStatus call whose
+// cascade branch disqualified it - is StatusDisqualifiedFromChain, and reports it to
+// onDisqualification. The cascade never runs verifyUTXO, so without this line the only trace is the
+// root's "UTXO verification for block ... failed" warning, possibly from a previous run. It logs once
+// per call rather than per cascaded block, since one IBD resolve chunk can cascade through thousands
+// of them.
+func (csm *consensusStateManager) logInheritedDisqualification(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash, unverifiedBlocks []*externalapi.DomainHash,
+	chainSelectedParent, rootDisqualifiedHere *externalapi.DomainHash, inheritedCount int,
+) {
+	tipSelectedParent := chainSelectedParent
+	if len(unverifiedBlocks) > 1 {
+		tipSelectedParent = unverifiedBlocks[1]
+	}
+
+	var reason string
+	if rootDisqualifiedHere != nil {
+		reason = fmt.Sprintf("its selected parent %s is disqualified. The root disqualification is block "+
+			"%s, which failed UTXO verification earlier in this resolution (%d blocks inherited it without "+
+			"their UTXO being verified)", tipSelectedParent, rootDisqualifiedHere, inheritedCount)
+		csm.lastInheritedDisqualification.block = blockHash
+		csm.lastInheritedDisqualification.root = rootDisqualifiedHere
+	} else if root, err := csm.findDisqualificationRoot(stagingArea, chainSelectedParent); err != nil {
+		reason = fmt.Sprintf("its selected parent %s is disqualified (%d blocks inherited it in this "+
+			"resolution without their UTXO being verified). Could not trace the root disqualification: %s",
+			tipSelectedParent, inheritedCount, err)
+	} else {
+		reason = fmt.Sprintf("its selected parent %s is disqualified (%d blocks inherited it in this "+
+			"resolution without their UTXO being verified). The root disqualification is block %s; look for "+
+			"\"UTXO verification for block %s failed\" for the reason",
+			tipSelectedParent, inheritedCount, root, root)
+		csm.lastInheritedDisqualification.block = blockHash
+		csm.lastInheritedDisqualification.root = root
+	}
+
+	log.Warnf("Block %s disqualified from chain: %s", blockHash, reason)
+	if csm.onDisqualification != nil {
+		csm.onDisqualification(blockHash, reason)
+	}
+}
+
+// findDisqualificationRoot walks down the selected chain from a StatusDisqualifiedFromChain block to
+// the first one whose selected parent is not disqualified, i.e. the block that failed verifyUTXO.
+func (csm *consensusStateManager) findDisqualificationRoot(stagingArea *model.StagingArea,
+	disqualifiedBlock *externalapi.DomainHash,
+) (*externalapi.DomainHash, error) {
+	const maxWalk = 100_000
+	current := disqualifiedBlock
+	for range maxWalk {
+		if current.Equal(csm.lastInheritedDisqualification.block) {
+			return csm.lastInheritedDisqualification.root, nil
+		}
+		ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, current, false)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get GHOSTDAG data of %s", current)
+		}
+		parent := ghostdagData.SelectedParent()
+		if parent == nil {
+			return current, nil
+		}
+		parentStatus, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, parent)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get status of %s", parent)
+		}
+		if parentStatus != externalapi.StatusDisqualifiedFromChain {
+			return current, nil
+		}
+		current = parent
+	}
+	return nil, errors.Errorf("root is more than %d selected-chain blocks below %s", maxWalk,
+		disqualifiedBlock)
 }
 
 // selectedParentInfo returns the hash and status of the selectedParent of the last block in the unverifiedBlocks
@@ -282,7 +368,8 @@ func (csm *consensusStateManager) ReproduceDisqualification(blockHash, selectedP
 			selectedParentHash)
 	}
 
-	status, _, err := csm.resolveSingleBlockStatus(stagingArea, blockHash, selectedParentHash, selectedParentPastUTXOSet, false)
+	status, _, err := csm.resolveSingleBlockStatus(stagingArea, blockHash, selectedParentHash, selectedParentPastUTXOSet, false,
+		false /* reportDisqualification: this root is already known */)
 	if err != nil {
 		return errors.Wrapf(err, "ReproduceDisqualification: resolveSingleBlockStatus failed for %s", blockHash)
 	}
@@ -291,7 +378,9 @@ func (csm *consensusStateManager) ReproduceDisqualification(blockHash, selectedP
 }
 
 func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.StagingArea,
-	blockHash, selectedParentHash *externalapi.DomainHash, selectedParentPastUTXOSet externalapi.UTXODiff, isResolveTip bool) (
+	blockHash, selectedParentHash *externalapi.DomainHash, selectedParentPastUTXOSet externalapi.UTXODiff, isResolveTip bool,
+	reportDisqualification bool,
+) (
 	externalapi.BlockStatus, externalapi.UTXODiff, error,
 ) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, fmt.Sprintf("resolveSingleBlockStatus for %s", blockHash))
@@ -341,7 +430,8 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		selectedParentPastUTXOSet, pastUTXOSet, acceptanceData, multiset)
 	if err != nil {
 		if errors.As(err, &ruleerrors.RuleError{}) {
-			log.Warnf("UTXO verification for block %s failed: %s", blockHash, err)
+			log.Warnf("UTXO verification for block %s failed: %s - disqualifying it from chain "+
+				"(verified against selected parent %s)", blockHash, err, selectedParentHash)
 
 			// Two independent self-consistency checks to localize the drift: does the STARTING
 			// point (selected parent's already-stored multiset) already disagree with its own
@@ -399,6 +489,12 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 					blockHash, selectedParentHash, blockHash)
 			}
 			csm.stageDiff(stagingArea, blockHash, utxoDiff, selectedParentHash)
+			// Reported last, so the survey and diagnostics above are already in the log if the
+			// callback stops the node.
+			if reportDisqualification && csm.onDisqualification != nil {
+				csm.onDisqualification(blockHash, fmt.Sprintf("UTXO verification against selected parent "+
+					"%s failed: %s", selectedParentHash, err))
+			}
 			// Even for disqualified blocks, return the calculated past UTXO so the
 			// next block in the chain can use it when resolving a chain of
 			// disqualified statuses.

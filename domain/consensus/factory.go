@@ -127,6 +127,10 @@ type Config struct {
 	// OnDisqualifiedBlockStreak is called once, under the consensus lock, when the streak reaches
 	// MaxConsecutiveDisqualifiedBlocks. It must not block or call back into consensus.
 	OnDisqualifiedBlockStreak func(streak int, lastBlock *externalapi.DomainHash)
+	// OnDisqualification is called, under the consensus lock and before the status is committed,
+	// every time a block is disqualified from the chain - by failing UTXO verification itself or by
+	// inheriting its selected parent's disqualification - with a human-readable reason. Nil disables it.
+	OnDisqualification func(blockHash *externalapi.DomainHash, reason string)
 }
 
 // Factory instantiates new Consensuses
@@ -384,7 +388,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		windowHeapSliceStore,
 		5000,
 		config.EnableSanityCheckPruningUTXOSet,
-		config.POWScores)
+		config.POWScores,
+		config.OnDisqualification)
 	if err != nil {
 		return nil, false, err
 	}

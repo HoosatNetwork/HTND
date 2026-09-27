@@ -109,7 +109,9 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 			return false
 		}
 		if firstError == nil {
-			firstError = err
+			// Named after the check, because the underlying errors don't all say which one they
+			// came from, and this is what the disqualification warning prints as the reason.
+			firstError = errors.Wrapf(err, "%s check failed", step)
 		}
 		// The survey runs the remaining checks so that one record describes the whole block. That is
 		// only worth doing for consensus failures: a non-RuleError is a database or programming fault,
@@ -291,7 +293,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 				// stored as UTXO-valid, and a transient local fault became a durable status difference.
 				mu.Lock()
 				if firstErr == nil {
-					firstErr = err
+					firstErr = errors.Wrapf(err, "transaction %s", transactionID)
 					close(done) // Signal others to stop
 				}
 				mu.Unlock()
@@ -314,7 +316,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 				}
 				mu.Lock()
 				if firstErr == nil {
-					firstErr = err
+					firstErr = errors.Wrapf(err, "transaction %s", transactionID)
 					close(done)
 				}
 				mu.Unlock()
@@ -339,7 +341,7 @@ func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalap
 	if !block.Header.AcceptedIDMerkleRoot().Equal(calculatedAcceptedIDMerkleRoot) {
 		return errors.Wrapf(ruleerrors.ErrBadMerkleRoot, "block %s accepted ID merkle root is invalid - block "+
 			"header indicates %s, but calculated value is %s",
-			blockHash, block.Header.UTXOCommitment(), calculatedAcceptedIDMerkleRoot)
+			blockHash, block.Header.AcceptedIDMerkleRoot(), calculatedAcceptedIDMerkleRoot)
 	}
 
 	return nil

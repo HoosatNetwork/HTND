@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 )
@@ -30,4 +32,17 @@ func stopNodeOnDisqualifiedBlockStreak(streak int, lastBlock *externalapi.Domain
 	spawn("stopNodeOnDisqualifiedBlockStreak", func() {
 		signal.ShutdownRequestChannel <- struct{}{}
 	})
+}
+
+// panicOnDisqualification stops the node with a stack trace the moment any block is disqualified from
+// the chain, whether it failed UTXO verification itself or inherited its selected parent's
+// disqualification. It panics on the resolving goroutine, under the consensus lock and before the
+// status is committed, so the trace shows the exact resolution path; panics.HandlePanic logs it and
+// exits.
+//
+// This deliberately trades availability for visibility: a single invalid block relayed by any peer
+// stops the node, and because the disqualification is never committed, the same block stops it
+// again after a restart until it is investigated.
+func panicOnDisqualification(blockHash *externalapi.DomainHash, reason string) {
+	panic(fmt.Sprintf("block %s disqualified from chain: %s", blockHash, reason))
 }
