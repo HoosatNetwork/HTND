@@ -166,6 +166,21 @@ func testReorg(cfg *configFlags) {
 	if !newVirtualSelectedParent.Equal(sideChainTipHash) {
 		fail("No reorg happened")
 	}
+
+	// The honest node must reach the attacker's own UTXO history for every side-chain block, not just
+	// reorg onto it: a failing UTXO commitment is tolerated until the strict commitment fork, so a
+	// reorg alone no longer proves the two nodes agree.
+	for i, block := range sideChain {
+		blockHash := consensushashing.BlockHash(block)
+		multiset, err := tc.MultisetStore().Get(tc.DatabaseContext(), stagingArea, blockHash)
+		if err != nil {
+			panic(err)
+		}
+		if !multiset.Hash().Equal(block.Header.UTXOCommitment()) {
+			fail("Side chain block %d (%s) resolved to UTXO commitment %s on the honest node, "+
+				"but the attacker committed %s", i, blockHash, multiset.Hash(), block.Header.UTXOCommitment())
+		}
+	}
 }
 
 func fail(format string, args ...any) {

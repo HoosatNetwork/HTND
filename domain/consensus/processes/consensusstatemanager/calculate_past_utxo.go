@@ -137,15 +137,16 @@ func (csm *consensusStateManager) restorePastUTXO(
 		return utxo.NewUTXODiff(), nil
 	}
 
-	if blockHash.Equal(csm.genesisHash) || blockHash.Equal(model.VirtualGenesisBlockHash) {
-		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, csm.genesisHash)
-		if err != nil {
-			if database.IsNotFoundError(err) {
-				return utxo.NewUTXODiff(), nil
-			}
-			return nil, err
-		}
-		return utxoDiff, nil
+	// VirtualGenesis is only a marker with no diff of its own; its past is genesis's. Genesis is then
+	// walked like any other block. Its stored diff is relative to its diff child, not to virtual, so
+	// returning that one hop - as this used to - hands a block whose selected parent is genesis a
+	// "past" that still holds nearly all of virtual's UTXO set whenever virtual is on another chain
+	// from genesis. The multiset then treats that chain's coinbases as already held and skips them,
+	// and the node commits a different UTXO history from the miner of that chain (the reorg
+	// stability test's attacker chain). With no genesis diff, or a pruned diff child, the walk stops
+	// at the missing diff exactly as the shortcut did.
+	if blockHash.Equal(model.VirtualGenesisBlockHash) {
+		blockHash = csm.genesisHash
 	}
 
 	log.Debugf("restorePastUTXO start for block %s", blockHash)
@@ -161,11 +162,6 @@ func (csm *consensusStateManager) restorePastUTXO(
 	var utxoDiffHashes []*externalapi.DomainHash
 	nextBlockHash := blockHash
 	for {
-		if nextBlockHash.Equal(model.VirtualGenesisBlockHash) || nextBlockHash.Equal(csm.genesisHash) {
-			log.Debugf("Block is genesis, treating as end of UTXO-diff chain for block %s", blockHash)
-			break
-		}
-
 		utxoDiff, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, nextBlockHash)
 		if err != nil {
 			if database.IsNotFoundError(err) {
