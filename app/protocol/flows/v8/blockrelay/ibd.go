@@ -1312,7 +1312,6 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
 }
 
-
 func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
 	if flow.peer.IBDCoinSetForbidden() {
 		return false
