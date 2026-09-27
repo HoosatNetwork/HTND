@@ -1313,6 +1313,18 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 }
 
 
+func (flow *handleIBDFlow) localFloorIsGenesis() bool {
+	pp, err := flow.Domain().Consensus().PruningPoint()
+	if err != nil || pp == nil {
+		return true
+	}
+	if flow.Config() != nil && flow.Config().ActiveNetParams != nil &&
+		pp.Equal(flow.Config().ActiveNetParams.GenesisHash) {
+		return true
+	}
+	return false
+}
+
 func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
 	if flow.peer.IBDCoinSetForbidden() {
 		return false
@@ -1320,5 +1332,9 @@ func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
 	if flow.Config().AllowIBDFromUnverifiedPeer {
 		return true
 	}
-	return flow.peer.UTXOBaselineAdvertised() == "ok"
+	if flow.peer.UTXOBaselineAdvertised() == "ok" {
+		return true
+	}
+	// First floor on an empty node: take the set even from stock 2.17.3.
+	return flow.localFloorIsGenesis()
 }
