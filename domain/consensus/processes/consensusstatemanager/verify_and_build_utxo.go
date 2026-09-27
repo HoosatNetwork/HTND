@@ -41,8 +41,8 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 
 	// HTN-002/HTN-004, gated at hardforks.StrictUTXOCommitmentVersion: from that block version
-	// onward the toleration above stops applying, and these four checks fail closed as they were
-	// always meant to.
+	// onward the toleration above - and the miner's-view toleration below - stop applying, and these
+	// four checks fail closed as they were always meant to.
 	//
 	// The gate is unscheduled, so this is inert for every block version any network can produce
 	// today - see the hardforks package. It must stay that way until a coordinated rebaseline:
@@ -53,14 +53,35 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// the block's own header version field, which is peer-supplied: this gate adds strictness, so
 	// keying it on a field the miner chooses would let any miner opt out by claiming an older
 	// version.
-	if tolerate {
-		strict, err := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
-		if err != nil {
-			return err
-		}
-		if strict {
-			tolerate = false
-		}
+	strict, err := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
+	if err != nil {
+		return err
+	}
+	if strict {
+		tolerate = false
+	}
+
+	// The UTXO commitment and the accepted-ID merkle root are tolerated on every node until the strict
+	// gate, not only on one whose baseline is offset. Mainnet mining nodes do not share one UTXO
+	// history: each commits the multiset of its own, and every node accepts that because the offset
+	// toleration above is on. Measured on a 93k-block retained chain, every block templated by some
+	// mining nodes carries a commitment that differs from what the rest compute, while the very next
+	// block, templated elsewhere, reproduces its header from the rest's value - so the network builds
+	// on one history and simply ignores these two fields.
+	//
+	// Keying their enforcement on the baseline check made it depend on which node happened to mine the
+	// pruning point: that check compares the pruning point's stored multiset against the pruning
+	// point's own header. When a pruning point templated by a node of this node's history came
+	// around, the baseline read as verified, enforcement switched on, and the next block from any
+	// other history was disqualified - a split on this node's side, triggered by nothing it did.
+	//
+	// These two fields only report the miner's view. This node's UTXO set comes from its own
+	// acceptance data either way, so tolerating them moves no value. The coinbase amount and the
+	// block's transactions do move value; they stay on the baseline toleration above, as does the
+	// missing-input acceptance in calculatePastUTXOAndAcceptanceData, which would change this node's
+	// own history if widened.
+	isMinersViewField := func(step string) bool {
+		return step == "utxo-commitment" || step == "accepted-id-merkle-root"
 	}
 
 	// firstError is what the caller sees: the first failure that was not tolerated, exactly as
@@ -90,8 +111,8 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 				return csm.virtualUTXOEntry(stagingArea, outpoint)
 			})
 		if !carriesOffsetOnly {
-			log.Warnf("Block %s: NOT tolerating its failures despite this node's offset baseline - %s. "+
-				"An incomplete pruning-point UTXO set explains a commitment that cannot be reproduced; "+
+			log.Warnf("Block %s: NOT tolerating its failures - %s. An incomplete pruning-point UTXO set, "+
+				"or a miner on a different UTXO history, explains a commitment that cannot be reproduced; "+
 				"it does not explain a block whose own acceptance data and UTXO diff disagree.",
 				blockHash, arithmeticProblem)
 		}
@@ -104,9 +125,15 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 			return false
 		}
 		survey.noteFailure(step, err)
-		if tolerate && errors.As(err, &ruleerrors.RuleError{}) && blockCarriesOffsetOnly() {
-			csm.logToleratedIssue(step, blockHash, err)
-			return false
+		if errors.As(err, &ruleerrors.RuleError{}) {
+			if tolerate && blockCarriesOffsetOnly() {
+				csm.logToleratedIssue(step, blockHash, err)
+				return false
+			}
+			if !strict && isMinersViewField(step) && blockCarriesOffsetOnly() {
+				csm.logMinersViewTolerated(step, blockHash, err)
+				return false
+			}
 		}
 		if firstError == nil {
 			// Named after the check, because the underlying errors don't all say which one they
@@ -161,6 +188,21 @@ func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *exte
 	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The chain is built on an incomplete "+
 		"imported pruning-point UTXO set, so this cannot be verified locally and the block is not being "+
 		"fully validated. Further %s tolerations are logged at debug level.", blockHash, step, err, step)
+}
+
+// logMinersViewTolerated is logToleratedIssue for a UTXO commitment or accepted-ID merkle root
+// tolerated on a node whose baseline is not offset: the header reports the miner's UTXO history,
+// which differs from this node's. It shares logToleratedIssue's once-per-step warn, under its own
+// keys, so the two reasons are each reported once.
+func (csm *consensusStateManager) logMinersViewTolerated(step string, blockHash *externalapi.DomainHash, err error) {
+	if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore("miners-view:"+step, struct{}{}); alreadyLogged {
+		log.Debugf("Block %s: tolerated %s mismatch from a miner on a different UTXO history: %s", blockHash, step, err)
+		return
+	}
+	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The header reports its miner's UTXO "+
+		"history, which differs from this node's; mainnet mining nodes do not share one, so this field is "+
+		"not enforced until the strict UTXO commitment fork. This node's UTXO set is unaffected. Further %s "+
+		"tolerations of this kind are logged at debug level.", blockHash, step, err, step)
 }
 
 // validateBlockTransactionsAgainstPastUTXO validates every non-coinbase transaction in the block
