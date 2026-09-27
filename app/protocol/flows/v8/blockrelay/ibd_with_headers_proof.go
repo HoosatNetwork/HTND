@@ -16,6 +16,10 @@ import (
 func (flow *handleIBDFlow) ibdWithHeadersProof(
 	syncerHeaderSelectedTipHash, relayBlockHash *externalapi.DomainHash, highBlockDAAScore uint64,
 ) error {
+	if !flow.peerMaySupplyCoinSet() {
+		log.Warnf("Skipping coin-set download from peer %s (no clean-floor advertisement). Ordinary header and block catch-up is unchanged.", flow.peer)
+		return nil
+	}
 	flow.updateBlockVersionFromDAAScore(highBlockDAAScore)
 	err := flow.Domain().InitStagingConsensusWithoutGenesis()
 	if err != nil {
@@ -522,11 +526,13 @@ func (flow *handleIBDFlow) syncPruningPointUTXOSet(consensus externalapi.Consens
 	isSuccessful, err := flow.fetchMissingUTXOSet(consensus, pruningPoint)
 	if err != nil {
 		log.Infof("An error occurred while fetching the pruning point UTXO set. Stopping IBD. (%s)", err)
+		flow.peer.ForbidIBDCoinSet()
 		return false, err
 	}
 
 	if !isSuccessful {
 		log.Infof("Couldn't successfully fetch the pruning point UTXO set. Stopping IBD.")
+		flow.peer.ForbidIBDCoinSet()
 		return false, nil
 	}
 

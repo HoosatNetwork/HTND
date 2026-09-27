@@ -12,6 +12,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
@@ -19,6 +20,7 @@ import (
 // HandleRequestPruningPointUTXOSetContext is the interface for the context needed for the HandleRequestPruningPointUTXOSet flow.
 type HandleRequestPruningPointUTXOSetContext interface {
 	Domain() domain.Domain
+	Config() *config.Config
 }
 
 type handleRequestPruningPointUTXOSetFlow struct {
@@ -84,6 +86,17 @@ func (flow *handleRequestPruningPointUTXOSetFlow) waitForRequestPruningPointUTXO
 func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
 ) error {
+	if cfg := flow.Config(); cfg == nil || !cfg.AllowMismatchedPruningUTXO {
+		health, healthErr := flow.Domain().Consensus().UTXOSetHealth()
+		if healthErr != nil {
+			return protocolerrors.Wrapf(false, healthErr, "refusing to send pruning-point coin set: health unreadable")
+		}
+		if health == nil || !health.BaselineVerified {
+			log.Warnf("Refusing to send pruning-point coin set: local floor is not clean")
+			return protocolerrors.Errorf(false, "this node will not send a pruning-point coin set that does not match its header")
+		}
+	}
+
 	ibdBatchSize := getIBDBatchSize()
 	// Send the UTXO set in `step`-sized chunks
 	const step = 1000
