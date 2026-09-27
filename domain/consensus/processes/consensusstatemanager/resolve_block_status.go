@@ -210,7 +210,13 @@ func (csm *consensusStateManager) logInheritedDisqualification(stagingArea *mode
 
 	log.Warnf("Block %s disqualified from chain: %s", blockHash, reason)
 	if csm.onDisqualification != nil {
-		csm.onDisqualification(blockHash, reason)
+		details := fmt.Sprintf("\n  block %s", csm.describeChainBlock(stagingArea, blockHash)) +
+			fmt.Sprintf("\n  selected parent %s", csm.describeChainBlock(stagingArea, tipSelectedParent))
+		if root := csm.lastInheritedDisqualification.root; root != nil &&
+			csm.lastInheritedDisqualification.block.Equal(blockHash) {
+			details += fmt.Sprintf("\n  root disqualification %s", csm.describeChainBlock(stagingArea, root))
+		}
+		csm.onDisqualification(blockHash, reason+details)
 	}
 }
 
@@ -493,7 +499,8 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 			// callback stops the node.
 			if reportDisqualification && csm.onDisqualification != nil {
 				csm.onDisqualification(blockHash, fmt.Sprintf("UTXO verification against selected parent "+
-					"%s failed: %s", selectedParentHash, err))
+					"%s failed: %s%s", selectedParentHash, err, csm.disqualificationReport(stagingArea, block,
+					blockHash, selectedParentHash, pastUTXOSet, acceptanceData, multiset)))
 			}
 			// Even for disqualified blocks, return the calculated past UTXO so the
 			// next block in the chain can use it when resolving a chain of
