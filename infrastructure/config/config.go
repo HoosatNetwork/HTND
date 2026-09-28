@@ -166,10 +166,6 @@ type Flags struct {
 	EnableAutoExodusExportOnPruning bool          `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
 	AutoExodusExportDir             string        `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
-	ShutdownOnDisqualifiedStreak    bool          `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified chains."`
-	AllowMismatchedPruningUTXO      bool          `long:"allow-mismatched-pruning-utxo" description:"Allow importing and serving a pruning-point coin set that does not match the block header."`
-	AllowIBDFromUnverifiedPeer      bool          `long:"allow-ibd-from-unverified-peer" description:"Allow coin-set download from a peer that did not advertise a clean floor."`
-	CoreNode                        bool          `long:"core-node" description:"Kept for old scripts. Does not isolate the node."`
 
 	// Compound transaction rate limiting flags
 	MaxCompoundTxPerMinute    uint64 `long:"max-compound-tx-per-minute" description:"Maximum compound transactions per address per minute" default:"10"`

@@ -12,7 +12,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
@@ -20,7 +19,6 @@ import (
 // HandleRequestPruningPointUTXOSetContext is the interface for the context needed for the HandleRequestPruningPointUTXOSet flow.
 type HandleRequestPruningPointUTXOSetContext interface {
 	Domain() domain.Domain
-	Config() *config.Config
 }
 
 type handleRequestPruningPointUTXOSetFlow struct {
@@ -86,7 +84,6 @@ func (flow *handleRequestPruningPointUTXOSetFlow) waitForRequestPruningPointUTXO
 func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
 ) error {
-
 	ibdBatchSize := getIBDBatchSize()
 	// Send the UTXO set in `step`-sized chunks
 	const step = 1000

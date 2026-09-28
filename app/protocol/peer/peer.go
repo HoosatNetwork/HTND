@@ -33,9 +33,6 @@ type Peer struct {
 	lastPingDuration time.Duration // Time for last ping to return
 
 	ibdRequestChannel chan *externalapi.DomainBlock // A channel used to communicate IBD requests between flows
-
-	utxoBaselineAdvertised string
-	ibdForbidden           bool
 }
 
 // New returns a new Peer
@@ -112,31 +109,7 @@ func (p *Peer) UpdateFieldsFromMsgVersion(msg *appmessage.MsgVersion, maxProtoco
 	p.subnetworkID = msg.SubnetworkID
 
 	p.timeOffset = mstime.Since(msg.Timestamp)
-	p.utxoBaselineAdvertised = ParseUTXOBaselineToken(msg.UserAgent)
 }
-
-func ParseUTXOBaselineToken(userAgent string) string {
-	if containsToken(userAgent, "/utxobase:ok/") {
-		return "ok"
-	}
-	if containsToken(userAgent, "/utxobase:bad/") {
-		return "bad"
-	}
-	return "unknown"
-}
-
-func containsToken(s, token string) bool {
-	for i := 0; i+len(token) <= len(s); i++ {
-		if s[i:i+len(token)] == token {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *Peer) UTXOBaselineAdvertised() string { return p.utxoBaselineAdvertised }
-func (p *Peer) ForbidIBDCoinSet()              { p.ibdForbidden = true }
-func (p *Peer) IBDCoinSetForbidden() bool      { return p.ibdForbidden }
 
 // SetPingPending sets the ping state of the peer to 'pending'
 func (p *Peer) SetPingPending(nonce uint64) {
