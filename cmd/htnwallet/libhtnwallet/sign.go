@@ -131,7 +131,7 @@ func sign(params *dagconfig.Params, mnemonic string, partiallySignedTransaction 
 				mldsa44BIP39SeedCache = mldsa44BIP39Seed(mnemonic)
 			}
 			signMLDSA44 := signMLDSA44Input
-			if partiallySignedInput.RedeemScript != nil {
+			if partiallySignedInput.RedeemScript != nil && txscript.IsMultiSigMLDSA44RedeemScript(partiallySignedInput.RedeemScript) {
 				signMLDSA44 = signMLDSA44MultiSigInput
 			}
 			inputSigned, err := signMLDSA44(params, mldsa44BIP39SeedCache, partiallySignedTransaction, i, sighashReusedValues)
@@ -174,9 +174,10 @@ func sign(params *dagconfig.Params, mnemonic string, partiallySignedTransaction 
 	return signed, nil
 }
 
-// signMLDSA44Input signs input idx, which spends an ML-DSA-44 P2PKH output, if this mnemonic owns it.
-// It reports false, without error, when the key at the input's derivation path does not hash to the
-// output's public key hash - the input belongs to another mnemonic.
+// signMLDSA44Input signs input idx, which spends a single-sig ML-DSA-44 output - P2PKH, or P2SH of the
+// P2PKH script - if this mnemonic owns it. It reports false, without error, when the key at the
+// input's derivation path is not the one the output is locked to - the input belongs to another
+// mnemonic.
 func signMLDSA44Input(params *dagconfig.Params, bip39Seed []byte, partiallySignedTransaction *serialization.PartiallySignedTransaction, idx int,
 	sighashReusedValues *consensushashing.SighashReusedValues,
 ) (bool, error) {
@@ -192,16 +193,11 @@ func signMLDSA44Input(params *dagconfig.Params, bip39Seed []byte, partiallySigne
 	}
 	publicKeyBytes := publicKey.Bytes()
 
-	scriptPublicKey := partiallySignedInput.PrevOutput.ScriptPublicKey
-	_, address, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, params)
+	owned, err := mldsa44SingleSigInputIsLockedTo(params, partiallySignedInput, publicKeyBytes)
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "input %d", idx)
 	}
-	mldsa44Address, ok := address.(*util.AddressPublicKeyHashMLDSA44)
-	if !ok {
-		return false, errors.Errorf("input %d: expected an ML-DSA-44 address, got %T", idx, address)
-	}
-	if !bytes.Equal(mldsa44Address.ScriptAddress(), util.HashBlake2b(publicKeyBytes)) {
+	if !owned {
 		return false, nil
 	}
 
@@ -214,13 +210,47 @@ func signMLDSA44Input(params *dagconfig.Params, bip39Seed []byte, partiallySigne
 	return true, nil
 }
 
-// IsMLDSA44Input reports whether input spends an ML-DSA-44 output: a single-sig ML-DSA-44 P2PKH, or an
-// ML-DSA-44 multisig P2SH, which the input marks by carrying its redeem script.
-func IsMLDSA44Input(input *serialization.PartiallySignedInput) bool {
+// mldsa44SingleSigInputIsLockedTo reports whether input's output is locked to publicKey, in whichever
+// single-sig ML-DSA-44 form it takes.
+func mldsa44SingleSigInputIsLockedTo(params *dagconfig.Params, input *serialization.PartiallySignedInput, publicKey []byte) (bool, error) {
+	lockingScript := input.PrevOutput.ScriptPublicKey
 	if input.RedeemScript != nil {
-		return txscript.IsMultiSigMLDSA44RedeemScript(input.RedeemScript)
+		// The redeem script travels with the unsigned transaction, so check it is the one the output
+		// commits to before trusting the key hash in it.
+		p2sh, err := txscript.PayToScriptHashScript(input.RedeemScript)
+		if err != nil {
+			return false, err
+		}
+		if !bytes.Equal(p2sh, lockingScript.Script) {
+			return false, errors.New("the redeem script does not match the output it spends")
+		}
+		lockingScript = &externalapi.ScriptPublicKey{Script: input.RedeemScript, Version: lockingScript.Version}
 	}
-	return txscript.GetScriptClass(input.PrevOutput.ScriptPublicKey.Script) == txscript.PubKeyHashMLDSA44Ty
+
+	_, address, err := txscript.ExtractScriptPubKeyAddress(lockingScript, params)
+	if err != nil {
+		return false, err
+	}
+	mldsa44Address, ok := address.(*util.AddressPublicKeyHashMLDSA44)
+	if !ok {
+		return false, errors.Errorf("expected an ML-DSA-44 address, got %T", address)
+	}
+	return bytes.Equal(mldsa44Address.ScriptAddress(), util.HashBlake2b(publicKey)), nil
+}
+
+// IsMLDSA44Input reports whether input spends an ML-DSA-44 output: a single-sig ML-DSA-44 P2PKH, or a
+// P2SH - single-sig or multisig - which the input marks by carrying its redeem script.
+func IsMLDSA44Input(input *serialization.PartiallySignedInput) bool {
+	return IsMLDSA44Coin(input.PrevOutput.ScriptPublicKey.Script, input.RedeemScript)
+}
+
+// IsMLDSA44Coin reports whether a coin locked by scriptPublicKey, spent with redeemScript (nil unless
+// it is ML-DSA-44 P2SH), is an ML-DSA-44 coin in any form.
+func IsMLDSA44Coin(scriptPublicKey []byte, redeemScript []byte) bool {
+	if redeemScript != nil {
+		return txscript.IsMultiSigMLDSA44RedeemScript(redeemScript) || isMLDSA44SingleSigRedeemScript(redeemScript)
+	}
+	return txscript.GetScriptClass(scriptPublicKey) == txscript.PubKeyHashMLDSA44Ty
 }
 
 // signMLDSA44MultiSigInput signs input idx, which spends an ML-DSA-44 multisig P2SH output, in the slot

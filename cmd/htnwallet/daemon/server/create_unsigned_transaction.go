@@ -11,7 +11,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
@@ -564,10 +563,8 @@ func allInputsAreMLDSA44(selectedUTXOs []*libhtnwallet.UTXO) bool {
 		return false
 	}
 	for _, selectedUTXO := range selectedUTXOs {
-		// A multisig coin's P2SH output does not say what is behind it; the carried redeem script does.
-		isMLDSA44MultiSig := selectedUTXO.RedeemScript != nil && txscript.IsMultiSigMLDSA44RedeemScript(selectedUTXO.RedeemScript)
-		isMLDSA44 := txscript.GetScriptClass(selectedUTXO.UTXOEntry.ScriptPublicKey().Script) == txscript.PubKeyHashMLDSA44Ty
-		if !isMLDSA44MultiSig && !isMLDSA44 {
+		// A P2SH output does not say what is behind it; the carried redeem script does.
+		if !libhtnwallet.IsMLDSA44Coin(selectedUTXO.UTXOEntry.ScriptPublicKey().Script, selectedUTXO.RedeemScript) {
 			return false
 		}
 	}

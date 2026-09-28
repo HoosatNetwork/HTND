@@ -90,8 +90,13 @@ enum AddressType {
   ADDRESS_TYPE_P2PKH = 1;
   ADDRESS_TYPE_P2PK = 2;
   ADDRESS_TYPE_P2SH = 3;
-  // Post-quantum ML-DSA-44 P2PKH. Single-sig wallets only.
+  // Post-quantum ML-DSA-44: P2PKH in a single-sig wallet, the multisig P2SH in a multisig wallet.
   ADDRESS_TYPE_MLDSA44 = 4;
+  // 5 was ML-DSA-44 P2PK, removed before release: the 1312-byte key made every output that large.
+  reserved 5;
+  reserved "ADDRESS_TYPE_MLDSA44_P2PK";
+  // Post-quantum ML-DSA-44 P2SH of the P2PKH script; the multisig P2SH in a multisig wallet.
+  ADDRESS_TYPE_MLDSA44_P2SH = 6;
 }
 
 message BroadcastRequest {

@@ -109,7 +109,14 @@ func (s *server) mldsa44Address(wAddr *walletAddress) (util.Address, error) {
 			"stop the daemon and run `htnwallet %s --count <n>` to generate more",
 			s.keysFile.MLDSA44.Size(), wAddr.index, generateMLDSA44KeysSubCmdName)
 	}
-	return libhtnwallet.MLDSA44Address(s.params, publicKeyHash)
+	switch wAddr.mldsa44Form {
+	case libhtnwallet.MLDSA44AddressFormP2PKH:
+		return libhtnwallet.MLDSA44Address(s.params, publicKeyHash)
+	case libhtnwallet.MLDSA44AddressFormP2SH:
+		return libhtnwallet.MLDSA44ScriptHashAddress(s.params, publicKeyHash)
+	default:
+		return nil, errors.Errorf("unknown ML-DSA-44 address form %s", wAddr.mldsa44Form)
+	}
 }
 
 // generateMLDSA44KeysSubCmdName is the CLI command that fills keys.MLDSA44KeyPool; the daemon names it
@@ -151,12 +158,23 @@ func (s *server) walletAddressCosignerIndex(mldsa44 bool) uint32 {
 }
 
 // walletAddressRedeemScript returns the redeem script to carry in an unsigned transaction spending
-// wAddr, or nil when the signers can rebuild it themselves - which is every case but ML-DSA-44 multisig.
+// wAddr, or nil when the signers can rebuild it themselves - which is every case but ML-DSA-44 P2SH,
+// single-sig or multisig.
 func (s *server) walletAddressRedeemScript(wAddr *walletAddress) ([]byte, error) {
-	if !wAddr.mldsa44 || !s.isMultisig() {
+	if !wAddr.mldsa44 {
 		return nil, nil
 	}
-	return s.mldsa44MultiSigRedeemScript(wAddr)
+	if s.isMultisig() {
+		return s.mldsa44MultiSigRedeemScript(wAddr)
+	}
+	if wAddr.mldsa44Form != libhtnwallet.MLDSA44AddressFormP2SH {
+		return nil, nil
+	}
+	publicKeyHash, ok := s.keysFile.MLDSA44.PublicKeyHash(wAddr.keyChain, wAddr.index)
+	if !ok {
+		return nil, errors.Errorf("the wallet has no ML-DSA-44 key at index %d", wAddr.index)
+	}
+	return libhtnwallet.MLDSA44SingleSigRedeemScript(publicKeyHash)
 }
 
 // ensureMLDSA44Active refuses to hand out ML-DSA-44 addresses before the network accepts ML-DSA-44
@@ -199,7 +217,7 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 				return nil, err
 			}
 			addresses = append(addresses, addressStrings...)
-			if mldsa44Addr, ok := s.mldsa44WalletAddressForScan(walletAddr); ok {
+			for _, mldsa44Addr := range s.mldsa44WalletAddressesForScan(walletAddr) {
 				address, err := s.mldsa44Address(mldsa44Addr)
 				if err != nil {
 					return nil, err
@@ -209,16 +227,17 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 			continue
 		}
 
-		if request.GetAddressType() == pb.AddressTypeMLDSA44 {
-			mldsa44Addr, ok := s.mldsa44WalletAddressForScan(walletAddr)
-			if !ok {
-				continue
+		if form, ok := mldsa44AddressForm(request.GetAddressType()); ok {
+			for _, mldsa44Addr := range s.mldsa44WalletAddressesForScan(walletAddr) {
+				if mldsa44Addr.mldsa44Form != form && !s.isMultisig() {
+					continue
+				}
+				address, err := s.mldsa44Address(mldsa44Addr)
+				if err != nil {
+					return nil, err
+				}
+				addresses = append(addresses, address.String())
 			}
-			address, err := s.mldsa44Address(mldsa44Addr)
-			if err != nil {
-				return nil, err
-			}
-			addresses = append(addresses, address.String())
 			continue
 		}
 
@@ -254,11 +273,11 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	if request.GetAddressType() == pb.AddressTypeMLDSA44 {
+	if form, ok := mldsa44AddressForm(request.GetAddressType()); ok {
 		if s.keysFile.IsImported() {
 			return nil, errors.New("an imported wallet holds no ML-DSA-44 keys")
 		}
-		return s.newMLDSA44Address()
+		return s.newMLDSA44Address(form)
 	}
 
 	if s.keysFile.IsImported() {
@@ -324,8 +343,22 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 	}, nil
 }
 
-// newMLDSA44Address hands out the ML-DSA-44 address at the next external index.
-func (s *server) newMLDSA44Address() (*pb.NewAddressResponse, error) {
+// mldsa44AddressForm returns the ML-DSA-44 address form an address type asks for, and false when it
+// is not an ML-DSA-44 address type.
+func mldsa44AddressForm(addressType pb.AddressType) (libhtnwallet.MLDSA44AddressForm, bool) {
+	switch addressType {
+	case pb.AddressType_ADDRESS_TYPE_MLDSA44:
+		return libhtnwallet.MLDSA44AddressFormP2PKH, true
+	case pb.AddressType_ADDRESS_TYPE_MLDSA44_P2SH:
+		return libhtnwallet.MLDSA44AddressFormP2SH, true
+	default:
+		return 0, false
+	}
+}
+
+// newMLDSA44Address hands out the ML-DSA-44 address of form at the next external index. In a
+// multisig wallet both forms name its multisig P2SH.
+func (s *server) newMLDSA44Address(form libhtnwallet.MLDSA44AddressForm) (*pb.NewAddressResponse, error) {
 	err := s.ensureMLDSA44Active()
 	if err != nil {
 		return nil, err
@@ -336,6 +369,9 @@ func (s *server) newMLDSA44Address() (*pb.NewAddressResponse, error) {
 		cosignerIndex: s.walletAddressCosignerIndex(true),
 		keyChain:      libhtnwallet.ExternalKeychain,
 		mldsa44:       true,
+	}
+	if !s.isMultisig() {
+		walletAddr.mldsa44Form = form
 	}
 	// Resolve the address before consuming the index, so an exhausted key pool leaves the wallet as it was.
 	address, err := s.mldsa44Address(walletAddr)
@@ -355,24 +391,31 @@ func (s *server) newMLDSA44Address() (*pb.NewAddressResponse, error) {
 	return &pb.NewAddressResponse{Address: address.String()}, nil
 }
 
-// mldsa44WalletAddressForScan returns the ML-DSA-44 counterpart of wAddr, and false when there is
-// none to query: multisig wallets have no ML-DSA-44 keys, and single-sig wallets only have them for
-// the indexes their key pool covers.
-func (s *server) mldsa44WalletAddressForScan(wAddr *walletAddress) (*walletAddress, bool) {
+// mldsa44WalletAddressesForScan returns the ML-DSA-44 counterparts of wAddr, or none when there is
+// nothing to query: a multisig wallet's one multisig P2SH once every cosigner's keys are imported,
+// and a single-sig wallet's P2PKH and P2SH for the indexes its key pool covers.
+func (s *server) mldsa44WalletAddressesForScan(wAddr *walletAddress) []*walletAddress {
 	mldsa44Addr := *wAddr
 	mldsa44Addr.mldsa44 = true
 	if s.isMultisig() {
 		// One address space for all cosigners; see mldsa44MultiSigRedeemScript.
 		mldsa44Addr.cosignerIndex = 0
 		if _, err := s.mldsa44MultiSigRedeemScript(&mldsa44Addr); err != nil {
-			return nil, false
+			return nil
 		}
-		return &mldsa44Addr, true
+		return []*walletAddress{&mldsa44Addr}
 	}
 	if _, ok := s.keysFile.MLDSA44.PublicKeyHash(wAddr.keyChain, wAddr.index); !ok {
-		return nil, false
+		return nil
 	}
-	return &mldsa44Addr, true
+	forms := []libhtnwallet.MLDSA44AddressForm{libhtnwallet.MLDSA44AddressFormP2PKH, libhtnwallet.MLDSA44AddressFormP2SH}
+	addresses := make([]*walletAddress, len(forms))
+	for i, form := range forms {
+		formAddr := mldsa44Addr
+		formAddr.mldsa44Form = form
+		addresses[i] = &formAddr
+	}
+	return addresses
 }
 
 // walletAddressStringsForScan returns all address encodings that should be queried

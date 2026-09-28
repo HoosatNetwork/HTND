@@ -40,7 +40,8 @@ type UTXO struct {
 	// DerivationPath.
 	ImportedExtendedPublicKey string
 	// RedeemScript is set for coins whose redeem script cannot be rebuilt from extended public keys:
-	// ML-DSA-44 multisig. It is carried into the unsigned transaction for the signers and extractor.
+	// ML-DSA-44 P2SH, single-sig or multisig. It is carried into the unsigned transaction for the
+	// signers and extractor.
 	RedeemScript []byte
 }
 
@@ -255,6 +256,22 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 			partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
 			continue
 		}
+		if input.RedeemScript != nil && isMLDSA44SingleSigRedeemScript(input.RedeemScript) {
+			signature, publicKey, err := mldsa44SingleSigSignatureAndPublicKey(input)
+			if err != nil {
+				return nil, errors.Wrapf(err, "input %d", i)
+			}
+			sigScript, err := txscript.NewScriptBuilder().
+				AddFullData(signature).
+				AddFullData(publicKey).
+				AddData(input.RedeemScript).
+				Script()
+			if err != nil {
+				return nil, err
+			}
+			partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
+			continue
+		}
 
 		isMultisig := len(input.PubKeySignaturePairs) > 1
 		scriptBuilder := txscript.NewScriptBuilder()
@@ -359,16 +376,13 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 				}
 				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
 			case txscript.PubKeyHashMLDSA44Ty:
-				// See MLDSA44SignatureWithPublicKeySize: the signer stored <sig||hashtype><pubkey>.
-				signatureWithPublicKey := input.PubKeySignaturePairs[0].Signature
-				if len(signatureWithPublicKey) != MLDSA44SignatureWithPublicKeySize {
-					return nil, errors.Errorf("ML-DSA-44 input %d: signature and public key are %d bytes, expected %d",
-						i, len(signatureWithPublicKey), MLDSA44SignatureWithPublicKeySize)
+				signature, publicKey, err := mldsa44SingleSigSignatureAndPublicKey(input)
+				if err != nil {
+					return nil, errors.Wrapf(err, "input %d", i)
 				}
-				signatureLength := len(signatureWithPublicKey) - mldsa44.PublicKeySize
 				sigScript, err := txscript.NewScriptBuilder().
-					AddFullData(signatureWithPublicKey[:signatureLength]).
-					AddFullData(signatureWithPublicKey[signatureLength:]).
+					AddFullData(signature).
+					AddFullData(publicKey).
 					Script()
 				if err != nil {
 					return nil, err
@@ -444,6 +458,21 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 		}
 	}
 	return partiallySignedTransaction.Tx, nil
+}
+
+// mldsa44SingleSigSignatureAndPublicKey splits what the signer of a single-sig ML-DSA-44 input stored,
+// <sig||hashtype><pubkey> (see MLDSA44SignatureWithPublicKeySize).
+func mldsa44SingleSigSignatureAndPublicKey(input *serialization.PartiallySignedInput) (signature, publicKey []byte, err error) {
+	if len(input.PubKeySignaturePairs) != 1 {
+		return nil, nil, errors.Errorf("single-sig ML-DSA-44 input has %d signers", len(input.PubKeySignaturePairs))
+	}
+	signatureWithPublicKey := input.PubKeySignaturePairs[0].Signature
+	if len(signatureWithPublicKey) != MLDSA44SignatureWithPublicKeySize {
+		return nil, nil, errors.Errorf("ML-DSA-44 signature and public key are %d bytes, expected %d",
+			len(signatureWithPublicKey), MLDSA44SignatureWithPublicKeySize)
+	}
+	signatureLength := len(signatureWithPublicKey) - mldsa44.PublicKeySize
+	return signatureWithPublicKey[:signatureLength], signatureWithPublicKey[signatureLength:], nil
 }
 
 // mldsa44MultiSigSignatureScript builds the signature script of an ML-DSA-44 multisig input from the

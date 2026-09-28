@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
@@ -23,4 +24,8 @@ type walletAddress struct {
 	// secp256k1 addresses at the same index but is a different key, so it must not compare equal to
 	// them - otherwise --from-address on one would select the other's coins too.
 	mldsa44 bool
+	// mldsa44Form is how the ML-DSA-44 key locks the address, when mldsa44 is set. The zero value is
+	// P2PKH. A multisig wallet's ML-DSA-44 addresses are always its multisig P2SH, and keep the zero
+	// value.
+	mldsa44Form libhtnwallet.MLDSA44AddressForm
 }

@@ -146,14 +146,14 @@ type parseConfig struct {
 
 type showAddressesConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
-	AddressType   string `long:"address-type" description:"Address type to show: p2pk (default), p2pkh, p2sh, or mldsa44"`
+	AddressType   string `long:"address-type" description:"Address type to show: p2pk (default), p2pkh, p2sh, mldsa44 (same as mldsa44-p2pkh), or mldsa44-p2sh"`
 	IncludaAll    bool   `long:"include-all" description:"Include all single-sig forms (p2pk, p2pkh, p2sh). Overrides --address-type"`
 	config.NetworkFlags
 }
 
 type newAddressConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
-	AddressType   string `long:"address-type" description:"Address type to create as primary: p2pk (default), p2pkh, p2sh, or mldsa44 (post-quantum)"`
+	AddressType   string `long:"address-type" description:"Address type to create as primary: p2pk (default), p2pkh, p2sh, or post-quantum mldsa44 (same as mldsa44-p2pkh) or mldsa44-p2sh"`
 	IncludaAll    bool   `long:"include-all" description:"Also print all single-sig forms (p2pk, p2pkh, p2sh) when available"`
 	config.NetworkFlags
 }

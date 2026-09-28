@@ -28,6 +28,10 @@ const (
 	AddressType_ADDRESS_TYPE_P2PKH       AddressType = 1
 	AddressType_ADDRESS_TYPE_P2PK        AddressType = 2
 	AddressType_ADDRESS_TYPE_P2SH        AddressType = 3
+	// Post-quantum ML-DSA-44: P2PKH in a single-sig wallet, the multisig P2SH in a multisig wallet.
+	AddressType_ADDRESS_TYPE_MLDSA44 AddressType = 4
+	// Post-quantum ML-DSA-44 P2SH of the P2PKH script; the multisig P2SH in a multisig wallet.
+	AddressType_ADDRESS_TYPE_MLDSA44_P2SH AddressType = 6
 )
 
 // Enum value maps for AddressType.
@@ -37,12 +41,16 @@ var (
 		1: "ADDRESS_TYPE_P2PKH",
 		2: "ADDRESS_TYPE_P2PK",
 		3: "ADDRESS_TYPE_P2SH",
+		4: "ADDRESS_TYPE_MLDSA44",
+		6: "ADDRESS_TYPE_MLDSA44_P2SH",
 	}
 	AddressType_value = map[string]int32{
-		"ADDRESS_TYPE_UNSPECIFIED": 0,
-		"ADDRESS_TYPE_P2PKH":       1,
-		"ADDRESS_TYPE_P2PK":        2,
-		"ADDRESS_TYPE_P2SH":        3,
+		"ADDRESS_TYPE_UNSPECIFIED":  0,
+		"ADDRESS_TYPE_P2PKH":        1,
+		"ADDRESS_TYPE_P2PK":         2,
+		"ADDRESS_TYPE_P2SH":         3,
+		"ADDRESS_TYPE_MLDSA44":      4,
+		"ADDRESS_TYPE_MLDSA44_P2SH": 6,
 	}
 )
 
@@ -1770,12 +1778,14 @@ const file_htnwalletd_proto_rawDesc = "" +
 	"\x12signedTransactions\x18\x01 \x03(\fR\x12signedTransactions\"\x13\n" +
 	"\x11GetVersionRequest\".\n" +
 	"\x12GetVersionResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\tR\aversion*q\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion*\xcb\x01\n" +
 	"\vAddressType\x12\x1c\n" +
 	"\x18ADDRESS_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12ADDRESS_TYPE_P2PKH\x10\x01\x12\x15\n" +
 	"\x11ADDRESS_TYPE_P2PK\x10\x02\x12\x15\n" +
-	"\x11ADDRESS_TYPE_P2SH\x10\x032\xb9\b\n" +
+	"\x11ADDRESS_TYPE_P2SH\x10\x03\x12\x18\n" +
+	"\x14ADDRESS_TYPE_MLDSA44\x10\x04\x12\x1d\n" +
+	"\x19ADDRESS_TYPE_MLDSA44_P2SH\x10\x06\"\x04\b\x05\x10\x05*\x19ADDRESS_TYPE_MLDSA44_P2PK2\xb9\b\n" +
 	"\n" +
 	"htnwalletd\x12M\n" +
 	"\n" +

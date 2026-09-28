@@ -106,9 +106,64 @@ func MLDSA44PublicKeyHashes(mnemonic string, keychain uint8, start, count uint32
 	return hashes, nil
 }
 
+// MLDSA44AddressForm selects how a single-sig ML-DSA-44 key locks an output. The same key at the same
+// derivation path is behind both, so a wallet holding the key can spend either.
+//
+// There is deliberately no pay-to-pubkey form: see util.AddressPublicKeyHashMLDSA44.
+type MLDSA44AddressForm uint8
+
+const (
+	// MLDSA44AddressFormP2PKH is OP_DUP OP_BLAKE2B <hash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44, the default.
+	MLDSA44AddressFormP2PKH MLDSA44AddressForm = iota
+	// MLDSA44AddressFormP2SH is pay-to-script-hash of the P2PKH script, as the wallet's Schnorr and
+	// ECDSA single-sig P2SH addresses wrap theirs.
+	MLDSA44AddressFormP2SH
+)
+
+func (form MLDSA44AddressForm) String() string {
+	switch form {
+	case MLDSA44AddressFormP2PKH:
+		return "P2PKH"
+	case MLDSA44AddressFormP2SH:
+		return "P2SH"
+	default:
+		return fmt.Sprintf("MLDSA44AddressForm(%d)", uint8(form))
+	}
+}
+
 // MLDSA44Address returns the ML-DSA-44 P2PKH address for a public key hash from MLDSA44PublicKeyHashes.
 func MLDSA44Address(params *dagconfig.Params, publicKeyHash []byte) (util.Address, error) {
 	return util.NewAddressPublicKeyHashMLDSA44FromHash(publicKeyHash, params.Prefix)
+}
+
+// MLDSA44SingleSigRedeemScript returns the redeem script of a single-sig ML-DSA-44 P2SH address: the
+// P2PKH script of publicKeyHash.
+func MLDSA44SingleSigRedeemScript(publicKeyHash []byte) ([]byte, error) {
+	address, err := util.NewAddressPublicKeyHashMLDSA44FromHash(publicKeyHash, util.Bech32PrefixHoosat)
+	if err != nil {
+		return nil, err
+	}
+	scriptPublicKey, err := txscript.PayToAddrScript(address)
+	if err != nil {
+		return nil, err
+	}
+	return scriptPublicKey.Script, nil
+}
+
+// MLDSA44ScriptHashAddress returns the single-sig ML-DSA-44 P2SH address for a public key hash from
+// MLDSA44PublicKeyHashes.
+func MLDSA44ScriptHashAddress(params *dagconfig.Params, publicKeyHash []byte) (util.Address, error) {
+	redeemScript, err := MLDSA44SingleSigRedeemScript(publicKeyHash)
+	if err != nil {
+		return nil, err
+	}
+	return util.NewAddressScriptHash(redeemScript, params.Prefix)
+}
+
+// isMLDSA44SingleSigRedeemScript reports whether redeemScript is the redeem script of a single-sig
+// ML-DSA-44 P2SH address (see MLDSA44SingleSigRedeemScript).
+func isMLDSA44SingleSigRedeemScript(redeemScript []byte) bool {
+	return txscript.GetScriptClass(redeemScript) == txscript.PubKeyHashMLDSA44Ty
 }
 
 // MLDSA44MultiSigRedeemScript returns the redeem script of an ML-DSA-44 multisig address.

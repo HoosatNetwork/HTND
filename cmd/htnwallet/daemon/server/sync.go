@@ -111,7 +111,7 @@ func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 					addresses[addressString] = address
 				}
 
-				if mldsa44Addr, ok := s.mldsa44WalletAddressForScan(address); ok {
+				for _, mldsa44Addr := range s.mldsa44WalletAddressesForScan(address) {
 					mldsa44Address, err := s.mldsa44Address(mldsa44Addr)
 					if err != nil {
 						return nil, err
