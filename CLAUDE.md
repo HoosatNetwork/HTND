@@ -45,7 +45,7 @@ go test -tags=ci ./...                      # what CI runs; skips tests guarded 
 | `infrastructure/logger/` | Subsystem loggers. Each package has a `log.go` with `log = logger.RegisterSubSystem("XXXX")` and `spawn = panics.GoroutineWrapperFunc(log)`. Start goroutines with `spawn`, not a bare `go`. |
 | `infrastructure/autoupdate/` | GitHub release auto-updater and panic issue reporting. |
 | `util/` | Addresses (bech32 `hoosat:` / `hoosattest:`), amounts, difficulty, `mstime`, `txmass`, `staging.CommitAllChanges`. |
-| `cmd/` | `htnctl` (RPC CLI), `htnwallet` (wallet plus gRPC daemon), `htnminer` (CPU miner), `genkeypair`, `htnexodus`, `ldbtool`, `utxoforensics` (offline datadir forensics). |
+| `cmd/` | `htnctl` (RPC CLI), `htnwallet` (wallet plus gRPC daemon), `htnminer` (CPU miner), `genkeypair`, `htnexodus`, `ldbtool`, `utxoforensics` (offline datadir forensics), `muhashjournal` (analyzes MuHash journals). |
 | `tools/` | `pruningproof-harness`. (`pebble-tool` was removed in HTN-177 — an ELF with no source; see `tools/pebble-tool/README.md`.) |
 | `docs/` | `script-engine.md` (txscript VM), `utxo-survey.md` (`HTND_UTXO_SURVEY*` IBD failure JSONL), `exodus-pruning-point.md`, `running-a-node-in-ubuntu.md`. |
 
@@ -96,6 +96,7 @@ Touch every layer, following an existing command such as `GetBlockCount`:
 - **Profiling:** `HTND_PROFILER`.
 - **Pebble tuning:** `HTND_PEBBLE_CACHE_MB`, `HTND_MEMTABLE_SIZE_MB`, `HTND_BASE_FILE_SIZE_MB`, etc.
 - **IBD UTXO survey:** `HTND_UTXO_SURVEY*` (see `docs/utxo-survey.md`).
+- **MuHash journal:** the hidden `--muhash-journal=<path>` flag records every element added to or removed from each block's UTXO multiset (see `domain/consensus/utils/muhashjournal`); analyze with `cmd/muhashjournal`.
 
 ## Commit style
 

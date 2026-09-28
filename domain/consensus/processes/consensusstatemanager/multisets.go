@@ -1,9 +1,12 @@
 package consensusstatemanager
 
 import (
+	"encoding/hex"
+
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/muhashjournal"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 )
@@ -62,12 +65,74 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 		}
 		return entry, true, nil
 	}
-	err = utxo.ApplyAcceptanceDataToMultiset(ms, acceptanceData, daaScore, selectedParentPastUTXO, baseUTXO)
+	var multisetWriter utxo.MultisetWriter = ms
+	var recorder *muhashjournal.Recorder
+	var journalParent *externalapi.DomainHash
+	var journalParentSerialized []byte
+	if muhashjournal.Enabled() {
+		journalParent = ms.Hash()
+		journalParentSerialized = ms.Serialize()
+		recorder = muhashjournal.NewRecorder(ms)
+		multisetWriter = recorder
+	}
+	err = utxo.ApplyAcceptanceDataToMultiset(multisetWriter, acceptanceData, daaScore, selectedParentPastUTXO, baseUTXO)
 	if err != nil {
 		return nil, err
 	}
+	if recorder != nil {
+		csm.writeMuHashJournalRecord(stagingArea, blockHash, selectedParent, daaScore, acceptanceData,
+			journalParent, journalParentSerialized, ms, recorder.Ops())
+	}
 
 	return ms, nil
+}
+
+// writeMuHashJournalRecord records one multiset computation for offline analysis; see package
+// muhashjournal. Every lookup here is best-effort: a missing header or DAA score leaves its field
+// empty rather than dropping the record, because a template or virtual computation has no header
+// and is still exactly the record a miner needs to keep.
+func (csm *consensusStateManager) writeMuHashJournalRecord(stagingArea *model.StagingArea,
+	blockHash, selectedParent *externalapi.DomainHash, daaScore uint64, acceptanceData externalapi.AcceptanceData,
+	parentHash *externalapi.DomainHash, parentSerialized []byte, result model.Multiset, ops []muhashjournal.Op,
+) {
+	record := &muhashjournal.Record{
+		Kind:                     muhashjournal.KindTemplate,
+		Block:                    blockHash.String(),
+		SelectedParent:           selectedParent.String(),
+		DAAScore:                 daaScore,
+		ParentMultiset:           parentHash.String(),
+		ParentMultisetSerialized: hex.EncodeToString(parentSerialized),
+		ResultMultiset:           result.Hash().String(),
+		Ops:                      ops,
+	}
+	if blockHash.Equal(model.VirtualBlockHash) {
+		record.Kind = muhashjournal.KindVirtual
+	} else if header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, blockHash); err == nil {
+		record.Kind = muhashjournal.KindBlock
+		record.HeaderCommitment = header.UTXOCommitment().String()
+	}
+	if header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, selectedParent); err == nil {
+		record.ParentHeaderCommitment = header.UTXOCommitment().String()
+	}
+	for _, blockAcceptanceData := range acceptanceData {
+		if blockAcceptanceData == nil {
+			continue
+		}
+		mergeSetBlock := muhashjournal.MergeSetBlock{
+			Hash:  blockAcceptanceData.BlockHash.String(),
+			Total: len(blockAcceptanceData.TransactionAcceptanceData),
+		}
+		if score, err := csm.daaBlocksStore.DAAScore(csm.databaseContext, stagingArea, blockAcceptanceData.BlockHash); err == nil {
+			mergeSetBlock.DAAScore = score
+		}
+		for _, transactionAcceptanceData := range blockAcceptanceData.TransactionAcceptanceData {
+			if transactionAcceptanceData != nil && transactionAcceptanceData.IsAccepted {
+				mergeSetBlock.Accepted++
+			}
+		}
+		record.MergeSet = append(record.MergeSet, mergeSetBlock)
+	}
+	muhashjournal.Write(record)
 }
 
 // reverseMultiset applies the reverse of the given acceptance data to a multiset.

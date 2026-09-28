@@ -14,6 +14,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/app/rpc"
 	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/muhashjournal"
 	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/autoupdate"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
@@ -168,6 +169,9 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		return nil, err
 	}
 	warnAboutPersistentRepairFlags(cfg)
+	// Process-global, like the journal itself: set before consensus is built so the first block
+	// resolved is already recorded.
+	muhashjournal.SetPath(cfg.MuHashJournal)
 
 	consensusConfig := consensus.Config{
 		Params:                            *cfg.ActiveNetParams,
