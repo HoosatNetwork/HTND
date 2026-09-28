@@ -38,6 +38,12 @@ func main() {
 		err = importPrivateKey(config.(*importPrivateKeyConfig))
 	case importWebWalletSubCmd:
 		err = importWebWallet(config.(*importWebWalletConfig))
+	case generateMLDSA44KeysSubCmd:
+		err = generateMLDSA44Keys(config.(*generateMLDSA44KeysConfig))
+	case exportMLDSA44KeysSubCmd:
+		err = exportMLDSA44Keys(config.(*exportMLDSA44KeysConfig))
+	case importMLDSA44KeysSubCmd:
+		err = importMLDSA44Keys(config.(*importMLDSA44KeysConfig))
 	case startDaemonSubCmd:
 		err = startDaemon(config.(*startDaemonConfig))
 	case sweepSubCmd:

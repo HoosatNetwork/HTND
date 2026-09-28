@@ -20,7 +20,9 @@ func parseAddressTypeFlag(flagValue string) (pb.AddressType, error) {
 		return pb.AddressType_ADDRESS_TYPE_P2PK, nil
 	case "p2sh":
 		return pb.AddressType_ADDRESS_TYPE_P2SH, nil
+	case "mldsa44":
+		return pb.AddressTypeMLDSA44, nil
 	default:
-		return pb.AddressType_ADDRESS_TYPE_UNSPECIFIED, fmt.Errorf("unknown --address-type %q (expected p2pkh, p2pk, or p2sh)", flagValue)
+		return pb.AddressType_ADDRESS_TYPE_UNSPECIFIED, fmt.Errorf("unknown --address-type %q (expected p2pkh, p2pk, p2sh, or mldsa44)", flagValue)
 	}
 }

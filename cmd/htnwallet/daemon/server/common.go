@@ -2,7 +2,6 @@ package server
 
 import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
-	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 )
 
@@ -20,22 +19,8 @@ type walletAddress struct {
 	cosignerIndex uint32
 	keyChain      uint8
 	imported      *keys.ImportedKey
-}
-
-// libhtnwalletUTXO returns the UTXO in the form libhtnwallet builds a transaction from: what spends it,
-// and where that key is.
-func (s *server) libhtnwalletUTXO(utxo *walletUTXO) *libhtnwallet.UTXO {
-	if utxo.address.imported != nil {
-		return &libhtnwallet.UTXO{
-			Outpoint:                  utxo.Outpoint,
-			UTXOEntry:                 utxo.UTXOEntry,
-			DerivationPath:            libhtnwallet.ImportedKeyDerivationPath,
-			ImportedExtendedPublicKey: utxo.address.imported.ExtendedPublicKey,
-		}
-	}
-	return &libhtnwallet.UTXO{
-		Outpoint:       utxo.Outpoint,
-		UTXOEntry:      utxo.UTXOEntry,
-		DerivationPath: s.walletAddressPath(utxo.address),
-	}
+	// mldsa44 marks the ML-DSA-44 address at this index. It shares the derivation path with the
+	// secp256k1 addresses at the same index but is a different key, so it must not compare equal to
+	// them - otherwise --from-address on one would select the other's coins too.
+	mldsa44 bool
 }

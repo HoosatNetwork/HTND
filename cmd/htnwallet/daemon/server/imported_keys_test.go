@@ -131,7 +131,10 @@ func TestImportedWalletCoinsAreSpentByTheirKey(t *testing.T) {
 		UTXOEntry: utxo.NewUTXOEntry(5, &externalapi.ScriptPublicKey{}, false, 0),
 		address:   walletAddr,
 	}
-	libhtnwalletUTXO := s.libhtnwalletUTXO(coin)
+	libhtnwalletUTXO, err := s.libhtnwalletUTXO(coin.Outpoint, coin.UTXOEntry, coin.address)
+	if err != nil {
+		t.Fatalf("libhtnwalletUTXO: %v", err)
+	}
 	if libhtnwalletUTXO.ImportedExtendedPublicKey != walletAddr.imported.ExtendedPublicKey ||
 		libhtnwalletUTXO.DerivationPath != libhtnwallet.ImportedKeyDerivationPath {
 		t.Fatalf("an imported key's coin became %+v", libhtnwalletUTXO)
@@ -165,7 +168,7 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 	}
 
 	for _, want := range []string{change0, change1, change0} {
-		address, _, err := s.changeAddress(false, nil)
+		address, _, err := s.changeAddress(false, nil, false)
 		if err != nil {
 			t.Fatalf("changeAddress: %+v", err)
 		}
@@ -175,7 +178,7 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 	}
 
 	fromAddress := s.addressSet[receive1]
-	address, _, err := s.changeAddress(true, []*walletAddress{fromAddress})
+	address, _, err := s.changeAddress(true, []*walletAddress{fromAddress}, false)
 	if err != nil {
 		t.Fatalf("changeAddress: %+v", err)
 	}
@@ -192,7 +195,7 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 		if response.Address != rawKeyAddress {
 			t.Fatalf("a private key wallet handed out %s, not its address %s", response.Address, rawKeyAddress)
 		}
-		address, _, err := s.changeAddress(false, nil)
+		address, _, err := s.changeAddress(false, nil, false)
 		if err != nil {
 			t.Fatalf("changeAddress: %+v", err)
 		}

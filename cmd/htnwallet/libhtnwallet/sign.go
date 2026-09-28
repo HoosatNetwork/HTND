@@ -1,6 +1,8 @@
 package libhtnwallet
 
 import (
+	"bytes"
+
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/bip32"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
@@ -8,6 +10,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
 )
 
@@ -121,7 +124,24 @@ func sign(params *dagconfig.Params, mnemonic string, partiallySignedTransaction 
 
 	sighashReusedValues := &consensushashing.SighashReusedValues{}
 	signed := false
+	var mldsa44BIP39SeedCache []byte
 	for i, partiallySignedInput := range partiallySignedTransaction.PartiallySignedInputs {
+		if IsMLDSA44Input(partiallySignedInput) {
+			if mldsa44BIP39SeedCache == nil {
+				mldsa44BIP39SeedCache = mldsa44BIP39Seed(mnemonic)
+			}
+			signMLDSA44 := signMLDSA44Input
+			if partiallySignedInput.RedeemScript != nil {
+				signMLDSA44 = signMLDSA44MultiSigInput
+			}
+			inputSigned, err := signMLDSA44(params, mldsa44BIP39SeedCache, partiallySignedTransaction, i, sighashReusedValues)
+			if err != nil {
+				return false, err
+			}
+			signed = signed || inputSigned
+			continue
+		}
+
 		isMultisig := len(partiallySignedInput.PubKeySignaturePairs) > 1
 		path := defaultPath(isMultisig)
 		extendedKey, err := extendedKeyFromMnemonicAndPath(mnemonic, path, params)
@@ -152,4 +172,101 @@ func sign(params *dagconfig.Params, mnemonic string, partiallySignedTransaction 
 	}
 
 	return signed, nil
+}
+
+// signMLDSA44Input signs input idx, which spends an ML-DSA-44 P2PKH output, if this mnemonic owns it.
+// It reports false, without error, when the key at the input's derivation path does not hash to the
+// output's public key hash - the input belongs to another mnemonic.
+func signMLDSA44Input(params *dagconfig.Params, bip39Seed []byte, partiallySignedTransaction *serialization.PartiallySignedTransaction, idx int,
+	sighashReusedValues *consensushashing.SighashReusedValues,
+) (bool, error) {
+	partiallySignedInput := partiallySignedTransaction.PartiallySignedInputs[idx]
+	if len(partiallySignedInput.PubKeySignaturePairs) != 1 {
+		return false, errors.Errorf("ML-DSA-44 input %d has %d signers; only single-sig is supported",
+			idx, len(partiallySignedInput.PubKeySignaturePairs))
+	}
+
+	publicKey, privateKey, err := mldsa44KeyFromBIP39Seed(bip39Seed, partiallySignedInput.DerivationPath, false)
+	if err != nil {
+		return false, err
+	}
+	publicKeyBytes := publicKey.Bytes()
+
+	scriptPublicKey := partiallySignedInput.PrevOutput.ScriptPublicKey
+	_, address, err := txscript.ExtractScriptPubKeyAddress(scriptPublicKey, params)
+	if err != nil {
+		return false, err
+	}
+	mldsa44Address, ok := address.(*util.AddressPublicKeyHashMLDSA44)
+	if !ok {
+		return false, errors.Errorf("input %d: expected an ML-DSA-44 address, got %T", idx, address)
+	}
+	if !bytes.Equal(mldsa44Address.ScriptAddress(), util.HashBlake2b(publicKeyBytes)) {
+		return false, nil
+	}
+
+	signature, err := txscript.RawTxInSignatureMLDSA44(partiallySignedTransaction.Tx, idx, consensushashing.SigHashAll,
+		privateKey, sighashReusedValues)
+	if err != nil {
+		return false, err
+	}
+	partiallySignedInput.PubKeySignaturePairs[0].Signature = append(signature, publicKeyBytes...)
+	return true, nil
+}
+
+// IsMLDSA44Input reports whether input spends an ML-DSA-44 output: a single-sig ML-DSA-44 P2PKH, or an
+// ML-DSA-44 multisig P2SH, which the input marks by carrying its redeem script.
+func IsMLDSA44Input(input *serialization.PartiallySignedInput) bool {
+	if input.RedeemScript != nil {
+		return txscript.IsMultiSigMLDSA44RedeemScript(input.RedeemScript)
+	}
+	return txscript.GetScriptClass(input.PrevOutput.ScriptPublicKey.Script) == txscript.PubKeyHashMLDSA44Ty
+}
+
+// signMLDSA44MultiSigInput signs input idx, which spends an ML-DSA-44 multisig P2SH output, in the slot
+// of this mnemonic's key. It reports false, without error, when none of the redeem script's key
+// hashes is this mnemonic's key at the input's derivation path.
+func signMLDSA44MultiSigInput(_ *dagconfig.Params, bip39Seed []byte, partiallySignedTransaction *serialization.PartiallySignedTransaction,
+	idx int, sighashReusedValues *consensushashing.SighashReusedValues,
+) (bool, error) {
+	partiallySignedInput := partiallySignedTransaction.PartiallySignedInputs[idx]
+
+	// The redeem script travels with the unsigned transaction, so check it is the one the output
+	// commits to before trusting its key hashes.
+	p2sh, err := txscript.PayToScriptHashScript(partiallySignedInput.RedeemScript)
+	if err != nil {
+		return false, err
+	}
+	if !bytes.Equal(p2sh, partiallySignedInput.PrevOutput.ScriptPublicKey.Script) {
+		return false, errors.Errorf("input %d: the redeem script does not match the output it spends", idx)
+	}
+	_, publicKeyHashes, err := txscript.ExtractMultiSigMLDSA44RedeemScript(partiallySignedInput.RedeemScript)
+	if err != nil {
+		return false, err
+	}
+	if len(publicKeyHashes) != len(partiallySignedInput.PubKeySignaturePairs) {
+		return false, errors.Errorf("input %d: the redeem script has %d keys but the input has %d signers",
+			idx, len(publicKeyHashes), len(partiallySignedInput.PubKeySignaturePairs))
+	}
+
+	publicKey, privateKey, err := mldsa44KeyFromBIP39Seed(bip39Seed, partiallySignedInput.DerivationPath, true)
+	if err != nil {
+		return false, err
+	}
+	publicKeyBytes := publicKey.Bytes()
+	publicKeyHash := util.HashBlake2b(publicKeyBytes)
+
+	for slot, slotPublicKeyHash := range publicKeyHashes {
+		if !bytes.Equal(slotPublicKeyHash, publicKeyHash) {
+			continue
+		}
+		signature, err := txscript.RawTxInSignatureMLDSA44(partiallySignedTransaction.Tx, idx, consensushashing.SigHashAll,
+			privateKey, sighashReusedValues)
+		if err != nil {
+			return false, err
+		}
+		partiallySignedInput.PubKeySignaturePairs[slot].Signature = append(signature, publicKeyBytes...)
+		return true, nil
+	}
+	return false, nil
 }

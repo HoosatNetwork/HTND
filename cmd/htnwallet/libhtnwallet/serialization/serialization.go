@@ -21,6 +21,10 @@ type PartiallySignedTransaction struct {
 // PartiallySignedInput represents an input signed
 // only by some of the relevant parties.
 type PartiallySignedInput struct {
+	// RedeemScript is set for inputs whose redeem script cannot be rebuilt from the extended public
+	// keys alone - today, ML-DSA-44 multisig, whose script commits to every cosigner's ML-DSA-44 key
+	// hash while each signer only holds its own.
+	RedeemScript         []byte
 	PrevOutput           *externalapi.DomainTransactionOutput
 	MinimumSignatures    uint32
 	PubKeySignaturePairs []*PubKeySignaturePair
@@ -48,6 +52,7 @@ func (pst *PartiallySignedTransaction) Clone() *PartiallySignedTransaction {
 // Clone creates a deep-clone of this PartiallySignedInput
 func (psi PartiallySignedInput) Clone() *PartiallySignedInput {
 	clone := &PartiallySignedInput{
+		RedeemScript:         append([]byte(nil), psi.RedeemScript...),
 		PrevOutput:           psi.PrevOutput.Clone(),
 		MinimumSignatures:    psi.MinimumSignatures,
 		PubKeySignaturePairs: make([]*PubKeySignaturePair, len(psi.PubKeySignaturePairs)),
@@ -160,6 +165,7 @@ func partiallySignedInputFromProto(protoPartiallySignedInput *protoserialization
 	}
 
 	return &PartiallySignedInput{
+		RedeemScript:         protoPartiallySignedInput.RedeemScript,
 		PrevOutput:           output,
 		MinimumSignatures:    protoPartiallySignedInput.MinimumSignatures,
 		PubKeySignaturePairs: pubKeySignaturePairs,
@@ -174,6 +180,7 @@ func partiallySignedInputToProto(partiallySignedInput *PartiallySignedInput) *pr
 	}
 
 	return &protoserialization.PartiallySignedInput{
+		RedeemScript:         partiallySignedInput.RedeemScript,
 		PrevOutput:           transactionOutputToProto(partiallySignedInput.PrevOutput),
 		MinimumSignatures:    partiallySignedInput.MinimumSignatures,
 		PubKeySignaturePairs: protoPairs,

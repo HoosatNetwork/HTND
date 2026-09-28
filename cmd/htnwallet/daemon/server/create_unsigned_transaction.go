@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
@@ -287,7 +288,11 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			}
 		}
 
-		selectedUTXOs = append(selectedUTXOs, s.libhtnwalletUTXO(highestUTXO))
+		selectedUTXO, err := s.libhtnwalletUTXO(highestUTXO.Outpoint, highestUTXO.UTXOEntry, highestUTXO.address)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
 		totalValue += highestUTXO.UTXOEntry.Amount()
 	}
 	// log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
@@ -316,7 +321,11 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			}
 		}
 
-		selectedUTXOs = append(selectedUTXOs, s.libhtnwalletUTXO(utxo))
+		selectedUTXO, err := s.libhtnwalletUTXO(utxo.Outpoint, utxo.UTXOEntry, utxo.address)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
 		totalValue += utxo.UTXOEntry.Amount()
 	}
 	// log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
@@ -389,7 +398,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, errors.Errorf("couldn't find funds to spend")
 	}
 
-	changeAddress, _, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
+	changeAddress, _, err := s.changeAddress(useExistingChangeAddress, fromAddresses, allInputsAreMLDSA44(selectedUTXOs))
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +490,11 @@ func (s *server) selectUTXOsForTransactionAtDAAScore(spendAmount uint64, isSendA
 			}
 		}
 
-		selectedUTXOs = append(selectedUTXOs, s.libhtnwalletUTXO(utxo))
+		selectedUTXO, err := s.libhtnwalletUTXO(utxo.Outpoint, utxo.UTXOEntry, utxo.address)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
 
 		totalValue += utxo.UTXOEntry.Amount()
 
@@ -516,6 +529,49 @@ func (s *server) selectUTXOsForTransactionAtDAAScore(spendAmount uint64, isSendA
 	}
 
 	return selectedUTXOs, totalReceived, totalValue - totalSpend, nil
+}
+
+// libhtnwalletUTXO returns the libhtnwallet.UTXO for a coin held at address: its derivation path, the
+// imported key that spends it for an imported wallet's coin, and for ML-DSA-44 multisig its redeem
+// script, which the signers cannot rebuild themselves.
+func (s *server) libhtnwalletUTXO(outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry,
+	address *walletAddress,
+) (*libhtnwallet.UTXO, error) {
+	if address.imported != nil {
+		return &libhtnwallet.UTXO{
+			Outpoint:                  outpoint,
+			UTXOEntry:                 utxoEntry,
+			DerivationPath:            libhtnwallet.ImportedKeyDerivationPath,
+			ImportedExtendedPublicKey: address.imported.ExtendedPublicKey,
+		}, nil
+	}
+	redeemScript, err := s.walletAddressRedeemScript(address)
+	if err != nil {
+		return nil, err
+	}
+	return &libhtnwallet.UTXO{
+		Outpoint:       outpoint,
+		UTXOEntry:      utxoEntry,
+		DerivationPath: s.walletAddressPath(address),
+		RedeemScript:   redeemScript,
+	}, nil
+}
+
+// allInputsAreMLDSA44 reports whether every selected coin is held by an ML-DSA-44 address, in which
+// case the change goes to one too (see changeAddress).
+func allInputsAreMLDSA44(selectedUTXOs []*libhtnwallet.UTXO) bool {
+	if len(selectedUTXOs) == 0 {
+		return false
+	}
+	for _, selectedUTXO := range selectedUTXOs {
+		// A multisig coin's P2SH output does not say what is behind it; the carried redeem script does.
+		isMLDSA44MultiSig := selectedUTXO.RedeemScript != nil && txscript.IsMultiSigMLDSA44RedeemScript(selectedUTXO.RedeemScript)
+		isMLDSA44 := txscript.GetScriptClass(selectedUTXO.UTXOEntry.ScriptPublicKey().Script) == txscript.PubKeyHashMLDSA44Ty
+		if !isMLDSA44MultiSig && !isMLDSA44 {
+			return false
+		}
+	}
+	return true
 }
 
 func walletAddressesContain(addresses []*walletAddress, contain *walletAddress) bool {

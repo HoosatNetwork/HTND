@@ -30,7 +30,7 @@ func TestChangeAddressIsTrackedBeforeItHoldsACoin(t *testing.T) {
 	}
 	s := &server{params: params, keysFile: keysFile, addressSet: make(walletAddressSet)}
 
-	address, walletAddr, err := s.changeAddress(false, nil)
+	address, walletAddr, err := s.changeAddress(false, nil, false)
 	if err != nil {
 		t.Fatalf("changeAddress: %+v", err)
 	}

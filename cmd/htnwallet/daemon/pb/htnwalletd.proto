@@ -90,6 +90,8 @@ enum AddressType {
   ADDRESS_TYPE_P2PKH = 1;
   ADDRESS_TYPE_P2PK = 2;
   ADDRESS_TYPE_P2SH = 3;
+  // Post-quantum ML-DSA-44 P2PKH. Single-sig wallets only.
+  ADDRESS_TYPE_MLDSA44 = 4;
 }
 
 message BroadcastRequest {
