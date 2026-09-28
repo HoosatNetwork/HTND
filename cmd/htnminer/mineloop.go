@@ -11,7 +11,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnminer/templatemanager"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/pow"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	utilrandom "github.com/HoosatNetwork/HTND/v2/util/random"
@@ -33,51 +32,25 @@ func mineLoop(client *minerClient, numberOfBlocks uint64, targetBlocksPerSecond 
 	errChan := make(chan error)
 	doneChan := make(chan struct{})
 
-	// We don't want to send router.DefaultMaxMessages blocks at once because there's
-	// a high chance we'll get disconnected from the node, so we make the channel
-	// capacity router.DefaultMaxMessages/2 (we give some slack for getBlockTemplate
-	// requests)
+	// Each template is solved at most once, so this rarely holds more than a block or two. The
+	// capacity stays below router.DefaultMaxMessages so a slow node can't get us disconnected.
 	foundBlockChan := make(chan *externalapi.DomainBlock, router.DefaultMaxMessages/2)
+
+	if targetBlocksPerSecond > 0 {
+		minSolveInterval := time.Duration(float64(time.Second) / targetBlocksPerSecond)
+		log.Infof("Minimum time between mined blocks: %s", minSolveInterval)
+		templatemanager.SetMinSolveInterval(minSolveInterval)
+	}
 
 	spawn("templatesLoop", func() {
 		templatesLoop(client, miningAddr, errChan)
 	})
 
 	for t := 0; t < *threads; t++ {
-		go func() {
-			spawn("blocksLoop", func() {
-				const windowSize = 150
-				hasBlockRateTarget := targetBlocksPerSecond != 0
-				var windowTicker, blockTicker *time.Ticker
-				// We use tickers to limit the block rate:
-				// 1. windowTicker -> makes sure that the last windowSize blocks take at least windowSize*targetBlocksPerSecond.
-				// 2. blockTicker -> makes sure that each block takes at least targetBlocksPerSecond/windowSize.
-				// that way we both allow for fluctuation in block rate but also make sure they're not too big (by an order of magnitude)
-				if hasBlockRateTarget {
-					windowRate := time.Duration(float64(time.Second) / (targetBlocksPerSecond / windowSize))
-					blockRate := time.Duration(float64(time.Second) / (targetBlocksPerSecond * windowSize))
-					log.Infof("Minimum average time per %d blocks: %s, smaller minimum time per block: %s", windowSize, windowRate, blockRate)
-					windowTicker = time.NewTicker(windowRate)
-					blockTicker = time.NewTicker(blockRate)
-					defer windowTicker.Stop()
-					defer blockTicker.Stop()
-				}
-
-				windowStart := time.Now()
-				for blockIndex := 1; ; blockIndex++ {
-					foundBlockChan <- mineNextBlock(mineWhenNotSynced)
-					if hasBlockRateTarget {
-						<-blockTicker.C
-						if (blockIndex % windowSize) == 0 {
-							tickerStart := time.Now()
-							<-windowTicker.C
-							log.Infof("Finished mining %d blocks in: %s. slept for: %s", windowSize, time.Since(windowStart), time.Since(tickerStart))
-							windowStart = time.Now()
-						}
-					}
-				}
-			})
-		}()
+		isFirstThread := t == 0
+		spawn("mineThread", func() {
+			mineThread(foundBlockChan, mineWhenNotSynced, isFirstThread)
+		})
 	}
 
 	spawn("handleFoundBlock", func() {
@@ -102,6 +75,75 @@ func mineLoop(client *minerClient, numberOfBlocks uint64, targetBlocksPerSecond 
 	}
 }
 
+// mineThread mines the current job until it is solved or replaced. It copies the PoW state once
+// per job, so the per-hash cost is the hash itself plus one atomic load.
+func mineThread(foundBlockChan chan<- *externalapi.DomainBlock, mineWhenNotSynced bool, shouldLog bool) {
+	for {
+		generation := templatemanager.Generation()
+		job := waitForJob(mineWhenNotSynced, shouldLog)
+		state := *job.State
+
+		nonce, err := utilrandom.Uint64()
+		if err != nil {
+			panic(err)
+		}
+		for templatemanager.Generation() == generation {
+			nonce++
+			state.Nonce = nonce
+			powNum, hash := state.CalculateProofOfWorkValue()
+			hashesTried.Add(1)
+			if powNum.Cmp(&state.Target) > 0 {
+				continue
+			}
+			if !templatemanager.MarkSolved(job.ID) {
+				// Another thread solved this template first; this block would be its sibling.
+				break
+			}
+			block := *job.Block
+			mutHeader := block.Header.ToMutable()
+			mutHeader.SetNonce(nonce)
+			block.Header = mutHeader.ToImmutable()
+			block.PoWHash = hash.String()
+			foundBlockChan <- &block
+			break
+		}
+	}
+}
+
+// waitForJob blocks until there is a job this thread may mine.
+func waitForJob(mineWhenNotSynced bool, shouldLog bool) *templatemanager.Job {
+	const logInterval = 2 * time.Second
+	lastLog := time.Time{}
+	for {
+		job, changed, resumeAt := templatemanager.Current()
+		if job != nil && (job.IsSynced || mineWhenNotSynced) {
+			return job
+		}
+		if shouldLog && time.Since(lastLog) >= logInterval {
+			hasTemplate, isSynced := templatemanager.HasTemplate()
+			switch {
+			case !hasTemplate:
+				log.Info("Waiting for the initial template")
+				lastLog = time.Now()
+			case !isSynced && !mineWhenNotSynced:
+				log.Warnf("Hoosatd is not synced. Skipping current block template")
+				lastLog = time.Now()
+			}
+		}
+
+		wait := logInterval
+		if !resumeAt.IsZero() {
+			wait = time.Until(resumeAt)
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-changed:
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
+}
+
 func logHashRate() {
 	spawn("logHashRate", func() {
 		lastCheck := time.Now()
@@ -123,81 +165,36 @@ func handleFoundBlock(client *minerClient, block *externalapi.DomainBlock) error
 	log.Infof("Submitting block: %s with PoW Hash: %s", blockHash, block.PoWHash)
 
 	rejectReason, err := client.SubmitBlock(block, block.PoWHash)
-	if err != nil {
-		if nativeerrors.Is(err, router.ErrTimeout) {
-			log.Warnf("Got timeout while submitting block: %s\n with PoW Hash: %s\n%s", blockHash, block.PoWHash, err)
-			return client.Reconnect()
-		}
-		if nativeerrors.Is(err, router.ErrRouteClosed) {
-			log.Infof("Got route is closed while requesting block template from %s. "+
-				"The client is most likely reconnecting", client.Address())
-			return nil
-		}
-		if rejectReason == appmessage.RejectReasonIsInIBD {
-			const waitTime = 100 * time.Millisecond
-			log.Warnf("Block %s was rejected because the node is in IBD. Waiting for %s", blockHash, waitTime)
-			time.Sleep(waitTime)
-			return nil
-		}
-		return errors.Wrapf(err, "Error submitting block %s to %s", blockHash, client.Address())
+	if err == nil {
+		// The node notifies about a new template once it has added the block, but ask right away
+		// as well: until the template builds on this block the threads have nothing to mine.
+		client.requestTemplateRefresh()
+		return nil
 	}
-	return nil
-}
+	templatemanager.SubmitFailed(block)
 
-func mineNextBlock(mineWhenNotSynced bool) *externalapi.DomainBlock {
-	nonce, err := utilrandom.Uint64()
-	if err != nil {
-		panic(err)
+	if nativeerrors.Is(err, router.ErrTimeout) {
+		log.Warnf("Got timeout while submitting block: %s\n with PoW Hash: %s\n%s", blockHash, block.PoWHash, err)
+		return client.Reconnect()
 	}
-	for {
-		nonce++
-		// For each nonce we try to build a block from the most up to date
-		// block template.
-		// In the rare case where the nonce space is exhausted for a specific
-		// block, it'll keep looping the nonce until a new block template
-		// is discovered.
-		block, state := getBlockForMining(mineWhenNotSynced)
-		state.Nonce = nonce
-		hashesTried.Add(1)
-		powNum, hash := state.CalculateProofOfWorkValue()
-		if powNum.Cmp(&state.Target) <= 0 {
-			mutHeader := block.Header.ToMutable()
-			mutHeader.SetNonce(nonce)
-			block.PoWHash = hash.String()
-			block.Header = mutHeader.ToImmutable()
-			// log.Infof("Found block %s\n with parents %s", consensushashing.BlockHash(block), block.Header.DirectParents())
-			return block
-		}
+	if nativeerrors.Is(err, router.ErrRouteClosed) {
+		log.Infof("Got route is closed while submitting block to %s. "+
+			"The client is most likely reconnecting", client.Address())
+		return nil
 	}
-}
-
-func getBlockForMining(mineWhenNotSynced bool) (*externalapi.DomainBlock, *pow.State) {
-	tryCount := 0
-
-	const sleepTime = 200 * time.Millisecond
-
-	for {
-		tryCount++
-
-		shouldLog := (tryCount-1)%10 == 0
-		template, state, isSynced := templatemanager.Get()
-		if template == nil {
-			if shouldLog {
-				log.Info("Waiting for the initial template")
-			}
-			time.Sleep(sleepTime)
-			continue
-		}
-		if !isSynced && !mineWhenNotSynced {
-			if shouldLog {
-				log.Warnf("Hoosatd is not synced. Skipping current block template")
-			}
-			time.Sleep(sleepTime)
-			continue
-		}
-
-		return template, state
+	switch rejectReason {
+	case appmessage.RejectReasonIsInIBD:
+		const waitTime = 100 * time.Millisecond
+		log.Warnf("Block %s was rejected because the node is in IBD. Waiting for %s", blockHash, waitTime)
+		time.Sleep(waitTime)
+		return nil
+	case appmessage.RejectReasonBlockInvalid:
+		// Usually a template that went stale while we mined it. One bad block is no reason to stop mining.
+		log.Warnf("Block %s was rejected: %s", blockHash, err)
+		client.requestTemplateRefresh()
+		return nil
 	}
+	return errors.Wrapf(err, "Error submitting block %s to %s", blockHash, client.Address())
 }
 
 func templatesLoop(client *minerClient, miningAddr util.Address, errChan chan error) {
