@@ -95,7 +95,7 @@ This matches the classic “scriptSig pushes redeemScript” model.
 The engine enforces limits typical of Bitcoin-style script VMs (with HTND-specific values):
 
 - `MaxScriptSize = 10,000` bytes (raw script length).
-- `MaxScriptElementSize = 520` bytes (max push size).
+- `MaxScriptElementSize = 520` bytes (max push size). Under `ScriptEnableMLDSA44` pushes of exactly 1312 bytes (ML-DSA-44 public key) and 2421 bytes (ML-DSA-44 signature + sighash type) are exempt; every other size keeps the limit.
 - `MaxStackSize = 244` combined elements across data stack + alt stack.
 - `MaxOpsPerScript = 201` non-push operations.
 
@@ -125,7 +125,7 @@ This means outputs created with higher script versions are **invalid under curre
 
 ## Signature verification capabilities
 
-HTND supports two public key + signature verification paths:
+HTND supports two public key + signature verification paths, plus a third that is implemented but dormant until its hard fork:
 
 1. **Schnorr**
    - Public key encoding: 32 bytes (checked by `checkPubKeyEncoding`)
@@ -137,7 +137,17 @@ HTND supports two public key + signature verification paths:
    - Signature length: 64 bytes (checked by `checkSignatureLengthECDSA`)
    - Uses `consensushashing.CalculateSignatureHashECDSA`
 
-Both paths optionally use signature caches (`SigCache` / `SigCacheECDSA`) to avoid repeated expensive verification.
+3. **ML-DSA-44** (FIPS 204, post-quantum; `OP_CHECKSIGMLDSA44`, opcode `0xa6`)
+   - Public key encoding: 1312 bytes (checked by `checkPubKeyEncodingMLDSA44`)
+   - Signature length: 2420 bytes (checked by `checkSignatureLengthMLDSA44`)
+   - Uses `consensushashing.CalculateSignatureHashMLDSA44` as the message, with an empty ML-DSA context string
+   - Verified with Cloudflare CIRCL (`github.com/cloudflare/circl/sign/mldsa/mldsa44`); a test pins that it agrees with Go's `crypto/mldsa`
+   - Only in the P2PKH form `OP_DUP OP_BLAKE2B <32-byte hash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44` (address version byte `0x04`), spent with `<sig||hashtype> <pubkey>`. There is no pay-to-pubkey form, so outputs stay the size of any other P2PKH.
+   - Gated by `ScriptEnableMLDSA44`, which consensus sets only for blocks at or above `dagconfig.Params.MLDSA44SignaturesBlockVersion` (block version 11 on every network; no network's `POWScores` reaches it yet), deriving the version from the block's DAA score. Without the flag `0xa6` fails as an unknown opcode and counts as 0 sigops, exactly as before; with it the opcode counts as 1 sigop.
+
+   - **Multisig** needs no further consensus rule: `txscript.MultiSigMLDSA44RedeemScript` builds a P2SH redeem script from `OP_CHECKSIGMLDSA44` and existing opcodes. For each key it runs `OP_IF OP_DUP OP_BLAKE2B <key hash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44 OP_ELSE OP_0 OP_ENDIF OP_TOALTSTACK`, then it sums the results and compares them with `<m> OP_GREATERTHANOREQUAL`. A signer supplies `<sig> <pubkey> OP_1`, a non-signer `OP_0`, so only the signers' keys appear on chain. Consensus sizes set the limits. The redeem script must fit `MaxScriptElementSize` (44n+1 bytes, so at most 11 keys). The signature script must fit `MaxScriptSize`, and each signer adds 3,740 bytes, so at most 2 signatures. The largest, 2-of-11, spends with a 7,977-byte signature script, which is the mempool's standard limit.
+
+The Schnorr and ECDSA paths optionally use signature caches (`SigCache` / `SigCacheECDSA`) to avoid repeated expensive verification. ML-DSA-44 has no cache: CIRCL verifies one in about 20 µs on amd64, less than a Schnorr verification.
 
 See the opcode implementations in `domain/consensus/utils/txscript/opcode.go`.
 
@@ -188,11 +198,13 @@ The package provides standard primitives to build and interpret common scripts:
 - `PayToAddrScript(addr)` returns a `ScriptPublicKey` for:
   - pay-to-pubkey (Schnorr)
   - pay-to-pubkey (ECDSA)
+  - pay-to-pubkey-hash (Schnorr, ECDSA, ML-DSA-44)
   - pay-to-script-hash (P2SH)
 - `ExtractScriptPubKeyAddress(scriptPubKey, params)` classifies standard scripts and extracts an address.
 - `PayToScriptHashScript(redeemScript)` returns the P2SH locking script.
 - `PayToScriptHashSignatureScript(redeemScript, signature)` creates a P2SH spend signature script that pushes `signature` then pushes the `redeemScript`.
 - `SignTxOutput(...)` can generate signature scripts for standard scripts using `KeyDB` and `ScriptDB`.
+- `SignatureScriptMLDSA44(...)` / `RawTxInSignatureMLDSA44(...)` sign an ML-DSA-44 P2PKH input (hedged signing, so repeated calls give different valid signatures).
 
 Implementation: `domain/consensus/utils/txscript/standard.go` and `domain/consensus/utils/txscript/sign.go`.
 
