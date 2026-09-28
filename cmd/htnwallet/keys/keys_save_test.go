@@ -2,6 +2,7 @@ package keys
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -107,11 +108,13 @@ func TestSaveOverwritingALongerFileLeavesNoTrailingBytes(t *testing.T) {
 // is only ever replaced by a complete file, in one atomic step.
 //
 // The failure is injected by making the directory unwritable, so os.CreateTemp fails. That is the
-// earliest point Save can fail, and the strongest form of the claim: even a save that got nowhere
-// must not have touched the original.
+// earliest point Save can fail: even a save that got nowhere must not have touched the original.
+// TestASaveFailingAtTheRenameLeavesTheExistingKeysFileIntact covers the latest point.
 func TestAFailedSaveLeavesTheExistingKeysFileIntact(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("windows ignores a directory's permission bits, so they would not prevent the write")
+		// Chmod on a Windows directory only sets its read-only attribute, which does not stop files
+		// being created in it, so there is no failure to inject this way.
+		t.Skip("directory permissions do not prevent creating files on Windows")
 	}
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: directory permissions would not prevent the write")
@@ -119,15 +122,7 @@ func TestAFailedSaveLeavesTheExistingKeysFileIntact(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "keys.json")
-
-	original := newTestFile(t, path, 1)
-	if err := original.Save(); err != nil {
-		t.Fatalf("seeding the original keys file: %+v", err)
-	}
-	before, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading the original keys file: %+v", err)
-	}
+	before := seedKeysFile(t, path)
 
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatalf("making the directory read-only: %+v", err)
@@ -144,6 +139,56 @@ func TestAFailedSaveLeavesTheExistingKeysFileIntact(t *testing.T) {
 		t.Fatalf("restoring directory permissions: %+v", err)
 	}
 
+	requireKeysFileUnchanged(t, path, before)
+}
+
+// TestASaveFailingAtTheRenameLeavesTheExistingKeysFileIntact fails Save at its last step, the rename
+// into place, after the replacement has been written out and synced in full. Nothing short of the
+// rename may touch the original, and the finished temp file must not be left behind either. Unlike
+// the directory-permissions test above, this injection works on every platform.
+func TestASaveFailingAtTheRenameLeavesTheExistingKeysFileIntact(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keys.json")
+	before := seedKeysFile(t, path)
+
+	injected := errors.New("injected rename failure")
+	renameFile = func(string, string) error { return injected }
+	t.Cleanup(func() { renameFile = os.Rename })
+
+	replacement := newTestFile(t, path, 2)
+	if err := replacement.Save(); !errors.Is(err, injected) {
+		t.Fatalf("Save returned %v, want the injected rename failure", err)
+	}
+
+	requireKeysFileUnchanged(t, path, before)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %+v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "keys.json" {
+		t.Fatalf("a failed save left files behind: expected exactly [keys.json] in %s, got %v", dir, entries)
+	}
+}
+
+// seedKeysFile saves a keys file with MinimumSignatures 1 at path and returns its bytes.
+func seedKeysFile(t *testing.T, path string) []byte {
+	t.Helper()
+	original := newTestFile(t, path, 1)
+	if err := original.Save(); err != nil {
+		t.Fatalf("seeding the original keys file: %+v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the original keys file: %+v", err)
+	}
+	return before
+}
+
+// requireKeysFileUnchanged checks that the keys file at path still holds exactly before, and still
+// reads as the seeded file.
+func requireKeysFileUnchanged(t *testing.T, path string, before []byte) {
+	t.Helper()
 	after, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("the keys file is unreadable after a failed save: %+v", err)

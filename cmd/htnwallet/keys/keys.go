@@ -528,13 +528,16 @@ func (d *File) Save() error {
 		return err
 	}
 
-	err = os.Rename(tempPath, d.path)
+	err = renameFile(tempPath, d.path)
 	if err != nil {
 		return err
 	}
 
 	return syncDir(dir)
 }
+
+// renameFile is os.Rename, as a variable so tests can fail Save at its last step on every platform.
+var renameFile = os.Rename
 
 const defaultNumThreads = 8
 
