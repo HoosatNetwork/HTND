@@ -198,6 +198,22 @@ type Params struct {
 	// miner with a more complete UTXO set may legitimately claim for transactions this node cannot
 	// fully price. Blocks below that version are unaffected by it.
 	UnpricedTransactionFeeAllowance uint64
+
+	// MLDSA44SignaturesBlockVersion is the block version from which post-quantum ML-DSA-44
+	// (FIPS 204) signatures are consensus-valid: opcode 0xa6 executes as OP_CHECKSIGMLDSA44
+	// instead of failing as an unknown opcode, counts as one signature operation, and the ML-DSA-44
+	// public key and signature pushes are exempted from MaxScriptElementSize.
+	//
+	// The version has to be derived from the DAA score of the block being validated (see
+	// constants.BlockVersionForDAAScore), never from the process-global version or a header field.
+	// It only takes effect once POWScores has an entry that reaches it; until then no block can have
+	// this version and the rule stays off.
+	MLDSA44SignaturesBlockVersion uint16
+}
+
+// MLDSA44SignaturesActive reports whether ML-DSA-44 signatures are valid in a block of blockVersion.
+func (p *Params) MLDSA44SignaturesActive(blockVersion uint16) bool {
+	return p.MLDSA44SignaturesBlockVersion != 0 && blockVersion >= p.MLDSA44SignaturesBlockVersion
 }
 
 // Consensus rules that are gated on a block version. Each activates at block version 11, whose
@@ -472,6 +488,7 @@ var MainnetParams = Params{
 	// behavior, not itself a bug) - the separate, actual bug that was blocking this node's own block
 	// template generation regardless of that (RepairBlockStatuses leaving a UTXO-valid virtual parent
 	// with no stored multiset) is fixed by RepairMissingMultisets, see consensus.go.
+	MLDSA44SignaturesBlockVersion: 11,
 	POWScores: []uint64{
 		17500000,
 		21821800,
@@ -666,6 +683,7 @@ var TestnetParams = Params{
 	// see domain/consensus/processes/coinbasemanager/payload.go. Testnet can use a real,
 	// soon-reachable value freely (low stakes); this just needs to stay comfortably above the
 	// 7th entry so the two hard forks exercise as distinct transitions during testing.
+	MLDSA44SignaturesBlockVersion: 11,
 	POWScores: []uint64{
 		1,
 		50,
@@ -791,6 +809,7 @@ var TestnetParamsB5 = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
+	MLDSA44SignaturesBlockVersion:   11,
 	POWScores:                       []uint64{5, 15, 25, 30},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
@@ -864,6 +883,7 @@ var TestnetParamsB10 = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 28800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
+	MLDSA44SignaturesBlockVersion:   11,
 	POWScores:                       []uint64{5, 15, 25, 30},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 3},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
@@ -938,6 +958,7 @@ var SimnetParams = Params{
 	FinalityDuration:               []time.Duration{defaultFinalityDuration, defaultFinalityDuration},
 	DifficultyAdjustmentWindowSize: []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 264},
 	TimestampDeviationTolerance:    defaultTimestampDeviationTolerance,
+	MLDSA44SignaturesBlockVersion:  11,
 	POWScores:                      []uint64{5},
 	PruningMultiplier:              []uint64{0, 0, 0, 0, 48},
 	MaxBlockMass:                   []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass},
@@ -1003,6 +1024,7 @@ var DevnetParams = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2640, 2640},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
+	MLDSA44SignaturesBlockVersion:   11,
 	POWScores:                       []uint64{1, 2, 3, 4},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},

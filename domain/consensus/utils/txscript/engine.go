@@ -12,6 +12,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 )
 
 // ScriptFlags is a bitmask defining additional operations or tests that will be
@@ -28,6 +29,14 @@ const (
 	// NOTE: This flag is intentionally opt-in so that consensus validation can
 	// keep using ScriptNoFlags and preserve the current behavior.
 	ScriptEnableDisabledOpcodes ScriptFlags = 1 << 0
+
+	// ScriptEnableMLDSA44 activates OP_CHECKSIGMLDSA44 and lets its public key and
+	// signature pushes exceed MaxScriptElementSize (see isMLDSA44ElementSize).
+	// Without it, opcode 0xa6 fails as an unknown opcode exactly as it always has.
+	//
+	// Consensus sets it from dagconfig.Params.MLDSA44SignaturesBlockVersion only; see
+	// transactionValidator.scriptFlagsForDAAScore.
+	ScriptEnableMLDSA44 ScriptFlags = 1 << 1
 )
 
 const (
@@ -114,7 +123,8 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 			return scriptError(ErrTooManyOperations, str)
 		}
 
-	} else if len(pop.data) > MaxScriptElementSize {
+	} else if len(pop.data) > MaxScriptElementSize &&
+		!(vm.flags&ScriptEnableMLDSA44 != 0 && isMLDSA44ElementSize(len(pop.data))) {
 		str := fmt.Sprintf("element size %d exceeds max allowed size %d",
 			len(pop.data), MaxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
@@ -403,6 +413,33 @@ func (vm *Engine) checkSignatureLengthECDSA(sig []byte) error {
 		return scriptError(ErrSigLength, message)
 	}
 	return nil
+}
+
+func (vm *Engine) checkPubKeyEncodingMLDSA44(pubKey []byte) error {
+	if len(pubKey) == mldsa44.PublicKeySize {
+		return nil
+	}
+
+	return scriptError(ErrPubKeyFormat, "unsupported public key type")
+}
+
+func (vm *Engine) checkSignatureLengthMLDSA44(sig []byte) error {
+	if len(sig) != mldsa44.SignatureSize {
+		message := fmt.Sprintf("invalid signature length %d", len(sig))
+		return scriptError(ErrSigLength, message)
+	}
+	return nil
+}
+
+// isMLDSA44ElementSize reports whether a push of size bytes is one of the two
+// ML-DSA-44 elements that ScriptEnableMLDSA44 exempts from MaxScriptElementSize:
+// a public key, or a signature with its trailing sighash type byte.
+//
+// The exemption is by exact size rather than a raised limit so that the fork
+// admits these two elements and nothing else: every other push stays capped
+// at MaxScriptElementSize.
+func isMLDSA44ElementSize(size int) bool {
+	return size == mldsa44.PublicKeySize || size == mldsa44.SignatureSize+1
 }
 
 // getStack returns the contents of stack as a byte array bottom up

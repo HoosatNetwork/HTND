@@ -1,12 +1,54 @@
 package transactionvalidator
 
 import (
+	"math"
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
+
+// TestScriptFlagsFollowMLDSA44BlockVersion pins that ML-DSA-44 is enabled by the DAA score of the
+// block being validated, through POWScores and MLDSA44SignaturesBlockVersion.
+func TestScriptFlagsFollowMLDSA44BlockVersion(t *testing.T) {
+	// Version 3 is reached at DAA score 200.
+	params := dagconfig.Params{POWScores: []uint64{100, 200}, MLDSA44SignaturesBlockVersion: 3}
+	validator := transactionValidator{dagParams: &params}
+	tests := []struct {
+		daaScore   uint64
+		wantActive bool
+	}{
+		{daaScore: 0, wantActive: false},
+		{daaScore: 199, wantActive: false},
+		{daaScore: 200, wantActive: true},
+		{daaScore: 1_000_000, wantActive: true},
+	}
+	for _, test := range tests {
+		flags := validator.scriptFlagsForDAAScore(test.daaScore)
+		if gotActive := flags&txscript.ScriptEnableMLDSA44 != 0; gotActive != test.wantActive {
+			t.Fatalf("DAA score %d: ML-DSA-44 active = %t, want %t", test.daaScore, gotActive, test.wantActive)
+		}
+	}
+}
+
+// TestMLDSA44IsInertOnEveryNetwork pins that version 11 is out of reach of every network's
+// POWScores today, so shipping this code changes no block's validity until an activation DAA
+// score is added.
+func TestMLDSA44IsInertOnEveryNetwork(t *testing.T) {
+	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams,
+		&dagconfig.SimnetParams, &dagconfig.DevnetParams} {
+		if params.MLDSA44SignaturesBlockVersion != 11 {
+			t.Fatalf("%s: MLDSA44SignaturesBlockVersion is %d, want 11", params.Name, params.MLDSA44SignaturesBlockVersion)
+		}
+		highestVersion := constants.BlockVersionForDAAScore(params.POWScores, math.MaxUint64)
+		if params.MLDSA44SignaturesActive(highestVersion) {
+			t.Fatalf("%s: ML-DSA-44 is active at the highest reachable block version %d", params.Name, highestVersion)
+		}
+	}
+}
 
 // TestSequenceLocksActive tests the SequenceLockActive function to ensure it
 // works as expected in all possible combinations/scenarios.

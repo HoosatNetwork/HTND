@@ -145,6 +145,25 @@ func CalculateSignatureHashECDSA(tx *externalapi.DomainTransaction, inputIndex i
 	return hashWriter.Finalize(), nil
 }
 
+// CalculateSignatureHashMLDSA44 will, given a script and hash type calculate the signature hash
+// to be used for signing and verification for ML-DSA-44. It is the Schnorr sighash under its own
+// domain, exactly as CalculateSignatureHashECDSA is, so that a signature made for one scheme can
+// never be replayed as a message of another.
+// This returns error only if one of the provided parameters are consensus-invalid.
+func CalculateSignatureHashMLDSA44(tx *externalapi.DomainTransaction, inputIndex int, hashType SigHashType,
+	reusedValues *SighashReusedValues,
+) (*externalapi.DomainHash, error) {
+	hash, err := CalculateSignatureHashSchnorr(tx, inputIndex, hashType, reusedValues)
+	if err != nil {
+		return nil, err
+	}
+
+	hashWriter := hashes.NewTransactionSigningHashMLDSA44Writer()
+	hashWriter.InfallibleWrite(hash.ByteSlice())
+
+	return hashWriter.Finalize(), nil
+}
+
 func calculateSignatureHash(tx *externalapi.DomainTransaction, inputIndex int, txIn *externalapi.DomainTransactionInput,
 	prevScriptPublicKey *externalapi.ScriptPublicKey, hashType SigHashType, reusedValues *SighashReusedValues) (
 	*externalapi.DomainHash, error,

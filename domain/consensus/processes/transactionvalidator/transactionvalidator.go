@@ -5,6 +5,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/util/txmass"
 )
 
@@ -26,6 +27,11 @@ type transactionValidator struct {
 	sigCacheECDSA                           *txscript.SigCacheECDSA
 	txMassCalculator                        *txmass.Calculator
 	enginePool                              *sync.Pool
+
+	// dagParams supplies POWScores and the block versions of script-level forks, used to decide
+	// which script flags apply at a given DAA score without going through the process-global
+	// block version.
+	dagParams *dagconfig.Params
 }
 
 // New instantiates a new TransactionValidator
@@ -39,6 +45,7 @@ func New(blockCoinbaseMaturity uint64,
 	ghostdagDataStore model.GHOSTDAGDataStore,
 	daaBlocksStore model.DAABlocksStore,
 	txMassCalculator *txmass.Calculator,
+	dagParams *dagconfig.Params,
 ) model.TransactionValidator {
 	return &transactionValidator{
 		blockCoinbaseMaturity:                   blockCoinbaseMaturity,
@@ -53,6 +60,7 @@ func New(blockCoinbaseMaturity uint64,
 		sigCache:                                txscript.NewSigCache(sigCacheSize),
 		sigCacheECDSA:                           txscript.NewSigCacheECDSA(sigCacheSize),
 		txMassCalculator:                        txMassCalculator,
+		dagParams:                               dagParams,
 		enginePool: &sync.Pool{
 			New: func() any {
 				return &txscript.Engine{}

@@ -291,7 +291,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		pastMedianTimeManager,
 		ghostdagDataStore,
 		daaBlocksStore,
-		txMassCalculator)
+		txMassCalculator,
+		&config.Params)
 	difficultyManager := f.difficultyConstructor(
 		dbManager,
 		ghostdagManager,
