@@ -432,6 +432,17 @@ func TestHighPriorityTransactions(t *testing.T) {
 		}
 		// There's no API to check what stayed in the orphan pool, but we'll find it out when we begin to unorphan
 
+		// A child leaves the orphan pool only once its parent's outputs are UTXOs of virtual,
+		// not merely outputs of a parent in the mempool.
+		for _, parent := range []*externalapi.DomainTransaction{
+			lowPriorityParentTransaction, firstHighPriorityParentTransaction, secondHighPriorityParentTransaction,
+		} {
+			err = testutils.StageCreatedOutputsToVirtual(tc, parent, 0)
+			if err != nil {
+				t.Fatalf("error staging parent outputs to virtual: %+v", err)
+			}
+		}
+
 		// Submit all the parents.
 		// Low priority transaction will only accept the parent, since the child was evicted from orphanPool
 		lowPriorityAcceptedTransactions, err := miningManager.ValidateAndInsertTransaction(lowPriorityParentTransaction, false, true, true)
@@ -636,6 +647,15 @@ func TestRevalidateHighPriorityTransactionsWithChain(t *testing.T) {
 		_, err = miningManager.HandleNewBlockTransactions(block.Transactions)
 		if err != nil {
 			t.Fatal(err)
+		}
+
+		// The mempool spends only UTXOs of virtual, never outputs of another mempool transaction,
+		// so put every output the rest of the chain spends into virtual first.
+		for _, transaction := range chain[1 : chainSize-1] {
+			err = testutils.StageCreatedOutputsToVirtual(tc, transaction, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		for _, transaction := range chain[1:] {
