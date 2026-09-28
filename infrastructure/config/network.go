@@ -52,6 +52,7 @@ type overrideDAGParamsConfig struct {
 	DisableDifficultyAdjustment             *bool              `json:"disableDifficultyAdjustment"`
 	SkipProofOfWork                         *bool              `json:"skipProofOfWork"`
 	HardForkOmitGenesisFromParentsDAAScore  *uint64            `json:"hardForkOmitGenesisFromParentsDaaScore"`
+	MLDSA44SignaturesBlockVersion           *uint16            `json:"mldsa44SignaturesBlockVersion"`
 }
 
 // ResolveNetwork parses the network command line argument and sets NetParams accordingly.
@@ -220,6 +221,12 @@ func (networkFlags *NetworkFlags) overrideDAGParams() error {
 
 	if config.SkipProofOfWork != nil {
 		networkFlags.ActiveNetParams.SkipProofOfWork = *config.SkipProofOfWork
+	}
+
+	// Lets a devnet activate ML-DSA-44 at a block version its POWScores already reach, for testing
+	// the full wallet-to-consensus path. The node and the wallet daemon must use the same file.
+	if config.MLDSA44SignaturesBlockVersion != nil {
+		networkFlags.ActiveNetParams.MLDSA44SignaturesBlockVersion = *config.MLDSA44SignaturesBlockVersion
 	}
 
 	return nil
