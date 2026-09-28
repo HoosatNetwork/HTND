@@ -867,45 +867,52 @@ func (pm *pruningManager) pruningPointCandidate(stagingArea *model.StagingArea) 
 
 // validateUTXOSetFitsCommitment makes sure that the calculated UTXOSet of the new pruning point fits the commitment.
 // This is a sanity test, to make sure that htnd doesn't store, and subsequently sends syncing peers the wrong UTXOSet.
-func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.StagingArea, pruningPointHash *externalapi.DomainHash) error {
+//
+// It also returns the served set's hash and stats whenever it got as far as hashing it, so a caller
+// reporting a mismatch does not need a second pass over the set.
+func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.StagingArea, pruningPointHash *externalapi.DomainHash) (
+	*externalapi.DomainHash, *utxoSetStats, error,
+) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.validateUTXOSetFitsCommitment")
 	defer onEnd()
 
 	utxoSetIterator, err := pm.pruningStore.PruningPointUTXOIterator(pm.databaseContext)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer utxoSetIterator.Close()
 
 	utxoSetMultiset := multiset.New()
+	stats := &utxoSetStats{}
 	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
 		outpoint, entry, err := utxoSetIterator.Get()
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		serializedUTXO, err := utxo.SerializeUTXO(entry, outpoint)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		utxoSetMultiset.Add(serializedUTXO)
+		stats.add(entry)
 	}
 	utxoSetHash := utxoSetMultiset.Hash()
 
 	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
 	if err != nil {
-		return err
+		return utxoSetHash, stats, err
 	}
 	expectedUTXOCommitment := header.UTXOCommitment()
 
 	if !expectedUTXOCommitment.Equal(utxoSetHash) {
-		return errors.Errorf("Calculated UTXOSet for next pruning point %s doesn't match it's UTXO commitment\n"+
-			"Calculated UTXOSet hash: %s. Commitment: %s",
-			pruningPointHash, utxoSetHash, expectedUTXOCommitment)
+		return utxoSetHash, stats, errors.Errorf("Calculated UTXOSet for next pruning point %s doesn't match it's UTXO commitment\n"+
+			"Calculated UTXOSet hash: %s. Commitment: %s. Served set: %s",
+			pruningPointHash, utxoSetHash, expectedUTXOCommitment, stats)
 	}
 
-	log.Debugf("Validated the pruning point %s UTXO commitment: %s", pruningPointHash, utxoSetHash)
+	log.Debugf("Validated the pruning point %s UTXO commitment: %s (%s)", pruningPointHash, utxoSetHash, stats)
 
-	return nil
+	return utxoSetHash, stats, nil
 }
 
 // This function takes 2 points (currentPruningHash, previousPruningHash) and traverses the UTXO diff children DAG
@@ -1277,6 +1284,7 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 	// second time just to know what's currently in it.
 	oldBucketEntries := make(map[externalapi.DomainOutpoint]externalapi.UTXOEntry)
 	entryCount := 0
+	bucketStats := &utxoSetStats{}
 	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
 		outpoint, entry, err := utxoSetIterator.Get()
 		if err != nil {
@@ -1290,9 +1298,14 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 		}
 		bucketMultiset.Add(serialized)
 		oldBucketEntries[*outpoint] = entry
+		bucketStats.add(entry)
 		entryCount++
 	}
 	bucketHash := bucketMultiset.Hash()
+	if !bucketHash.Equal(expectedCommitment) {
+		// Before the switch below, because one of its branches repairs the bucket in place.
+		pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats, "", nil)
+	}
 
 	perBlockMultiset, perBlockErr := pm.multiSetStore.Get(pm.databaseContext, stagingArea, pruningPoint)
 	var perBlockHash *externalapi.DomainHash
@@ -2217,7 +2230,11 @@ func (pm *pruningManager) updatePruningPoint() error {
 	// is the price of a node knowing what it serves.
 	if !pruningPoint.Equal(pm.genesisHash) {
 		log.Info("Validating that the pruning point UTXO set this node will serve fits its commitment")
-		if validationErr := pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint); validationErr != nil {
+		if bucketHash, bucketStats, validationErr := pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint); validationErr != nil {
+			if bucketHash != nil {
+				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
+					methodUsed, utxoSetDiff)
+			}
 			if pm.shouldSanityCheckPruningUTXOSet {
 				return validationErr
 			}
