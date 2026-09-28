@@ -1,6 +1,7 @@
 package consensusstatemanager
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -295,7 +296,7 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 
 			var rejection *transactionRejection
 			isAccepted, accumulatedMass, rejection, err = csm.maybeAcceptTransaction(stagingArea,
-				transaction, blockHash, isSelectedParent, accumulatedUTXODiff, accumulatedMass,
+				transaction, blockHash, mergeSetBlockHash, isSelectedParent, accumulatedUTXODiff, accumulatedMass,
 				selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, nil, err
@@ -344,6 +345,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	stagingArea *model.StagingArea,
 	transaction *externalapi.DomainTransaction,
 	blockHash *externalapi.DomainHash,
+	mergeSetBlockHash *externalapi.DomainHash,
 	isSelectedParent bool,
 	accumulatedUTXODiff externalapi.MutableUTXODiff,
 	accumulatedMassBefore uint64,
@@ -358,6 +360,12 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	transactionIDPtr := consensushashing.TransactionID(transaction)
 	if transactionIDPtr != nil {
 		transactionID = transactionIDPtr.String()
+	}
+	verdictContext := &transactionVerdictContext{
+		blockHash:         blockHash,
+		mergeSetBlockHash: mergeSetBlockHash,
+		isSelectedParent:  isSelectedParent,
+		blockDAAScore:     blockDAAScore,
 	}
 	log.Tracef("maybeAcceptTransaction start for transaction %s in block %s", transactionID, blockHash)
 	defer log.Tracef("maybeAcceptTransaction end for transaction %s in block %s", transactionID, blockHash)
@@ -377,7 +385,8 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 				resolvedInputs++
 			}
 		}
-		if acceptDespiteMissingInputs(err, csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash), resolvedInputs) {
+		inheritsOffset := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+		if acceptDespiteMissingInputs(err, inheritsOffset, resolvedInputs) {
 			transaction.StoreFee(0)
 			err = accumulatedUTXODiff.AddOutputsSpendingResolvedInputs(transaction, utxo.AcceptedUTXOBlockDAAScore(blockDAAScore))
 			if err != nil {
@@ -386,8 +395,12 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			}
 			log.Debugf("Transaction %s in block %s spends coins this set does not hold; its outputs are "+
 				"kept so the gap does not spread", transactionID, blockHash)
+			logTransactionVerdict("accepted despite missing inputs", verdictContext, transaction, transactionID,
+				err, "block inherits a known UTXO commitment offset")
 			return true, accumulatedMassBefore, nil, nil
 		}
+		logTransactionVerdict("rejected: unresolved inputs", verdictContext, transaction, transactionID, err,
+			fmt.Sprintf("inherits known UTXO commitment offset: %t", inheritsOffset))
 		return false, accumulatedMassBefore, newTransactionRejection("missing-input", err), nil
 	}
 
@@ -398,6 +411,8 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			log.Tracef("Transaction %s is the coinbase of block %s "+
 				"but said block is not in the selected parent chain. "+
 				"As such, it is not accepted", transactionID, blockHash)
+			logTransactionVerdict("rejected: coinbase not on the selected chain", verdictContext, nil,
+				transactionID, nil, fmt.Sprintf("%d outputs", len(transaction.Outputs)))
 			return false, accumulatedMassBefore, newTransactionRejection("coinbase-not-on-selected-chain", nil), nil
 		}
 		log.Tracef("Transaction %s is the coinbase of block %s", transactionID, blockHash)
@@ -412,6 +427,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 
 			log.Tracef("Validation failed for transaction %s "+
 				"in block %s: %s", transactionID, blockHash, err)
+			logTransactionVerdict("rejected: consensus rule", verdictContext, transaction, transactionID, err, "")
 			return false, accumulatedMassBefore, newTransactionRejection("rule-error", err), nil
 		}
 		log.Tracef("Validation passed for transaction %s in block %s", transactionID, blockHash)
