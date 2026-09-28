@@ -88,12 +88,9 @@ func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 ) error {
 	if cfg := flow.Config(); cfg == nil || !cfg.AllowMismatchedPruningUTXO {
 		health, healthErr := flow.Domain().Consensus().UTXOSetHealth()
-		if healthErr != nil {
-			return protocolerrors.Wrapf(false, healthErr, "refusing to send pruning-point coin set: health unreadable")
-		}
-		if health == nil || !health.BaselineVerified {
-			log.Warnf("Refusing to send pruning-point coin set: local floor is not clean")
-			return protocolerrors.Errorf(false, "this node will not send a pruning-point coin set that does not match its header")
+		if healthErr != nil || health == nil || !health.BaselineVerified {
+			log.Warnf("Not serving pruning-point coin set: local floor is not clean. Sending UnexpectedPruningPoint without closing gossip.")
+			return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
 		}
 	}
 

@@ -75,8 +75,7 @@ type Config struct {
 	// IsArchival tells the consensus if it should not prune old blocks
 	IsArchival bool
 	// EnableSanityCheckPruningUTXOSet checks the full pruning point utxo set against the commitment at every pruning movement
-	EnableSanityCheckPruningUTXOSet bool
-	// RefuseMismatchedImportedPruningPointUTXOSet rejects an imported coin set that does not match the header.
+	EnableSanityCheckPruningUTXOSet             bool
 	RefuseMismatchedImportedPruningPointUTXOSet bool
 	// EnableUTXODebugDiagnostics runs the expensive [UTXO-DEBUG] startup self-consistency checks
 	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) - each pass can take

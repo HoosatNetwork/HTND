@@ -168,7 +168,7 @@ type Flags struct {
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
 	ShutdownOnDisqualifiedStreak    bool          `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified chains."`
 	AllowMismatchedPruningUTXO      bool          `long:"allow-mismatched-pruning-utxo" description:"Allow importing and serving a pruning-point coin set that does not match the block header."`
-	AllowIBDFromUnverifiedPeer      bool          `long:"allow-ibd-from-unverified-peer" description:"Allow first-time coin-set download from a peer that did not advertise a clean floor."`
+	AllowIBDFromUnverifiedPeer      bool          `long:"allow-ibd-from-unverified-peer" description:"Allow coin-set download from a peer that did not advertise a clean floor."`
 	CoreNode                        bool          `long:"core-node" description:"Kept for old scripts. Does not isolate the node."`
 
 	// Compound transaction rate limiting flags
