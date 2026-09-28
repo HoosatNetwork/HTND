@@ -31,3 +31,31 @@ type UTXOSetHealth struct {
 	StoredMultiset   *DomainHash
 	HeaderCommitment *DomainHash
 }
+
+// ServedUTXOSetHealth answers the question a node must answer before it hands its pruning point
+// UTXO set to a peer: does the set it would actually send hash to the commitment in that pruning
+// point's header?
+//
+// UTXOSetHealth cannot answer this. It compares the pruning point's per-block multiset, not the
+// served bucket, and it also reports false for reasons that say nothing about the served set: a
+// pruning point that is still genesis or has no readable multiset (Checked=false), and a descendant
+// of the pruning point that failed its own commitment check (HTN-208). Gating serving on it made
+// nodes whose bucket was fine refuse every peer. The receiving peer verifies exactly the property
+// this reports, so this is the check that predicts whether serving is useful.
+type ServedUTXOSetHealth struct {
+	// Verified is true only when the multiset of every entry in the served pruning point UTXO bucket
+	// equals HeaderCommitment. It is false when they differ, and also when Ready is false.
+	Verified bool
+
+	// Ready is false when no answer could be given now: the pruning point UTXO set is being
+	// rewritten, or the pruning point moved while the set was being hashed. Retrying later can
+	// succeed; neither case says the set is bad.
+	Ready bool
+
+	// PruningPoint, SetMultiset, HeaderCommitment and EntryCount are the values the answer was
+	// derived from. SetMultiset and EntryCount are unset when Ready is false.
+	PruningPoint     *DomainHash
+	SetMultiset      *DomainHash
+	HeaderCommitment *DomainHash
+	EntryCount       uint64
+}

@@ -89,6 +89,8 @@ type consensus struct {
 	virtualChangeSetDropped bool
 	// disqualificationStreak watches for a node that disqualifies every block it adds. Guarded by lock.
 	disqualificationStreak disqualificationStreak
+	// servedUTXOSetCheck memoises CheckUTXOHealth. It has its own lock.
+	servedUTXOSetCheck servedUTXOSetCheck
 }
 
 func (s *consensus) exportPruningPointExodusBundle(pruningPoint *externalapi.DomainHash, exportRoot, network string) {

@@ -86,10 +86,26 @@ func (flow *handleRequestPruningPointUTXOSetFlow) waitForRequestPruningPointUTXO
 func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
 ) error {
+	// Gate on the set that would actually be sent, not on UTXOSetHealth. That one reads the pruning
+	// point's per-block multiset and also reports false for a pruning point that is still genesis or
+	// for an HTN-208 boundary offset, none of which says anything about the bucket served here.
 	if cfg := flow.Config(); cfg == nil || !cfg.AllowMismatchedPruningUTXO {
-		health, healthErr := flow.Domain().Consensus().UTXOSetHealth()
-		if healthErr != nil || health == nil || !health.BaselineVerified {
-			log.Warnf("Not serving pruning-point coin set: local floor is not clean. Sending UnexpectedPruningPoint without closing gossip.")
+		health, healthErr := flow.Domain().Consensus().CheckUTXOHealth(msgRequestPruningPointUTXOSet.PruningPointHash)
+		switch {
+		case errors.Is(healthErr, ruleerrors.ErrWrongPruningPointHash):
+			return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
+		case healthErr != nil:
+			log.Warnf("Not serving pruning-point coin set: could not check it (%s). "+
+				"Sending UnexpectedPruningPoint without closing gossip.", healthErr)
+			return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
+		case !health.Ready:
+			log.Infof("Not serving pruning-point coin set for %s: it is being rewritten. "+
+				"Sending UnexpectedPruningPoint without closing gossip.", health.PruningPoint)
+			return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
+		case !health.Verified:
+			log.Warnf("Not serving pruning-point coin set for %s: it hashes to %s, not its header commitment %s. "+
+				"Sending UnexpectedPruningPoint without closing gossip.",
+				health.PruningPoint, health.SetMultiset, health.HeaderCommitment)
 			return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
 		}
 	}
