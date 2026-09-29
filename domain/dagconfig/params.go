@@ -191,34 +191,14 @@ type Params struct {
 
 	POWScores []uint64
 
-	// OffsetModeValueChecksActivationDAAScore is the DAA score from which a node whose UTXO baseline is
-	// offset (blockInheritsKnownUTXOCommitmentOffset) stops waving value through on trust:
-	//
-	//   - a transaction accepted despite missing inputs must pass every check its found inputs can
-	//     decide (scripts, maturity, sequence locks, sigops) and may not create more than those inputs
-	//     hold (TransactionValidator.ValidateTransactionWithMissingInputsAndPopulateFee), and
-	//   - a coinbase that does not match the expected one is no longer tolerated wholesale: it may be
-	//     smaller, but may exceed the expected coinbase only by UnpricedTransactionFeeAllowance per
-	//     merge-set transaction this node could not price.
-	//
-	// Before it, both behave exactly as they always did, so history already accepted under the old
-	// rules still replays identically during IBD and virtual resolution. The gate is on the DAA score
-	// of the block being validated / merging, which header validation already pins.
-	//
-	// Mainnet ships with OffsetModeValueChecksNeverActive: activation there is a network-wide
-	// consensus change and must be a coordinated, chosen DAA score. Every test network activates at 0.
-	OffsetModeValueChecksActivationDAAScore uint64
-
 	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
 	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
-	// coinbase once OffsetModeValueChecksActivationDAAScore is reached. It bounds the fee a miner with a
-	// more complete UTXO set may legitimately claim for transactions this node cannot fully price.
+	// coinbase on a node with an offset UTXO baseline, from the block version at which
+	// hardforks.OffsetModeValueChecksVersion activates the offset-mode value checks. It bounds the fee a
+	// miner with a more complete UTXO set may legitimately claim for transactions this node cannot
+	// fully price. Blocks below that version are unaffected by it.
 	UnpricedTransactionFeeAllowance uint64
 }
-
-// OffsetModeValueChecksNeverActive is the OffsetModeValueChecksActivationDAAScore of a network that has
-// not scheduled the activation.
-const OffsetModeValueChecksNeverActive = ^uint64(0)
 
 // defaultUnpricedTransactionFeeAllowance is 0.1 HTN per unpriced transaction - about ten times the fee
 // htnwallet pays for a full 88-input compound (10,000 sompi per input).
@@ -345,6 +325,7 @@ var MainnetParams = Params{
 		40,
 		40,
 		40,
+		40,
 	},
 	Name:        "hoosat-mainnet",
 	Net:         appmessage.Mainnet,
@@ -386,6 +367,7 @@ var MainnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
@@ -398,12 +380,14 @@ var MainnetParams = Params{
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
+		10800 * time.Second,
 	},
 	DifficultyAdjustmentWindowSize: []int{
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
+		2640,
 		2640,
 		2640,
 		2640,
@@ -435,6 +419,15 @@ var MainnetParams = Params{
 		217137983,
 		218735007,
 		227679830,
+		// Block version 11: hardforks.OffsetModeValueChecksVersion - on a node whose UTXO baseline is
+		// offset, a transaction accepted despite missing inputs must pass every check its found inputs
+		// can decide and may not create more than they hold, and a mismatching coinbase is no longer
+		// tolerated wholesale (see consensusstatemanager/offset_value_checks.go). ^uint64(0) is a
+		// placeholder that never triggers: it needs a real, coordinated activation DAA score chosen
+		// with enough lead time for every mainnet node operator and miner to upgrade. Every other
+		// per-version table repeats its version-10 value for version 11: this fork changes no
+		// parameter, only validation.
+		^uint64(0),
 	},
 
 	PruningMultiplier: []uint64{
@@ -448,12 +441,14 @@ var MainnetParams = Params{
 		1,
 		1,
 		1,
+		1,
 	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000,
@@ -499,6 +494,7 @@ var MainnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -512,14 +508,14 @@ var MainnetParams = Params{
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	// Set to the coordinated activation DAA score before enabling on mainnet; see the field's doc.
-	OffsetModeValueChecksActivationDAAScore: OffsetModeValueChecksNeverActive,
-	UnpricedTransactionFeeAllowance:         defaultUnpricedTransactionFeeAllowance,
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	MaxBlockLevel: 225,
 	MergeDepth: []uint64{
 		defaultMergeDepth,
 		defaultMergeDepth,
 		defaultMergeDepth,
+		3600,
 		3600,
 		3600,
 		3600,
@@ -688,8 +684,7 @@ var TestnetParams = Params{
 
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
-	OffsetModeValueChecksActivationDAAScore: 0,
-	UnpricedTransactionFeeAllowance:         defaultUnpricedTransactionFeeAllowance,
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	MaxBlockLevel: 225,
 	MergeDepth: []uint64{
@@ -772,8 +767,7 @@ var TestnetParamsB5 = Params{
 	PruningProofM:                           defaultPruningProofM,
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
-	OffsetModeValueChecksActivationDAAScore: 0,
-	UnpricedTransactionFeeAllowance:         defaultUnpricedTransactionFeeAllowance,
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	MaxBlockLevel: 225,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
@@ -846,8 +840,7 @@ var TestnetParamsB10 = Params{
 	PruningProofM:                           defaultPruningProofM,
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
-	OffsetModeValueChecksActivationDAAScore: 0,
-	UnpricedTransactionFeeAllowance:         defaultUnpricedTransactionFeeAllowance,
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	MaxBlockLevel: 250,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
@@ -919,8 +912,7 @@ var SimnetParams = Params{
 	PruningProofM:                           defaultPruningProofM,
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
-	OffsetModeValueChecksActivationDAAScore: 0,
-	UnpricedTransactionFeeAllowance:         defaultUnpricedTransactionFeeAllowance,
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	MaxBlockLevel: 250,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, defaultMergeDepth},
@@ -990,8 +982,7 @@ var DevnetParams = Params{
 
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
-	OffsetModeValueChecksActivationDAAScore: 0,
-	UnpricedTransactionFeeAllowance:         defaultUnpricedTransactionFeeAllowance,
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	MaxBlockLevel: 225,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},

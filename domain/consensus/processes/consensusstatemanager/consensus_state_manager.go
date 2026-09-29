@@ -56,10 +56,9 @@ type consensusStateManager struct {
 
 	stores []model.Store
 
-	// offsetModeValueChecksActivationDAAScore and unpricedTransactionFeeAllowance are the dagconfig
-	// fields of the same names: see offset_value_checks.go.
-	offsetModeValueChecksActivationDAAScore uint64
-	unpricedTransactionFeeAllowance         uint64
+	// unpricedTransactionFeeAllowance is dagconfig.Params.UnpricedTransactionFeeAllowance, used from
+	// hardforks.OffsetModeValueChecksVersion onward: see offset_value_checks.go.
+	unpricedTransactionFeeAllowance uint64
 
 	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
 	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
@@ -191,17 +190,15 @@ func New(
 	refuseMismatchedImportedPruningPointUTXOSet bool,
 	powScores []uint64,
 	onDisqualification func(blockHash *externalapi.DomainHash, reason string),
-	offsetModeValueChecksActivationDAAScore uint64,
 	unpricedTransactionFeeAllowance uint64,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
-		offsetModeValueChecksActivationDAAScore: offsetModeValueChecksActivationDAAScore,
-		unpricedTransactionFeeAllowance:         unpricedTransactionFeeAllowance,
-		powScores:                               powScores,
-		onDisqualification:                      onDisqualification,
-		maxBlockParents:                         maxBlockParents,
-		mergeSetSizeLimit:                       mergeSetSizeLimit,
-		genesisHash:                             genesisHash,
+		unpricedTransactionFeeAllowance: unpricedTransactionFeeAllowance,
+		powScores:                       powScores,
+		onDisqualification:              onDisqualification,
+		maxBlockParents:                 maxBlockParents,
+		mergeSetSizeLimit:               mergeSetSizeLimit,
+		genesisHash:                     genesisHash,
 
 		databaseContext: databaseContext,
 

@@ -16,6 +16,7 @@ func gates() map[string]uint16 {
 		"RefuseMismatchedImportVersion": RefuseMismatchedImportVersion,
 		"ValidateHeaderBitsVersion":     ValidateHeaderBitsVersion,
 		"ValidateIBDPruningListVersion": ValidateIBDPruningListVersion,
+		"OffsetModeValueChecksVersion":  OffsetModeValueChecksVersion,
 	}
 }
 

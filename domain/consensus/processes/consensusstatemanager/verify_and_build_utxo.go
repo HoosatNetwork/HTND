@@ -160,7 +160,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 
 	coinbaseTransaction := block.Transactions[0]
 	coinbaseErr := csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-	// From the offset-mode value checks' activation, a coinbase mismatch on an offset baseline is no
+	// From block version 11 (hardforks.OffsetModeValueChecksVersion), a coinbase mismatch on an offset baseline is no
 	// longer tolerated wholesale: only a coinbase of the expected shape that exceeds the expected
 	// amounts by at most the fees this node could not price is. Anything else - a subsidy over-pay,
 	// a different payee - is notTolerable and disqualifies the block. See offset_value_checks.go.

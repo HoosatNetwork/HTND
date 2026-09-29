@@ -96,6 +96,20 @@ var (
 	// The measured blue-score mismatch rate makes it likely that turning them on now would reject
 	// the majority of the existing chain.
 	ValidateIBDPruningListVersion = unscheduledActivation
+
+	// OffsetModeValueChecksVersion activates the offset-mode value checks: from this block version,
+	// on a node whose UTXO baseline is offset, (1) a transaction accepted despite missing inputs must
+	// pass every check its found inputs can decide - scripts/signatures, coinbase maturity, sequence
+	// locks, sigop counts - and its outputs may not exceed its found inputs, with the real fee stored;
+	// and (2) ErrBadCoinbaseTransaction is no longer tolerated wholesale - only a coinbase of the
+	// expected shape exceeding the expected amounts by at most UnpricedTransactionFeeAllowance per
+	// transaction this node could not price is. See consensusstatemanager/offset_value_checks.go.
+	//
+	// Scheduled at block version 11. Mainnet's POWScores defines version 11 with a ^uint64(0)
+	// placeholder activation DAA score, so the rule is scheduled but cannot fire there until that
+	// entry is set to a real, coordinated DAA score. Other networks do not define version 11 yet.
+	// Version 10 and older blocks keep the old behaviour, so existing history replays unchanged.
+	OffsetModeValueChecksVersion uint16 = 11
 )
 
 // IsScheduled reports whether activationVersion names a real block version rather than the

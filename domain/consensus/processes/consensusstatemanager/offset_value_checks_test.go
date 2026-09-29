@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
@@ -32,36 +33,34 @@ func (f *fakeMissingInputValidator) ValidateTransactionWithMissingInputsAndPopul
 
 func TestOffsetModeValueChecksGate(t *testing.T) {
 	tests := []struct {
-		activation, daaScore uint64
-		want                 bool
+		version uint16
+		want    bool
 	}{
-		{0, 0, true},
-		{0, 231_301_175, true},
-		{1_000, 999, false},
-		{1_000, 1_000, true},
-		{1_000, 1_001, true},
-		{dagconfig.OffsetModeValueChecksNeverActive, 231_301_175, false},
-		{dagconfig.OffsetModeValueChecksNeverActive, ^uint64(0) - 1, false},
+		{9, false},
+		{10, false},
+		{11, true},
+		{12, true},
 	}
 	for _, test := range tests {
-		if got := offsetModeValueChecksActiveAt(test.activation, test.daaScore); got != test.want {
-			t.Errorf("activation %d, DAA score %d: active=%t, want %t", test.activation, test.daaScore, got, test.want)
+		if got := offsetModeValueChecksActiveForVersion(test.version); got != test.want {
+			t.Errorf("block version %d: active=%t, want %t", test.version, got, test.want)
 		}
 	}
-	if dagconfig.MainnetParams.OffsetModeValueChecksActivationDAAScore != dagconfig.OffsetModeValueChecksNeverActive {
-		t.Errorf("mainnet must not activate the offset-mode value checks until a coordinated DAA score is chosen")
+	scores := dagconfig.MainnetParams.POWScores
+	// POWScores[i] is the activation score of block version i+2 (version 1 has no entry).
+	if len(scores) < int(hardforks.OffsetModeValueChecksVersion)-1 {
+		t.Fatalf("mainnet POWScores does not define block version %d", hardforks.OffsetModeValueChecksVersion)
 	}
-	for _, params := range []*dagconfig.Params{&dagconfig.TestnetParams, &dagconfig.TestnetParamsB5,
+	if scores[hardforks.OffsetModeValueChecksVersion-2] != ^uint64(0) {
+		t.Errorf("mainnet must not activate block version 11 until a coordinated POW score is chosen")
+	}
+	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams, &dagconfig.TestnetParamsB5,
 		&dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
-		if params.OffsetModeValueChecksActivationDAAScore != 0 {
-			t.Errorf("%s: offset-mode value checks should be active from genesis", params.Name)
-		}
 		if params.UnpricedTransactionFeeAllowance == 0 {
 			t.Errorf("%s: unpriced transaction fee allowance is not set", params.Name)
 		}
 	}
 }
-
 // TestMissingInputAcceptancePreActivationUnchanged pins that before activation the missing-input
 // path behaves exactly as it always did - fee 0, no validation - so history accepted under the old
 // rule replays identically, and that after it the validator's verdict decides.
