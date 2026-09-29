@@ -393,11 +393,19 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 				return false, 0, nil, errors.Wrapf(err, "failed to add outputs of transaction %s in block %s "+
 					"after a missing input", transactionID, blockHash)
 			}
+			csm.journalMissingInputVerdict(stagingArea, blockHash, mergeSetBlockHash, transaction, transactionID,
+				true, inheritsOffset, resolvedInputs)
 			log.Debugf("Transaction %s in block %s spends coins this set does not hold; its outputs are "+
 				"kept so the gap does not spread", transactionID, blockHash)
 			logTransactionVerdict("accepted despite missing inputs", verdictContext, transaction, transactionID,
 				err, "block inherits a known UTXO commitment offset")
 			return true, accumulatedMassBefore, nil, nil
+		}
+		// Journal only the rejections the local offset state decided: the ones a node with inheritsOffset=true
+		// would have accepted. Double spends and zero-resolved-input copies are rejected by every node alike.
+		if acceptDespiteMissingInputs(err, true, resolvedInputs) {
+			csm.journalMissingInputVerdict(stagingArea, blockHash, mergeSetBlockHash, transaction, transactionID,
+				false, inheritsOffset, resolvedInputs)
 		}
 		logTransactionVerdict("rejected: unresolved inputs", verdictContext, transaction, transactionID, err,
 			fmt.Sprintf("inherits known UTXO commitment offset: %t", inheritsOffset))
