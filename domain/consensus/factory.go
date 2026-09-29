@@ -389,7 +389,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		5000,
 		config.EnableSanityCheckPruningUTXOSet,
 		config.POWScores,
-		config.OnDisqualification)
+		config.OnDisqualification,
+		config.OffsetModeValueChecksActivationDAAScore,
+		config.UnpricedTransactionFeeAllowance)
 	if err != nil {
 		return nil, false, err
 	}

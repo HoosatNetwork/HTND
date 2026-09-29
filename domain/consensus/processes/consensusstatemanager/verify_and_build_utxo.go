@@ -125,7 +125,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 			return false
 		}
 		survey.noteFailure(step, err)
-		if errors.As(err, &ruleerrors.RuleError{}) {
+		if errors.As(err, &ruleerrors.RuleError{}) && !isNotTolerable(err) {
 			if tolerate && blockCarriesOffsetOnly() {
 				csm.logToleratedIssue(step, blockHash, err)
 				return false
@@ -159,8 +159,19 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	log.Debugf("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
 
 	coinbaseTransaction := block.Transactions[0]
-	if stop("coinbase-transaction",
-		csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)) {
+	coinbaseErr := csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
+	// From the offset-mode value checks' activation, a coinbase mismatch on an offset baseline is no
+	// longer tolerated wholesale: only a coinbase of the expected shape that exceeds the expected
+	// amounts by at most the fees this node could not price is. Anything else - a subsidy over-pay,
+	// a different payee - is notTolerable and disqualifies the block. See offset_value_checks.go.
+	if coinbaseErr != nil && tolerate && errors.Is(coinbaseErr, ruleerrors.ErrBadCoinbaseTransaction) &&
+		csm.offsetModeValueChecksActive(block.Header.DAAScore()) {
+		if boundedErr := csm.checkCoinbaseOnOffsetBaseline(stagingArea, block, blockHash, coinbaseTransaction,
+			acceptanceData); boundedErr != nil {
+			coinbaseErr = boundedErr
+		}
+	}
+	if stop("coinbase-transaction", coinbaseErr) {
 		return firstError
 	}
 	log.Debugf("Coinbase transaction validation passed for block %s", blockHash)
@@ -694,17 +705,17 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 	return merkle.CalculateIDMerkleRoot(acceptedTransactions)
 }
 
-func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
-	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
-) error {
-	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
-	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
-
+// expectedCoinbaseTransaction is the coinbase this node expects block to carry, with the payload
+// copied from the block's own coinbase, which is not validated.
+func (csm *consensusStateManager) expectedCoinbaseTransaction(stagingArea *model.StagingArea,
+	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash,
+	coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
+) (*externalapi.DomainTransaction, error) {
 	log.Tracef("Extracting coinbase data for coinbase transaction %s in block %s",
 		consensushashing.TransactionID(coinbaseTransaction), blockHash)
 	_, coinbaseData, _, err := csm.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTransaction, block.Header.Version())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Tracef("Calculating the expected coinbase transaction for the given coinbase data and block %s", blockHash)
@@ -712,10 +723,24 @@ func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model
 	// using its own GHOSTDAG data to ensure it only processes merge set blocks
 	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Lets skip validation of the payload, because daascore or other data may change on expected payload.
 	expectedCoinbaseTransaction.Payload = coinbaseTransaction.Payload
+	return expectedCoinbaseTransaction, nil
+}
+
+func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
+	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
+) error {
+	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
+	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
+
+	expectedCoinbaseTransaction, err := csm.expectedCoinbaseTransaction(stagingArea, block, blockHash,
+		coinbaseTransaction, acceptanceData)
+	if err != nil {
+		return err
+	}
 
 	coinbaseTransactionHash := consensushashing.TransactionHash(coinbaseTransaction)
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)

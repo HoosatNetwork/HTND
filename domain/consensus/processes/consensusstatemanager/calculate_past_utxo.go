@@ -387,7 +387,21 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		}
 		inheritsOffset := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 		if acceptDespiteMissingInputs(err, inheritsOffset, resolvedInputs) {
-			transaction.StoreFee(0)
+			// Before the offset-mode value checks activate, this path took the transaction on trust:
+			// fee 0, no checks, every output created. From activation the found inputs must pass
+			// every check they can decide and the outputs may not exceed them - see
+			// offset_value_checks.go. A failure is an ordinary consensus rejection of the transaction.
+			ruleErr, validationErr := checkMissingInputAcceptance(csm.transactionValidator, stagingArea,
+				transaction, blockHash, blockDAAScore, csm.offsetModeValueChecksActive(blockDAAScore))
+			if validationErr != nil {
+				return false, 0, nil, errors.Wrapf(validationErr, "failed to validate transaction %s in "+
+					"block %s on the missing-input path", transactionID, blockHash)
+			}
+			if ruleErr != nil {
+				logTransactionVerdict("rejected: missing inputs and its found inputs fail validation",
+					verdictContext, transaction, transactionID, ruleErr, "offset-mode value checks active")
+				return false, accumulatedMassBefore, newTransactionRejection("rule-error", ruleErr), nil
+			}
 			err = accumulatedUTXODiff.AddOutputsSpendingResolvedInputs(transaction, utxo.AcceptedUTXOBlockDAAScore(blockDAAScore))
 			if err != nil {
 				return false, 0, nil, errors.Wrapf(err, "failed to add outputs of transaction %s in block %s "+
