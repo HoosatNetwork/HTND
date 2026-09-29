@@ -37,7 +37,7 @@ func (s *server) selectExternalSpendableUTXOs(externalUTXOs *appmessage.GetUTXOs
 	}
 
 	daaScore := dagInfo.VirtualDAAScore
-	maturity := s.params.BlockCoinbaseMaturity
+	maturity := s.coinbaseMaturity
 
 	// we do not make because we do not know size, because of unspendable utxos
 	var selectedExternalUtxos []*pb.UtxosByAddressesEntry
@@ -58,5 +58,5 @@ func isExternalUTXOSpendable(entry *appmessage.UTXOsByAddressesEntry, virtualDAA
 	} else if entry.UTXOEntry.Amount <= feePerInput {
 		return false
 	}
-	return entry.UTXOEntry.BlockDAAScore+coinbaseMaturity < virtualDAAScore
+	return isCoinbaseSafelyMature(entry.UTXOEntry.BlockDAAScore, coinbaseMaturity, virtualDAAScore)
 }
