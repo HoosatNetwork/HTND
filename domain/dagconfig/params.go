@@ -212,22 +212,22 @@ var (
 	// StrictUTXOCommitmentVersion activates HTN-002/HTN-004: from this block version,
 	// verifyAndBuildUTXO stops swallowing RuleErrors from the UTXO commitment, accepted-ID merkle
 	// root, coinbase and body-vs-past-UTXO checks on a node running an inherited-offset baseline.
-	StrictUTXOCommitmentVersion uint16 = 11
+	StrictUTXOCommitmentVersion uint16 = 10
 
 	// RefuseMismatchedImportVersion activates HTN-005: from this block version, an imported
 	// pruning-point UTXO set whose MuHash disagrees with the commitment is refused rather than
 	// accepted-and-repaired, and this node refuses to serve such a set onward. This is separate from
 	// the operator flag --enable-sanity-check-pruning-utxo, which is unchanged.
-	RefuseMismatchedImportVersion uint16 = 11
+	RefuseMismatchedImportVersion uint16 = ^uint16(0)
 
 	// ValidateHeaderBitsVersion activates HTN-007: from this block version, a header's bits must
 	// equal the difficulty this node computes for it.
-	ValidateHeaderBitsVersion uint16 = 11
+	ValidateHeaderBitsVersion uint16 = ^uint16(0)
 
 	// ValidateIBDPruningListVersion activates HTN-006: from this block version, an imported pruning
 	// point is checked with IsValidPruningPoint, and the pruning point list is checked to form a
 	// valid chain to genesis with ArePruningPointsInValidChain.
-	ValidateIBDPruningListVersion uint16 = 11
+	ValidateIBDPruningListVersion uint16 = ^uint16(0)
 
 	// OffsetModeValueChecksVersion activates the offset-mode value checks: from this block version,
 	// on a node whose UTXO baseline is offset, (1) a transaction accepted despite missing inputs must
@@ -235,7 +235,7 @@ var (
 	// and (2) ErrBadCoinbaseTransaction is only tolerated for a coinbase of the expected shape
 	// exceeding the expected amounts by at most UnpricedTransactionFeeAllowance per transaction this
 	// node could not price. See consensusstatemanager/offset_value_checks.go.
-	OffsetModeValueChecksVersion uint16 = 11
+	OffsetModeValueChecksVersion uint16 = 10
 )
 
 // HardForkActive reports whether the rule gated at activationVersion applies to a block of
