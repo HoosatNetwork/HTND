@@ -52,11 +52,15 @@ func (s *server) selectExternalSpendableUTXOs(externalUTXOs *appmessage.GetUTXOs
 	return selectedExternalUtxos, nil
 }
 
+// isExternalUTXOSpendable applies the wallet's age rule (isInputSafelyAged) to a coin of an address the
+// wallet does not hold the keys of, and skips coinbase outputs worth no more than their fee.
 func isExternalUTXOSpendable(entry *appmessage.UTXOsByAddressesEntry, virtualDAAScore uint64, coinbaseMaturity uint64) bool {
-	if !entry.UTXOEntry.IsCoinbase {
-		return true
-	} else if entry.UTXOEntry.Amount <= feePerInput {
+	if entry.UTXOEntry.IsCoinbase && entry.UTXOEntry.Amount <= feePerInput {
 		return false
 	}
+<<<<<<< HEAD
 	return entry.UTXOEntry.BlockDAAScore+coinbaseMaturity < virtualDAAScore
+=======
+	return isInputSafelyAged(entry.UTXOEntry.BlockDAAScore, entry.UTXOEntry.IsCoinbase, coinbaseMaturity, virtualDAAScore)
+>>>>>>> df732b44d (feat(mempool,htnwallet): require every input to be at least 1000 DAA old)
 }

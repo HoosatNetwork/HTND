@@ -108,15 +108,9 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, errors.Errorf("nothing to compound")
 	}
 
-	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
-	if err != nil {
-		return nil, err
-	}
-
 	// For compounding we want to consolidate inputs into a single output.
 	// Send the net amount (after fees) to the requested address and avoid creating
 	// an additional change output to keep base mass low and prevent dust.
-	// Note: changeAddress is still used by maybeAutoCompoundTransaction for split/merge flows.
 	unsignedTransaction, spentUTXOs, err := s.buildCompoundTransactionWithinStandardMass(selectedUTXOs, toAddress)
 	if err != nil {
 		return nil, err
@@ -130,11 +124,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		s.usedOutpoints[*spentUTXO.Outpoint] = time.Now()
 	}
 
-	unsignedTransactions, err := s.maybeAutoCompoundTransaction(unsignedTransaction, toAddress, changeAddress, changeWalletAddress)
-	if err != nil {
-		return nil, err
-	}
-	return unsignedTransactions, nil
+	return s.requireStandardMass(unsignedTransaction)
 }
 
 // Add this constant next to your others
@@ -147,9 +137,9 @@ var targetCompoundInputs = 88
 // 66-byte push of the signature). Other input types are bigger - a P2PKH input also carries its
 // public key (99 bytes), a P2SH input carries the public key and the redeem script (137) - so the
 // same 88 inputs that measure 98890 mass from a P2PK wallet measure 101794 from a P2PKH one and
-// 105138 from a P2SH one, against a 100000 limit. Going over is what pushed those wallets into
-// maybeSplitAndMergeTransaction, whose split transactions pay the change address rather than the
-// requested destination.
+// 105138 from a P2SH one, against a 100000 limit. Going over used to push those wallets into split
+// and merge transactions, whose splits paid the change address rather than the requested destination;
+// now it would refuse the compound outright (requireStandardMass).
 //
 // Sizing by measured mass instead of by count keeps a compound a single transaction paying the
 // destination directly, whatever the inputs look like, rather than depending on a constant that only
@@ -366,7 +356,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, errors.Errorf("couldn't find funds to spend")
 	}
 
-	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
+	changeAddress, _, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -388,11 +378,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, err
 	}
 
-	unsignedTransactions, err := s.maybeAutoCompoundTransaction(unsignedTransaction, toAddress, changeAddress, changeWalletAddress)
-	if err != nil {
-		return nil, err
-	}
-	return unsignedTransactions, nil
+	return s.requireStandardMass(unsignedTransaction)
 }
 
 func (s *server) sortUTXOsByAmountAscending() {

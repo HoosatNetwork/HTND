@@ -26,7 +26,7 @@ func TestUnorphanRejectsDoubleSpendOfPoolTransaction(t *testing.T) {
 
 		tcAsConsensus := tc.(externalapi.Consensus)
 		tcAsConsensusPointer := &tcAsConsensus
-		mp := New(DefaultConfig(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
+		mp := New(configWithoutInputMinAge(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 
 		// Distinct values: the helper is deterministic, so equal values would make these the same transaction.
 		grandparent := testutils.CreateTransactionWithOutput(100_000)

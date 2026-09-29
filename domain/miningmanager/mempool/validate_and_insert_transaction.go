@@ -35,6 +35,10 @@ func (mp *mempool) validateAndInsertTransaction(transaction *externalapi.DomainT
 	}
 
 	if len(missingOutpoints) > 0 {
+		// Inputs spending unconfirmed or unknown outputs are younger than any minimum input age.
+		if mp.config.InputMinAgeDAAScore > 0 {
+			return nil, mp.inputsWithoutUTXOEntryError(transaction, missingOutpoints)
+		}
 		if !allowOrphan {
 			str := fmt.Sprintf("Transaction %s is an orphan, where allowOrphan = false",
 				consensushashing.TransactionID(transaction))

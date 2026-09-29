@@ -1088,11 +1088,11 @@ func contains(transaction *externalapi.DomainTransaction, transactions []*extern
 	return false
 }
 
-// testMempoolConfig is the default mempool configuration without the coinbase reorg safety margin:
-// these tests set consensus coinbase maturity to 0 to spend coinbase outputs straight away, and are
-// about other behaviour. The margin has its own tests in the mempool package.
+// testMempoolConfig is the default mempool configuration without the minimum input age: these tests
+// set consensus coinbase maturity to 0 to spend coinbase outputs straight away, chain transactions,
+// and are about other behaviour. The minimum input age has its own tests in the mempool package.
 func testMempoolConfig(params *dagconfig.Params) *mempool.Config {
 	config := mempool.DefaultConfig(params)
-	config.CoinbaseReorgSafetyMarginDAAScore = 0
+	config.InputMinAgeDAAScore = 0
 	return config
 }

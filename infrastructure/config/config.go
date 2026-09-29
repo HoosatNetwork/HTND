@@ -74,8 +74,8 @@ const (
 	blockMaxMassMax              = 10_000_000
 	defaultMinRelayTxFee         = 1e-5 // 1 sompi per byte
 	defaultMaxOrphanTransactions = 100
-	// defaultCoinbaseReorgSafetyMargin matches the mempool's and htnwallet's default.
-	defaultCoinbaseReorgSafetyMargin = 1000
+	// defaultInputMinAgeDAA matches the mempool's and htnwallet's default.
+	defaultInputMinAgeDAA = 1000
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
@@ -176,8 +176,9 @@ type Flags struct {
 	CompoundTxRateLimitWindow uint64 `long:"compound-tx-ratelimit-window" description:"Rate limit window in minutes" default:"1"`
 	CompoundTxInputsThreshold uint64 `long:"compound-tx-inputs-threshold" description:"Minimum inputs to consider transaction as compound" default:"21"`
 
-	// Mempool policy: see mempool.checkCoinbaseReorgSafetyMargin.
-	CoinbaseReorgSafetyMargin uint64 `long:"coinbase-reorg-safety-margin" description:"Refuse to accept or relay transactions spending a coinbase output until it is this many DAA score units older than coinbase maturity (0 = consensus maturity only)" default:"1000"`
+	// Mempool policy: see mempool.checkInputMinAge.
+	InputMinAgeDAA            uint64  `long:"input-min-age-daa" description:"Refuse to accept or relay transactions with an input younger than this many DAA score units (counted after coinbase maturity for coinbase outputs), or spending outputs of unconfirmed transactions (0 = consensus rules only)" default:"1000"`
+	CoinbaseReorgSafetyMargin *uint64 `long:"coinbase-reorg-safety-margin" hidden:"true" description:"Deprecated alias of --input-min-age-daa; when given, it overrides it"`
 
 	// Wallet freezing flags
 	FrozenAddresses []string `long:"freeze-address" description:"Address to freeze (can be specified multiple times)"`
@@ -279,7 +280,7 @@ func defaultFlags() *Flags {
 		MaxOrphanTxs:                      defaultMaxOrphanTransactions,
 		SigCacheMaxSize:                   defaultSigCacheMaxSize,
 		MinRelayTxFee:                     defaultMinRelayTxFee,
-		CoinbaseReorgSafetyMargin:         defaultCoinbaseReorgSafetyMargin,
+		InputMinAgeDAA:                    defaultInputMinAgeDAA,
 		ServiceOptions:                    &ServiceOptions{},
 		ProtocolVersion:                   defaultProtocolVersion,
 		DisableIBDTimeout:                 defaultDisableIBDTimeout,
@@ -592,6 +593,8 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	applyDeprecatedFlagAliases(cfg.Flags)
+
 	// Validate the the minrelaytxfee.
 	cfg.MinRelayTxFee, err = util.NewAmount(cfg.Flags.MinRelayTxFee)
 	if err != nil {
@@ -728,4 +731,13 @@ func createDefaultConfigFile(destinationPath string) error {
 	_, err = dest.WriteString(sampleConfig)
 
 	return err
+}
+
+// applyDeprecatedFlagAliases copies flags given under a former name onto their current one.
+func applyDeprecatedFlagAliases(cfgFlags *Flags) {
+	// --coinbase-reorg-safety-margin was the name of --input-min-age-daa while it covered coinbase
+	// inputs only.
+	if cfgFlags.CoinbaseReorgSafetyMargin != nil {
+		cfgFlags.InputMinAgeDAA = *cfgFlags.CoinbaseReorgSafetyMargin
+	}
 }
