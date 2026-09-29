@@ -22,7 +22,7 @@ func TestMinedOrphanPromotesItsOrphanChild(t *testing.T) {
 
 		tcAsConsensus := tc.(externalapi.Consensus)
 		tcAsConsensusPointer := &tcAsConsensus
-		mp := New(DefaultConfig(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
+		mp := New(configWithoutInputMinAge(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 
 		// grandparent is unknown to both consensus and the mempool, so parent and child are orphans.
 		grandparent := testutils.CreateTransactionWithOutput(100_000)

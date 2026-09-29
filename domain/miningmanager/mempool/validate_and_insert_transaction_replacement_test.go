@@ -35,7 +35,7 @@ func TestValidateAndInsertTransactionReplacement(t *testing.T) {
 		tcAsConsensusPointer := &tcAsConsensus
 
 		newMempool := func() *mempool {
-			mempoolConfig := DefaultConfig(tc.DAGParams())
+			mempoolConfig := configWithoutInputMinAge(tc.DAGParams())
 			return New(mempoolConfig, consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 		}
 

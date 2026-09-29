@@ -84,8 +84,8 @@ func (mp *mempool) validateTransactionInContext(transaction *externalapi.DomainT
 		}
 	}
 
-	// Mempool policy, applied to local and relayed transactions alike: see checkCoinbaseReorgSafetyMargin.
-	if err := mp.checkCoinbaseReorgSafetyMargin(transaction); err != nil {
+	// Mempool policy, applied to local and relayed transactions alike: see checkInputMinAge.
+	if err := mp.checkInputMinAge(transaction); err != nil {
 		return err
 	}
 

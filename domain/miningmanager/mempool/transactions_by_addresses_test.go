@@ -25,7 +25,7 @@ func TestGetTransactionsByAddressesListsEveryTransaction(t *testing.T) {
 
 		tcAsConsensus := tc.(externalapi.Consensus)
 		tcAsConsensusPointer := &tcAsConsensus
-		mp := New(DefaultConfig(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
+		mp := New(configWithoutInputMinAge(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 
 		var spends []*externalapi.DomainTransaction
 		for i := range 2 {

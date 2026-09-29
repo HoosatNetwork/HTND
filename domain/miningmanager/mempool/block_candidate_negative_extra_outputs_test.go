@@ -26,7 +26,7 @@ func TestBlockCandidateTransactionsWithMoreInputsThanOutputs(t *testing.T) {
 
 		tcAsConsensus := tc.(externalapi.Consensus)
 		tcAsConsensusPointer := &tcAsConsensus
-		mp := New(DefaultConfig(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
+		mp := New(configWithoutInputMinAge(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 
 		scriptPublicKey, redeemScript := testutils.OpTrueScript()
 		signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)

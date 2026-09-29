@@ -126,7 +126,11 @@ func TestAddressTypeMatrix(t *testing.T) {
 					// The auto-compounder broadcasts through the node's mempool, which AddBlock bypasses.
 					tcAsConsensus := tc.(externalapi.Consensus)
 					tcAsConsensusPointer := &tcAsConsensus
-					mp := mempool.New(mempool.DefaultConfig(tc.DAGParams()),
+					// This matrix pins script-type admission, not coin age: the coins it spends are a few DAA old,
+					// so the input minimum-age policy is switched off here.
+					mempoolConfig := mempool.DefaultConfig(tc.DAGParams())
+					mempoolConfig.InputMinAgeDAAScore = 0
+					mp := mempool.New(mempoolConfig,
 						consensusreference.NewConsensusReference(&tcAsConsensusPointer))
 					if _, err := mp.ValidateAndInsertTransaction(tx, false, false, true); err != nil {
 						t.Fatalf("MEMPOOL REJECTED %s->%s: %+v", src.name, dst.name, err)

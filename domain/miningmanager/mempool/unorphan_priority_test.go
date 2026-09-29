@@ -30,7 +30,7 @@ func TestUnorphanCarriesThePriorityTheOrphanEarned(t *testing.T) {
 
 		tcAsConsensus := tc.(externalapi.Consensus)
 		tcAsConsensusPointer := &tcAsConsensus
-		config := DefaultConfig(tc.DAGParams())
+		config := configWithoutInputMinAge(tc.DAGParams())
 		config.CompoundTxMinInputsThreshold = 2
 		mp := New(config, consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 

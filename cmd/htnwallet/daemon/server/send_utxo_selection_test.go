@@ -13,7 +13,8 @@ import (
 // that wrapped around: a send-all over coins worth less than their fees, and a requested amount near the
 // uint64 limit, both used to yield a payment of about 2^64 sompi that passed the funds check.
 func TestSelectUTXOsForTransactionFeeArithmetic(t *testing.T) {
-	const virtualDAAScore = 100
+	// Past the coins' DAA score (1) plus the input minimum age and its slack, so every coin is spendable.
+	const virtualDAAScore = 1 + inputMinAgeDAAScore + 100
 	newServer := func(amounts ...uint64) *server {
 		coins := make([]*walletUTXO, len(amounts))
 		for i, amount := range amounts {
