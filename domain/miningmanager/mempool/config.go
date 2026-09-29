@@ -46,6 +46,11 @@ const (
 	// as consensus.
 	defaultMinimumStandardTransactionVersion = constants.MaxTransactionVersion
 	defaultMaximumStandardTransactionVersion = constants.MaxTransactionVersion
+
+	// defaultCoinbaseReorgSafetyMarginDAAScore is how many DAA score units beyond consensus coinbase
+	// maturity a coinbase output must age before this node accepts or relays a transaction spending it.
+	// It matches htnwallet's coinbaseReorgSafetyMargin. See checkCoinbaseReorgSafetyMargin.
+	defaultCoinbaseReorgSafetyMarginDAAScore uint64 = 1000
 )
 
 // Config represents a mempool configuration
@@ -66,6 +71,11 @@ type Config struct {
 	MinimumRelayTransactionFee           util.Amount
 	MinimumStandardTransactionVersion    uint16
 	MaximumStandardTransactionVersion    uint16
+
+	// CoinbaseReorgSafetyMarginDAAScore is mempool policy: a transaction spending a coinbase output is
+	// refused until virtual DAA score >= the output's DAA score + coinbase maturity + this margin.
+	// 0 disables the check, leaving only consensus maturity.
+	CoinbaseReorgSafetyMarginDAAScore uint64
 
 	// Compound transaction rate limiting configuration
 	CompoundTxRateLimitEnabled       bool
@@ -96,6 +106,7 @@ func DefaultConfig(dagParams *dagconfig.Params) *Config {
 		MinimumRelayTransactionFee:           defaultMinimumRelayTransactionFee,
 		MinimumStandardTransactionVersion:    defaultMinimumStandardTransactionVersion,
 		MaximumStandardTransactionVersion:    defaultMaximumStandardTransactionVersion,
+		CoinbaseReorgSafetyMarginDAAScore:    defaultCoinbaseReorgSafetyMarginDAAScore,
 
 		// Compound transaction rate limiting
 		CompoundTxRateLimitEnabled:       defaultCompoundTxRateLimitEnabled,

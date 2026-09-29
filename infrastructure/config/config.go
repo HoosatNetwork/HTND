@@ -74,6 +74,8 @@ const (
 	blockMaxMassMax              = 10_000_000
 	defaultMinRelayTxFee         = 1e-5 // 1 sompi per byte
 	defaultMaxOrphanTransactions = 100
+	// defaultCoinbaseReorgSafetyMargin matches the mempool's and htnwallet's default.
+	defaultCoinbaseReorgSafetyMargin = 1000
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
@@ -172,6 +174,9 @@ type Flags struct {
 	MaxCompoundTxPerMinute    uint64 `long:"max-compound-tx-per-minute" description:"Maximum compound transactions per address per minute" default:"10"`
 	CompoundTxRateLimitWindow uint64 `long:"compound-tx-ratelimit-window" description:"Rate limit window in minutes" default:"1"`
 	CompoundTxInputsThreshold uint64 `long:"compound-tx-inputs-threshold" description:"Minimum inputs to consider transaction as compound" default:"21"`
+
+	// Mempool policy: see mempool.checkCoinbaseReorgSafetyMargin.
+	CoinbaseReorgSafetyMargin uint64 `long:"coinbase-reorg-safety-margin" description:"Refuse to accept or relay transactions spending a coinbase output until it is this many DAA score units older than coinbase maturity (0 = consensus maturity only)" default:"1000"`
 
 	// Wallet freezing flags
 	FrozenAddresses []string `long:"freeze-address" description:"Address to freeze (can be specified multiple times)"`
@@ -273,6 +278,7 @@ func defaultFlags() *Flags {
 		MaxOrphanTxs:                      defaultMaxOrphanTransactions,
 		SigCacheMaxSize:                   defaultSigCacheMaxSize,
 		MinRelayTxFee:                     defaultMinRelayTxFee,
+		CoinbaseReorgSafetyMargin:         defaultCoinbaseReorgSafetyMargin,
 		ServiceOptions:                    &ServiceOptions{},
 		ProtocolVersion:                   defaultProtocolVersion,
 		DisableIBDTimeout:                 defaultDisableIBDTimeout,

@@ -84,6 +84,11 @@ func (mp *mempool) validateTransactionInContext(transaction *externalapi.DomainT
 		}
 	}
 
+	// Mempool policy, applied to local and relayed transactions alike: see checkCoinbaseReorgSafetyMargin.
+	if err := mp.checkCoinbaseReorgSafetyMargin(transaction); err != nil {
+		return err
+	}
+
 	numExtraOuts := len(transaction.Outputs) - len(transaction.Inputs)
 	if !hasCoinbaseInput && numExtraOuts > 2 && transaction.LoadFee() < uint64(numExtraOuts)*constants.SompiPerHoosat {
 		log.Warnf("Rejected spam tx %s from mempool (%d outputs)", consensushashing.TransactionID(transaction), len(transaction.Outputs))
