@@ -1043,6 +1043,8 @@ diffTraversalLoop:
 
 // This function takes 2 chain blocks (currentPruningHash, previousPruningHash) and finds
 // the UTXO diff between them by iterating over acceptance data of the chain blocks in between.
+// It must produce the same diff as calculateDiffBetweenPreviousAndCurrentPruningPoints: the replay
+// is reconciled against the previous pruning point's UTXO set, see reconcileReplayWithPreviousSet.
 func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData(stagingArea *model.StagingArea, currentPruningHash *externalapi.DomainHash) (externalapi.UTXODiff, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.calculateDiffBetweenPreviousAndCurrentPruningPoints__UsingAcceptanceData")
 	defer onEnd()
@@ -1077,6 +1079,7 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPointsUsi
 	}
 
 	utxoDiff := utxo.NewMutableUTXODiff()
+	created := make(map[externalapi.DomainOutpoint]struct{})
 
 	iterator, err := pm.dagTraversalManager.SelectedChildIterator(stagingArea, currentPruningHash, previousPruningHash, false)
 	if err != nil {
@@ -1110,9 +1113,23 @@ func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPointsUsi
 		if err != nil {
 			return nil, err
 		}
+		err = addAcceptedOutpoints(created, chainBlockAcceptanceData)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return utxoDiff.ToImmutable(), err
+	previousPruningPointUTXO, err := pm.pastUTXOLookup(stagingArea, previousPruningHash)
+	if err != nil {
+		// Without the previous set the replay cannot be reconciled. Returned as it is rather than failing: the
+		// diff-chain walk needs the same UTXO diffs, so it cannot be derived either, and the commitment
+		// verification after this still checks whatever is returned.
+		log.Warnf("pruning point %s: could not restore the previous pruning point %s's UTXO set to reconcile the "+
+			"acceptance-data diff against (%s) - a coin the previous set holds and a later chain block restamps "+
+			"is not removed from it", currentPruningHash, previousPruningHash, err)
+		return utxoDiff.ToImmutable(), nil
+	}
+	return reconcileReplayWithPreviousSet(utxoDiff.ToImmutable(), created, previousPruningPointUTXO)
 }
 
 // finalityScore is the number of finality intervals passed since
