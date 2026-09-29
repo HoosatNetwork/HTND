@@ -159,10 +159,11 @@ func NewOp(op string, data []byte) Op {
 	return result
 }
 
-// MaxRecords is how many records one process writes before the journal stops. A record is a few
-// kilobytes plus about 200 bytes per element, so this bounds a journal left on to roughly a
-// gigabyte. Delete or rotate the file between runs to record more.
-const MaxRecords = 200000
+// MaxRecords is how many records one process writes before the journal stops. On mainnet a record
+// averages about 8 KB (200,000 records measured 1.6 GB, about five hours of blocks), so this
+// bounds a journal left on to roughly 16 GB, about two days. Delete or rotate the file between runs
+// to record more.
+const MaxRecords = 2000000
 
 type writer struct {
 	mu       sync.Mutex
