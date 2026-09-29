@@ -1,8 +1,6 @@
 package app
 
 import (
-	"fmt"
-
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 )
@@ -34,15 +32,16 @@ func stopNodeOnDisqualifiedBlockStreak(streak int, lastBlock *externalapi.Domain
 	})
 }
 
-// panicOnDisqualification stops the node with a stack trace the moment any block is disqualified from
-// the chain, whether it failed UTXO verification itself or inherited its selected parent's
-// disqualification. It panics on the resolving goroutine, under the consensus lock and before the
-// status is committed, so the trace shows the exact resolution path; panics.HandlePanic logs it and
-// exits.
+// logDisqualification logs the full report for every block disqualified from the chain, whether it
+// failed UTXO verification itself or inherited its selected parent's disqualification, and lets the
+// node carry on.
 //
-// This deliberately trades availability for visibility: a single invalid block relayed by any peer
-// stops the node, and because the disqualification is never committed, the same block stops it
-// again after a restart until it is investigated.
-func panicOnDisqualification(blockHash *externalapi.DomainHash, reason string) {
-	panic(fmt.Sprintf("block %s disqualified from chain: %s", blockHash, reason))
+// It used to panic instead. Any single invalid block relayed by any peer then stopped the node, and
+// because the panic fired before the status was committed, the same block stopped it again on every
+// restart. With the strict UTXO commitment gate active, a block from a miner on a different UTXO
+// history is disqualified in the ordinary course of things - rejecting it is the gate's job - so the
+// panic turned a rule working as intended into a crash loop. A node that has really fallen off the
+// network shows up as a streak, which stopNodeOnDisqualifiedBlockStreak still handles.
+func logDisqualification(blockHash *externalapi.DomainHash, reason string) {
+	log.Warnf("Block %s disqualified from chain: %s", blockHash, reason)
 }

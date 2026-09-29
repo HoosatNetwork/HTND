@@ -189,7 +189,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
 		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
 		OnDisqualifiedBlockStreak:         stopNodeOnDisqualifiedBlockStreak,
-		OnDisqualification:                panicOnDisqualification,
+		OnDisqualification:                logDisqualification,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
