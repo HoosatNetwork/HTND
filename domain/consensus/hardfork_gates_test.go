@@ -11,12 +11,12 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
-// Workstream C's central safety property, tested from the outside: each dormant consensus rule must
-// change nothing while its gate is unscheduled, and must actually bite once it is scheduled.
+// Workstream C's central safety property, tested from the outside: each gated consensus rule must
+// change nothing below its activation version, and must actually bite once blocks reach it.
 //
 // Both halves matter, and the first is the one that protects the live network. A rule that fires
 // early rejects history - the chain was built without it - so a node applying it would disqualify
@@ -47,26 +47,22 @@ func withWrongBits(block *externalapi.DomainBlock, bits uint32) *externalapi.Dom
 	}
 }
 
-// TestHeaderBitsRuleIsInertUntilItsGateIsScheduled is HTN-007's admissibility half: a block whose
+// TestHeaderBitsRuleIsInertBelowItsActivationVersion is HTN-007's admissibility half: a block whose
 // bits are wrong - which is every block, as far as this rule is concerned, because nothing has ever
-// checked them - must still be accepted while the gate is unscheduled.
+// checked them - must still be accepted below dagconfig.ValidateHeaderBitsVersion.
 //
 // This is not hypothetical for HTN-007 specifically. HTN-221 changed the retarget formula with no
 // version gate, on the explicit reasoning that bits are never strictly validated. So blocks built
 // before and after that change disagree about the correct bits for the same window, and enforcing
 // this rule on existing versions would reject blocks this very node would have built.
-func TestHeaderBitsRuleIsInertUntilItsGateIsScheduled(t *testing.T) {
+func TestHeaderBitsRuleIsInertBelowItsActivationVersion(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
 		tc, teardown, err := consensus.NewFactory().NewTestConsensus(consensusConfig,
-			"TestHeaderBitsRuleIsInertUntilItsGateIsScheduled")
+			"TestHeaderBitsRuleIsInertBelowItsActivationVersion")
 		if err != nil {
 			t.Fatalf("NewTestConsensus: %+v", err)
 		}
 		defer teardown(false)
-
-		if hardforks.IsScheduled(hardforks.ValidateHeaderBitsVersion) {
-			t.Skip("ValidateHeaderBitsVersion has been scheduled; this test covers the dormant state")
-		}
 
 		block, _, err := tc.BuildBlockWithParents(
 			[]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
@@ -77,7 +73,7 @@ func TestHeaderBitsRuleIsInertUntilItsGateIsScheduled(t *testing.T) {
 		// Deliberately nonsense bits, far from anything the window could produce.
 		tampered := withWrongBits(block, block.Header.Bits()-1)
 		if err := tc.ValidateAndInsertBlock(tampered, true, true); err != nil {
-			t.Fatalf("a block with wrong difficulty bits was rejected while the rule is dormant, so "+
+			t.Fatalf("a block with wrong difficulty bits was rejected below the activation version, so "+
 				"this change is NOT inert and would reject existing history: %+v", err)
 		}
 
@@ -87,7 +83,7 @@ func TestHeaderBitsRuleIsInertUntilItsGateIsScheduled(t *testing.T) {
 			t.Fatalf("reading the block status: %+v", err)
 		}
 		if status == externalapi.StatusInvalid || status == externalapi.StatusDisqualifiedFromChain {
-			t.Fatalf("a block with wrong bits landed as %s while the rule is dormant", status)
+			t.Fatalf("a block with wrong bits landed as %s below the activation version", status)
 		}
 	})
 }
@@ -108,7 +104,9 @@ func TestHeaderBitsRuleRejectsWrongBitsOnceScheduled(t *testing.T) {
 
 		// Version 1 covers everything from genesis, so scheduling there activates the rule for the
 		// blocks this test builds.
-		defer hardforks.SetForTest(&hardforks.ValidateHeaderBitsVersion, 1)()
+		defer func(previous uint16) { dagconfig.ValidateHeaderBitsVersion = previous }(
+			dagconfig.ValidateHeaderBitsVersion)
+		dagconfig.ValidateHeaderBitsVersion = 1
 
 		block, _, err := tc.BuildBlockWithParents(
 			[]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
@@ -134,23 +132,31 @@ func TestHeaderBitsRuleRejectsWrongBitsOnceScheduled(t *testing.T) {
 	})
 }
 
-// TestEveryGateIsUnscheduledInAShippedBuild is the belt-and-braces check against the one mistake
-// this whole design is built to prevent: shipping with a gate accidentally left scheduled.
-//
-// hardforks' own tests assert the same thing, but they can only see the package's values. This runs
-// from the consensus package, after all of its init work, so it also catches anything that assigned
-// to a gate on the way here.
-func TestEveryGateIsUnscheduledInAShippedBuild(t *testing.T) {
-	for name, gate := range map[string]uint16{
-		"StrictUTXOCommitmentVersion":   hardforks.StrictUTXOCommitmentVersion,
-		"RefuseMismatchedImportVersion": hardforks.RefuseMismatchedImportVersion,
-		"ValidateHeaderBitsVersion":     hardforks.ValidateHeaderBitsVersion,
-		"ValidateIBDPruningListVersion": hardforks.ValidateIBDPruningListVersion,
-	} {
-		if hardforks.IsScheduled(gate) {
-			t.Errorf("%s is scheduled at version %d in this build. No gate may be scheduled without "+
-				"a matching POWScores entry and a lockstep extension of every per-version parameter "+
-				"table - see the hardforks package comment.", name, gate)
+// TestNoGateIsReachableOnAnyNetwork is the belt-and-braces check against shipping a gated rule that a
+// network can already reach. A block version is reachable when its POWScores activation score is
+// not the ^uint64(0) placeholder. It runs from the consensus package, after all of its init work, so
+// it also catches anything that assigned to a gate on the way here.
+func TestNoGateIsReachableOnAnyNetwork(t *testing.T) {
+	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams,
+		&dagconfig.TestnetParamsB5, &dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
+		highestReachable := uint16(1)
+		for _, score := range params.POWScores {
+			if score != ^uint64(0) {
+				highestReachable++
+			}
+		}
+		for name, gate := range map[string]uint16{
+			"StrictUTXOCommitmentVersion":   dagconfig.StrictUTXOCommitmentVersion,
+			"RefuseMismatchedImportVersion": dagconfig.RefuseMismatchedImportVersion,
+			"ValidateHeaderBitsVersion":     dagconfig.ValidateHeaderBitsVersion,
+			"ValidateIBDPruningListVersion": dagconfig.ValidateIBDPruningListVersion,
+			"OffsetModeValueChecksVersion":  dagconfig.OffsetModeValueChecksVersion,
+		} {
+			if dagconfig.HardForkActive(gate, highestReachable) {
+				t.Errorf("%s: %s (block version %d) is reachable at block version %d. Give it a real "+
+					"POWScores activation score only as a coordinated hard fork.",
+					params.Name, name, gate, highestReachable)
+			}
 		}
 	}
 }

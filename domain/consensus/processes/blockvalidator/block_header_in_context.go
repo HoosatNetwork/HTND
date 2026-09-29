@@ -46,7 +46,7 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 
 	// DISABLED, not gated: no ticket, no recorded reason, and no activation version. It has been off
 	// long enough that the live chain may well contain blocks that violate it, so it cannot simply be
-	// switched on - it needs the same treatment as the four rules in the hardforks package: measure
+	// switched on - it needs the same treatment as the rules gated in dagconfig/params.go: measure
 	// how much of the existing chain would fail, then gate it. Left as-is here rather than deleted so
 	// the check itself is not lost.
 	// err = v.checkMergeSizeLimit(stagingArea, ghostdagData)
@@ -101,7 +101,7 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	// are left here, labelled, rather than deleted - deleting them would lose the checks, and
 	// enabling them would reject history.
 	//
-	// The next step for any of them is the one the hardforks package exists for: measure how much of
+	// The next step for any of them is the one the dagconfig/params.go gates exist for: measure how much of
 	// the existing chain fails the check, then gate it at a new block version. See HTN-006 for the
 	// blue-score/blue-work half, which measured a 62.5% mismatch rate - i.e. re-enabling those two
 	// today would reject the majority of the chain.
@@ -132,7 +132,7 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	// pruning point, which is half of why two nodes with identical blocks could pick different ones.
 	// The original note reads "probably can never again be enabled" - if that is true it should be
 	// deleted with a recorded decision rather than left looking like a TODO. The import-time half of
-	// this question is gated at hardforks.ValidateIBDPruningListVersion.
+	// this question is gated at dagconfig.ValidateIBDPruningListVersion.
 	// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
 	// if err != nil {
 	// 	return err

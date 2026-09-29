@@ -8,7 +8,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/domain/prefixmanager/prefix"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
@@ -178,12 +177,12 @@ func TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated(t *testing
 
 	// 6. And none of the gates may have been reachable during any of the above.
 	for name, gate := range map[string]uint16{
-		"StrictUTXOCommitmentVersion":   hardforks.StrictUTXOCommitmentVersion,
-		"RefuseMismatchedImportVersion": hardforks.RefuseMismatchedImportVersion,
-		"ValidateHeaderBitsVersion":     hardforks.ValidateHeaderBitsVersion,
-		"ValidateIBDPruningListVersion": hardforks.ValidateIBDPruningListVersion,
+		"StrictUTXOCommitmentVersion":   dagconfig.StrictUTXOCommitmentVersion,
+		"RefuseMismatchedImportVersion": dagconfig.RefuseMismatchedImportVersion,
+		"ValidateHeaderBitsVersion":     dagconfig.ValidateHeaderBitsVersion,
+		"ValidateIBDPruningListVersion": dagconfig.ValidateIBDPruningListVersion,
 	} {
-		if hardforks.Active(gate, 9) {
+		if dagconfig.HardForkActive(gate, 9) {
 			t.Errorf("%s was active at block version 9 during this run", name)
 		}
 	}

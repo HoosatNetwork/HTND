@@ -8,10 +8,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionhelper"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
@@ -290,9 +290,9 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 	// so a node that refuses them all never syncs. It is for finding a clean peer once one exists,
 	// and for a node that should stay off a broken baseline rather than join it.
 	//
-	// HTN-005, gated at hardforks.RefuseMismatchedImportVersion: from that block version onward this
-	// refusal is not optional and the operator flag is no longer what decides it. The gate is
-	// unscheduled, so today only the flag can trigger this, exactly as before - the flag's default
+	// HTN-005, gated at dagconfig.RefuseMismatchedImportVersion: from that block version onward this
+	// refusal is not optional and the operator flag is no longer what decides it. No network reaches
+	// block version 11 yet, so today only the flag can trigger this, exactly as before - the flag's default
 	// and meaning are deliberately untouched.
 	refuse := csm.refuseMismatchedImportedPruningPointUTXOSet
 	refusalReason := "this node is configured to refuse an unverifiable set rather than build on it"
@@ -330,7 +330,7 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 }
 
 // refuseMismatchedImportIsActive reports whether newPruningPoint is at or past
-// hardforks.RefuseMismatchedImportVersion, and so may not be imported with a UTXO set that
+// dagconfig.RefuseMismatchedImportVersion, and so may not be imported with a UTXO set that
 // disagrees with its commitment.
 //
 // The version comes from the pruning point header's own DAA score. At import time this node has no
@@ -341,9 +341,6 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 func (csm *consensusStateManager) refuseMismatchedImportIsActive(stagingArea *model.StagingArea,
 	newPruningPoint *externalapi.DomainHash,
 ) (bool, error) {
-	if !hardforks.IsScheduled(hardforks.RefuseMismatchedImportVersion) {
-		return false, nil
-	}
 	if len(csm.powScores) == 0 {
 		return false, nil
 	}
@@ -353,7 +350,7 @@ func (csm *consensusStateManager) refuseMismatchedImportIsActive(stagingArea *mo
 		return false, err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(csm.powScores, header.DAAScore())
-	return hardforks.Active(hardforks.RefuseMismatchedImportVersion, blockVersion), nil
+	return dagconfig.HardForkActive(dagconfig.RefuseMismatchedImportVersion, blockVersion), nil
 }
 
 // spendingTransactionsByOutpoint maps each outpoint the block spends to the transaction that spends

@@ -95,9 +95,10 @@ which reads like partial progress, but they are dead code, so the defect is tota
 
 ## Workstream C: the four gated rules
 
-All four are implemented in `domain/consensus/utils/hardforks` and wired at their call sites. **Every
-one is unscheduled**, keyed at `math.MaxUint16`, which no network can reach — mainnet's highest
-producible version is `len(POWScores)+1 = 10`.
+All four are gates in `domain/dagconfig/params.go`, checked with `dagconfig.HardForkActive` at their
+call sites. **Every one activates at block version 11**, alongside `OffsetModeValueChecksVersion`.
+Mainnet defines version 11 in `POWScores` with a `^uint64(0)` placeholder and no other network
+defines it, so none can fire until a coordinated activation DAA score is set.
 
 | Predicate | Ticket | Where it bites | Anchored on |
 |---|---|---|---|
@@ -111,25 +112,23 @@ adds strictness, so keying on it would let any miner opt out by claiming an olde
 
 ### Tests
 
-- `hardforks` package: six tests asserting inertness at every reachable version on every network,
-  at absurd versions, that the placeholder is unreachable, and that a *scheduled* gate must be
-  defined by `POWScores` (fires at activation time, not before).
-- `TestHeaderBitsRuleIsInertUntilItsGateIsScheduled` — a block with wrong bits still lands.
+- `TestHeaderBitsRuleIsInertBelowItsActivationVersion` — a block with wrong bits still lands.
 - `TestHeaderBitsRuleRejectsWrongBitsOnceScheduled` — the same block is refused with
-  `ErrUnexpectedDifficulty` once scheduled, and a block this node built still passes.
+  `ErrUnexpectedDifficulty` once the gate is moved to version 1, and a block this node built still
+  passes.
 - `TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated` — two consensuses fed identical
   blocks, built at global version 1 and 9, agree on pruning point, pruning point *list*, finality
   point, tip status and template bits.
 - `TestValidateAndInsertImportedPruningPoint` — two long-dead commented-out assertions restored under
   the gate, including the plan's named case: a UTXO set **with one sompi removed** is accepted with
   the gate off and rejected with `ErrBadPruningPointUTXOSet` with it on.
-- `TestEveryGateIsUnscheduledInAShippedBuild` — belt and braces from outside the package.
+- `TestNoGateIsReachableOnAnyNetwork` — no gate is active at the highest block version any network
+  can reach (placeholder `POWScores` entries excluded).
 
 ### CI
 
-`build_and_test.sh` gained a second check: production code may not assign to a gate or call
-`hardforks.SetForTest`. The gates are `var` rather than `const` only so tests can exercise a rule
-that is otherwise unreachable.
+`build_and_test.sh` gained a second check: production code may not assign to a gate. The gates are
+`var` rather than `const` only so tests can exercise a rule that is otherwise unreachable.
 
 ### Corrected assumption
 

@@ -9,7 +9,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/internal/ci"
@@ -305,8 +304,8 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 
 			// These two checks were commented out with "DISABLE this test because the validation is
 			// disabled" - HTN-006 and HTN-005 respectively. Both validations now exist again behind
-			// unscheduled hardfork gates, so each assertion is run twice: once with the gate off,
-			// pinning today's documented (permissive) behaviour, and once with it scheduled at
+			// hardfork gates at block version 11, so each assertion is run twice: once with the gate
+			// off, pinning today's documented (permissive) behaviour, and once with it moved to
 			// version 1, pinning the behaviour the fork will bring.
 			//
 			// All blocks here are version 1 (POWScores is math.MaxUint64 above), so scheduling a
@@ -327,7 +326,8 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint, nil)
 
 			// HTN-005, gate on: the same set is refused with ErrBadPruningPointUTXOSet.
-			restoreImportGate := hardforks.SetForTest(&hardforks.RefuseMismatchedImportVersion, 1)
+			previousImportGate := dagconfig.RefuseMismatchedImportVersion
+			dagconfig.RefuseMismatchedImportVersion = 1
 			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint,
 				ruleerrors.ErrBadPruningPointUTXOSet)
 
@@ -337,7 +337,7 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 			// means other than the MuHash.
 			assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
 				pruningPoint, ruleerrors.ErrBadPruningPointUTXOSet)
-			restoreImportGate()
+			dagconfig.RefuseMismatchedImportVersion = previousImportGate
 
 			// And with the gate off again, that same one-sompi-short set is accepted - which is
 			// precisely how a node ends up on an offset baseline without anything going wrong

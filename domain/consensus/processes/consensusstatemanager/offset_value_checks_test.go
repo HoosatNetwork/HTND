@@ -6,7 +6,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
@@ -48,10 +47,10 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 	}
 	scores := dagconfig.MainnetParams.POWScores
 	// POWScores[i] is the activation score of block version i+2 (version 1 has no entry).
-	if len(scores) < int(hardforks.OffsetModeValueChecksVersion)-1 {
-		t.Fatalf("mainnet POWScores does not define block version %d", hardforks.OffsetModeValueChecksVersion)
+	if len(scores) < int(dagconfig.OffsetModeValueChecksVersion)-1 {
+		t.Fatalf("mainnet POWScores does not define block version %d", dagconfig.OffsetModeValueChecksVersion)
 	}
-	if scores[hardforks.OffsetModeValueChecksVersion-2] != ^uint64(0) {
+	if scores[dagconfig.OffsetModeValueChecksVersion-2] != ^uint64(0) {
 		t.Errorf("mainnet must not activate block version 11 until a coordinated POW score is chosen")
 	}
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams, &dagconfig.TestnetParamsB5,
@@ -61,6 +60,7 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 		}
 	}
 }
+
 // TestMissingInputAcceptancePreActivationUnchanged pins that before activation the missing-input
 // path behaves exactly as it always did - fee 0, no validation - so history accepted under the old
 // rule replays identically, and that after it the validator's verdict decides.

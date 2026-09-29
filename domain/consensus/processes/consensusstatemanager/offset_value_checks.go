@@ -7,12 +7,12 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionhelper"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/pkg/errors"
 )
 
-// Offset-mode value checks (hardforks.OffsetModeValueChecksVersion, block version 11).
+// Offset-mode value checks (dagconfig.OffsetModeValueChecksVersion, block version 11).
 //
 // A node whose UTXO baseline is offset tolerates what it cannot reproduce. Before activation that
 // toleration also covered two things that move value and that the node CAN check:
@@ -35,12 +35,12 @@ import (
 // while making subsidy over-pay impossible and fee over-pay small and bounded.
 //
 // The gate is the block version, activated through the network's POWScores like every earlier
-// hard fork: blocks of version >= hardforks.OffsetModeValueChecksVersion (11) get the checks, blocks
+// hard fork: blocks of version >= dagconfig.OffsetModeValueChecksVersion (11) get the checks, blocks
 // of version 10 and below keep the old behaviour exactly, so history accepted before activation
 // replays exactly as it was accepted during IBD, reorgs and virtual resolution.
 //
 // The version is derived from the DAA score of the block being validated or merging with
-// constants.BlockVersionForDAAScore, as hardforks.Active requires, rather than read from a
+// constants.BlockVersionForDAAScore, as dagconfig.HardForkActive requires, rather than read from a
 // peer-supplied header field. For a real block the two are identical (checkBlockVersion rejects a
 // header whose version differs from the one its DAA score implies); for virtual, which has no
 // header, the derived version is the version a block built on the same parents carries, so a
@@ -55,7 +55,7 @@ func (csm *consensusStateManager) offsetModeValueChecksActive(blockDAAScore uint
 // offsetModeValueChecksActiveForVersion reports whether the offset-mode value checks apply to a block
 // of the given version.
 func offsetModeValueChecksActiveForVersion(blockVersion uint16) bool {
-	return hardforks.Active(hardforks.OffsetModeValueChecksVersion, blockVersion)
+	return dagconfig.HardForkActive(dagconfig.OffsetModeValueChecksVersion, blockVersion)
 }
 
 // checkMissingInputAcceptance decides the fee and validity of a transaction on the missing-input

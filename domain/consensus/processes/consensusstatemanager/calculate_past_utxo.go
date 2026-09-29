@@ -387,7 +387,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		}
 		inheritsOffset := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 		if acceptDespiteMissingInputs(err, inheritsOffset, resolvedInputs) {
-			// Below block version 11 (hardforks.OffsetModeValueChecksVersion) this path takes the
+			// Below block version 11 (dagconfig.OffsetModeValueChecksVersion) this path takes the
 			// transaction on trust: fee 0, no checks, every output created. From it the found inputs must pass
 			// every check they can decide and the outputs may not exceed them - see
 			// offset_value_checks.go. A failure is an ordinary consensus rejection of the transaction.

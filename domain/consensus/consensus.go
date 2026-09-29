@@ -19,8 +19,8 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/domain/exodus"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
@@ -42,7 +42,7 @@ type consensus struct {
 	difficultyAdjustmentWindowSize []int
 
 	// powScores is the network's activation table, kept so that a block version can be derived from
-	// a DAA score without going through the process-global (see the hardforks package).
+	// a DAA score without going through the process-global (see dagconfig.HardForkActive).
 	powScores []uint64
 
 	blockProcessor        model.BlockProcessor
@@ -892,7 +892,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 			pruningPointHash)
 	}
 
-	// HTN-005's serve half, gated at hardforks.RefuseMismatchedImportVersion: once the pruning
+	// HTN-005's serve half, gated at dagconfig.RefuseMismatchedImportVersion: once the pruning
 	// point's commitment is treated as law, a node whose own set does not hash to it must not hand
 	// that set to anyone else.
 	//
@@ -902,9 +902,9 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	// shrinks. GetInfo already advertises the same fact through UTXOSetHealth, so a peer can see it
 	// before asking; this is what stops the answer being given anyway.
 	//
-	// The gate is unscheduled, so this is inert today, and it must stay that way until a coordinated
-	// rebaseline: essentially every node currently serves a set that fails this check, so refusing
-	// now would simply stop IBD working for everyone.
+	// The gate is block version 11, which no network reaches yet, so this is inert today, and it must
+	// stay that way until a coordinated rebaseline: essentially every node currently serves a set
+	// that fails this check, so refusing now would simply stop IBD working for everyone.
 	if err := s.refuseToServeUnverifiableUTXOSet(stagingArea, pruningPointHash); err != nil {
 		return nil, err
 	}
@@ -916,7 +916,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	return pruningPointUTXOs, nil
 }
 
-// refuseToServeUnverifiableUTXOSet returns a rule error when hardforks.RefuseMismatchedImportVersion
+// refuseToServeUnverifiableUTXOSet returns a rule error when dagconfig.RefuseMismatchedImportVersion
 // has activated for pruningPointHash and this node's own UTXO baseline does not hash to that point's
 // header commitment.
 //
@@ -929,9 +929,6 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 func (s *consensus) refuseToServeUnverifiableUTXOSet(stagingArea *model.StagingArea,
 	pruningPointHash *externalapi.DomainHash,
 ) error {
-	if !hardforks.IsScheduled(hardforks.RefuseMismatchedImportVersion) {
-		return nil
-	}
 	if len(s.powScores) == 0 {
 		return nil
 	}
@@ -941,7 +938,7 @@ func (s *consensus) refuseToServeUnverifiableUTXOSet(stagingArea *model.StagingA
 		return err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(s.powScores, header.DAAScore())
-	if !hardforks.Active(hardforks.RefuseMismatchedImportVersion, blockVersion) {
+	if !dagconfig.HardForkActive(dagconfig.RefuseMismatchedImportVersion, blockVersion) {
 		return nil
 	}
 

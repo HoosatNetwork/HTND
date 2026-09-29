@@ -14,7 +14,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/pkg/errors"
 )
 
@@ -40,12 +40,12 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
 	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 
-	// HTN-002/HTN-004, gated at hardforks.StrictUTXOCommitmentVersion: from that block version
+	// HTN-002/HTN-004, gated at dagconfig.StrictUTXOCommitmentVersion: from that block version
 	// onward the toleration above - and the miner's-view toleration below - stop applying, and these
 	// four checks fail closed as they were always meant to.
 	//
-	// The gate is unscheduled, so this is inert for every block version any network can produce
-	// today - see the hardforks package. It must stay that way until a coordinated rebaseline:
+	// The gate is block version 11, so this is inert for every block version any network can produce
+	// today - see dagconfig/params.go. It must stay that way until a coordinated rebaseline:
 	// essentially every mainnet node currently runs on an offset baseline, so a node that stopped
 	// tolerating would disqualify the live chain and fall off the network alone.
 	//
@@ -160,7 +160,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 
 	coinbaseTransaction := block.Transactions[0]
 	coinbaseErr := csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-	// From block version 11 (hardforks.OffsetModeValueChecksVersion), a coinbase mismatch on an offset baseline is no
+	// From block version 11 (dagconfig.OffsetModeValueChecksVersion), a coinbase mismatch on an offset baseline is no
 	// longer tolerated wholesale: only a coinbase of the expected shape that exceeds the expected
 	// amounts by at most the fees this node could not price is. Anything else - a subsidy over-pay,
 	// a different payee - is notTolerable and disqualifies the block. See offset_value_checks.go.
@@ -497,22 +497,19 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 //
 // Needs no persisted marker; works on an already-synced database.
 // utxoCommitmentIsStrictFor reports whether blockHash is at or past
-// hardforks.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
+// dagconfig.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
 //
 // The version comes from the block's selected parent's DAA score, as this node computed it - the
 // same anchoring HTN-001/003 established for every other version-dependent rule. A block's own
-// header version is not used: it is peer-supplied, and every rule gated in the hardforks package
+// header version is not used: it is peer-supplied, and every rule gated in dagconfig/params.go
 // adds strictness, so a miner could otherwise opt out of this one by claiming an older version.
 //
 // A block whose selected parent has no DAA score yet (genesis, trusted-data bootstrap) falls back
-// to the process-global version, exactly as versionOfChildOf does. While the gate is unscheduled
-// that fallback cannot matter, because no version at all satisfies an unscheduled gate.
+// to the process-global version, exactly as versionOfChildOf does. While no network can reach block
+// version 11 that fallback cannot matter, because no version it yields satisfies the gate.
 func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) (bool, error) {
-	if !hardforks.IsScheduled(hardforks.StrictUTXOCommitmentVersion) {
-		return false, nil
-	}
 
 	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 	if err != nil {
@@ -522,7 +519,7 @@ func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.S
 	if err != nil {
 		return false, err
 	}
-	return hardforks.Active(hardforks.StrictUTXOCommitmentVersion, blockVersion), nil
+	return dagconfig.HardForkActive(dagconfig.StrictUTXOCommitmentVersion, blockVersion), nil
 }
 
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,

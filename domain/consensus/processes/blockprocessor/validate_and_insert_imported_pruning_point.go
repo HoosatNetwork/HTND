@@ -5,7 +5,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/pkg/errors"
 )
 
@@ -34,15 +34,15 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 }
 
 // validateImportedPruningPointChain runs HTN-006's two checks, gated at
-// hardforks.ValidateIBDPruningListVersion.
+// dagconfig.ValidateIBDPruningListVersion.
 //
 // Both were commented out, under the note "Currently HTN pruning points are messed up, so need to
 // disable this check". That is still true: HTN-006 measured a 62.5% blue-score mismatch rate, so
 // turning these on for existing block versions would very likely reject the majority of the chain
-// that exists. They are restored here as real code behind an unscheduled gate rather than left as
+// that exists. They are restored here as real code behind a block-version-11 gate rather than left as
 // comments, so that activating them later is a version bump and not an archaeology exercise.
 //
-// Until the gate is scheduled this returns nil without reading anything, so IBD behaves exactly as
+// Until a network reaches block version 11 the gate is inactive, so IBD behaves exactly as
 // it does today.
 //
 // What they check, and why it matters:
@@ -84,7 +84,7 @@ func (bp *blockProcessor) validateImportedPruningPointChain(
 }
 
 // pruningListValidationIsActive reports whether the imported pruning point is at or past
-// hardforks.ValidateIBDPruningListVersion.
+// dagconfig.ValidateIBDPruningListVersion.
 //
 // The version is derived from the pruning point header's own DAA score. That is a weaker anchor
 // than the selected-parent derivation used elsewhere - at import time this node has no resolved DAG
@@ -96,9 +96,6 @@ func (bp *blockProcessor) validateImportedPruningPointChain(
 func (bp *blockProcessor) pruningListValidationIsActive(
 	stagingArea *model.StagingArea, newPruningPointHash *externalapi.DomainHash,
 ) (bool, error) {
-	if !hardforks.IsScheduled(hardforks.ValidateIBDPruningListVersion) {
-		return false, nil
-	}
 	if len(bp.powScores) == 0 {
 		return false, nil
 	}
@@ -108,5 +105,5 @@ func (bp *blockProcessor) pruningListValidationIsActive(
 		return false, err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(bp.powScores, header.DAAScore())
-	return hardforks.Active(hardforks.ValidateIBDPruningListVersion, blockVersion), nil
+	return dagconfig.HardForkActive(dagconfig.ValidateIBDPruningListVersion, blockVersion), nil
 }

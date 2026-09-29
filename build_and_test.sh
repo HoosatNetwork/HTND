@@ -34,18 +34,16 @@ then
   exit 1
 fi
 
-# The hardfork activation gates are vars only so that tests can exercise a rule that is otherwise
-# unreachable. Nothing in production may assign to one or call the test-only setter: a gate flipped
-# at runtime would activate a consensus rule that the network has not agreed to, which is the exact
-# failure this whole mechanism exists to make impossible.
+# The hardfork activation gates in domain/dagconfig/params.go are vars only so that tests can
+# exercise a rule that is otherwise unreachable. Nothing in production may assign to one: a gate
+# flipped at runtime would activate a consensus rule that the network has not agreed to.
 HARDFORK_GATE_WRITES=$(find . -type f -name '*.go' -not -name '*_test.go' -not -path './vendor/*' \
-  -not -path './domain/consensus/utils/hardforks/*' \
-  -exec grep -Hn -E 'hardforks\.(SetForTest|[A-Za-z]+Version[[:space:]]*=[^=])' {} + \
+  -exec grep -Hn -E 'dagconfig\.(StrictUTXOCommitment|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningList|OffsetModeValueChecks)Version[[:space:]]*=[^=]' {} + \
   | grep -v -E '^[^:]*:[0-9]+:[[:space:]]*//' || true)
 if [ -n "${HARDFORK_GATE_WRITES}" ]
 then
-  echo "Production code assigns to a hardfork activation gate, or calls hardforks.SetForTest."
-  echo "Gates may only be changed by editing their declaration in the hardforks package:"
+  echo "Production code assigns to a hardfork activation gate."
+  echo "Gates may only be changed by editing their declaration in domain/dagconfig/params.go:"
   echo "${HARDFORK_GATE_WRITES}"
   exit 1
 fi

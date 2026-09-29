@@ -7,9 +7,9 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/pow"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/virtual"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/pkg/errors"
@@ -45,7 +45,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 	// of whose parents is an ancestor of another, which is a structural rule rather than a
 	// UTXO-state one, so the chain either satisfies it or it does not - that is a cheap thing to
 	// measure and has not been. Until it is, this cannot be switched on, for the same reason as
-	// everything in the hardforks package: a rule turned on for existing versions rejects history.
+	// every gate in dagconfig/params.go: a rule turned on for existing versions rejects history.
 	// err = v.checkParentsIncest(stagingArea, blockHash)
 	// if err != nil {
 	// 	return err
@@ -82,7 +82,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		}
 	}
 
-	// Stage the DAA window, and - from hardforks.ValidateHeaderBitsVersion onward - check that the
+	// Stage the DAA window, and - from dagconfig.ValidateHeaderBitsVersion onward - check that the
 	// difficulty the header claims is the one this node computes.
 	//
 	// HTN-007: the comment that used to sit here said the header's difficulty was validated "within
@@ -93,7 +93,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 	// bits, so a miner cannot claim easy work and skip doing it - but it can claim a difficulty the
 	// rest of the network never agreed on, and nothing here noticed.
 	//
-	// The gate is unscheduled, so this is inert for every block version any network can produce
+	// The gate is block version 11, so this is inert for every block version any network can produce
 	// today. It must stay that way until activation: HTN-221 deliberately changed the retarget
 	// formula without a version gate, on the reasoning that bits are never strictly validated, so
 	// turning this on for existing versions would now reject blocks this very node would build.
@@ -115,20 +115,17 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 	return nil
 }
 
-// checkHeaderBits enforces HTN-007's rule once hardforks.ValidateHeaderBitsVersion has activated.
+// checkHeaderBits enforces HTN-007's rule once dagconfig.ValidateHeaderBitsVersion has activated.
 //
 // The version is derived from the block's selected parent's DAA score, as this node computed it,
 // never from the header's own version field: the field is peer-supplied, and a rule that adds
 // strictness must not be one a miner can decline by claiming an older version. A block whose
 // selected parent has no DAA score yet (genesis, trusted-data bootstrap) falls back to the
-// process-global version, which cannot matter while the gate is unscheduled because no version
-// satisfies an unscheduled gate.
+// process-global version, which cannot reach the gate while no network defines a reachable
+// block version 11.
 func (v *blockValidator) checkHeaderBits(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash, header externalapi.BlockHeader, expectedBits uint32,
 ) error {
-	if !hardforks.IsScheduled(hardforks.ValidateHeaderBitsVersion) {
-		return nil
-	}
 	if blockHash.Equal(v.genesisHash) {
 		return nil
 	}
@@ -138,7 +135,7 @@ func (v *blockValidator) checkHeaderBits(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
-	if !hardforks.Active(hardforks.ValidateHeaderBitsVersion, blockVersion) {
+	if !dagconfig.HardForkActive(dagconfig.ValidateHeaderBitsVersion, blockVersion) {
 		return nil
 	}
 

@@ -194,10 +194,59 @@ type Params struct {
 	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
 	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
 	// coinbase on a node with an offset UTXO baseline, from the block version at which
-	// hardforks.OffsetModeValueChecksVersion activates the offset-mode value checks. It bounds the fee a
+	// OffsetModeValueChecksVersion activates the offset-mode value checks. It bounds the fee a
 	// miner with a more complete UTXO set may legitimately claim for transactions this node cannot
 	// fully price. Blocks below that version are unaffected by it.
 	UnpricedTransactionFeeAllowance uint64
+}
+
+// Consensus rules that are gated on a block version. Each activates at block version 11, whose
+// activation DAA score each network sets in its POWScores. Mainnet defines version 11 with a
+// ^uint64(0) placeholder and no other network defines it, so none of these rules can fire until a
+// real, coordinated DAA score is chosen for it. Version 10 and older blocks keep the old behaviour,
+// so existing history replays unchanged.
+//
+// These are vars rather than consts only so that tests can activate a rule at a version their
+// blocks reach. Production code never assigns to them; build_and_test.sh enforces that.
+var (
+	// StrictUTXOCommitmentVersion activates HTN-002/HTN-004: from this block version,
+	// verifyAndBuildUTXO stops swallowing RuleErrors from the UTXO commitment, accepted-ID merkle
+	// root, coinbase and body-vs-past-UTXO checks on a node running an inherited-offset baseline.
+	StrictUTXOCommitmentVersion uint16 = 11
+
+	// RefuseMismatchedImportVersion activates HTN-005: from this block version, an imported
+	// pruning-point UTXO set whose MuHash disagrees with the commitment is refused rather than
+	// accepted-and-repaired, and this node refuses to serve such a set onward. This is separate from
+	// the operator flag --enable-sanity-check-pruning-utxo, which is unchanged.
+	RefuseMismatchedImportVersion uint16 = 11
+
+	// ValidateHeaderBitsVersion activates HTN-007: from this block version, a header's bits must
+	// equal the difficulty this node computes for it.
+	ValidateHeaderBitsVersion uint16 = 11
+
+	// ValidateIBDPruningListVersion activates HTN-006: from this block version, an imported pruning
+	// point is checked with IsValidPruningPoint, and the pruning point list is checked to form a
+	// valid chain to genesis with ArePruningPointsInValidChain.
+	ValidateIBDPruningListVersion uint16 = 11
+
+	// OffsetModeValueChecksVersion activates the offset-mode value checks: from this block version,
+	// on a node whose UTXO baseline is offset, (1) a transaction accepted despite missing inputs must
+	// pass every check its found inputs can decide and its outputs may not exceed its found inputs,
+	// and (2) ErrBadCoinbaseTransaction is only tolerated for a coinbase of the expected shape
+	// exceeding the expected amounts by at most UnpricedTransactionFeeAllowance per transaction this
+	// node could not price. See consensusstatemanager/offset_value_checks.go.
+	OffsetModeValueChecksVersion uint16 = 11
+)
+
+// HardForkActive reports whether the rule gated at activationVersion applies to a block of
+// blockVersion.
+//
+// blockVersion must be a version this node derived itself from a DAA score it computed - via
+// constants.BlockVersionForDAAScore, blockversion.OfSelectedParent, or an equivalent - and never the
+// version field of a peer-supplied header. Every gated rule adds strictness, so keying one on an
+// attacker-chosen field would let any miner opt out of it by claiming an older version.
+func HardForkActive(activationVersion, blockVersion uint16) bool {
+	return blockVersion >= activationVersion
 }
 
 // defaultUnpricedTransactionFeeAllowance is 0.1 HTN per unpriced transaction - about ten times the fee
@@ -419,10 +468,9 @@ var MainnetParams = Params{
 		217137983,
 		218735007,
 		227679830,
-		// Block version 11: hardforks.OffsetModeValueChecksVersion - on a node whose UTXO baseline is
-		// offset, a transaction accepted despite missing inputs must pass every check its found inputs
-		// can decide and may not create more than they hold, and a mismatching coinbase is no longer
-		// tolerated wholesale (see consensusstatemanager/offset_value_checks.go). ^uint64(0) is a
+		// Block version 11 activates every gated rule declared above: StrictUTXOCommitmentVersion,
+		// RefuseMismatchedImportVersion, ValidateHeaderBitsVersion, ValidateIBDPruningListVersion and
+		// OffsetModeValueChecksVersion. ^uint64(0) is a
 		// placeholder that never triggers: it needs a real, coordinated activation DAA score chosen
 		// with enough lead time for every mainnet node operator and miner to upgrade. Every other
 		// per-version table repeats its version-10 value for version 11: this fork changes no
