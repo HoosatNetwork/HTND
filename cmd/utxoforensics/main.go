@@ -257,6 +257,13 @@ func main() {
 		}
 	}
 
+	if *ppFingerprintCompare != "" {
+		compareSetFingerprints(*ppFingerprintCompare)
+		if *dbPath == "" {
+			return
+		}
+	}
+
 	if *dbPath == "" {
 		fmt.Fprintln(os.Stderr, "-db is required")
 		os.Exit(2)
@@ -301,6 +308,14 @@ func main() {
 			os.Exit(1)
 		}
 		diffPruningPointSets(s, s2, sa)
+	}
+
+	if *ppFingerprintOut != "" {
+		writeSetFingerprint(s, sa, *ppFingerprintOut)
+	}
+
+	if *ppFingerprintDump != "" {
+		dumpPartitions(s, *ppFingerprintDump)
 	}
 
 	if *canonicalArtifactFlag {
