@@ -214,6 +214,14 @@ var (
 	// root, coinbase and body-vs-past-UTXO checks on a node running an inherited-offset baseline.
 	StrictUTXOCommitmentVersion uint16 = 10
 
+	// StrictMinersViewFieldsVersion ends the miner's-view toleration: from this block version, a
+	// block whose only failures are its UTXO commitment or accepted-ID merkle root is disqualified.
+	// Those two fields report the miner's UTXO history and move no value, and mainnet mining nodes do
+	// not share one history, so a node enforcing them alone disqualifies the chain the network builds
+	// on. It is separate from StrictUTXOCommitmentVersion so the value-moving checks can be enforced
+	// without it, and can only activate once every mining node commits the same multiset.
+	StrictMinersViewFieldsVersion uint16 = ^uint16(0)
+
 	// RefuseMismatchedImportVersion activates HTN-005: from this block version, an imported
 	// pruning-point UTXO set whose MuHash disagrees with the commitment is refused rather than
 	// accepted-and-repaired, and this node refuses to serve such a set onward. This is separate from
@@ -469,6 +477,7 @@ var MainnetParams = Params{
 		218735007,
 		227679830,
 		// Block version 11 activates every gated rule declared above: StrictUTXOCommitmentVersion,
+		// StrictMinersViewFieldsVersion,
 		// RefuseMismatchedImportVersion, ValidateHeaderBitsVersion, ValidateIBDPruningListVersion and
 		// OffsetModeValueChecksVersion. ^uint64(0) is a
 		// placeholder that never triggers: it needs a real, coordinated activation DAA score chosen

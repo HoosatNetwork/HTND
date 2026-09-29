@@ -147,6 +147,7 @@ func TestNoGateIsReachableOnAnyNetwork(t *testing.T) {
 		}
 		for name, gate := range map[string]uint16{
 			"StrictUTXOCommitmentVersion":   dagconfig.StrictUTXOCommitmentVersion,
+			"StrictMinersViewFieldsVersion": dagconfig.StrictMinersViewFieldsVersion,
 			"RefuseMismatchedImportVersion": dagconfig.RefuseMismatchedImportVersion,
 			"ValidateHeaderBitsVersion":     dagconfig.ValidateHeaderBitsVersion,
 			"ValidateIBDPruningListVersion": dagconfig.ValidateIBDPruningListVersion,

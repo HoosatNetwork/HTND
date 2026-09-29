@@ -60,6 +60,15 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	if strict {
 		tolerate = false
 	}
+	// The miner's-view toleration below has its own gate. Ending it together with the baseline
+	// toleration disqualified the live chain: at block version 10, 93b08180 (templated by a mining
+	// node on another UTXO history) failed only its commitment - its transactions, coinbase and
+	// accepted-ID merkle root all passed - and the network built on it while this node disqualified
+	// it and every block above it.
+	minersViewStrict, err := csm.minersViewFieldsAreStrictFor(stagingArea, blockHash)
+	if err != nil {
+		return err
+	}
 
 	// The UTXO commitment and the accepted-ID merkle root are tolerated on every node until the strict
 	// gate, not only on one whose baseline is offset. Mainnet mining nodes do not share one UTXO
@@ -130,7 +139,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 				csm.logToleratedIssue(step, blockHash, err)
 				return false
 			}
-			if !strict && isMinersViewField(step) && blockCarriesOffsetOnly() {
+			if !minersViewStrict && isMinersViewField(step) && blockCarriesOffsetOnly() {
 				csm.logMinersViewTolerated(step, blockHash, err)
 				return false
 			}
@@ -510,7 +519,22 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) (bool, error) {
+	return csm.hardForkActiveFor(stagingArea, blockHash, dagconfig.StrictUTXOCommitmentVersion)
+}
 
+// minersViewFieldsAreStrictFor reports whether blockHash is at or past
+// dagconfig.StrictMinersViewFieldsVersion, and so may not have a failing UTXO commitment or
+// accepted-ID merkle root tolerated as the miner's view. The version is derived as in
+// utxoCommitmentIsStrictFor.
+func (csm *consensusStateManager) minersViewFieldsAreStrictFor(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash,
+) (bool, error) {
+	return csm.hardForkActiveFor(stagingArea, blockHash, dagconfig.StrictMinersViewFieldsVersion)
+}
+
+func (csm *consensusStateManager) hardForkActiveFor(stagingArea *model.StagingArea,
+	blockHash *externalapi.DomainHash, activationVersion uint16,
+) (bool, error) {
 	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 	if err != nil {
 		return false, err
@@ -519,7 +543,7 @@ func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.S
 	if err != nil {
 		return false, err
 	}
-	return dagconfig.HardForkActive(dagconfig.StrictUTXOCommitmentVersion, blockVersion), nil
+	return dagconfig.HardForkActive(activationVersion, blockVersion), nil
 }
 
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,

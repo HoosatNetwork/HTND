@@ -52,6 +52,7 @@ func (csm *consensusStateManager) disqualificationReport(stagingArea *model.Stag
 
 	// The toleration decision's inputs.
 	strict, strictErr := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
+	minersViewStrict, minersViewStrictErr := csm.minersViewFieldsAreStrictFor(stagingArea, blockHash)
 	carriesOffsetOnly, arithmeticProblem := blockOnlyCarriesTheInheritedOffset(acceptanceData, pastUTXOSet,
 		header.DAAScore(), func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool) {
 			return csm.virtualUTXOEntry(stagingArea, outpoint)
@@ -59,9 +60,10 @@ func (csm *consensusStateManager) disqualificationReport(stagingArea *model.Stag
 	if arithmeticProblem == "" {
 		arithmeticProblem = "none"
 	}
-	line("toleration: offset baseline signal %t, strict commitment gate %t (err %v), acceptance data agrees with "+
-		"UTXO diff %t (problem: %s)", csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash), strict,
-		strictErr, carriesOffsetOnly, arithmeticProblem)
+	line("toleration: offset baseline signal %t, strict commitment gate %t (err %v), strict miner's-view gate "+
+		"%t (err %v), acceptance data agrees with UTXO diff %t (problem: %s)",
+		csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash), strict, strictErr, minersViewStrict,
+		minersViewStrictErr, carriesOffsetOnly, arithmeticProblem)
 
 	line("selected parent %s", csm.describeChainBlock(stagingArea, selectedParentHash))
 

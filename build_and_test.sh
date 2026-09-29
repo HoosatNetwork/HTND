@@ -38,7 +38,7 @@ fi
 # exercise a rule that is otherwise unreachable. Nothing in production may assign to one: a gate
 # flipped at runtime would activate a consensus rule that the network has not agreed to.
 HARDFORK_GATE_WRITES=$(find . -type f -name '*.go' -not -name '*_test.go' -not -path './vendor/*' \
-  -exec grep -Hn -E 'dagconfig\.(StrictUTXOCommitment|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningList|OffsetModeValueChecks)Version[[:space:]]*=[^=]' {} + \
+  -exec grep -Hn -E 'dagconfig\.(StrictUTXOCommitment|StrictMinersViewFields|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningList|OffsetModeValueChecks)Version[[:space:]]*=[^=]' {} + \
   | grep -v -E '^[^:]*:[0-9]+:[[:space:]]*//' || true)
 if [ -n "${HARDFORK_GATE_WRITES}" ]
 then
