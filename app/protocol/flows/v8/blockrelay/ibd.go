@@ -230,17 +230,12 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 		// 	}
 		// }
 
-		if flow.Config().NetParams().DisallowDirectBlocksOnTopOfGenesis && !flow.Config().AllowSubmitBlockWhenNotSynced {
-			isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
-			if err != nil {
-				return err
-			}
-
-			if isGenesisVirtualSelectedParent {
-				log.Infof("Cannot IBD to %s because it won't change the pruning point. The node needs to IBD "+
-					"to the recent pruning point before normal operation can resume.", relayBlockHash)
-				return nil
-			}
+		isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
+		if err != nil {
+			return err
+		}
+		if isGenesisVirtualSelectedParent {
+			log.Infof("Virtual selected parent is genesis; continuing header/body catch-up to %s", relayBlockHash)
 		}
 
 		err = flow.syncPruningPointFutureHeaders(

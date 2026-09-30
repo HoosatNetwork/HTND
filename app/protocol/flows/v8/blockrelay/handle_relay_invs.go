@@ -269,9 +269,8 @@ func (flow *handleRelayInvsFlow) start() error {
 		}
 
 		if flow.IsOrphan(inv.Hash) {
-			if flow.Config().NetParams().DisallowDirectBlocksOnTopOfGenesis && !flow.Config().AllowSubmitBlockWhenNotSynced && isGenesisVirtualSelectedParent {
-				log.Infof("Cannot process orphan %s for a node with only the genesis block. The node needs to IBD to the recent pruning point before normal operation can resume.", inv.Hash)
-				continue
+			if isGenesisVirtualSelectedParent {
+				log.Infof("Virtual selected parent is genesis; requesting missing ancestors for %s", inv.Hash)
 			}
 
 			log.Debugf("Block %s is a known orphan. Requesting its missing ancestors", inv.Hash)
@@ -597,16 +596,12 @@ func (flow *handleRelayInvsFlow) processOrphan(block *externalapi.DomainBlock) e
 		return err
 	}
 	if isBlockInOrphanResolutionRange {
-		if flow.Config().NetParams().DisallowDirectBlocksOnTopOfGenesis && !flow.Config().AllowSubmitBlockWhenNotSynced {
-			isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
-			if err != nil {
-				return err
-			}
-
-			if isGenesisVirtualSelectedParent {
-				log.Infof("Cannot process orphan %s for a node with only the genesis block. The node needs to IBD to the recent pruning point before normal operation can resume.", blockHash)
-				return nil
-			}
+		isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
+		if err != nil {
+			return err
+		}
+		if isGenesisVirtualSelectedParent {
+			log.Infof("Virtual selected parent is genesis; continuing orphan processing for %s", blockHash)
 		}
 		flow.AddOrphan(block)
 		log.Debugf("Requesting block %s missing ancestors", blockHash)

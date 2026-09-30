@@ -77,7 +77,7 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 		var flows []*common.Flow
 		log.Debugf("Registering p2p flows for peer %s for protocol version %d", peer, peer.ProtocolVersion())
 		switch peer.ProtocolVersion() {
-		case 8:
+		case 8, 11:
 			flows = v8.Register(m, netConnection, router, errChan, &isStopping)
 		default:
 			panic(errors.Errorf("no way to handle protocol version %d", peer.ProtocolVersion()))

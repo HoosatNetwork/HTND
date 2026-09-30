@@ -394,15 +394,7 @@ var MainnetParams = Params{
 	// template generation regardless of that (RepairBlockStatuses leaving a UTXO-valid virtual parent
 	// with no stored multiset) is fixed by RepairMissingMultisets, see consensus.go.
 	POWScores: []uint64{
-		17500000,
-		21821800,
-		29335426,
-		43334184,
-		192792190,
-		213340776,
-		217137983,
-		218735007,
-		227679830,
+		1, 1, 1, 1, 1, 1, 1, 1, 1,
 	},
 
 	PruningMultiplier: []uint64{
