@@ -58,9 +58,5 @@ func isExternalUTXOSpendable(entry *appmessage.UTXOsByAddressesEntry, virtualDAA
 	if entry.UTXOEntry.IsCoinbase && entry.UTXOEntry.Amount <= feePerInput {
 		return false
 	}
-<<<<<<< HEAD
-	return entry.UTXOEntry.BlockDAAScore+coinbaseMaturity < virtualDAAScore
-=======
 	return isInputSafelyAged(entry.UTXOEntry.BlockDAAScore, entry.UTXOEntry.IsCoinbase, coinbaseMaturity, virtualDAAScore)
->>>>>>> df732b44d (feat(mempool,htnwallet): require every input to be at least 1000 DAA old)
 }
