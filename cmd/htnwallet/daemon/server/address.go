@@ -23,9 +23,10 @@ func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress,
 	if len(fromAddresses) != 0 && useExisting {
 		walletAddr = fromAddresses[0]
 	} else {
-		if mldsa44 {
+		if mldsa44 && !useExisting {
 			// Check before consuming an internal index, so a wallet without enough ML-DSA-44 keys
-			// fails without advancing lastUsedInternalIndex.
+			// fails without advancing lastUsedInternalIndex. useExisting takes internal index 0
+			// instead, and never needs the next one.
 			_, err := s.mldsa44Address(&walletAddress{
 				index:    s.keysFile.LastUsedInternalIndex() + 1,
 				keyChain: libhtnwallet.InternalKeychain,

@@ -57,3 +57,50 @@ func TestChangeAddressIsTrackedBeforeItHoldsACoin(t *testing.T) {
 		t.Fatalf("the scan derives %v for the change address, not %s", scanned, address)
 	}
 }
+
+// TestMLDSA44ChangeAddressWithExhaustedKeyPool pins that a wallet whose internal index has reached the
+// end of its ML-DSA-44 key pool can still send with an existing change address: that reuses internal
+// index 0 and must not be refused for lacking the key after the last used one. A fresh change address
+// is still refused, and the refusal leaves the internal index where it was.
+func TestMLDSA44ChangeAddressWithExhaustedKeyPool(t *testing.T) {
+	params := &dagconfig.MainnetParams
+	mnemonic, err := libhtnwallet.CreateMnemonic()
+	if err != nil {
+		t.Fatalf("CreateMnemonic: %+v", err)
+	}
+	extendedPublicKey, err := libhtnwallet.MasterPublicKeyFromMnemonic(params, mnemonic, false)
+	if err != nil {
+		t.Fatalf("MasterPublicKeyFromMnemonic: %+v", err)
+	}
+	const poolSize = 3
+	pool, err := keys.NewMLDSA44KeyPool(mnemonic, poolSize, false)
+	if err != nil {
+		t.Fatalf("NewMLDSA44KeyPool: %+v", err)
+	}
+	keysFile := &keys.File{ExtendedPublicKeys: []string{extendedPublicKey}, MinimumSignatures: 1, MLDSA44: pool}
+	err = keysFile.SetPath(params, filepath.Join(t.TempDir(), "keys.json"), true)
+	if err != nil {
+		t.Fatalf("SetPath: %+v", err)
+	}
+	err = keysFile.SetLastUsedInternalIndex(poolSize - 1)
+	if err != nil {
+		t.Fatalf("SetLastUsedInternalIndex: %+v", err)
+	}
+	s := &server{params: params, keysFile: keysFile}
+
+	_, walletAddr, err := s.changeAddress(true, nil, true)
+	if err != nil {
+		t.Fatalf("an existing ML-DSA-44 change address was refused: %+v", err)
+	}
+	if walletAddr.index != 0 || walletAddr.keyChain != libhtnwallet.InternalKeychain || !walletAddr.mldsa44 {
+		t.Fatalf("an existing ML-DSA-44 change address is %+v, want internal index 0", walletAddr)
+	}
+
+	_, _, err = s.changeAddress(false, nil, true)
+	if err == nil {
+		t.Fatalf("a fresh ML-DSA-44 change address past the key pool was handed out")
+	}
+	if got := keysFile.LastUsedInternalIndex(); got != poolSize-1 {
+		t.Fatalf("a refused change address moved the internal index to %d, want %d", got, poolSize-1)
+	}
+}

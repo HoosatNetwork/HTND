@@ -76,10 +76,14 @@ func compoundOnce(
 	defer cancel()
 
 	// 1. Create unsigned tx
+	//
+	// Always ask for an existing change address. A compound pays everything to the destination, so it
+	// has no use for a fresh one, and a daemon that allocated one per compound would walk the internal
+	// index past the ML-DSA-44 key pool after as many compounds as the pool has keys.
 	resp, err := client.CreateUnsignedCompoundTransaction(ctx, &pb.CreateUnsignedCompoundTransactionRequest{
 		From:                     conf.FromAddresses,
 		Address:                  conf.ToAddress,
-		UseExistingChangeAddress: conf.UseExistingChangeAddress,
+		UseExistingChangeAddress: true,
 		Limit:                    &conf.Limit,
 	})
 	if err != nil {

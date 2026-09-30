@@ -88,7 +88,7 @@ type autoCompoundConfig struct {
 	DaemonAddress            string   `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
 	ToAddress                string   `long:"to-address" short:"t" description:"The public address to compound your HTN to" required:"true"`
 	FromAddresses            []string `long:"from-address" short:"a" description:"Specific public address to send Hoosat from. Repeat multiple times (adding -a before each) to accept several addresses" required:"false"`
-	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" description:"Will use an existing change address (in case no change address was ever used, it will use a new one)"`
+	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" hidden:"true" description:"Always on for auto-compound; accepted so existing command lines keep working"`
 	Verbose                  bool     `long:"show-serialized" short:"s" description:"Show a list of hex encoded sent transactions"`
 	Limit                    string   `long:"limit" short:"l" description:"Limit the number of UTXO to fetch before sending (default: 10,000), (0 equals no limit)"`
 	config.NetworkFlags
