@@ -169,14 +169,16 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 
 	coinbaseTransaction := block.Transactions[0]
 	coinbaseErr := csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-	// From block version 11 (dagconfig.OffsetModeValueChecksVersion), a coinbase mismatch on an offset baseline is no
-	// longer tolerated wholesale: only a coinbase of the expected shape that exceeds the expected
-	// amounts by at most the fees this node could not price is. Anything else - a subsidy over-pay,
-	// a different payee - is notTolerable and disqualifies the block. See offset_value_checks.go.
+	strictCoinbase, err := csm.hardForkActiveFor(stagingArea, blockHash, dagconfig.StrictCoinbaseVersion)
+	if err != nil {
+		return err
+	}
+	// Once the offset-mode checks activate, a mismatch is bounded by the fees this node could not
+	// price. Once StrictCoinbaseVersion activates, even that allowance and underpayment end.
 	if coinbaseErr != nil && tolerate && errors.Is(coinbaseErr, ruleerrors.ErrBadCoinbaseTransaction) &&
-		csm.offsetModeValueChecksActive(block.Header.DAAScore()) {
+		(strictCoinbase || csm.offsetModeValueChecksActive(block.Header.DAAScore())) {
 		if boundedErr := csm.checkCoinbaseOnOffsetBaseline(stagingArea, block, blockHash, coinbaseTransaction,
-			acceptanceData); boundedErr != nil {
+			acceptanceData, strictCoinbase); boundedErr != nil {
 			coinbaseErr = boundedErr
 		}
 	}

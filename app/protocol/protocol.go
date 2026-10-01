@@ -76,11 +76,11 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 
 		var flows []*common.Flow
 		log.Debugf("Registering p2p flows for peer %s for protocol version %d", peer, peer.ProtocolVersion())
-		switch peer.ProtocolVersion() {
-		case 8:
-			flows = v8.Register(m, netConnection, router, errChan, &isStopping)
-		default:
-			panic(errors.Errorf("no way to handle protocol version %d", peer.ProtocolVersion()))
+		flows, err = registerFlowsForProtocol(m, netConnection, router, errChan, &isStopping, peer.ProtocolVersion())
+		if err != nil {
+			log.Warnf("Disconnecting peer %s with unsupported protocol version %d", peer, peer.ProtocolVersion())
+			m.handleError(err, netConnection, router.OutgoingRoute())
+			return
 		}
 		log.Debugf("Registered p2p flows for peer %s.", peer)
 
@@ -107,6 +107,17 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 		router.Close()
 		flowsWaitGroup.Wait()
 	})
+}
+
+func registerFlowsForProtocol(m *Manager, netConnection *netadapter.NetConnection, router *routerpkg.Router,
+	errChan chan error, isStopping *uint32, protocolVersion uint32,
+) ([]*common.Flow, error) {
+	switch protocolVersion {
+	case 8:
+		return v8.Register(m, netConnection, router, errChan, isStopping), nil
+	default:
+		return nil, protocolerrors.Errorf(false, "peer protocol version %d is not accepted", protocolVersion)
+	}
 }
 
 func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection, outgoingRoute *routerpkg.Route) {

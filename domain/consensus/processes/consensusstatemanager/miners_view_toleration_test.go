@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/merkle"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
 // TestMinersViewFieldsToleratedOnCleanBaseline pins that a node whose baseline is NOT offset still
@@ -71,9 +72,29 @@ func TestMinersViewFieldsToleratedOnCleanBaseline(t *testing.T) {
 			parent = blockHash
 		}
 
+		block, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{parent}, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildBlockWithParents for strict gate: %+v", err)
+		}
+		h := block.Header
+		block.Header = blockheader.NewImmutableBlockHeader(h.Version(), h.Parents(), h.HashMerkleRoot(),
+			h.AcceptedIDMerkleRoot(), bogus, h.TimeInMilliseconds(), h.Bits(), h.Nonce(), h.DAAScore(),
+			h.BlueScore(), h.BlueWork(), h.PruningPoint())
+		previousGate := dagconfig.StrictMinersViewFieldsVersion
+		dagconfig.StrictMinersViewFieldsVersion = 1
+		err = tc.ValidateAndInsertBlock(block, true, true)
+		dagconfig.StrictMinersViewFieldsVersion = previousGate
+		if err != nil {
+			t.Fatalf("strict gate ValidateAndInsertBlock: %+v", err)
+		}
+		strictHash := consensushashing.BlockHash(block)
+		if status := blockStatus(t, tc, strictHash); status != externalapi.StatusDisqualifiedFromChain {
+			t.Fatalf("strict gate accepted a block with a wrong UTXO commitment: %s", status)
+		}
+
 		// A coinbase that pays one sompi more than its merge set earns. Everything else about the block,
 		// both commitments included, is what the block builder produced.
-		block, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{parent}, nil, nil)
+		block, _, err = tc.BuildBlockWithParents([]*externalapi.DomainHash{parent}, nil, nil)
 		if err != nil {
 			t.Fatalf("BuildBlockWithParents: %+v", err)
 		}

@@ -9,11 +9,14 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/virtual"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
@@ -605,6 +608,9 @@ func (pm *pruningManager) pruneTips(stagingArea *model.StagingArea, pruningPoint
 func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruningPointHash *externalapi.DomainHash) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.savePruningPoint")
 	defer onEnd()
+	if err := pm.validatePruningPointBeforeStaging(stagingArea, pruningPointHash); err != nil {
+		return err
+	}
 	err := pm.pruningStore.StagePruningPoint(pm.databaseContext, stagingArea, pruningPointHash)
 	if err != nil {
 		return err
@@ -619,6 +625,31 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 	}
 
 	return nil
+}
+
+func (pm *pruningManager) validatePruningPointBeforeStaging(stagingArea *model.StagingArea,
+	pruningPointHash *externalapi.DomainHash,
+) error {
+	refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPointHash)
+	if err != nil || !refuseMismatch {
+		return err
+	}
+	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return err
+	}
+	storedMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return err
+	}
+	storedCommitment := storedMultiset.Hash()
+	headerCommitment := header.UTXOCommitment()
+	if storedCommitment.Equal(headerCommitment) {
+		return nil
+	}
+	return errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		"refusing to store pruning point advancement to %s: locally computed UTXO commitment %s "+
+			"does not match its header commitment %s", pruningPointHash, storedCommitment, headerCommitment)
 }
 
 func (pm *pruningManager) deleteBlock(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
@@ -913,6 +944,24 @@ func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.Stagi
 	log.Debugf("Validated the pruning point %s UTXO commitment: %s (%s)", pruningPointHash, utxoSetHash, stats)
 
 	return utxoSetHash, stats, nil
+}
+
+func refuseMismatchedPruningPointForVersion(blockVersion uint16) bool {
+	return dagconfig.HardForkActive(dagconfig.RefuseMismatchedImportVersion, blockVersion)
+}
+
+func (pm *pruningManager) refuseMismatchedPruningPoint(stagingArea *model.StagingArea,
+	pruningPointHash *externalapi.DomainHash,
+) (bool, error) {
+	if len(pm.powScores) == 0 {
+		return false, nil
+	}
+	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return false, err
+	}
+	blockVersion := constants.BlockVersionForDAAScore(pm.powScores, header.DAAScore())
+	return refuseMismatchedPruningPointForVersion(blockVersion), nil
 }
 
 // This function takes 2 points (currentPruningHash, previousPruningHash) and traverses the UTXO diff children DAG
@@ -2252,7 +2301,11 @@ func (pm *pruningManager) updatePruningPoint() error {
 				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
 					methodUsed, utxoSetDiff)
 			}
-			if pm.shouldSanityCheckPruningUTXOSet {
+			refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPoint)
+			if err != nil {
+				return err
+			}
+			if pm.shouldSanityCheckPruningUTXOSet || refuseMismatch {
 				return validationErr
 			}
 			log.Warnf("Pruning point %s: the UTXO set this node now serves does NOT match the chain's "+
