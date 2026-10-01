@@ -35,10 +35,10 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 		version uint16
 		want    bool
 	}{
+		{8, false},
 		{9, false},
-		{10, false},
+		{10, true},
 		{11, true},
-		{12, true},
 	}
 	for _, test := range tests {
 		if got := offsetModeValueChecksActiveForVersion(test.version); got != test.want {
@@ -50,8 +50,9 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 	if len(scores) < int(dagconfig.OffsetModeValueChecksVersion)-1 {
 		t.Fatalf("mainnet POWScores does not define block version %d", dagconfig.OffsetModeValueChecksVersion)
 	}
-	if scores[dagconfig.OffsetModeValueChecksVersion-2] != ^uint64(0) {
-		t.Errorf("mainnet must not activate block version 11 until a coordinated POW score is chosen")
+	if scores[dagconfig.OffsetModeValueChecksVersion-2] == ^uint64(0) {
+		t.Errorf("mainnet must activate block version %d, which enforces the offset-mode value checks, at a real POW score",
+			dagconfig.OffsetModeValueChecksVersion)
 	}
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams, &dagconfig.TestnetParamsB5,
 		&dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {

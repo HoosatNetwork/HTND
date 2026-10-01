@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
@@ -109,6 +110,9 @@ func TestSaveOverwritingALongerFileLeavesNoTrailingBytes(t *testing.T) {
 // earliest point Save can fail, and the strongest form of the claim: even a save that got nowhere
 // must not have touched the original.
 func TestAFailedSaveLeavesTheExistingKeysFileIntact(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows ignores a directory's permission bits, so they would not prevent the write")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: directory permissions would not prevent the write")
 	}
