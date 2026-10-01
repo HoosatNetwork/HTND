@@ -226,7 +226,7 @@ var (
 	// the coinbase must exactly match the value this node computes, including when some merge-set
 	// transaction fees cannot be priced locally. It is unscheduled until all nodes share one UTXO
 	// baseline and can therefore compute the same fees.
-	StrictCoinbaseVersion uint16 = ^uint16(0)
+	StrictCoinbaseVersion uint16 = 10
 
 	// RefuseMismatchedImportVersion activates HTN-005: from this block version, a local pruning-point
 	// advancement or imported pruning-point UTXO set whose MuHash disagrees with the commitment is
