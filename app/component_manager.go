@@ -190,8 +190,6 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
 	mempoolConfig.MinimumRelayTransactionFee = cfg.MinRelayTxFee
 
-	mempoolConfig.InputMinAgeDAAScore = cfg.InputMinAgeDAA
-
 	// Configure compound transaction rate limiting (always enabled)
 	mempoolConfig.CompoundTxRateLimitEnabled = true
 	if cfg.MaxCompoundTxPerMinute > 0 {

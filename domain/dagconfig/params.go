@@ -319,19 +319,10 @@ var MainnetParams = Params{
 	RPCPort:     "42420",
 	DefaultPort: "42421",
 	DNSSeeds: []string{
-		// This DNS seeder is run by Toni Lukkaroinen
-		"mainnet-dnsseed.hoosat.fi",
-		// These DNS seeders are run by Cryptonoob
 		"mainnet-node-1.hoosat.org",
 		"mainnet-node-2.hoosat.org",
 		"mainnet-node-3.hoosat.org",
 		"mainnet-node-4.hoosat.org",
-		// These DNS seeders are ran by Evern00b
-		"hoosat.seed-fi.evern00b.com",
-		"hoosat.seed-de.evern00b.com",
-		"hoosat.seed-in.evern00b.com",
-		// Seeder run by Foztor in the UK
-		"htn-mainnet-seed.htn.foztor.net",
 	},
 
 	// DAG parameters

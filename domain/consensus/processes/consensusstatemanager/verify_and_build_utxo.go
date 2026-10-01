@@ -38,7 +38,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// RuleError from these checks is downgraded to a logged issue so virtual resolution can advance.
 	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
-	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	tolerate := false
 
 	// HTN-002/HTN-004, gated at hardforks.StrictUTXOCommitmentVersion: from that block version
 	// onward the toleration above stops applying, and these four checks fail closed as they were
