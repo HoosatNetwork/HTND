@@ -7,7 +7,7 @@ Hoosat Network Daemon is the reference full node implementation for Hoosat Netwo
 
 ## What is Hoosat Network?
 
-Hoosat Network is an advanced cryptocurrency built with an ASIC-resistant proof-of-work (PoW) algorithm. It offers instant confirmations and sub-second block times, designed for both security and performance. Hoosat Network is a fork of Kaspa and utilizes the [GhostDAG protocol](https://eprint.iacr.org/2018/104.pdf), a generalization of the Nakamoto consensus.
+Hoosat Network is an advanced cryptocurrency built with an ASIC-resistant proof-of-work (PoW) algorithm. It offers instant confirmations and sub-second block times, designed for both security and performance. Hoosat Network is a fork of Kaspa and utilizes the [DAGKnight protocol](https://eprint.iacr.org/2022/1494.pdf), an evoluation of GhostDAG and generalization of the Nakamoto consensus.
 
 One of the most distinctive features of Hoosat Network is its unique PoW security. Hoosat Network is **the first and only cryptocurrency** that integrates advanced protection against nonce-guessing attacks of any level, including those that could potentially be launched using Grover's algorithm in quantum computing. This security is enabled by our patent pending technology, **"Securing Proof-of-Work Integrity,"** which sets Hoosat Network apart as a truly quantum-resistant cryptocurrency.
 
@@ -22,7 +22,7 @@ Hoosat Network is open-source, but it also includes patent pending technology to
 
 ## Requirements
 
-Go 1.26 or later.
+Go 1.27.1 or later.
 
 ## Installation
 
@@ -42,7 +42,7 @@ $ go version
 ```bash
 $ git clone https://github.com/HoosatNetwork/HTND
 $ cd HTND
-$ go install . ./cmd/...
+$ go install -ldflags="-s -w" --tags="pebblegozstd" . ./cmd/...
 ```
 
 - HTND (and utilities) should now be installed in `$(go env GOPATH)/bin`. If you did
@@ -91,8 +91,7 @@ $ htnd
      recorded anywhere in this repository, and inviting people to a guessed URL would be worse
      than an honest gap. -->
 
-The Discord invite link is currently missing from this README. Until it is restored, please use the
-[issue tracker](https://github.com/HoosatNetwork/HTND/issues).
+The Discord invite link is <A HREF='https://discord.gg/VQsraB2Y8'>here</a>
 
 ## Issue Tracker
 
