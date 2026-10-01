@@ -38,7 +38,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// RuleError from these checks is downgraded to a logged issue so virtual resolution can advance.
 	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
-	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	tolerate := false
 
 	// HTN-002/HTN-004, gated at dagconfig.StrictUTXOCommitmentVersion: from that block version
 	// onward the toleration above - and the miner's-view toleration below - stop applying, and these
@@ -139,7 +139,9 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 				csm.logToleratedIssue(step, blockHash, err)
 				return false
 			}
-			if !minersViewStrict && isMinersViewField(step) && blockCarriesOffsetOnly() {
+			// Gated on tolerate as well: this chain never tolerates a UTXO commitment offset, so the
+			// miner's-view toleration must not reopen that path.
+			if tolerate && !minersViewStrict && isMinersViewField(step) && blockCarriesOffsetOnly() {
 				csm.logMinersViewTolerated(step, blockHash, err)
 				return false
 			}

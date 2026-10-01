@@ -35,5 +35,7 @@ func HandleGetBlockTemplate(context *rpccontext.Context, _ *router.Router, reque
 
 	rpcBlock := appmessage.DomainBlockToRPCBlock(templateBlock)
 
-	return appmessage.NewGetBlockTemplateResponseMessage(rpcBlock, context.ProtocolManager.Context().HasPeers() && isNearlySynced), nil
+	isSynced := !context.ProtocolManager.Context().IsIBDRunning()
+	_ = isNearlySynced
+	return appmessage.NewGetBlockTemplateResponseMessage(rpcBlock, isSynced), nil
 }
