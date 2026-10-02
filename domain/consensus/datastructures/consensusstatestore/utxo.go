@@ -1,6 +1,9 @@
 package consensusstatestore
 
 import (
+	"bytes"
+	"slices"
+
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
@@ -99,6 +102,95 @@ func (css *consensusStateStore) UTXOByOutpointWithoutPopulatingCache(dbContext m
 	stagingShard := css.stagingShard(stagingArea)
 
 	return css.utxoByOutpointFromStagedVirtualUTXODiff(dbContext, stagingShard, outpoint, false)
+}
+
+// UTXOsByOutpointsWithoutPopulatingCache looks every outpoint up the way
+// UTXOByOutpointWithoutPopulatingCache does, and sets entries[i] to the entry of outpoints[i], or
+// leaves it nil where virtual's UTXO set does not hold the coin.
+//
+// The outpoints that are neither staged nor cached are read in key order through one cursor instead
+// of one Get each. A Get starts a fresh descent of every level of the LSM tree for its key, and a
+// wallet's coins are spread over the whole UTXO set, so a lookup of tens of thousands of them paid
+// that descent tens of thousands of times. Seeking one iterator forward lets pebble continue from
+// where the previous seek left each level (TrySeekUsingNext) and reuse the blocks it has already
+// loaded.
+func (css *consensusStateStore) UTXOsByOutpointsWithoutPopulatingCache(dbContext model.DBReader,
+	stagingArea *model.StagingArea, outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry,
+) error {
+	if len(entries) != len(outpoints) {
+		return errors.Errorf("%d entries given for %d outpoints", len(entries), len(outpoints))
+	}
+	stagingShard := css.stagingShard(stagingArea)
+
+	type dbLookup struct {
+		index int
+		key   model.DBKey
+	}
+	var lookups []dbLookup
+	for i, outpoint := range outpoints {
+		entries[i] = nil
+		if stagingShard.virtualUTXODiffStaging != nil {
+			if stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
+				continue
+			}
+			if utxoEntry, ok := stagingShard.virtualUTXODiffStaging.ToAdd().Get(outpoint); ok {
+				entries[i] = utxoEntry
+				continue
+			}
+		}
+		if entry, ok := css.virtualUTXOSetCache.Get(outpoint); ok {
+			entries[i] = entry
+			continue
+		}
+		key, err := css.utxoKey(outpoint)
+		if err != nil {
+			return err
+		}
+		lookups = append(lookups, dbLookup{index: i, key: key})
+	}
+	if len(lookups) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(lookups, func(a, b dbLookup) int {
+		return bytes.Compare(a.key.Bytes(), b.key.Bytes())
+	})
+
+	cursor, err := dbContext.Cursor(css.utxoSetBucket)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close()
+
+	for _, lookup := range lookups {
+		err := cursor.Seek(lookup.key)
+		if database.IsNotFoundError(err) {
+			// Pebble reports this only once nothing is left at or after the key, but the LevelDB cursor
+			// also reports it whenever the exact key is missing, so it cannot end the walk.
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		foundKey, err := cursor.Key()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(foundKey.Bytes(), lookup.key.Bytes()) {
+			continue
+		}
+		serializedUTXOEntry, err := cursor.Value()
+		if err != nil {
+			return err
+		}
+		// deserializeUTXOEntry copies what it keeps, so the entry outlives the cursor's next move.
+		entry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		if err != nil {
+			return err
+		}
+		entries[lookup.index] = entry
+	}
+	return nil
 }
 
 func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContext model.DBReader,

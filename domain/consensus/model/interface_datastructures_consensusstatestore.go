@@ -13,6 +13,11 @@ type ConsensusStateStore interface {
 	// the shared virtual UTXO cache - only a hit refreshes an entry's recency. For a bulk caller whose
 	// outpoint count can dwarf the cache size, see HTN-207.
 	UTXOByOutpointWithoutPopulatingCache(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error)
+	// UTXOsByOutpointsWithoutPopulatingCache sets entries[i] to what UTXOByOutpointWithoutPopulatingCache
+	// would answer for outpoints[i], or nil where the coin does not exist, reading the database in key
+	// order rather than one Get per outpoint.
+	UTXOsByOutpointsWithoutPopulatingCache(dbContext DBReader, stagingArea *StagingArea,
+		outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) error
 	HasUTXOByOutpoint(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (bool, error)
 	VirtualUTXOSetIterator(dbContext DBReader, stagingArea *StagingArea) (externalapi.ReadOnlyUTXOSetIterator, error)
 	VirtualUTXOs(dbContext DBReader, fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error)

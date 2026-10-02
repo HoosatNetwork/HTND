@@ -1006,9 +1006,13 @@ func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoin
 }
 
 // virtualUTXOEntriesNoLock fills entries with virtual's entry for each outpoint and returns virtual's
-// parents. One lookup answers both "is it there" and "what is it": asking HasUTXOByOutpoint first
-// doubled the database reads - Has never consults the UTXO cache - for a question the lookup's
-// not-found already answers.
+// parents.
+//
+// It does not populate the cache on a miss: an address with more coins than the cache holds would
+// otherwise scan through it evicting everything block validation put there, going cold for the path
+// that actually needs it, for no benefit to itself - see HTN-207. Without the cache, every refresh of
+// a wallet reads all its coins from the database, so the misses are read in key order through one
+// cursor rather than one Get each.
 func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) (
 	[]*externalapi.DomainHash, error,
 ) {
@@ -1017,20 +1021,9 @@ func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutp
 	if err != nil {
 		return nil, err
 	}
-	for i, outpoint := range outpoints {
-		// Does not populate the cache on a miss: an address with more coins than the cache holds
-		// would otherwise scan through it evicting everything block validation put there, going cold
-		// for the path that actually needs it, for no benefit to itself - see HTN-207.
-		entry, found, err := s.consensusStateStore.UTXOByOutpointWithoutPopulatingCache(s.databaseContext, stagingArea, outpoint)
-		if database.IsNotFoundError(err) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		if found {
-			entries[i] = entry
-		}
+	err = s.consensusStateStore.UTXOsByOutpointsWithoutPopulatingCache(s.databaseContext, stagingArea, outpoints, entries)
+	if err != nil {
+		return nil, err
 	}
 	return externalapi.CloneHashes(virtualParents), nil
 }
