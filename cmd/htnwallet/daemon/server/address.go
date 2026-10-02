@@ -42,7 +42,24 @@ func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress)
 	if err != nil {
 		return nil, nil, err
 	}
+	s.trackChangeAddress(address, walletAddr)
 	return address, walletAddr, nil
+}
+
+// trackChangeAddress adds a change address to the addresses the wallet reads balances and UTXOs from,
+// before any coin reaches it. The caller holds s.lock.
+//
+// The address scan only adds an address once the node reports it usable, which means it holds a coin,
+// and the node caches that answer per address for 30 seconds - "not usable" answers included. The scan
+// asks about every recent address every two seconds, so a fresh change address is cached as not usable
+// when the change arrives. Once the payment was accepted, its input was gone while the change address
+// was still outside the set: the balance dropped by the whole input for up to half a minute, and the
+// change looked lost.
+func (s *server) trackChangeAddress(address util.Address, walletAddr *walletAddress) {
+	if s.addressSet == nil {
+		s.addressSet = make(walletAddressSet)
+	}
+	s.addressSet[address.String()] = walletAddr
 }
 
 func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesRequest) (*pb.ShowAddressesResponse, error) {

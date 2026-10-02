@@ -280,7 +280,8 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 			return err
 		}
 
-		// No need to lock for reading since the only writer of this set is on `syncLoop` on the same goroutine.
+		// The caller holds s.lock, which every writer of addressSet takes. The one unlocked call is syncLoop's
+		// initial refresh, which runs before firstSyncDone lets any request reach a writer.
 		address, ok := s.addressSet[entry.Address]
 		if !ok {
 			return errors.Errorf("Got result from address %s even though it wasn't requested", entry.Address)
@@ -310,7 +311,8 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 func (s *server) refreshUTXOs(limit uint32) error {
 	refreshStart := time.Now()
 
-	// No need to lock for reading since the only writer of this set is on `syncLoop` on the same goroutine.
+	// The caller holds s.lock, which every writer of addressSet takes. The one unlocked call is syncLoop's
+	// initial refresh, which runs before firstSyncDone lets any request reach a writer.
 	addresses := s.addressSet.strings()
 	// It's important to check the mempool before calling `GetUTXOsByAddresses`:
 	// If we would do it the other way around an output can be spent in the mempool
