@@ -34,9 +34,10 @@ func (db *readCountingDB) Has(key model.DBKey) (bool, error) {
 	return db.DBReader.Has(key)
 }
 
-// TestHasBlockDoesNotReadTheBlock pins that HasBlock answers from a key-only Has: it used to Get, copy and
-// deserialize the whole block, push it into the cache, and report any database fault as a missing block.
-func TestHasBlockDoesNotReadTheBlock(t *testing.T) {
+// TestHasBlockCachesAFoundBlockAndReportsFaults pins that HasBlock caches a block it finds, so the same
+// block announced by every peer reads the database once, and that a database fault is an error rather
+// than "block not present", which is what it used to be reported as.
+func TestHasBlockCachesAFoundBlockAndReportsFaults(t *testing.T) {
 	dbManager, prefixBucket, teardown := testutils.NewTestDB(t)
 	defer teardown()
 
@@ -56,10 +57,11 @@ func TestHasBlockDoesNotReadTheBlock(t *testing.T) {
 
 	db := &readCountingDB{DBReader: dbManager}
 	stagingArea = model.NewStagingArea()
+	// The stored block twice - as two peers announcing it would - and a missing one.
 	for _, test := range []struct {
 		hash *externalapi.DomainHash
 		want bool
-	}{{stored, true}, {testutils.Hash(2), false}} {
+	}{{stored, true}, {stored, true}, {testutils.Hash(2), false}} {
 		has, err := store.HasBlock(db, stagingArea, test.hash)
 		if err != nil {
 			t.Fatalf("HasBlock(%s): %v", test.hash, err)
@@ -68,15 +70,16 @@ func TestHasBlockDoesNotReadTheBlock(t *testing.T) {
 			t.Errorf("HasBlock(%s) = %t, want %t", test.hash, has, test.want)
 		}
 	}
-	if db.gets != 0 || db.hases != 2 {
-		t.Errorf("HasBlock made %d Gets and %d Hases for two blocks, want 0 and 2", db.gets, db.hases)
+	if reads := db.gets + db.hases; reads != 2 {
+		t.Errorf("HasBlock read the database %d times for a block asked about twice and a missing one, "+
+			"want 2: the second ask must be a cache hit", reads)
 	}
-	if store.cache.Len() != 0 {
-		t.Errorf("HasBlock added %d blocks to the cache", store.cache.Len())
+	if !store.cache.Has(stored) {
+		t.Errorf("HasBlock did not cache the block it found")
 	}
 
 	faultyDB := &readCountingDB{DBReader: dbManager, err: errors.New("disk fault")}
-	if _, err := store.HasBlock(faultyDB, stagingArea, stored); err == nil {
+	if _, err := store.HasBlock(faultyDB, stagingArea, testutils.Hash(3)); err == nil {
 		t.Errorf("HasBlock reported a database fault as an answer instead of an error")
 	}
 }

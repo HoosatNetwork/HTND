@@ -136,11 +136,27 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 		return true, nil
 	}
 
-	// Has, not Get: no caller uses the block, and a Get read, copied and deserialized the whole body -
-	// up to the block mass limit - for every relayed inv of a block this node has and every parent of a
-	// block being validated, then pushed it into the cache, evicting a block that was being used. A
-	// database fault is an error, not a missing block.
-	return dbContext.Has(bs.hashAsKey(blockHash))
+	// A found block goes into the cache. Every peer announces the same block, so relay calls this once
+	// per peer under the consensus lock, and the cache makes all but the first a hit. A key-only Has
+	// saves little in exchange: pebble's Has is a Get that reads the same value, it only skips the copy.
+	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
+	if database.IsNotFoundError(err) {
+		return false, nil
+	}
+	// A database fault is an error, not a missing block.
+	if err != nil {
+		return false, err
+	}
+
+	blockDeserialized, err := bs.deserializeBlock(blockBytes)
+	if err != nil {
+		return false, err
+	}
+
+	bs.lock.Lock()
+	bs.cache.Add(blockHash, blockDeserialized)
+	bs.lock.Unlock()
+	return true, nil
 }
 
 // Blocks gets the blocks associated with the given blockHashes
