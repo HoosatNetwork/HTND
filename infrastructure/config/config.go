@@ -79,7 +79,7 @@ const (
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
-	defaultProtocolVersion        = 8
+	defaultProtocolVersion        = 11
 	defaultIBDTimeout             = 480 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
@@ -166,8 +166,6 @@ type Flags struct {
 	MuHashJournal                   string        `long:"muhash-journal" hidden:"true" description:"Append a JSONL record of every element added to or removed from each block's UTXO multiset (MuHash) to this file, for analyzing UTXO commitment mismatches with cmd/muhashjournal. Also records block templates, so run it on the miner too. Off by default."`
 	RepairBlockStatuses             bool          `long:"repair-block-statuses" hidden:"true" description:"At startup, re-mark every block that is neither invalid nor header-only as UTXO-valid, to recover a node that has disqualified its whole chain. Walks every block in the store before the node starts serving RPC, so on a mature or archival node it delays startup by a long time. Off by default - ask for it when recovering."`
 	RepairMissingMultisets          bool          `long:"repair-missing-multisets" hidden:"true" description:"At startup, re-mark for verification any UTXO-valid block reachable from a virtual tip that has no stored multiset (a state --repair-block-statuses, or a similar incident, can leave behind), so the normal resolve path re-derives it. Fixes a node stuck unable to build any further block template with 'Multiset <hash> does not exist in db'. Off by default - ask for it when recovering, do not leave it on every boot."`
-	EnableAutoExodusExportOnPruning bool          `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
-	AutoExodusExportDir             string        `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
 
 	// Compound transaction rate limiting flags
@@ -461,10 +459,6 @@ func LoadConfig() (*Config, error) {
 	// means each individual piece of serialized data does not have to
 	// worry about changing names per network and such.
 	cfg.AppDir = filepath.Join(cfg.AppDir, cfg.NetParams().Name)
-	if cfg.AutoExodusExportDir == "" {
-		cfg.AutoExodusExportDir = filepath.Join(cfg.AppDir, "exodus-auto-export")
-	}
-	cfg.AutoExodusExportDir = cleanAndExpandPath(cfg.AutoExodusExportDir)
 
 	// Logs directory is usually under the home directory, unless otherwise specified
 	if cfg.LogDir == "" {

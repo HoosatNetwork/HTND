@@ -2252,14 +2252,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
 					methodUsed, utxoSetDiff)
 			}
-			if pm.shouldSanityCheckPruningUTXOSet {
-				return validationErr
-			}
-			log.Warnf("Pruning point %s: the UTXO set this node now serves does NOT match the chain's "+
-				"commitment for it. Every peer that syncs from this node inherits this set, gap included. "+
-				"Continuing because no node currently holds a matching set; run with "+
-				"--enable-sanity-check-pruning-utxo to refuse the advancement instead. Details: %s",
-				pruningPoint, validationErr)
+			return validationErr
 		} else {
 			log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
 				pruningPoint)

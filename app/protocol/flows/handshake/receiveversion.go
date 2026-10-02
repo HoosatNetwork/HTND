@@ -20,9 +20,9 @@ var (
 
 	// minAcceptableProtocolVersion is the lowest protocol version that a
 	// connected peer may support.
-	minAcceptableProtocolVersion = uint32(8)
+	minAcceptableProtocolVersion = uint32(11)
 
-	maxAcceptableProtocolVersion = uint32(8)
+	maxAcceptableProtocolVersion = uint32(11)
 )
 
 type receiveVersionFlow struct {

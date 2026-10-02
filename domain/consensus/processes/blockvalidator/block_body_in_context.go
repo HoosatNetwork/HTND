@@ -171,18 +171,12 @@ func (v *blockValidator) checkCoinbaseSubsidy(stagingArea *model.StagingArea, bl
 		return 0, err
 	}
 
-	if block.Header.DAAScore() <= 43334184 || 43334184+10000000 <= block.Header.DAAScore() {
-		if subsidy != expectedSubsidy {
-			return 0, errors.Wrapf(ruleerrors.ErrWrongCoinbaseSubsidy, "the subsidy specified on the coinbase of %s is "+
-				"wrong: expected %d but got %d, blocks version %d", blockHash, expectedSubsidy, subsidy, block.Header.Version())
-		}
-	} else {
-		minSubsidy := expectedSubsidy / 2
-		maxSubsidy := expectedSubsidy * 2
-		if minSubsidy > subsidy || subsidy > maxSubsidy {
-			return 0, errors.Wrapf(ruleerrors.ErrWrongCoinbaseSubsidy, "the subsidy specified on the coinbase of %s is "+
-				"out of range: expected between %d and %d but got %d, blocks version %d", blockHash, minSubsidy, maxSubsidy, subsidy, block.Header.Version())
-		}
+	// Always require the exact subsidy from BlockSubsidy (emission offset
+	// included). The official 43334184..+10M half-to-double window was a
+	// leftover Nocturne height and must not open on this chain.
+	if subsidy != expectedSubsidy {
+		return 0, errors.Wrapf(ruleerrors.ErrWrongCoinbaseSubsidy, "the subsidy specified on the coinbase of %s is "+
+			"wrong: expected %d but got %d, blocks version %d", blockHash, expectedSubsidy, subsidy, block.Header.Version())
 	}
 
 	return subsidy, nil
