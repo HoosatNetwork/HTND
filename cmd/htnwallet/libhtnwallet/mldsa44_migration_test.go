@@ -81,7 +81,7 @@ func TestMigrateToMLDSA44(t *testing.T) {
 					name := signatureName + "-" + source.name + "-to-MLDSA44-" + form.String()
 					t.Run(name, func(t *testing.T) {
 						consensusConfig.BlockCoinbaseMaturity = 0
-						consensusConfig.MLDSA44SignaturesBlockVersion = 1
+						consensusConfig.HardForkGates.MLDSA44SignaturesBlockVersion = 1
 						tc, teardown, err := consensus.NewFactory().NewTestConsensus(consensusConfig, "TestMigrateToMLDSA44"+name)
 						if err != nil {
 							t.Fatalf("Error setting up tc: %+v", err)

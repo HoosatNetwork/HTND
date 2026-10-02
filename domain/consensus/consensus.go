@@ -44,6 +44,9 @@ type consensus struct {
 	// powScores is the network's activation table, kept so that a block version can be derived from
 	// a DAA score without going through the process-global (see dagconfig.HardForkActive).
 	powScores []uint64
+	// hardForkGates is the activation version of each gated rule, copied from Config when this
+	// consensus was built and shared with every process that reads one.
+	hardForkGates *dagconfig.HardForkGates
 
 	blockProcessor        model.BlockProcessor
 	blockBuilder          model.BlockBuilder
@@ -892,7 +895,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 			pruningPointHash)
 	}
 
-	// HTN-005's serve half, gated at dagconfig.RefuseMismatchedImportVersion: once the pruning
+	// HTN-005's serve half, gated at HardForkGates.RefuseMismatchedImportVersion: once the pruning
 	// point's commitment is treated as law, a node whose own set does not hash to it must not hand
 	// that set to anyone else.
 	//
@@ -916,7 +919,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	return pruningPointUTXOs, nil
 }
 
-// refuseToServeUnverifiableUTXOSet returns a rule error when dagconfig.RefuseMismatchedImportVersion
+// refuseToServeUnverifiableUTXOSet returns a rule error when HardForkGates.RefuseMismatchedImportVersion
 // has activated for pruningPointHash and this node's own UTXO baseline does not hash to that point's
 // header commitment.
 //
@@ -938,7 +941,7 @@ func (s *consensus) refuseToServeUnverifiableUTXOSet(stagingArea *model.StagingA
 		return err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(s.powScores, header.DAAScore())
-	if !dagconfig.HardForkActive(dagconfig.RefuseMismatchedImportVersion, blockVersion) {
+	if !dagconfig.HardForkActive(s.hardForkGates.RefuseMismatchedImportVersion, blockVersion) {
 		return nil
 	}
 

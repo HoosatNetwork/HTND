@@ -34,7 +34,7 @@ const (
 	// signature pushes exceed MaxScriptElementSize (see isMLDSA44ElementSize).
 	// Without it, opcode 0xa6 fails as an unknown opcode exactly as it always has.
 	//
-	// Consensus sets it from dagconfig.Params.MLDSA44SignaturesBlockVersion only; see
+	// Consensus sets it from dagconfig.HardForkGates.MLDSA44SignaturesBlockVersion only; see
 	// transactionValidator.scriptFlagsForDAAScore.
 	ScriptEnableMLDSA44 ScriptFlags = 1 << 1
 )

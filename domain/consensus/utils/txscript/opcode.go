@@ -201,7 +201,7 @@ const (
 	OpMin                 = 0xa3 // 163
 	OpMax                 = 0xa4 // 164
 	OpWithin              = 0xa5 // 165
-	OpCheckSigMLDSA44     = 0xa6 // 166 - OP_UNKNOWN166 below Params.MLDSA44SignaturesBlockVersion
+	OpCheckSigMLDSA44     = 0xa6 // 166 - OP_UNKNOWN166 below HardForkGates.MLDSA44SignaturesBlockVersion
 	OpUnknown167          = 0xa7 // 167
 	OpSHA256              = 0xa8 // 168
 	OpCheckMultiSigECDSA  = 0xa9 // 169

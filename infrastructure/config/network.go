@@ -226,7 +226,7 @@ func (networkFlags *NetworkFlags) overrideDAGParams() error {
 	// Lets a devnet activate ML-DSA-44 at a block version its POWScores already reach, for testing
 	// the full wallet-to-consensus path. The node and the wallet daemon must use the same file.
 	if config.MLDSA44SignaturesBlockVersion != nil {
-		networkFlags.ActiveNetParams.MLDSA44SignaturesBlockVersion = *config.MLDSA44SignaturesBlockVersion
+		networkFlags.ActiveNetParams.HardForkGates.MLDSA44SignaturesBlockVersion = *config.MLDSA44SignaturesBlockVersion
 	}
 
 	return nil

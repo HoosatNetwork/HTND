@@ -49,6 +49,7 @@ type pruningManager struct {
 	isArchivalNode bool
 	genesisHash    *externalapi.DomainHash
 	powScores      []uint64
+	hardForkGates  *dagconfig.HardForkGates
 	// finalityDepthForBlockVersion and pruningDepthForBlockVersion are evaluated with the chain's current block
 	// version on every use (see currentDepths), never cached.
 	finalityDepthForBlockVersion    func(blockVersion uint16) uint64
@@ -94,6 +95,7 @@ func New(
 	isArchivalNode bool,
 	genesisHash *externalapi.DomainHash,
 	powScores []uint64,
+	hardForkGates *dagconfig.HardForkGates,
 	finalityDepthForBlockVersion func(blockVersion uint16) uint64,
 	pruningDepthForBlockVersion func(blockVersion uint16) uint64,
 	deletionDepth uint64,
@@ -129,6 +131,7 @@ func New(
 		isArchivalNode:                  isArchivalNode,
 		genesisHash:                     genesisHash,
 		powScores:                       powScores,
+		hardForkGates:                   hardForkGates,
 		finalityDepthForBlockVersion:    finalityDepthForBlockVersion,
 		pruningDepthForBlockVersion:     pruningDepthForBlockVersion,
 		deletionDepth:                   deletionDepth,
@@ -946,8 +949,8 @@ func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.Stagi
 	return utxoSetHash, stats, nil
 }
 
-func refuseMismatchedPruningPointForVersion(blockVersion uint16) bool {
-	return dagconfig.HardForkActive(dagconfig.RefuseMismatchedImportVersion, blockVersion)
+func refuseMismatchedPruningPointForVersion(gates dagconfig.HardForkGates, blockVersion uint16) bool {
+	return dagconfig.HardForkActive(gates.RefuseMismatchedImportVersion, blockVersion)
 }
 
 func (pm *pruningManager) refuseMismatchedPruningPoint(stagingArea *model.StagingArea,
@@ -961,7 +964,7 @@ func (pm *pruningManager) refuseMismatchedPruningPoint(stagingArea *model.Stagin
 		return false, err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(pm.powScores, header.DAAScore())
-	return refuseMismatchedPruningPointForVersion(blockVersion), nil
+	return refuseMismatchedPruningPointForVersion(*pm.hardForkGates, blockVersion), nil
 }
 
 // This function takes 2 points (currentPruningHash, previousPruningHash) and traverses the UTXO diff children DAG

@@ -191,6 +191,70 @@ type Params struct {
 
 	POWScores []uint64
 
+	// HardForkGates is the block version at which each version-gated consensus rule activates on
+	// this network.
+	HardForkGates HardForkGates
+}
+
+// MLDSA44SignaturesActive reports whether ML-DSA-44 signatures are valid in a block of blockVersion.
+func (p *Params) MLDSA44SignaturesActive(blockVersion uint16) bool {
+	gate := p.HardForkGates.MLDSA44SignaturesBlockVersion
+	return gate != 0 && blockVersion >= gate
+}
+
+// HardForkGates holds the block versions at which each version-gated consensus rule activates on a
+// network, and the parameters those rules take. Each network declares its own set (see
+// mainnetHardForkGates and testnetHardForkGates), so a rule can be scheduled on testnet without
+// touching mainnet. A block version only exists once the network's POWScores has an entry reaching
+// it, so a gate at a version POWScores does not define never fires.
+//
+// Each consensus copies the gates from its Config when it is built and shares that copy with every
+// process that reads one. Production code never assigns to the gates outside these declarations
+// (build_and_test.sh enforces that), except that a custom network's JSON config may set
+// MLDSA44SignaturesBlockVersion. Tests activate a rule at a version their blocks reach through
+// TestConsensus.HardForkGates.
+type HardForkGates struct {
+	// StrictUTXOCommitmentVersion activates HTN-002/HTN-004: from this block version,
+	// verifyAndBuildUTXO stops swallowing RuleErrors from the UTXO commitment, accepted-ID merkle
+	// root, coinbase and body-vs-past-UTXO checks on a node running an inherited-offset baseline.
+	StrictUTXOCommitmentVersion uint16
+
+	// StrictMinersViewFieldsVersion ends the miner's-view toleration: from this block version, a
+	// block whose only failures are its UTXO commitment or accepted-ID merkle root is disqualified.
+	// Those two fields report the miner's UTXO history and move no value, and mainnet mining nodes do
+	// not share one history, so a node enforcing them alone disqualifies the chain the network builds
+	// on. It is separate from StrictUTXOCommitmentVersion so the value-moving checks can be enforced
+	// without it, and can only activate once every mining node commits the same multiset.
+	StrictMinersViewFieldsVersion uint16
+
+	// StrictCoinbaseVersion ends the offset-baseline coinbase allowance: from this block version,
+	// the coinbase must exactly match the value this node computes, including when some merge-set
+	// transaction fees cannot be priced locally.
+	StrictCoinbaseVersion uint16
+
+	// RefuseMismatchedImportVersion activates HTN-005: from this block version, a local pruning-point
+	// advancement or imported pruning-point UTXO set whose MuHash disagrees with the commitment is
+	// refused rather than accepted-and-repaired, and this node refuses to serve such a set onward.
+	// This is separate from the operator flag --enable-sanity-check-pruning-utxo, which is unchanged.
+	RefuseMismatchedImportVersion uint16
+
+	// ValidateHeaderBitsVersion activates HTN-007: from this block version, a header's bits must
+	// equal the difficulty this node computes for it.
+	ValidateHeaderBitsVersion uint16
+
+	// ValidateIBDPruningListVersion activates HTN-006: from this block version, an imported pruning
+	// point is checked with IsValidPruningPoint, and the pruning point list is checked to form a
+	// valid chain to genesis with ArePruningPointsInValidChain.
+	ValidateIBDPruningListVersion uint16
+
+	// OffsetModeValueChecksVersion activates the offset-mode value checks: from this block version,
+	// on a node whose UTXO baseline is offset, (1) a transaction accepted despite missing inputs must
+	// pass every check its found inputs can decide and its outputs may not exceed its found inputs,
+	// and (2) ErrBadCoinbaseTransaction is only tolerated for a coinbase of the expected shape
+	// exceeding the expected amounts by at most UnpricedTransactionFeeAllowance per transaction this
+	// node could not price. See consensusstatemanager/offset_value_checks.go.
+	OffsetModeValueChecksVersion uint16
+
 	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
 	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
 	// coinbase on a node with an offset UTXO baseline, from the block version at which
@@ -211,62 +275,38 @@ type Params struct {
 	MLDSA44SignaturesBlockVersion uint16
 }
 
-// MLDSA44SignaturesActive reports whether ML-DSA-44 signatures are valid in a block of blockVersion.
-func (p *Params) MLDSA44SignaturesActive(blockVersion uint16) bool {
-	return p.MLDSA44SignaturesBlockVersion != 0 && blockVersion >= p.MLDSA44SignaturesBlockVersion
+// unscheduledHardForkGate is a gate no block version can reach.
+const unscheduledHardForkGate = ^uint16(0)
+
+// mainnetHardForkGates schedules the gated rules on mainnet. A change here is a mainnet hard fork:
+// it needs a coordinated activation with enough lead time for every node operator and miner.
+var mainnetHardForkGates = HardForkGates{
+	StrictUTXOCommitmentVersion:   10,
+	StrictMinersViewFieldsVersion: unscheduledHardForkGate,
+	StrictCoinbaseVersion:         10,
+	RefuseMismatchedImportVersion: unscheduledHardForkGate,
+	ValidateHeaderBitsVersion:     unscheduledHardForkGate,
+	ValidateIBDPruningListVersion: unscheduledHardForkGate,
+	OffsetModeValueChecksVersion:  10,
+	MLDSA44SignaturesBlockVersion: 11,
+
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 }
 
-// Consensus rules that are gated on a block version. Each activates at block version 11, whose
-// activation DAA score each network sets in its POWScores. Mainnet defines version 11 with a
-// ^uint64(0) placeholder and no other network defines it, so none of these rules can fire until a
-// real, coordinated DAA score is chosen for it. Version 10 and older blocks keep the old behaviour,
-// so existing history replays unchanged.
-//
-// These are vars rather than consts only so that tests can activate a rule at a version their
-// blocks reach. Production code never assigns to them; build_and_test.sh enforces that.
-var (
-	// StrictUTXOCommitmentVersion activates HTN-002/HTN-004: from this block version,
-	// verifyAndBuildUTXO stops swallowing RuleErrors from the UTXO commitment, accepted-ID merkle
-	// root, coinbase and body-vs-past-UTXO checks on a node running an inherited-offset baseline.
-	StrictUTXOCommitmentVersion uint16 = 10
+// testnetHardForkGates schedules the gated rules on testnet and the other test networks. It may run
+// ahead of mainnetHardForkGates to exercise a rule before it is scheduled on mainnet.
+var testnetHardForkGates = HardForkGates{
+	StrictUTXOCommitmentVersion:   10,
+	StrictMinersViewFieldsVersion: 12,
+	StrictCoinbaseVersion:         10,
+	RefuseMismatchedImportVersion: unscheduledHardForkGate,
+	ValidateHeaderBitsVersion:     unscheduledHardForkGate,
+	ValidateIBDPruningListVersion: unscheduledHardForkGate,
+	OffsetModeValueChecksVersion:  10,
+	MLDSA44SignaturesBlockVersion: 11,
 
-	// StrictMinersViewFieldsVersion ends the miner's-view toleration: from this block version, a
-	// block whose only failures are its UTXO commitment or accepted-ID merkle root is disqualified.
-	// Those two fields report the miner's UTXO history and move no value, and mainnet mining nodes do
-	// not share one history, so a node enforcing them alone disqualifies the chain the network builds
-	// on. It is separate from StrictUTXOCommitmentVersion so the value-moving checks can be enforced
-	// without it, and can only activate once every mining node commits the same multiset.
-	StrictMinersViewFieldsVersion uint16 = ^uint16(0)
-
-	// StrictCoinbaseVersion ends the offset-baseline coinbase allowance: from this block version,
-	// the coinbase must exactly match the value this node computes, including when some merge-set
-	// transaction fees cannot be priced locally. It is unscheduled until all nodes share one UTXO
-	// baseline and can therefore compute the same fees.
-	StrictCoinbaseVersion uint16 = 10
-
-	// RefuseMismatchedImportVersion activates HTN-005: from this block version, a local pruning-point
-	// advancement or imported pruning-point UTXO set whose MuHash disagrees with the commitment is
-	// refused rather than accepted-and-repaired, and this node refuses to serve such a set onward.
-	// This is separate from the operator flag --enable-sanity-check-pruning-utxo, which is unchanged.
-	RefuseMismatchedImportVersion uint16 = ^uint16(0)
-
-	// ValidateHeaderBitsVersion activates HTN-007: from this block version, a header's bits must
-	// equal the difficulty this node computes for it.
-	ValidateHeaderBitsVersion uint16 = ^uint16(0)
-
-	// ValidateIBDPruningListVersion activates HTN-006: from this block version, an imported pruning
-	// point is checked with IsValidPruningPoint, and the pruning point list is checked to form a
-	// valid chain to genesis with ArePruningPointsInValidChain.
-	ValidateIBDPruningListVersion uint16 = ^uint16(0)
-
-	// OffsetModeValueChecksVersion activates the offset-mode value checks: from this block version,
-	// on a node whose UTXO baseline is offset, (1) a transaction accepted despite missing inputs must
-	// pass every check its found inputs can decide and its outputs may not exceed its found inputs,
-	// and (2) ErrBadCoinbaseTransaction is only tolerated for a coinbase of the expected shape
-	// exceeding the expected amounts by at most UnpricedTransactionFeeAllowance per transaction this
-	// node could not price. See consensusstatemanager/offset_value_checks.go.
-	OffsetModeValueChecksVersion uint16 = 10
-)
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+}
 
 // HardForkActive reports whether the rule gated at activationVersion applies to a block of
 // blockVersion.
@@ -488,7 +528,6 @@ var MainnetParams = Params{
 	// behavior, not itself a bug) - the separate, actual bug that was blocking this node's own block
 	// template generation regardless of that (RepairBlockStatuses leaving a UTXO-valid virtual parent
 	// with no stored multiset) is fixed by RepairMissingMultisets, see consensus.go.
-	MLDSA44SignaturesBlockVersion: 11,
 	POWScores: []uint64{
 		17500000,
 		21821800,
@@ -499,10 +538,8 @@ var MainnetParams = Params{
 		217137983,
 		218735007,
 		227679830,
-		// Block version 11 activates every gated rule declared above: StrictUTXOCommitmentVersion,
-		// StrictMinersViewFieldsVersion, StrictCoinbaseVersion,
-		// RefuseMismatchedImportVersion, ValidateHeaderBitsVersion, ValidateIBDPruningListVersion and
-		// OffsetModeValueChecksVersion. ^uint64(0) is a
+		// Block version 11 is the next version at which mainnetHardForkGates can schedule a gated
+		// rule. ^uint64(0) is a
 		// placeholder that never triggers: it needs a real, coordinated activation DAA score chosen
 		// with enough lead time for every mainnet node operator and miner to upgrade. Every other
 		// per-version table repeats its version-10 value for version 11: this fork changes no
@@ -585,11 +622,10 @@ var MainnetParams = Params{
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 	DisallowDirectBlocksOnTopOfGenesis:      true,
 
+	HardForkGates: mainnetHardForkGates,
+
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
-	// Set to the coordinated activation DAA score before enabling on mainnet; see the field's doc.
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
-
 	MaxBlockLevel: 225,
 	MergeDepth: []uint64{
 		defaultMergeDepth,
@@ -613,6 +649,7 @@ var TestnetParams = Params{
 		defaultGHOSTDAGK,
 		defaultGHOSTDAGK,
 		defaultGHOSTDAGK,
+		40,
 		40,
 		40,
 		40,
@@ -656,12 +693,14 @@ var TestnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -683,6 +722,7 @@ var TestnetParams = Params{
 		2641,
 		2641,
 		2641,
+		2641,
 	},
 	TimestampDeviationTolerance: defaultTimestampDeviationTolerance,
 	// TODO: set the real activation DAA score for block version 8 (coinbase
@@ -692,7 +732,6 @@ var TestnetParams = Params{
 	// see domain/consensus/processes/coinbasemanager/payload.go. Testnet can use a real,
 	// soon-reachable value freely (low stakes); this just needs to stay comfortably above the
 	// 7th entry so the two hard forks exercise as distinct transitions during testing.
-	MLDSA44SignaturesBlockVersion: 11,
 	POWScores: []uint64{
 		1,
 		50,
@@ -704,6 +743,7 @@ var TestnetParams = Params{
 		350,
 		400,
 		450,
+		1525959,
 	},
 	PruningMultiplier: []uint64{
 		0,
@@ -717,12 +757,14 @@ var TestnetParams = Params{
 		1,
 		1,
 		1,
+		1,
 	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000,
@@ -770,6 +812,7 @@ var TestnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -780,15 +823,16 @@ var TestnetParams = Params{
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 	DisallowDirectBlocksOnTopOfGenesis:      true,
 
+	HardForkGates: testnetHardForkGates,
+
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
-
 	MaxBlockLevel: 225,
 	MergeDepth: []uint64{
 		defaultMergeDepth,
 		defaultMergeDepth,
 		defaultMergeDepth,
+		3600,
 		3600,
 		3600,
 		3600,
@@ -828,7 +872,6 @@ var TestnetParamsB5 = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	MLDSA44SignaturesBlockVersion:   11,
 	POWScores:                       []uint64{5, 15, 25, 30},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
@@ -868,7 +911,7 @@ var TestnetParamsB5 = Params{
 	PruningProofM:                           defaultPruningProofM,
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+	HardForkGates: testnetHardForkGates,
 
 	MaxBlockLevel: 225,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
@@ -902,7 +945,6 @@ var TestnetParamsB10 = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 28800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	MLDSA44SignaturesBlockVersion:   11,
 	POWScores:                       []uint64{5, 15, 25, 30},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 3},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
@@ -942,7 +984,7 @@ var TestnetParamsB10 = Params{
 	PruningProofM:                           defaultPruningProofM,
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+	HardForkGates: testnetHardForkGates,
 
 	MaxBlockLevel: 250,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
@@ -977,7 +1019,6 @@ var SimnetParams = Params{
 	FinalityDuration:               []time.Duration{defaultFinalityDuration, defaultFinalityDuration},
 	DifficultyAdjustmentWindowSize: []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 264},
 	TimestampDeviationTolerance:    defaultTimestampDeviationTolerance,
-	MLDSA44SignaturesBlockVersion:  11,
 	POWScores:                      []uint64{5},
 	PruningMultiplier:              []uint64{0, 0, 0, 0, 48},
 	MaxBlockMass:                   []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass},
@@ -1015,7 +1056,7 @@ var SimnetParams = Params{
 	PruningProofM:                           defaultPruningProofM,
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+	HardForkGates: testnetHardForkGates,
 
 	MaxBlockLevel: 250,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, defaultMergeDepth},
@@ -1043,7 +1084,6 @@ var DevnetParams = Params{
 	FinalityDuration:                []time.Duration{defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, defaultFinalityDuration, 10800 * time.Second, 10800 * time.Second},
 	DifficultyAdjustmentWindowSize:  []int{defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, defaultDifficultyAdjustmentWindowSize, 2640, 2640},
 	TimestampDeviationTolerance:     defaultTimestampDeviationTolerance,
-	MLDSA44SignaturesBlockVersion:   11,
 	POWScores:                       []uint64{1, 2, 3, 4},
 	PruningMultiplier:               []uint64{0, 0, 0, 0, 1, 1},
 	MaxBlockMass:                    []uint64{defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, defaultMaxBlockMass, 1_000_000, 1_000_000},
@@ -1084,10 +1124,10 @@ var DevnetParams = Params{
 	DeflationaryPhaseDaaScore:               defaultDeflationaryPhaseDaaScore,
 	DisallowDirectBlocksOnTopOfGenesis:      true,
 
+	HardForkGates: testnetHardForkGates,
+
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
-
 	MaxBlockLevel: 225,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }

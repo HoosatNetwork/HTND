@@ -34,7 +34,7 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 }
 
 // validateImportedPruningPointChain runs HTN-006's two checks, gated at
-// dagconfig.ValidateIBDPruningListVersion.
+// HardForkGates.ValidateIBDPruningListVersion.
 //
 // Both were commented out, under the note "Currently HTN pruning points are messed up, so need to
 // disable this check". That is still true: HTN-006 measured a 62.5% blue-score mismatch rate, so
@@ -84,7 +84,7 @@ func (bp *blockProcessor) validateImportedPruningPointChain(
 }
 
 // pruningListValidationIsActive reports whether the imported pruning point is at or past
-// dagconfig.ValidateIBDPruningListVersion.
+// HardForkGates.ValidateIBDPruningListVersion.
 //
 // The version is derived from the pruning point header's own DAA score. That is a weaker anchor
 // than the selected-parent derivation used elsewhere - at import time this node has no resolved DAG
@@ -105,5 +105,5 @@ func (bp *blockProcessor) pruningListValidationIsActive(
 		return false, err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(bp.powScores, header.DAAScore())
-	return dagconfig.HardForkActive(dagconfig.ValidateIBDPruningListVersion, blockVersion), nil
+	return dagconfig.HardForkActive(bp.hardForkGates.ValidateIBDPruningListVersion, blockVersion), nil
 }

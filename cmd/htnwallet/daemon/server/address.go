@@ -188,7 +188,7 @@ func (s *server) ensureMLDSA44Active() error {
 	if !libhtnwallet.MLDSA44Active(s.params, dagInfo.VirtualDAAScore) {
 		return errors.Errorf("ML-DSA-44 is not active on %s yet: it activates at block version %d, "+
 			"and coins sent to an ML-DSA-44 address before then cannot be spent until it does",
-			s.params.Name, s.params.MLDSA44SignaturesBlockVersion)
+			s.params.Name, s.params.HardForkGates.MLDSA44SignaturesBlockVersion)
 	}
 	return nil
 }

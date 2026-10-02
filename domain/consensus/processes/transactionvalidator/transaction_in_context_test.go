@@ -15,7 +15,7 @@ import (
 // block being validated, through POWScores and MLDSA44SignaturesBlockVersion.
 func TestScriptFlagsFollowMLDSA44BlockVersion(t *testing.T) {
 	// Version 3 is reached at DAA score 200.
-	params := dagconfig.Params{POWScores: []uint64{100, 200}, MLDSA44SignaturesBlockVersion: 3}
+	params := dagconfig.Params{POWScores: []uint64{100, 200}, HardForkGates: dagconfig.HardForkGates{MLDSA44SignaturesBlockVersion: 3}}
 	validator := transactionValidator{dagParams: &params}
 	tests := []struct {
 		daaScore   uint64
@@ -40,8 +40,8 @@ func TestScriptFlagsFollowMLDSA44BlockVersion(t *testing.T) {
 func TestMLDSA44IsInertOnEveryNetwork(t *testing.T) {
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams,
 		&dagconfig.SimnetParams, &dagconfig.DevnetParams} {
-		if params.MLDSA44SignaturesBlockVersion != 11 {
-			t.Fatalf("%s: MLDSA44SignaturesBlockVersion is %d, want 11", params.Name, params.MLDSA44SignaturesBlockVersion)
+		if params.HardForkGates.MLDSA44SignaturesBlockVersion != 11 {
+			t.Fatalf("%s: MLDSA44SignaturesBlockVersion is %d, want 11", params.Name, params.HardForkGates.MLDSA44SignaturesBlockVersion)
 		}
 		highestVersion := constants.BlockVersionForDAAScore(params.POWScores, math.MaxUint64)
 		if params.MLDSA44SignaturesActive(highestVersion) {

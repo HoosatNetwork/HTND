@@ -154,7 +154,7 @@ func TestMLDSA44WalletSpendEndToEnd(t *testing.T) {
 			return
 		}
 		consensusConfig.BlockCoinbaseMaturity = 0
-		consensusConfig.MLDSA44SignaturesBlockVersion = 1
+		consensusConfig.HardForkGates.MLDSA44SignaturesBlockVersion = 1
 		tc, teardown, err := consensus.NewFactory().NewTestConsensus(consensusConfig, "TestMLDSA44WalletSpendEndToEnd")
 		if err != nil {
 			t.Fatalf("Error setting up tc: %+v", err)

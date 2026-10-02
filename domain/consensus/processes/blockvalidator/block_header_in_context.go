@@ -132,7 +132,7 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 	// pruning point, which is half of why two nodes with identical blocks could pick different ones.
 	// The original note reads "probably can never again be enabled" - if that is true it should be
 	// deleted with a recorded decision rather than left looking like a TODO. The import-time half of
-	// this question is gated at dagconfig.ValidateIBDPruningListVersion.
+	// this question is gated at HardForkGates.ValidateIBDPruningListVersion.
 	// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
 	// if err != nil {
 	// 	return err

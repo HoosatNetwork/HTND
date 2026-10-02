@@ -175,6 +175,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	// Set the global flag for using hoohash C library
 	pow.SetUseHoohashCLibrary(config.UseHoohashCLibrary)
 
+	// Each consensus owns a copy of the gates, shared by every process that reads one, so a
+	// consensus built for this network cannot have its rules changed through the caller's Config.
+	hardForkGates := config.HardForkGates
 	dbManager := consensusdatabase.New(db)
 	prefixBucket := consensusdatabase.MakeBucket(dbPrefix.Serialize())
 
@@ -390,8 +393,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		5000,
 		config.EnableSanityCheckPruningUTXOSet,
 		config.POWScores,
+		&hardForkGates,
 		config.OnDisqualification,
-		config.UnpricedTransactionFeeAllowance)
+		config.HardForkGates.UnpricedTransactionFeeAllowance)
 	if err != nil {
 		return nil, false, err
 	}
@@ -428,6 +432,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.IsArchival,
 		genesisHash,
 		config.POWScores,
+		&hardForkGates,
 		config.FinalityDepthForBlockVersion,
 		config.PruningDepthForBlockVersion,
 		config.DeletionDepth,
@@ -465,6 +470,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.TimestampDeviationTolerance,
 		config.TargetTimePerBlock,
 		config.POWScores,
+		&hardForkGates,
 		config.MaxBlockLevel,
 		config.PastMedianTimeValidationTolerance,
 
@@ -536,6 +542,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	blockProcessor := blockprocessor.New(
 		genesisHash,
 		config.POWScores,
+		&hardForkGates,
 		config.TargetTimePerBlock,
 		config.MaxBlockLevel,
 		dbManager,
@@ -605,6 +612,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		targetTimePerBlock:             config.TargetTimePerBlock,
 		difficultyAdjustmentWindowSize: config.DifficultyAdjustmentWindowSize,
 		powScores:                      config.POWScores,
+		hardForkGates:                  &hardForkGates,
 
 		blockProcessor:        blockProcessor,
 		blockBuilder:          blockBuilder,

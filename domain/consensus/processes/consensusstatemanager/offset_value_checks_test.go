@@ -42,33 +42,33 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if got := offsetModeValueChecksActiveForVersion(test.version); got != test.want {
+		if got := offsetModeValueChecksActiveForVersion(dagconfig.MainnetParams.HardForkGates, test.version); got != test.want {
 			t.Errorf("block version %d: active=%t, want %t", test.version, got, test.want)
 		}
 	}
 	scores := dagconfig.MainnetParams.POWScores
 	// POWScores[i] is the activation score of block version i+2 (version 1 has no entry).
-	if len(scores) < int(dagconfig.OffsetModeValueChecksVersion)-1 {
-		t.Fatalf("mainnet POWScores does not define block version %d", dagconfig.OffsetModeValueChecksVersion)
+	if len(scores) < int(dagconfig.MainnetParams.HardForkGates.OffsetModeValueChecksVersion)-1 {
+		t.Fatalf("mainnet POWScores does not define block version %d", dagconfig.MainnetParams.HardForkGates.OffsetModeValueChecksVersion)
 	}
-	if scores[dagconfig.OffsetModeValueChecksVersion-2] == ^uint64(0) {
+	if scores[dagconfig.MainnetParams.HardForkGates.OffsetModeValueChecksVersion-2] == ^uint64(0) {
 		t.Errorf("mainnet must activate block version %d, which enforces the offset-mode value checks, at a real POW score",
-			dagconfig.OffsetModeValueChecksVersion)
+			dagconfig.MainnetParams.HardForkGates.OffsetModeValueChecksVersion)
 	}
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams, &dagconfig.TestnetParamsB5,
 		&dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
-		if params.UnpricedTransactionFeeAllowance == 0 {
+		if params.HardForkGates.UnpricedTransactionFeeAllowance == 0 {
 			t.Errorf("%s: unpriced transaction fee allowance is not set", params.Name)
 		}
 	}
 }
 
 func TestStrictCoinbaseGateIsUnscheduled(t *testing.T) {
-	if dagconfig.StrictCoinbaseVersion != ^uint16(0) {
-		t.Fatalf("StrictCoinbaseVersion is scheduled at block version %d", dagconfig.StrictCoinbaseVersion)
+	if dagconfig.MainnetParams.HardForkGates.StrictCoinbaseVersion != ^uint16(0) {
+		t.Fatalf("StrictCoinbaseVersion is scheduled at block version %d", dagconfig.MainnetParams.HardForkGates.StrictCoinbaseVersion)
 	}
 	for _, version := range []uint16{1, 9, 10, 11, ^uint16(0) - 1} {
-		if dagconfig.HardForkActive(dagconfig.StrictCoinbaseVersion, version) {
+		if dagconfig.HardForkActive(dagconfig.MainnetParams.HardForkGates.StrictCoinbaseVersion, version) {
 			t.Errorf("strict coinbase gate active at reachable block version %d", version)
 		}
 	}

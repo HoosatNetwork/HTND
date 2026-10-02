@@ -82,7 +82,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		}
 	}
 
-	// Stage the DAA window, and - from dagconfig.ValidateHeaderBitsVersion onward - check that the
+	// Stage the DAA window, and - from HardForkGates.ValidateHeaderBitsVersion onward - check that the
 	// difficulty the header claims is the one this node computes.
 	//
 	// HTN-007: the comment that used to sit here said the header's difficulty was validated "within
@@ -115,7 +115,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 	return nil
 }
 
-// checkHeaderBits enforces HTN-007's rule once dagconfig.ValidateHeaderBitsVersion has activated.
+// checkHeaderBits enforces HTN-007's rule once HardForkGates.ValidateHeaderBitsVersion has activated.
 //
 // The version is derived from the block's selected parent's DAA score, as this node computed it,
 // never from the header's own version field: the field is peer-supplied, and a rule that adds
@@ -135,7 +135,7 @@ func (v *blockValidator) checkHeaderBits(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
-	if !dagconfig.HardForkActive(dagconfig.ValidateHeaderBitsVersion, blockVersion) {
+	if !dagconfig.HardForkActive(v.hardForkGates.ValidateHeaderBitsVersion, blockVersion) {
 		return nil
 	}
 

@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Offset-mode value checks (dagconfig.OffsetModeValueChecksVersion, block version 11).
+// Offset-mode value checks (HardForkGates.OffsetModeValueChecksVersion, block version 11).
 //
 // A node whose UTXO baseline is offset tolerates what it cannot reproduce. Before activation that
 // toleration also covered two things that move value and that the node CAN check:
@@ -35,7 +35,7 @@ import (
 // while making subsidy over-pay impossible and fee over-pay small and bounded.
 //
 // The gate is the block version, activated through the network's POWScores like every earlier
-// hard fork: blocks of version >= dagconfig.OffsetModeValueChecksVersion (11) get the checks, blocks
+// hard fork: blocks of version >= HardForkGates.OffsetModeValueChecksVersion (11) get the checks, blocks
 // of version 10 and below keep the old behaviour exactly, so history accepted before activation
 // replays exactly as it was accepted during IBD, reorgs and virtual resolution.
 //
@@ -49,13 +49,13 @@ import (
 // offsetModeValueChecksActive reports whether the offset-mode value checks apply to a block (or
 // virtual) with the given DAA score on this network.
 func (csm *consensusStateManager) offsetModeValueChecksActive(blockDAAScore uint64) bool {
-	return offsetModeValueChecksActiveForVersion(constants.BlockVersionForDAAScore(csm.powScores, blockDAAScore))
+	return offsetModeValueChecksActiveForVersion(*csm.hardForkGates, constants.BlockVersionForDAAScore(csm.powScores, blockDAAScore))
 }
 
 // offsetModeValueChecksActiveForVersion reports whether the offset-mode value checks apply to a block
-// of the given version.
-func offsetModeValueChecksActiveForVersion(blockVersion uint16) bool {
-	return dagconfig.HardForkActive(dagconfig.OffsetModeValueChecksVersion, blockVersion)
+// of the given version under gates.
+func offsetModeValueChecksActiveForVersion(gates dagconfig.HardForkGates, blockVersion uint16) bool {
+	return dagconfig.HardForkActive(gates.OffsetModeValueChecksVersion, blockVersion)
 }
 
 // checkMissingInputAcceptance decides the fee and validity of a transaction on the missing-input

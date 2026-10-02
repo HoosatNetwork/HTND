@@ -196,7 +196,7 @@ func MLDSA44MultiSigAddress(params *dagconfig.Params, redeemScript []byte) (util
 
 // MLDSA44Active reports whether ML-DSA-44 spends are consensus-valid at virtualDAAScore on the
 // network described by params. Coins sent to an ML-DSA-44 address before then cannot be spent until
-// the network reaches params.MLDSA44SignaturesBlockVersion.
+// the network reaches params.HardForkGates.MLDSA44SignaturesBlockVersion.
 func MLDSA44Active(params *dagconfig.Params, virtualDAAScore uint64) bool {
 	return params.MLDSA44SignaturesActive(constants.BlockVersionForDAAScore(params.POWScores, virtualDAAScore))
 }

@@ -7,16 +7,17 @@ import (
 )
 
 func TestRefuseMismatchedPruningPointGateIsUnscheduled(t *testing.T) {
-	if dagconfig.RefuseMismatchedImportVersion != ^uint16(0) {
-		t.Fatalf("RefuseMismatchedImportVersion is scheduled at block version %d",
-			dagconfig.RefuseMismatchedImportVersion)
+	gates := dagconfig.MainnetParams.HardForkGates
+	if gates.RefuseMismatchedImportVersion != ^uint16(0) {
+		t.Fatalf("RefuseMismatchedImportVersion is scheduled on mainnet at block version %d",
+			gates.RefuseMismatchedImportVersion)
 	}
 	for _, version := range []uint16{1, 9, 10, 11, ^uint16(0) - 1} {
-		if refuseMismatchedPruningPointForVersion(version) {
+		if refuseMismatchedPruningPointForVersion(gates, version) {
 			t.Errorf("mismatched pruning-point refusal active at reachable block version %d", version)
 		}
 	}
-	if !refuseMismatchedPruningPointForVersion(^uint16(0)) {
+	if !refuseMismatchedPruningPointForVersion(gates, ^uint16(0)) {
 		t.Fatal("mismatched pruning-point refusal does not activate at its gate")
 	}
 }
