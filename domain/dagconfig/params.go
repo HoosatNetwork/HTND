@@ -743,7 +743,7 @@ var TestnetParams = Params{
 		350,
 		400,
 		450,
-		1527934,
+		1534673,
 	},
 	PruningMultiplier: []uint64{
 		0,
