@@ -12,6 +12,8 @@ func main() {
 		err = create(config.(*createConfig))
 	case balanceSubCmd:
 		err = balance(config.(*balanceConfig))
+	case utxosSubCmd:
+		err = utxos(config.(*utxosConfig))
 	case autoCompoundSubCmd:
 		err = autoCompound(config.(*autoCompoundConfig))
 	case sendSubCmd:

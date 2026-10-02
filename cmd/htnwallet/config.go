@@ -12,6 +12,7 @@ import (
 const (
 	createSubCmd                    = "create"
 	balanceSubCmd                   = "balance"
+	utxosSubCmd                     = "utxos"
 	sendSubCmd                      = "send"
 	autoCompoundSubCmd              = "auto-compound"
 	voteSubCmd                      = "vote"
@@ -47,6 +48,11 @@ type createConfig struct {
 	NumPublicKeys     uint32 `long:"num-public-keys" short:"n" description:"Total number of keys" default:"1"`
 	ECDSA             bool   `long:"ecdsa" description:"Create an ECDSA wallet"`
 	Import            bool   `long:"import" short:"i" description:"Import private keys (as opposed to generating them)"`
+	config.NetworkFlags
+}
+
+type utxosConfig struct {
+	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
 	config.NetworkFlags
 }
 
@@ -183,6 +189,10 @@ func parseCommandLine() (subCommand string, config any) {
 	_, _ = parser.AddCommand(balanceSubCmd, "Shows the balance of a public address",
 		"Shows the balance for a public address in Hoosat", balanceConf)
 
+	utxosConf := &utxosConfig{DaemonAddress: defaultListen}
+	_, _ = parser.AddCommand(utxosSubCmd, "Lists the UTXOs of the wallet",
+		"Lists every UTXO on the wallet's addresses with its address, amount and derivation path", utxosConf)
+
 	spamConf := &autoCompoundConfig{DaemonAddress: defaultListen}
 	_, _ = parser.AddCommand(autoCompoundSubCmd, "Sends a Hoosat compound transactions automatically",
 		"Sends a Hoosat compound transactions automatically", spamConf)
@@ -264,6 +274,13 @@ func parseCommandLine() (subCommand string, config any) {
 			printErrorAndExit(err)
 		}
 		config = balanceConf
+	case utxosSubCmd:
+		combineNetworkFlags(&utxosConf.NetworkFlags, &cfg.NetworkFlags)
+		err := utxosConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = utxosConf
 	case autoCompoundSubCmd:
 		combineNetworkFlags(&spamConf.NetworkFlags, &cfg.NetworkFlags)
 		err := spamConf.ResolveNetwork(parser)

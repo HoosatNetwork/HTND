@@ -6,6 +6,8 @@ package htnwalletd;
 service htnwalletd {
   rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse) {}
   rpc GetExternalSpendableUTXOs (GetExternalSpendableUTXOsRequest) returns (GetExternalSpendableUTXOsResponse) {}
+  // GetUTXOs lists the coins on every address the daemon tracks, each with the path its address is derived at.
+  rpc GetUTXOs (GetUTXOsRequest) returns (GetUTXOsResponse) {}
   rpc CreateUnsignedTransactions (CreateUnsignedTransactionsRequest) returns (CreateUnsignedTransactionsResponse) {}
   rpc ShowAddresses (ShowAddressesRequest) returns (ShowAddressesResponse) {}
   rpc NewAddress (NewAddressRequest) returns (NewAddressResponse) {}
@@ -116,6 +118,20 @@ message UtxosByAddressesEntry {
   string address = 1;
   Outpoint outpoint = 2;
   UtxoEntry utxoEntry = 3;
+}
+
+message GetUTXOsRequest {
+}
+
+message WalletUtxo {
+  string address = 1;
+  Outpoint outpoint = 2;
+  UtxoEntry utxoEntry = 3;
+  string derivationPath = 4;
+}
+
+message GetUTXOsResponse {
+  repeated WalletUtxo utxos = 1;
 }
 
 message ScriptPublicKey {
