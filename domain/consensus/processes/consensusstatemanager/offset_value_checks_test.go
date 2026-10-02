@@ -40,6 +40,7 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 		{10, true},
 		{11, true},
 	}
+
 	for _, test := range tests {
 		if got := offsetModeValueChecksActiveForVersion(test.version); got != test.want {
 			t.Errorf("block version %d: active=%t, want %t", test.version, got, test.want)
@@ -58,6 +59,17 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 		&dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
 		if params.UnpricedTransactionFeeAllowance == 0 {
 			t.Errorf("%s: unpriced transaction fee allowance is not set", params.Name)
+		}
+	}
+}
+
+func TestStrictCoinbaseGateIsUnscheduled(t *testing.T) {
+	if dagconfig.StrictCoinbaseVersion != ^uint16(0) {
+		t.Fatalf("StrictCoinbaseVersion is scheduled at block version %d", dagconfig.StrictCoinbaseVersion)
+	}
+	for _, version := range []uint16{1, 9, 10, 11, ^uint16(0) - 1} {
+		if dagconfig.HardForkActive(dagconfig.StrictCoinbaseVersion, version) {
+			t.Errorf("strict coinbase gate active at reachable block version %d", version)
 		}
 	}
 }
@@ -158,7 +170,7 @@ func TestCoinbaseWithinUnpricedAllowance(t *testing.T) {
 		{"extra output", testCoinbase(1_266_666_667, 66_666_666, 1), 10_000_000, false},
 	}
 	for _, test := range tests {
-		err := coinbaseWithinUnpricedAllowance(test.actual, expected, test.allowance)
+		err := coinbaseWithinUnpricedAllowance(test.actual, expected, test.allowance, false)
 		if test.wantOK && err != nil {
 			t.Errorf("%s: expected tolerance, got %v", test.name, err)
 		}
@@ -169,15 +181,25 @@ func TestCoinbaseWithinUnpricedAllowance(t *testing.T) {
 
 	differentPayee := testCoinbase(1_266_666_667, 66_666_666)
 	differentPayee.Outputs[0].ScriptPublicKey = &externalapi.ScriptPublicKey{Script: []byte{0x52}, Version: 0}
-	if err := coinbaseWithinUnpricedAllowance(differentPayee, expected, ^uint64(0)); !errors.Is(err, ruleerrors.ErrBadCoinbaseTransaction) {
+	if err := coinbaseWithinUnpricedAllowance(differentPayee, expected, ^uint64(0), false); !errors.Is(err, ruleerrors.ErrBadCoinbaseTransaction) {
 		t.Errorf("a coinbase paying a different script must be rejected whatever the allowance, got %v", err)
 	}
 
 	// A payload difference is not compared, as validateCoinbaseTransaction does not compare it.
 	otherPayload := testCoinbase(1_266_666_667, 66_666_666)
 	otherPayload.Payload = []byte{0x02}
-	if err := coinbaseWithinUnpricedAllowance(otherPayload, expected, 0); err != nil {
+	if err := coinbaseWithinUnpricedAllowance(otherPayload, expected, 0, false); err != nil {
 		t.Errorf("payload must not be compared, got %v", err)
+	}
+
+	for _, actual := range []*externalapi.DomainTransaction{
+		testCoinbase(1_266_000_000, 66_666_666),
+		testCoinbase(1_266_666_667+880_000, 66_666_666),
+	} {
+		if err := coinbaseWithinUnpricedAllowance(actual, expected, 10_000_000, true); !errors.Is(
+			err, ruleerrors.ErrBadCoinbaseTransaction) {
+			t.Errorf("strict coinbase accepted inexact values: %v", err)
+		}
 	}
 }
 

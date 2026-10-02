@@ -132,7 +132,9 @@ func unpricedTransactionCount(acceptanceData externalapi.AcceptanceData) uint64 
 // than expected (value not claimed destroys nothing), and the outputs may exceed the expected ones
 // by at most allowance in total. The payload is not compared, as validateCoinbaseTransaction does not
 // compare it either.
-func coinbaseWithinUnpricedAllowance(actual, expected *externalapi.DomainTransaction, allowance uint64) error {
+func coinbaseWithinUnpricedAllowance(actual, expected *externalapi.DomainTransaction, allowance uint64,
+	requireExact bool,
+) error {
 	if actual.Version != expected.Version || actual.LockTime != expected.LockTime ||
 		!actual.SubnetworkID.Equal(&expected.SubnetworkID) || actual.Gas != expected.Gas ||
 		len(actual.Inputs) != len(expected.Inputs) {
@@ -150,6 +152,10 @@ func coinbaseWithinUnpricedAllowance(actual, expected *externalapi.DomainTransac
 			!bytes.Equal(output.ScriptPublicKey.Script, expectedOutput.ScriptPublicKey.Script) {
 			return errors.Wrapf(ruleerrors.ErrBadCoinbaseTransaction,
 				"coinbase output %d pays a different script than expected", i)
+		}
+		if requireExact && output.Value != expectedOutput.Value {
+			return errors.Wrapf(ruleerrors.ErrBadCoinbaseTransaction,
+				"coinbase output %d pays %d, expected exactly %d", i, output.Value, expectedOutput.Value)
 		}
 		if output.Value <= expectedOutput.Value {
 			continue
@@ -183,13 +189,14 @@ func saturatingMul(a, b uint64) uint64 {
 func (csm *consensusStateManager) checkCoinbaseOnOffsetBaseline(stagingArea *model.StagingArea,
 	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash,
 	coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
+	requireExact bool,
 ) error {
 	expected, err := csm.expectedCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
 	if err != nil {
 		return err
 	}
 	allowance := saturatingMul(unpricedTransactionCount(acceptanceData), csm.unpricedTransactionFeeAllowance)
-	if err := coinbaseWithinUnpricedAllowance(coinbaseTransaction, expected, allowance); err != nil {
+	if err := coinbaseWithinUnpricedAllowance(coinbaseTransaction, expected, allowance, requireExact); err != nil {
 		return notTolerable{errors.Wrapf(err, "block %s", blockHash)}
 	}
 	return nil

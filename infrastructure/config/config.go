@@ -79,7 +79,7 @@ const (
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
-	defaultProtocolVersion        = 8
+	defaultProtocolVersion        = 11
 	defaultIBDTimeout             = 480 * time.Minute
 	defaultNearlySyncedIBDTimeout = 10 * time.Minute
 	defaultDisableIBDTimeout      = false
@@ -169,6 +169,7 @@ type Flags struct {
 	EnableAutoExodusExportOnPruning bool          `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
 	AutoExodusExportDir             string        `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
+	ShutdownOnDisqualifiedStreak    bool          `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified tip chains after a consecutive streak"`
 
 	// Compound transaction rate limiting flags
 	MaxCompoundTxPerMinute    uint64 `long:"max-compound-tx-per-minute" description:"Maximum compound transactions per address per minute" default:"10"`

@@ -188,7 +188,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		UseHoohashCLibrary:                cfg.UseHoohashCLibrary,
 		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
 		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
-		OnDisqualifiedBlockStreak:         stopNodeOnDisqualifiedBlockStreak,
+		OnDisqualifiedBlockStreak:         recoverFromDisqualifiedBlockStreak,
 		OnDisqualification:                logDisqualification,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
@@ -221,6 +221,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	if err != nil {
 		return nil, err
 	}
+	bindDisqualifiedStreakRecovery(domain, cfg.ShutdownOnDisqualifiedStreak)
 
 	netAdapter, err := netadapter.NewNetAdapter(cfg)
 	if err != nil {

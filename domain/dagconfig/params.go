@@ -222,10 +222,16 @@ var (
 	// without it, and can only activate once every mining node commits the same multiset.
 	StrictMinersViewFieldsVersion uint16 = ^uint16(0)
 
-	// RefuseMismatchedImportVersion activates HTN-005: from this block version, an imported
-	// pruning-point UTXO set whose MuHash disagrees with the commitment is refused rather than
-	// accepted-and-repaired, and this node refuses to serve such a set onward. This is separate from
-	// the operator flag --enable-sanity-check-pruning-utxo, which is unchanged.
+	// StrictCoinbaseVersion ends the offset-baseline coinbase allowance: from this block version,
+	// the coinbase must exactly match the value this node computes, including when some merge-set
+	// transaction fees cannot be priced locally. It is unscheduled until all nodes share one UTXO
+	// baseline and can therefore compute the same fees.
+	StrictCoinbaseVersion uint16 = 10
+
+	// RefuseMismatchedImportVersion activates HTN-005: from this block version, a local pruning-point
+	// advancement or imported pruning-point UTXO set whose MuHash disagrees with the commitment is
+	// refused rather than accepted-and-repaired, and this node refuses to serve such a set onward.
+	// This is separate from the operator flag --enable-sanity-check-pruning-utxo, which is unchanged.
 	RefuseMismatchedImportVersion uint16 = ^uint16(0)
 
 	// ValidateHeaderBitsVersion activates HTN-007: from this block version, a header's bits must
@@ -477,7 +483,7 @@ var MainnetParams = Params{
 		218735007,
 		227679830,
 		// Block version 11 activates every gated rule declared above: StrictUTXOCommitmentVersion,
-		// StrictMinersViewFieldsVersion,
+		// StrictMinersViewFieldsVersion, StrictCoinbaseVersion,
 		// RefuseMismatchedImportVersion, ValidateHeaderBitsVersion, ValidateIBDPruningListVersion and
 		// OffsetModeValueChecksVersion. ^uint64(0) is a
 		// placeholder that never triggers: it needs a real, coordinated activation DAA score chosen
