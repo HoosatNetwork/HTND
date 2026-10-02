@@ -41,16 +41,6 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		return err
 	}
 
-	// DISABLED, not gated: no ticket and no recorded reason. checkParentsIncest rejects a block one
-	// of whose parents is an ancestor of another, which is a structural rule rather than a
-	// UTXO-state one, so the chain either satisfies it or it does not - that is a cheap thing to
-	// measure and has not been. Until it is, this cannot be switched on, for the same reason as
-	// every gate in dagconfig/params.go: a rule turned on for existing versions rejects history.
-	// err = v.checkParentsIncest(stagingArea, blockHash)
-	// if err != nil {
-	// 	return err
-	// }
-
 	if !isBlockWithTrustedData {
 		err = v.checkPruningPointViolation(stagingArea, blockHash)
 		if err != nil {
@@ -71,6 +61,21 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		err := v.ghostdagManagers[0].GHOSTDAG(stagingArea, blockHash)
 		if err != nil {
 			return err
+		}
+
+		// checkParentsIncest rejects a block one of whose direct parents is an ancestor of another.
+		// It had been disabled with no gate, so it is off before HardForkGates.ParentsIncestVersion.
+		// It runs after GHOSTDAG rather than before the pruning violation check, where upstream had
+		// it, because the gate is keyed on the selected parent, which GHOSTDAG chooses.
+		active, err := v.hardForkActiveFor(stagingArea, blockHash, v.hardForkGates.ParentsIncestVersion)
+		if err != nil {
+			return err
+		}
+		if active {
+			err = v.checkParentsIncest(stagingArea, blockHash)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

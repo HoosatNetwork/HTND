@@ -273,6 +273,40 @@ type HardForkGates struct {
 	// It only takes effect once POWScores has an entry that reaches it; until then no block can have
 	// this version and the rule stays off.
 	MLDSA44SignaturesBlockVersion uint16
+
+	// The gates below re-enable header and structural checks that were commented out with no
+	// version gate (see blockvalidator). Each was off long enough that the existing chain may
+	// violate it, so each applies only from its own block version onward. Like every other gate,
+	// the version is derived from the selected parent's DAA score as this node computed it, and
+	// blocks with trusted data are exempt, as they were upstream.
+
+	// ParentsIncestVersion activates checkParentsIncest: no direct parent may be an ancestor of
+	// another.
+	ParentsIncestVersion uint16
+
+	// MergeSetSizeLimitVersion activates checkMergeSizeLimit: a block's merge set may not exceed
+	// MergeSetSizeLimit.
+	MergeSetSizeLimitVersion uint16
+
+	// HeaderDAAScoreVersion activates checkDAAScore (HTN-006): a header's DAA score must equal the
+	// one this node computes for it.
+	HeaderDAAScoreVersion uint16
+
+	// HeaderBlueWorkVersion activates checkBlueWork (HTN-006): a header's blue work must equal the
+	// blue work GHOSTDAG computes for it.
+	HeaderBlueWorkVersion uint16
+
+	// HeaderBlueScoreVersion activates checkHeaderBlueScore (HTN-006): a header's blue score must
+	// equal the blue score GHOSTDAG computes for it.
+	HeaderBlueScoreVersion uint16
+
+	// HeaderPruningPointVersion activates validateHeaderPruningPoint (HTN-001): a header's pruning
+	// point must equal the one this node expects from its selected parent.
+	HeaderPruningPointVersion uint16
+
+	// IndirectParentsVersion activates checkIndirectParents: a header's parents at every level above
+	// 0 must equal the ones this node builds from its direct parents.
+	IndirectParentsVersion uint16
 }
 
 // unscheduledHardForkGate is a gate no block version can reach.
@@ -290,6 +324,14 @@ var mainnetHardForkGates = HardForkGates{
 	OffsetModeValueChecksVersion:  10,
 	MLDSA44SignaturesBlockVersion: 11,
 
+	ParentsIncestVersion: unscheduledHardForkGate,
+	MergeSetSizeLimitVersion: unscheduledHardForkGate,
+	HeaderDAAScoreVersion: unscheduledHardForkGate,
+	HeaderBlueWorkVersion: unscheduledHardForkGate,
+	HeaderBlueScoreVersion: unscheduledHardForkGate,
+	HeaderPruningPointVersion: unscheduledHardForkGate,
+	IndirectParentsVersion: unscheduledHardForkGate,
+
 	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 }
 
@@ -304,6 +346,14 @@ var testnetHardForkGates = HardForkGates{
 	ValidateIBDPruningListVersion: 12,
 	OffsetModeValueChecksVersion:  10,
 	MLDSA44SignaturesBlockVersion: 11,
+
+	ParentsIncestVersion: 13,
+	MergeSetSizeLimitVersion: 13,
+	HeaderDAAScoreVersion: 13,
+	HeaderBlueWorkVersion: 13,
+	HeaderBlueScoreVersion: 13,
+	HeaderPruningPointVersion: 13,
+	IndirectParentsVersion: 13,
 
 	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 }
@@ -657,6 +707,7 @@ var TestnetParams = Params{
 		40,
 		40,
 		40,
+		40,
 	},
 	Name:        "hoosat-testnet",
 	Net:         appmessage.Testnet,
@@ -694,12 +745,14 @@ var TestnetParams = Params{
 		200 * time.Millisecond,
 		200 * time.Millisecond,
 		200 * time.Millisecond,
+		200 * time.Millisecond,
 	},
 	FinalityDuration: []time.Duration{
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
 		defaultFinalityDuration,
+		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
 		10800 * time.Second,
@@ -715,6 +768,7 @@ var TestnetParams = Params{
 		defaultDifficultyAdjustmentWindowSize,
 		defaultDifficultyAdjustmentWindowSize,
 		2651,
+		2641,
 		2641,
 		2641,
 		2641,
@@ -744,6 +798,10 @@ var TestnetParams = Params{
 		400,
 		450,
 		1534673,
+		// Block version 13 activates the header and structural checks gated at 13 in
+		// testnetHardForkGates. ^uint64(0) is a placeholder that never triggers: set it to the
+		// testnet DAA score the fork should activate at.
+		^uint64(0),
 	},
 	PruningMultiplier: []uint64{
 		0,
@@ -758,12 +816,14 @@ var TestnetParams = Params{
 		1,
 		1,
 		1,
+		1,
 	},
 	MaxBlockMass: []uint64{
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
 		defaultMaxBlockMass,
+		1_000_000,
 		1_000_000,
 		1_000_000,
 		1_000_000,
@@ -813,6 +873,7 @@ var TestnetParams = Params{
 		12,
 		12,
 		12,
+		12,
 	},
 	MassPerTxByte:                           defaultMassPerTxByte,
 	MassPerScriptPubKeyByte:                 defaultMassPerScriptPubKeyByte,
@@ -832,6 +893,7 @@ var TestnetParams = Params{
 		defaultMergeDepth,
 		defaultMergeDepth,
 		defaultMergeDepth,
+		3600,
 		3600,
 		3600,
 		3600,
