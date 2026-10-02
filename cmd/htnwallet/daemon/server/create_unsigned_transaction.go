@@ -246,11 +246,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			}
 		}
 
-		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
-			Outpoint:       highestUTXO.Outpoint,
-			UTXOEntry:      highestUTXO.UTXOEntry,
-			DerivationPath: s.walletAddressPath(highestUTXO.address),
-		})
+		selectedUTXOs = append(selectedUTXOs, s.libhtnwalletUTXO(highestUTXO))
 		totalValue += highestUTXO.UTXOEntry.Amount()
 	}
 	// log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
@@ -279,11 +275,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			}
 		}
 
-		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
-			Outpoint:       utxo.Outpoint,
-			UTXOEntry:      utxo.UTXOEntry,
-			DerivationPath: s.walletAddressPath(utxo.address),
-		})
+		selectedUTXOs = append(selectedUTXOs, s.libhtnwalletUTXO(utxo))
 		totalValue += utxo.UTXOEntry.Amount()
 	}
 	// log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
@@ -448,11 +440,7 @@ func (s *server) selectUTXOsForTransactionAtDAAScore(spendAmount uint64, isSendA
 			}
 		}
 
-		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
-			Outpoint:       utxo.Outpoint,
-			UTXOEntry:      utxo.UTXOEntry,
-			DerivationPath: s.walletAddressPath(utxo.address),
-		})
+		selectedUTXOs = append(selectedUTXOs, s.libhtnwalletUTXO(utxo))
 
 		totalValue += utxo.UTXOEntry.Amount()
 

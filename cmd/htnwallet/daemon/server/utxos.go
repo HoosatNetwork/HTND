@@ -45,7 +45,7 @@ func (s *server) walletUTXOs(entries []*appmessage.UTXOsByAddressesEntry) ([]*pb
 			Address:        entry.Address,
 			Outpoint:       converted.Outpoint,
 			UtxoEntry:      converted.UtxoEntry,
-			DerivationPath: s.walletAddressPath(address),
+			DerivationPath: s.walletAddressLabel(address),
 		})
 	}
 	return utxos, nil

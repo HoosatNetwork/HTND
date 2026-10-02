@@ -47,6 +47,9 @@ type keysFileJSON struct {
 	LastUsedExternalIndex uint32                     `json:"lastUsedExternalIndex"`
 	LastUsedInternalIndex uint32                     `json:"lastUsedInternalIndex"`
 	ECDSA                 bool                       `json:"ecdsa"`
+	// Imported is left out of an htnwallet wallet's file, so such a file is written exactly as before
+	// imported wallets existed. Older htnwallet versions reject an imported wallet's file.
+	Imported *importJSON `json:"imported,omitempty"`
 }
 
 // EncryptedMnemonic represents an encrypted mnemonic
@@ -66,6 +69,7 @@ type File struct {
 	lastUsedExternalIndex uint32
 	lastUsedInternalIndex uint32
 	ECDSA                 bool
+	Imported              *Import // Set for an imported wallet, which then has no mnemonics or extended public keys
 	path                  string
 }
 
@@ -88,6 +92,7 @@ func (d *File) toJSON() *keysFileJSON {
 		CosignerIndex:         d.CosignerIndex,
 		LastUsedExternalIndex: d.lastUsedExternalIndex,
 		LastUsedInternalIndex: d.lastUsedInternalIndex,
+		Imported:              importToJSON(d.Imported),
 	}
 }
 
@@ -116,6 +121,16 @@ func (d *File) fromJSON(fileJSON *keysFileJSON) error {
 	d.CosignerIndex = fileJSON.CosignerIndex
 	d.lastUsedExternalIndex = fileJSON.LastUsedExternalIndex
 	d.lastUsedInternalIndex = fileJSON.LastUsedInternalIndex
+
+	imported, err := importFromJSON(fileJSON.Imported)
+	if err != nil {
+		return err
+	}
+	if imported != nil && (len(fileJSON.EncryptedPrivateKeys) > 0 || len(fileJSON.ExtendedPublicKeys) > 0) {
+		return errors.New("the keys file holds both an imported wallet and htnwallet keys; " +
+			"a keys file holds one wallet")
+	}
+	d.Imported = imported
 
 	d.EncryptedMnemonics = make([]*EncryptedMnemonic, len(fileJSON.EncryptedPrivateKeys))
 	for i, encryptedPrivateKeyJSON := range fileJSON.EncryptedPrivateKeys {

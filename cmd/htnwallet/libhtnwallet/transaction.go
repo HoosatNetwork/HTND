@@ -34,6 +34,10 @@ type UTXO struct {
 	Outpoint       *externalapi.DomainOutpoint
 	UTXOEntry      externalapi.UTXOEntry
 	DerivationPath string
+	// ImportedExtendedPublicKey is set for a UTXO on an imported key's address: it is the imported key
+	// (ImportedKeyExtendedPublicKey) that spends it, in place of the wallet's own keys derived at
+	// DerivationPath.
+	ImportedExtendedPublicKey string
 }
 
 // CreateUnsignedTransaction creates an unsigned transaction
@@ -115,6 +119,20 @@ func createUnsignedTransaction(
 	inputs := make([]*externalapi.DomainTransactionInput, len(selectedUTXOs))
 	partiallySignedInputs := make([]*serialization.PartiallySignedInput, len(selectedUTXOs))
 	for i, utxo := range selectedUTXOs {
+		if utxo.ImportedExtendedPublicKey != "" {
+			inputs[i] = &externalapi.DomainTransactionInput{PreviousOutpoint: *utxo.Outpoint}
+			partiallySignedInputs[i] = &serialization.PartiallySignedInput{
+				PrevOutput: &externalapi.DomainTransactionOutput{
+					Value:           utxo.UTXOEntry.Amount(),
+					ScriptPublicKey: utxo.UTXOEntry.ScriptPublicKey(),
+				},
+				MinimumSignatures:    1,
+				PubKeySignaturePairs: []*serialization.PubKeySignaturePair{{ExtendedPublicKey: utxo.ImportedExtendedPublicKey}},
+				DerivationPath:       ImportedKeyDerivationPath,
+			}
+			continue
+		}
+
 		emptyPubKeySignaturePairs := make([]*serialization.PubKeySignaturePair, len(extendedPublicKeys))
 		for i, extendedPublicKey := range extendedPublicKeys {
 			extendedKey, err := bip32.DeserializeExtendedKey(extendedPublicKey)

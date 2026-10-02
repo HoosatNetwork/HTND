@@ -10,6 +10,10 @@ import (
 )
 
 func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress) (util.Address, *walletAddress, error) {
+	if s.keysFile.IsImported() {
+		return s.importedWalletChangeAddress(useExisting, fromAddresses)
+	}
+
 	var walletAddr *walletAddress
 	if len(fromAddresses) != 0 && useExisting {
 		walletAddr = fromAddresses[0]
@@ -69,6 +73,10 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
+	if s.keysFile.IsImported() {
+		return s.showImportedWalletAddresses(request)
+	}
+
 	addresses := make([]string, 0)
 	for i := uint32(1); i <= s.keysFile.LastUsedExternalIndex(); i++ {
 		walletAddr := &walletAddress{
@@ -115,6 +123,10 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
+	}
+
+	if s.keysFile.IsImported() {
+		return s.importedWalletNewAddress(request)
 	}
 
 	err := s.keysFile.SetLastUsedExternalIndex(s.keysFile.LastUsedExternalIndex() + 1)

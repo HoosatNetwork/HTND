@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
@@ -83,9 +84,13 @@ const (
 // addressesToQuery scans the addresses in the given range. Because
 // each cosigner in a multisig has its own unique path for generating
 // addresses it goes over all the cosigners and add their addresses
-// for each key chain.
+// for each key chain. The batch starting at index 0, which every sync rescans, also holds the
+// addresses of the imported keys.
 func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 	addresses := make(walletAddressSet)
+	if start == 0 {
+		maps.Copy(addresses, s.importedAddresses)
+	}
 	for index := start; index < end; index++ {
 		cosignerCount, err := checkedUint32FromInt(len(s.keysFile.ExtendedPublicKeys))
 		if err != nil {
@@ -222,6 +227,11 @@ func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAdd
 		}
 
 		s.addressSet[address] = walletAddress
+
+		// An imported key is not at an index of the wallet's key chains.
+		if walletAddress.imported != nil {
+			continue
+		}
 
 		if walletAddress.keyChain == libhtnwallet.ExternalKeychain {
 			if walletAddress.index > lastUsedExternalIndex {

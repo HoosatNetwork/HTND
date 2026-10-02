@@ -34,6 +34,10 @@ func main() {
 		err = newAddress(config.(*newAddressConfig))
 	case dumpUnencryptedDataSubCmd:
 		err = dumpUnencryptedData(config.(*dumpUnencryptedDataConfig))
+	case importPrivateKeySubCmd:
+		err = importPrivateKey(config.(*importPrivateKeyConfig))
+	case importWebWalletSubCmd:
+		err = importWebWallet(config.(*importWebWalletConfig))
 	case startDaemonSubCmd:
 		err = startDaemon(config.(*startDaemonConfig))
 	case sweepSubCmd:

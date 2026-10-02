@@ -42,6 +42,7 @@ type server struct {
 	forceSyncChan                   chan struct{}
 	startTimeOfLastCompletedRefresh time.Time
 	addressSet                      walletAddressSet
+	importedAddresses               walletAddressSet // Every address of an imported key; see trackImportedKeys
 	txMassCalculator                *txmass.Calculator
 	usedOutpoints                   map[externalapi.DomainOutpoint]time.Time
 	pendingBroadcasts               map[externalapi.DomainTransactionID]*pendingBroadcast
@@ -121,6 +122,11 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		isLogFinalProgressLineShown: false,
 		maxUsedAddressesForLog:      0,
 		maxProcessedAddressesForLog: 0,
+	}
+
+	err = serverInstance.trackImportedKeys()
+	if err != nil {
+		return errors.Wrap(err, "Error reading the imported keys")
 	}
 
 	log.Infof("Read, syncing the wallet...")

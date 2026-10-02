@@ -24,6 +24,8 @@ const (
 	showAddressesSubCmd             = "show-addresses"
 	newAddressSubCmd                = "new-address"
 	dumpUnencryptedDataSubCmd       = "dump-unencrypted-data"
+	importPrivateKeySubCmd          = "import-private-key"
+	importWebWalletSubCmd           = "import-web-wallet"
 	startDaemonSubCmd               = "start-daemon"
 	versionSubCmd                   = "version"
 	getDaemonVersionSubCmd          = "get-daemon-version"
@@ -170,6 +172,25 @@ type dumpUnencryptedDataConfig struct {
 	config.NetworkFlags
 }
 
+type importPrivateKeyConfig struct {
+	KeysFile   string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	Password   string `long:"password" short:"p" description:"Wallet password"`
+	PrivateKey string `long:"private-key" short:"k" description:"Schnorr private key in hex, as genkeypair prints it (prompted for if not given)"`
+	Yes        bool   `long:"yes" short:"y" description:"Assume \"yes\" to all questions"`
+	config.NetworkFlags
+}
+
+type importWebWalletConfig struct {
+	KeysFile       string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	Password       string `long:"password" short:"p" description:"Wallet password"`
+	Export         string `long:"export" short:"e" description:"An encrypted web wallet export, as the web wallet's export() returns it (otherwise the mnemonic is prompted for)"`
+	ExportFile     string `long:"export-file" short:"F" description:"A file containing an encrypted web wallet export"`
+	ExportPassword string `long:"export-password" description:"The password the web wallet export was encrypted with (prompted for if not given)"`
+	NumAddresses   uint32 `long:"num-addresses" short:"n" description:"Number of receive addresses, and as many change addresses, to import" default:"256"`
+	Yes            bool   `long:"yes" short:"y" description:"Assume \"yes\" to all questions"`
+	config.NetworkFlags
+}
+
 type versionConfig struct{}
 
 type getDaemonVersionConfig struct {
@@ -239,6 +260,20 @@ func parseCommandLine() (subCommand string, config any) {
 	_, _ = parser.AddCommand(dumpUnencryptedDataSubCmd, "Prints the unencrypted wallet data",
 		"Prints the unencrypted wallet data including its private keys. Anyone that sees it can access "+
 			"the funds. Use only on safe environment.", dumpUnencryptedDataConf)
+
+	importPrivateKeyConf := &importPrivateKeyConfig{}
+	_, _ = parser.AddCommand(importPrivateKeySubCmd, "Creates a wallet from a Schnorr private key, such as one from genkeypair",
+		"Creates a keys file holding only the given Schnorr private key - such as one printed by the genkeypair "+
+			"utility - encrypted with a new password, like create does for a new wallet. Run the daemon on that keys file "+
+			"to use it; it is a wallet of its own, separate from any htnwallet wallet.", importPrivateKeyConf)
+
+	importWebWalletConf := &importWebWalletConfig{}
+	_, _ = parser.AddCommand(importWebWalletSubCmd, "Creates a wallet from an HTN web wallet",
+		"Creates a keys file holding only an HTN web wallet (github.com/HoosatNetwork/htn-wallet), from its mnemonic "+
+			"or from an encrypted export, encrypted with a new password, like create does for a new wallet. The web "+
+			"wallet derives every address with hardened derivation, so a fixed number of receive and change addresses "+
+			"is imported (--num-addresses); import it again with a larger number to extend it. Run the daemon on that "+
+			"keys file to use it; it is a wallet of its own, separate from any htnwallet wallet.", importWebWalletConf)
 
 	startDaemonConf := &startDaemonConfig{
 		RPCServer: defaultRPCServer,
@@ -366,6 +401,24 @@ func parseCommandLine() (subCommand string, config any) {
 			printErrorAndExit(err)
 		}
 		config = dumpUnencryptedDataConf
+	case importPrivateKeySubCmd:
+		combineNetworkFlags(&importPrivateKeyConf.NetworkFlags, &cfg.NetworkFlags)
+		err := importPrivateKeyConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = importPrivateKeyConf
+	case importWebWalletSubCmd:
+		combineNetworkFlags(&importWebWalletConf.NetworkFlags, &cfg.NetworkFlags)
+		err := importWebWalletConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		err = validateImportWebWalletConfig(importWebWalletConf)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = importWebWalletConf
 	case startDaemonSubCmd:
 		combineNetworkFlags(&startDaemonConf.NetworkFlags, &cfg.NetworkFlags)
 		err := startDaemonConf.ResolveNetwork(parser)
