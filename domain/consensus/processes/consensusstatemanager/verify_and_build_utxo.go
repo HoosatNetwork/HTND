@@ -259,12 +259,11 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	//
 	// It deliberately does NOT consult ErrMissingTxOut.HasDoubleSpend here, though it used to.
 	//
-	// That flag means "the outpoint was in the diff's toRemove", which is a statement about double
-	// spending only when the diff is the accumulated one being built during acceptance - there
-	// toRemove records spends this very pass made. The diff handed to THIS function is different: it
-	// is the block's past relative to virtual, where toRemove means "virtual holds this coin and this
-	// block's past does not". That covers coins created after the block as much as coins spent before
-	// it, so reading it as a double spend convicts blocks that never spent anything twice.
+	// That flag means an earlier transaction in the same acceptance pass already spent the outpoint.
+	// This function validates each of the block's own transactions against the past diff on its own
+	// and passes no such set. A hit in toRemove is reported as a plain missing coin: on this diff
+	// toRemove means virtual holds the coin and the block's past does not, which covers coins created
+	// after the block as much as coins spent before it.
 	//
 	// The cost was not theoretical. A node syncing mainnet refused 150 blocks this way, started block
 	// body sync eight times, and accepted zero blocks - IBD reached 99% of headers and then made no
@@ -337,7 +336,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 
 			// Populate UTXO entries
 			stagingMu.Lock()
-			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff)
+			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff, nil)
 			stagingMu.Unlock()
 			if err != nil {
 				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})

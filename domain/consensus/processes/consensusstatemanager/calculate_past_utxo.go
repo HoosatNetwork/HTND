@@ -276,6 +276,9 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	multiblockAcceptanceData := make(externalapi.AcceptanceData, len(mergeSetBlocks))
 	accumulatedUTXODiff := selectedParentPastUTXODiff.CloneMutable()
 	accumulatedMass := uint64(0)
+	// Outpoints spent by a transaction this pass has already accepted. This, and not the diff's
+	// ToRemove, is the double-spend set: ToRemove is seeded from virtual and grows with arrival order.
+	spentInPass := make(map[externalapi.DomainOutpoint]struct{})
 
 	for i, mergeSetBlock := range mergeSetBlocks {
 		mergeSetBlockHash := consensushashing.BlockHash(mergeSetBlock)
@@ -296,8 +299,8 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 
 			var rejection *transactionRejection
 			isAccepted, accumulatedMass, rejection, err = csm.maybeAcceptTransaction(stagingArea,
-				transaction, blockHash, mergeSetBlockHash, isSelectedParent, accumulatedUTXODiff, accumulatedMass,
-				selectedParentMedianTime, daaScore)
+				transaction, blockHash, mergeSetBlockHash, isSelectedParent, accumulatedUTXODiff, spentInPass,
+				accumulatedMass, selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -328,6 +331,21 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	return multiblockAcceptanceData, accumulatedUTXODiff, rejectionReasons, nil
 }
 
+// noteSpentInputs records the inputs this accepted transaction actually spent. Inputs left without
+// an entry were absent from the set and were not removed from it, so a later transaction that spends
+// one of them is still missing a coin, not double-spending.
+func noteSpentInputs(spentInPass map[externalapi.DomainOutpoint]struct{}, transaction *externalapi.DomainTransaction) {
+	if spentInPass == nil || transaction == nil {
+		return
+	}
+	for _, input := range transaction.Inputs {
+		if input == nil || input.UTXOEntry == nil {
+			continue
+		}
+		spentInPass[input.PreviousOutpoint] = struct{}{}
+	}
+}
+
 // maybeAcceptTransaction decides whether one merge-set transaction is accepted, and - when it is not
 // - says why.
 //
@@ -348,6 +366,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	mergeSetBlockHash *externalapi.DomainHash,
 	isSelectedParent bool,
 	accumulatedUTXODiff externalapi.MutableUTXODiff,
+	spentInPass map[externalapi.DomainOutpoint]struct{},
 	accumulatedMassBefore uint64,
 	_ int64,
 	blockDAAScore uint64,
@@ -371,7 +390,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	defer log.Tracef("maybeAcceptTransaction end for transaction %s in block %s", transactionID, blockHash)
 
 	log.Tracef("Populating transaction %s with UTXO entries", transactionID)
-	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable())
+	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable(), spentInPass)
 	if err != nil {
 		csm.noteAcceptanceRejection(blockHash, transactionIDPtr, len(transaction.Inputs), err)
 		// An input this view has already spent is a double spend and stays rejected. An input that is
@@ -409,6 +428,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			}
 			csm.journalMissingInputVerdict(stagingArea, blockHash, mergeSetBlockHash, transaction, transactionID,
 				true, inheritsOffset, resolvedInputs)
+			noteSpentInputs(spentInPass, transaction)
 			log.Debugf("Transaction %s in block %s spends coins this set does not hold; its outputs are "+
 				"kept so the gap does not spread", transactionID, blockHash)
 			logTransactionVerdict("accepted despite missing inputs", verdictContext, transaction, transactionID,
@@ -484,6 +504,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		return false, 0, nil, errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
 			transactionID, blockHash)
 	}
+	noteSpentInputs(spentInPass, transaction)
 
 	if isCoinbase && transactionIDPtr != nil {
 		for i := range transaction.Outputs {
