@@ -350,7 +350,13 @@ func (s *server) refreshUTXOs(limit uint32) error {
 	}
 	// log.Infof("Got %d UTXOs from node", len(getUTXOsByAddressesResponse.Entries))
 
-	return s.updateUTXOSet(getUTXOsByAddressesResponse.Entries, mempoolEntriesByAddresses.Entries, refreshStart)
+	err = s.updateUTXOSet(getUTXOsByAddressesResponse.Entries, mempoolEntriesByAddresses.Entries, refreshStart)
+	if err != nil {
+		return err
+	}
+	s.limitOfLastCompletedRefresh = limit
+	s.utxoSetIsStale = false
+	return nil
 }
 
 func (s *server) forceSync() {

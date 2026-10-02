@@ -51,6 +51,9 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			if shouldReleaseUsedOutpointsOnBroadcastError(err) {
 				s.releaseUsedOutpoints(tx)
 			}
+			if broadcastErrorMeansUTXOSetIsStale(err) {
+				s.utxoSetIsStale = true
+			}
 			return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 		}
 
@@ -85,6 +88,23 @@ func shouldReleaseUsedOutpointsOnBroadcastError(err error) bool {
 	return strings.Contains(errString, "rejected transaction") ||
 		strings.Contains(errString, "already spent by transaction") ||
 		strings.Contains(errString, "compound transaction rate limit exceeded")
+}
+
+// broadcastErrorMeansUTXOSetIsStale reports whether the node refused a transaction over its inputs,
+// which says the wallet's UTXO set lists coins the node no longer holds. A compound reuses that set
+// between refreshes (see compoundNeedsUTXORefresh), so without this it would keep picking the same
+// spent coins until the set aged out. A rate-limit refusal says nothing about the inputs.
+func broadcastErrorMeansUTXOSetIsStale(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errString := strings.ToLower(err.Error())
+	if strings.Contains(errString, "compound transaction rate limit exceeded") {
+		return false
+	}
+	return strings.Contains(errString, "rejected transaction") ||
+		strings.Contains(errString, "already spent by transaction")
 }
 
 func (s *server) releaseUsedOutpoints(tx *externalapi.DomainTransaction) {

@@ -79,12 +79,6 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
-	err := s.refreshUTXOs(limit)
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("Fetched %d UTXO from the Node", len(s.utxosSortedByAmount))
-
 	toAddress, err := util.DecodeAddress(address, s.params.Prefix)
 	if err != nil {
 		return nil, err
@@ -99,7 +93,25 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
+	refreshed := false
+	if s.compoundNeedsUTXORefresh(limit, time.Now()) {
+		err = s.refreshCompoundUTXOs(limit)
+		if err != nil {
+			return nil, err
+		}
+		refreshed = true
+	}
+
 	selectedUTXOs, _, _, err := s.selectUTXOsForCompounding(feePerInput, fromAddresses)
+	if err != nil && !refreshed {
+		// The reused set may just have run out of coins this daemon has not already spent; only a
+		// fresh one can tell that apart from there being nothing left to compound.
+		err = s.refreshCompoundUTXOs(limit)
+		if err != nil {
+			return nil, err
+		}
+		selectedUTXOs, _, _, err = s.selectUTXOsForCompounding(feePerInput, fromAddresses)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +137,35 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 	}
 
 	return s.requireStandardMass(unsignedTransaction)
+}
+
+// compoundUTXOSetMaxAge is how long a compound reuses the wallet's UTXO set before fetching it again.
+//
+// A refresh asks the node for up to limit coins of every wallet address, and the node checks each one
+// against virtual's UTXO set with a database read. On a wallet with many coins that takes minutes,
+// while a compound spends at most targetCompoundInputs of them. Refreshing for every compound made the
+// refresh, not the compound rate, set the pace. Reusing the set is safe because the coins this daemon
+// spent stay in usedOutpoints and are skipped. What it costs is that coins received since the refresh
+// wait for the next one, and that coins spent elsewhere are only noticed when a broadcast is refused
+// over them (utxoSetIsStale).
+const compoundUTXOSetMaxAge = 10 * time.Minute
+
+// compoundNeedsUTXORefresh reports whether a compound must fetch the wallet's UTXO set again rather
+// than reuse the one it has.
+func (s *server) compoundNeedsUTXORefresh(limit uint32, now time.Time) bool {
+	return s.utxoSetIsStale ||
+		s.startTimeOfLastCompletedRefresh.IsZero() ||
+		s.limitOfLastCompletedRefresh != limit ||
+		now.Sub(s.startTimeOfLastCompletedRefresh) > compoundUTXOSetMaxAge
+}
+
+func (s *server) refreshCompoundUTXOs(limit uint32) error {
+	err := s.refreshUTXOs(limit)
+	if err != nil {
+		return err
+	}
+	log.Infof("Fetched %d UTXO from the Node", len(s.utxosSortedByAmount))
+	return nil
 }
 
 // Add this constant next to your others

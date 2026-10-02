@@ -41,6 +41,8 @@ type server struct {
 	shutdown                        chan struct{}
 	forceSyncChan                   chan struct{}
 	startTimeOfLastCompletedRefresh time.Time
+	limitOfLastCompletedRefresh     uint32 // The per-address UTXO limit utxosSortedByAmount was fetched with
+	utxoSetIsStale                  bool   // A broadcast found utxosSortedByAmount holding coins already spent
 	addressSet                      walletAddressSet
 	importedAddresses               walletAddressSet // Every address of an imported key; see trackImportedKeys
 	txMassCalculator                *txmass.Calculator
