@@ -34,10 +34,11 @@ func (db *readCountingDB) Has(key model.DBKey) (bool, error) {
 	return db.DBReader.Has(key)
 }
 
-// TestHasBlockCachesAFoundBlockAndReportsFaults pins that HasBlock caches a block it finds, so the same
-// block announced by every peer reads the database once, and that a database fault is an error rather
-// than "block not present", which is what it used to be reported as.
-func TestHasBlockCachesAFoundBlockAndReportsFaults(t *testing.T) {
+// TestHasBlockRemembersAFoundBlockAndReportsFaults pins that HasBlock answers from the key alone and
+// remembers a block it finds, so the same block announced by every peer asks the database once,
+// that a deleted block is forgotten, and that a database fault is an error rather than "block not
+// present", which is what it used to be reported as.
+func TestHasBlockRemembersAFoundBlockAndReportsFaults(t *testing.T) {
 	dbManager, prefixBucket, teardown := testutils.NewTestDB(t)
 	defer teardown()
 
@@ -70,12 +71,26 @@ func TestHasBlockCachesAFoundBlockAndReportsFaults(t *testing.T) {
 			t.Errorf("HasBlock(%s) = %t, want %t", test.hash, has, test.want)
 		}
 	}
-	if reads := db.gets + db.hases; reads != 2 {
-		t.Errorf("HasBlock read the database %d times for a block asked about twice and a missing one, "+
-			"want 2: the second ask must be a cache hit", reads)
+	if db.gets != 0 {
+		t.Errorf("HasBlock read %d block values, want 0: whether a block exists is a question about its key", db.gets)
 	}
-	if !store.cache.Has(stored) {
-		t.Errorf("HasBlock did not cache the block it found")
+	if db.hases != 2 {
+		t.Errorf("HasBlock asked the database %d times for a block asked about twice and a missing one, "+
+			"want 2: the second ask must be a cache hit", db.hases)
+	}
+	if !store.existsCache.Has(stored) {
+		t.Errorf("HasBlock did not remember the block it found")
+	}
+	if store.cache.Has(stored) {
+		t.Errorf("HasBlock put the block body in the block cache, which no caller of HasBlock uses")
+	}
+
+	// A deleted block must stop being reported, even though HasBlock remembered it.
+	stagingArea = model.NewStagingArea()
+	store.Delete(stagingArea, stored)
+	testutils.Commit(t, dbManager, stagingArea)
+	if has, err := store.HasBlock(db, model.NewStagingArea(), stored); err != nil || has {
+		t.Errorf("HasBlock after Delete = %t, %v; want false, nil", has, err)
 	}
 
 	faultyDB := &readCountingDB{DBReader: dbManager, err: errors.New("disk fault")}

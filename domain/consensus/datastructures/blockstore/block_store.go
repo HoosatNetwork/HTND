@@ -16,9 +16,12 @@ var bucketName = []byte("blocks")
 
 // blockStore represents a store of blocks
 type blockStore struct {
-	shardID     model.StagingShardID
-	lock        sync.Mutex
-	cache       *lrucache.LRUCache[*externalapi.DomainBlock]
+	shardID model.StagingShardID
+	lock    sync.Mutex
+	cache   *lrucache.LRUCache[*externalapi.DomainBlock]
+	// existsCache remembers blocks HasBlock found in the database, without their bodies. HasBlock
+	// asks about the key only, so answering it needs neither the block nor a slot in cache.
+	existsCache *lrucache.LRUCache[struct{}]
 	countCached uint64
 	bucket      model.DBBucket
 	countKey    model.DBKey
@@ -27,10 +30,11 @@ type blockStore struct {
 // New instantiates a new BlockStore
 func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockStore, error) {
 	blockStore := &blockStore{
-		shardID:  staging.GenerateShardingID(),
-		cache:    lrucache.New[*externalapi.DomainBlock](cacheSize, preallocate),
-		bucket:   prefixBucket.Bucket(bucketName),
-		countKey: prefixBucket.Key([]byte("blocks-count")),
+		shardID:     staging.GenerateShardingID(),
+		cache:       lrucache.New[*externalapi.DomainBlock](cacheSize, preallocate),
+		existsCache: lrucache.New[struct{}](cacheSize, preallocate),
+		bucket:      prefixBucket.Bucket(bucketName),
+		countKey:    prefixBucket.Key([]byte("blocks-count")),
 	}
 
 	err := blockStore.initializeCount(dbContext)
@@ -131,30 +135,29 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 
 	bs.lock.Lock()
 	cachedHas := bs.cache.Has(blockHash)
+	if !cachedHas {
+		_, cachedHas = bs.existsCache.Get(blockHash)
+	}
 	bs.lock.Unlock()
 	if cachedHas {
 		return true, nil
 	}
 
-	// A found block goes into the cache. Every peer announces the same block, so relay calls this once
-	// per peer under the consensus lock, and the cache makes all but the first a hit. A key-only Has
-	// saves little in exchange: pebble's Has is a Get that reads the same value, it only skips the copy.
-	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
-	if database.IsNotFoundError(err) {
-		return false, nil
-	}
+	// A found block is remembered in existsCache. Every peer announces the same block, so relay calls
+	// this once per peer under the consensus lock, and the cache makes all but the first a hit. Only
+	// the key is remembered: no caller of HasBlock uses the block, so there is nothing to copy or
+	// deserialize, and no block cache slot to take from a block that is in use.
+	has, err := dbContext.Has(bs.hashAsKey(blockHash))
 	// A database fault is an error, not a missing block.
 	if err != nil {
 		return false, err
 	}
-
-	blockDeserialized, err := bs.deserializeBlock(blockBytes)
-	if err != nil {
-		return false, err
+	if !has {
+		return false, nil
 	}
 
 	bs.lock.Lock()
-	bs.cache.Add(blockHash, blockDeserialized)
+	bs.existsCache.Add(blockHash, struct{}{})
 	bs.lock.Unlock()
 	return true, nil
 }
@@ -179,6 +182,7 @@ func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *external
 	stagingShard := bs.stagingShard(stagingArea)
 	bs.lock.Lock()
 	bs.cache.Remove(blockHash)
+	bs.existsCache.Remove(blockHash)
 	bs.lock.Unlock()
 
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {

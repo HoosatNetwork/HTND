@@ -40,6 +40,7 @@ func (bss *blockStagingShard) Commit(dbTx model.DBTransaction) error {
 			return err
 		}
 		bss.store.cache.Remove(&hash)
+		bss.store.existsCache.Remove(&hash)
 	}
 
 	err := bss.commitCount(dbTx)
