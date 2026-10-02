@@ -18,6 +18,12 @@ type ConsensusStateStore interface {
 	// order rather than one Get per outpoint.
 	UTXOsByOutpointsWithoutPopulatingCache(dbContext DBReader, stagingArea *StagingArea,
 		outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) error
+	// LookupUTXOByOutpoint returns the coin's entry and true, or nil and false where virtual's UTXO set
+	// does not hold it - HasUTXOByOutpoint and UTXOByOutpoint in one lookup that consults the cache.
+	// Only a database fault is an error.
+	LookupUTXOByOutpoint(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error)
+	// LookupUTXOByOutpointWithoutPopulatingCache is LookupUTXOByOutpoint without adding a miss to the cache.
+	LookupUTXOByOutpointWithoutPopulatingCache(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error)
 	HasUTXOByOutpoint(dbContext DBReader, stagingArea *StagingArea, outpoint *externalapi.DomainOutpoint) (bool, error)
 	VirtualUTXOSetIterator(dbContext DBReader, stagingArea *StagingArea) (externalapi.ReadOnlyUTXOSetIterator, error)
 	VirtualUTXOs(dbContext DBReader, fromOutpoint *externalapi.DomainOutpoint, limit int) ([]*externalapi.OutpointAndUTXOEntryPair, error)

@@ -193,12 +193,33 @@ func (css *consensusStateStore) UTXOsByOutpointsWithoutPopulatingCache(dbContext
 	return nil
 }
 
-func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContext model.DBReader,
-	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint, populateCacheOnMiss bool,
+// LookupUTXOByOutpoint answers what HasUTXOByOutpoint and UTXOByOutpoint answer together, in one
+// lookup: the coin's entry and true, or nil and false where virtual's UTXO set does not hold it.
+// Only a database fault is an error.
+//
+// Asking Has first cost every caller a database read even for a coin already in
+// virtualUTXOSetCache, because Has never consults the cache, and two reads for a coin that is not.
+// Like UTXOByOutpoint, it populates the cache on a miss.
+func (css *consensusStateStore) LookupUTXOByOutpoint(dbContext model.DBReader, stagingArea *model.StagingArea,
+	outpoint *externalapi.DomainOutpoint,
+) (externalapi.UTXOEntry, bool, error) {
+	return css.lookupUTXO(dbContext, css.stagingShard(stagingArea), outpoint, true)
+}
+
+// LookupUTXOByOutpointWithoutPopulatingCache is LookupUTXOByOutpoint for a bulk caller: it never adds a
+// cache miss to virtualUTXOSetCache (see UTXOByOutpointWithoutPopulatingCache).
+func (css *consensusStateStore) LookupUTXOByOutpointWithoutPopulatingCache(dbContext model.DBReader,
+	stagingArea *model.StagingArea, outpoint *externalapi.DomainOutpoint,
+) (externalapi.UTXOEntry, bool, error) {
+	return css.lookupUTXO(dbContext, css.stagingShard(stagingArea), outpoint, false)
+}
+
+func (css *consensusStateStore) lookupUTXO(dbContext model.DBReader, stagingShard *consensusStateStagingShard,
+	outpoint *externalapi.DomainOutpoint, populateCacheOnMiss bool,
 ) (externalapi.UTXOEntry, bool, error) {
 	if stagingShard.virtualUTXODiffStaging != nil {
 		if stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
-			return nil, false, errors.Errorf("outpoint was not found")
+			return nil, false, nil
 		}
 		if utxoEntry, ok := stagingShard.virtualUTXODiffStaging.ToAdd().Get(outpoint); ok {
 			return utxoEntry, true, nil
@@ -215,8 +236,8 @@ func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContex
 	}
 
 	serializedUTXOEntry, err := dbContext.Get(key)
-	if errors.Is(err, database.ErrNotFound) {
-		return nil, false, errors.Wrapf(err, "UTXO entry %s does not exist in db", outpoint)
+	if database.IsNotFoundError(err) {
+		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, err
@@ -229,6 +250,22 @@ func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContex
 
 	if populateCacheOnMiss {
 		css.virtualUTXOSetCache.Add(outpoint, entry)
+	}
+	return entry, true, nil
+}
+
+func (css *consensusStateStore) utxoByOutpointFromStagedVirtualUTXODiff(dbContext model.DBReader,
+	stagingShard *consensusStateStagingShard, outpoint *externalapi.DomainOutpoint, populateCacheOnMiss bool,
+) (externalapi.UTXOEntry, bool, error) {
+	if stagingShard.virtualUTXODiffStaging != nil && stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
+		return nil, false, errors.Errorf("outpoint was not found")
+	}
+	entry, found, err := css.lookupUTXO(dbContext, stagingShard, outpoint, populateCacheOnMiss)
+	if err != nil {
+		return nil, false, err
+	}
+	if !found {
+		return nil, false, errors.Wrapf(database.ErrNotFound, "UTXO entry %s does not exist in db", outpoint)
 	}
 	return entry, true, nil
 }
