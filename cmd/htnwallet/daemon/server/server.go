@@ -44,6 +44,7 @@ type server struct {
 	addressSet                      walletAddressSet
 	txMassCalculator                *txmass.Calculator
 	usedOutpoints                   map[externalapi.DomainOutpoint]time.Time
+	pendingBroadcasts               map[externalapi.DomainTransactionID]*pendingBroadcast
 	firstSyncDone                   atomic.Bool
 
 	isLogFinalProgressLineShown bool

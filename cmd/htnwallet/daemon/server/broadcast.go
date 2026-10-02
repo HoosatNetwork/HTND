@@ -54,9 +54,11 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 		}
 
+		broadcastTime := time.Now()
 		for _, input := range tx.Inputs {
-			s.usedOutpoints[input.PreviousOutpoint] = time.Now()
+			s.usedOutpoints[input.PreviousOutpoint] = broadcastTime
 		}
+		s.trackBroadcast(tx, broadcastTime)
 	}
 
 	s.forceSync()

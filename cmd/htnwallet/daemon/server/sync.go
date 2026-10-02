@@ -52,6 +52,7 @@ func (s *server) syncLoop() error {
 		if err != nil {
 			return err
 		}
+		s.checkPendingBroadcasts(time.Now())
 	}
 }
 
