@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
@@ -183,60 +182,20 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 // For single-sig wallets, this includes both legacy P2PK and modern P2PKH encodings
 // so that upgrading the wallet does not "lose" old funds.
 func (s *server) walletAddressStringsForScan(wAddr *walletAddress) ([]string, error) {
-	path := s.walletAddressPath(wAddr)
-
-	if s.isMultisig() {
-		addr, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
-		if err != nil {
-			return nil, err
-		}
-		return []string{addr.String()}, nil
-	}
-
-	addrP2PK, err := libhtnwallet.AddressWithSingleSigAddressType(
-		s.params,
-		s.keysFile.ExtendedPublicKeys,
-		s.keysFile.MinimumSignatures,
-		path,
-		s.keysFile.ECDSA,
-		libhtnwallet.SingleSigAddressTypeP2PK,
-	)
+	addresses, err := libhtnwallet.WalletAddressesAtPath(s.params, s.keysFile.ExtendedPublicKeys,
+		s.keysFile.MinimumSignatures, s.walletAddressPath(wAddr), s.keysFile.ECDSA)
 	if err != nil {
 		return nil, err
 	}
-
-	addrP2PKH, err := libhtnwallet.AddressWithSingleSigAddressType(
-		s.params,
-		s.keysFile.ExtendedPublicKeys,
-		s.keysFile.MinimumSignatures,
-		path,
-		s.keysFile.ECDSA,
-		libhtnwallet.SingleSigAddressTypeP2PKH,
-	)
-	if err != nil {
-		return nil, err
+	addressStrings := make([]string, len(addresses))
+	for i, address := range addresses {
+		addressStrings[i] = address.String()
 	}
-
-	addrP2SH, err := libhtnwallet.AddressWithSingleSigAddressType(
-		s.params,
-		s.keysFile.ExtendedPublicKeys,
-		s.keysFile.MinimumSignatures,
-		path,
-		s.keysFile.ECDSA,
-		libhtnwallet.SingleSigAddressTypeP2SH,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return []string{addrP2PK.String(), addrP2PKH.String(), addrP2SH.String()}, nil
+	return addressStrings, nil
 }
 
 func (s *server) walletAddressPath(wAddr *walletAddress) string {
-	if s.isMultisig() {
-		return fmt.Sprintf("m/%d/%d/%d", wAddr.cosignerIndex, wAddr.keyChain, wAddr.index)
-	}
-	return fmt.Sprintf("m/%d/%d", wAddr.keyChain, wAddr.index)
+	return libhtnwallet.WalletAddressPath(s.isMultisig(), wAddr.cosignerIndex, wAddr.keyChain, wAddr.index)
 }
 
 func (s *server) isMultisig() bool {

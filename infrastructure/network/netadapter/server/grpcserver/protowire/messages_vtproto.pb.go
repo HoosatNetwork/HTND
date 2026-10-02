@@ -1322,6 +1322,24 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) CloneVT() isHoosatdMessage_Paylo
 	return r
 }
 
+func (m *HoosatdMessage_GetWalletUtxosRequest) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetWalletUtxosRequest)(nil)
+	}
+	r := new(HoosatdMessage_GetWalletUtxosRequest)
+	r.GetWalletUtxosRequest = m.GetWalletUtxosRequest.CloneVT()
+	return r
+}
+
+func (m *HoosatdMessage_GetWalletUtxosResponse) CloneVT() isHoosatdMessage_Payload {
+	if m == nil {
+		return (*HoosatdMessage_GetWalletUtxosResponse)(nil)
+	}
+	r := new(HoosatdMessage_GetWalletUtxosResponse)
+	r.GetWalletUtxosResponse = m.GetWalletUtxosResponse.CloneVT()
+	return r
+}
+
 func (this *HoosatdMessage) EqualVT(that *HoosatdMessage) bool {
 	if this == that {
 		return true
@@ -4900,6 +4918,56 @@ func (this *HoosatdMessage_GetFeeEstimateResponse) EqualVT(thatIface isHoosatdMe
 	return true
 }
 
+func (this *HoosatdMessage_GetWalletUtxosRequest) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetWalletUtxosRequest)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetWalletUtxosRequest, that.GetWalletUtxosRequest; p != q {
+		if p == nil {
+			p = &GetWalletUtxosRequestMessage{}
+		}
+		if q == nil {
+			q = &GetWalletUtxosRequestMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
+func (this *HoosatdMessage_GetWalletUtxosResponse) EqualVT(thatIface isHoosatdMessage_Payload) bool {
+	that, ok := thatIface.(*HoosatdMessage_GetWalletUtxosResponse)
+	if !ok {
+		return false
+	}
+	if this == that {
+		return true
+	}
+	if this == nil && that != nil || this != nil && that == nil {
+		return false
+	}
+	if p, q := this.GetWalletUtxosResponse, that.GetWalletUtxosResponse; p != q {
+		if p == nil {
+			p = &GetWalletUtxosResponseMessage{}
+		}
+		if q == nil {
+			q = &GetWalletUtxosResponseMessage{}
+		}
+		if !p.EqualVT(q) {
+			return false
+		}
+	}
+	return true
+}
+
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
 // Requires gRPC-Go v1.32.0 or later.
@@ -8145,6 +8213,48 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToSizedBufferVT(dAtA []by
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetWalletUtxosRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetWalletUtxosRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetWalletUtxosRequest != nil {
+		size, err := m.GetWalletUtxosRequest.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0xa2
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetWalletUtxosResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetWalletUtxosResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetWalletUtxosResponse != nil {
+		size, err := m.GetWalletUtxosResponse.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0xaa
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -8174,6 +8284,20 @@ func (m *HoosatdMessage) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) 
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetWalletUtxosResponse); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+	}
+	if msg, ok := m.Payload.(*HoosatdMessage_GetWalletUtxosRequest); ok {
+		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
 	}
 	if msg, ok := m.Payload.(*HoosatdMessage_GetFeeEstimateResponse); ok {
 		size, err := msg.MarshalToSizedBufferVTStrict(dAtA[:i])
@@ -12134,6 +12258,48 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) MarshalToSizedBufferVTStrict(dAt
 	}
 	return len(dAtA) - i, nil
 }
+func (m *HoosatdMessage_GetWalletUtxosRequest) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetWalletUtxosRequest) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetWalletUtxosRequest != nil {
+		size, err := m.GetWalletUtxosRequest.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0xa2
+	}
+	return len(dAtA) - i, nil
+}
+func (m *HoosatdMessage_GetWalletUtxosResponse) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HoosatdMessage_GetWalletUtxosResponse) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.GetWalletUtxosResponse != nil {
+		size, err := m.GetWalletUtxosResponse.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x45
+		i--
+		dAtA[i] = 0xaa
+	}
+	return len(dAtA) - i, nil
+}
 func (m *HoosatdMessage) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -13847,6 +14013,30 @@ func (m *HoosatdMessage_GetFeeEstimateResponse) SizeVT() (n int) {
 	_ = l
 	if m.GetFeeEstimateResponse != nil {
 		l = m.GetFeeEstimateResponse.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetWalletUtxosRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetWalletUtxosRequest != nil {
+		l = m.GetWalletUtxosRequest.SizeVT()
+		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	return n
+}
+func (m *HoosatdMessage_GetWalletUtxosResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GetWalletUtxosResponse != nil {
+		l = m.GetWalletUtxosResponse.SizeVT()
 		n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	return n
@@ -19700,6 +19890,88 @@ func (m *HoosatdMessage) UnmarshalVT(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetFeeEstimateResponse{GetFeeEstimateResponse: v}
+			}
+			iNdEx = postIndex
+		case 1108:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetWalletUtxosRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetWalletUtxosRequest); ok {
+				if err := oneof.GetWalletUtxosRequest.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetWalletUtxosRequestMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetWalletUtxosRequest{GetWalletUtxosRequest: v}
+			}
+			iNdEx = postIndex
+		case 1109:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetWalletUtxosResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetWalletUtxosResponse); ok {
+				if err := oneof.GetWalletUtxosResponse.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetWalletUtxosResponseMessage{}
+				if err := v.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetWalletUtxosResponse{GetWalletUtxosResponse: v}
 			}
 			iNdEx = postIndex
 		default:
@@ -25573,6 +25845,88 @@ func (m *HoosatdMessage) UnmarshalVTUnsafe(dAtA []byte) error {
 					return err
 				}
 				m.Payload = &HoosatdMessage_GetFeeEstimateResponse{GetFeeEstimateResponse: v}
+			}
+			iNdEx = postIndex
+		case 1108:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetWalletUtxosRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetWalletUtxosRequest); ok {
+				if err := oneof.GetWalletUtxosRequest.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetWalletUtxosRequestMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetWalletUtxosRequest{GetWalletUtxosRequest: v}
+			}
+			iNdEx = postIndex
+		case 1109:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetWalletUtxosResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if oneof, ok := m.Payload.(*HoosatdMessage_GetWalletUtxosResponse); ok {
+				if err := oneof.GetWalletUtxosResponse.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				v := &GetWalletUtxosResponseMessage{}
+				if err := v.UnmarshalVTUnsafe(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+				m.Payload = &HoosatdMessage_GetWalletUtxosResponse{GetWalletUtxosResponse: v}
 			}
 			iNdEx = postIndex
 		default:
