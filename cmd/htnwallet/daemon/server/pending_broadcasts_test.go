@@ -23,8 +23,13 @@ type pendingBroadcastNode struct {
 	mu              sync.Mutex
 	inMempool       bool
 	submitRejection string
-	mempoolQueries  int
-	submissions     int
+	// transactionStatus answers GetTransactionStatus; unknown leaves the decision to a resubmission.
+	transactionStatus appmessage.TransactionStatus
+	// statusUnanswered makes the node never answer GetTransactionStatus, as one scanning every block.
+	statusUnanswered bool
+	statusQueries    int
+	mempoolQueries   int
+	submissions      int
 }
 
 func (n *pendingBroadcastNode) MessageStream(stream protowire.RPC_MessageStreamServer) error {
@@ -51,6 +56,11 @@ func (n *pendingBroadcastNode) MessageStream(stream protowire.RPC_MessageStreamS
 				entryResponse.Error = appmessage.RPCErrorf("Transaction %s was not found", message.TxID)
 			}
 			response = entryResponse
+		case *appmessage.GetTransactionStatusRequestMessage:
+			n.statusQueries++
+			if !n.statusUnanswered {
+				response = appmessage.NewGetTransactionStatusResponseMessage(n.transactionStatus, nil, 0)
+			}
 		case *appmessage.SubmitTransactionRequestMessage:
 			n.submissions++
 			id := consensushashing.TransactionID(mustDomainTransaction(message.Transaction)).String()
@@ -222,6 +232,75 @@ func TestSettledBroadcastInputsLeaveTheReusedUTXOSet(t *testing.T) {
 	if len(walletServer.utxosSortedByAmount) != 1 || *walletServer.utxosSortedByAmount[0].Outpoint != otherOutpoint {
 		t.Fatalf("after settling, the UTXO set holds %d coins, want only the unrelated one",
 			len(walletServer.utxosSortedByAmount))
+	}
+}
+
+// TestAcceptedBroadcastSettlesWithoutResubmission pins the usual case: the transaction left the mempool
+// because the chain accepted it, the node says so, and the wallet releases its inputs without sending
+// it again - a resubmission would only be refused over every input.
+func TestAcceptedBroadcastSettlesWithoutResubmission(t *testing.T) {
+	for _, status := range []appmessage.TransactionStatus{
+		appmessage.TransactionStatusAccepted,
+		appmessage.TransactionStatusConfirmed,
+		appmessage.TransactionStatusInvalid,
+	} {
+		transaction := broadcastTestTransaction(1)
+		broadcastTime := time.Now()
+		node := &pendingBroadcastNode{transactionStatus: status}
+		walletServer := newPendingBroadcastTestServer(t, node, transaction, broadcastTime)
+
+		walletServer.checkPendingBroadcasts(broadcastTime.Add(pendingBroadcastGracePeriod))
+
+		if _, submissions, _ := node.counts(); submissions != 0 {
+			t.Fatalf("status %s: the transaction was resubmitted %d times", status, submissions)
+		}
+		if walletServer.isTrackingBroadcast(transaction) || walletServer.reservesInput(transaction) {
+			t.Fatalf("status %s: the transaction did not settle", status)
+		}
+	}
+}
+
+// TestUnmergedBroadcastIsStillResubmitted pins that a status short of a verdict - carried by a block
+// not merged yet, or not found - still leads to a resubmission, which puts a lost transaction back.
+func TestUnmergedBroadcastIsStillResubmitted(t *testing.T) {
+	for _, status := range []appmessage.TransactionStatus{
+		appmessage.TransactionStatusPending,
+		appmessage.TransactionStatusNotFound,
+	} {
+		transaction := broadcastTestTransaction(1)
+		broadcastTime := time.Now()
+		node := &pendingBroadcastNode{transactionStatus: status}
+		walletServer := newPendingBroadcastTestServer(t, node, transaction, broadcastTime)
+
+		walletServer.checkPendingBroadcasts(broadcastTime.Add(pendingBroadcastGracePeriod))
+
+		if _, submissions, inMempool := node.counts(); submissions != 1 || !inMempool {
+			t.Fatalf("status %s: got %d submissions, want 1", status, submissions)
+		}
+	}
+}
+
+// TestSlowTransactionStatusIsNotAskedAgain pins the fallback for a node that answers GetTransactionStatus
+// by scanning every block: after one timeout the wallet resubmits as before and stops asking, so it
+// neither waits out the timeout on every check nor reads the late answer as a reply to a later request.
+func TestSlowTransactionStatusIsNotAskedAgain(t *testing.T) {
+	transaction := broadcastTestTransaction(1)
+	broadcastTime := time.Now()
+	node := &pendingBroadcastNode{statusUnanswered: true}
+	walletServer := newPendingBroadcastTestServer(t, node, transaction, broadcastTime)
+	walletServer.backgroundRPCClient.SetTimeout(200 * time.Millisecond)
+
+	checkTime := broadcastTime.Add(pendingBroadcastGracePeriod)
+	walletServer.checkPendingBroadcasts(checkTime)
+	node.mu.Lock()
+	node.inMempool = false
+	node.mu.Unlock()
+	walletServer.checkPendingBroadcasts(checkTime.Add(pendingBroadcastCheckInterval))
+
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	if node.statusQueries != 1 || node.submissions != 2 {
+		t.Fatalf("got %d status queries and %d submissions, want 1 and 2", node.statusQueries, node.submissions)
 	}
 }
 

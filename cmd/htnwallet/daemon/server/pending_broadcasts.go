@@ -5,8 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -131,6 +134,16 @@ func (s *server) checkPendingBroadcast(pending *pendingBroadcast) pendingBroadca
 		return stillPending
 	}
 
+	switch s.acceptanceVerdict(pending) {
+	case appmessage.TransactionStatusAccepted, appmessage.TransactionStatusConfirmed:
+		log.Debugf("Transaction %s was accepted; its inputs are released", pending.transactionID)
+		return settled
+	case appmessage.TransactionStatusInvalid:
+		log.Infof("Transaction %s was merged and rejected by the chain; its inputs are released",
+			pending.transactionID)
+		return settled
+	}
+
 	_, err = sendTransaction(s.backgroundRPCClient, pending.transaction, false, nil)
 	if err == nil {
 		pending.resubmissions++
@@ -149,4 +162,34 @@ func (s *server) checkPendingBroadcast(pending *pendingBroadcast) pendingBroadca
 	log.Infof("Transaction %s left the node's mempool and the node refuses it again, so it was either "+
 		"accepted or can no longer be; its inputs are released: %s", pending.transactionID, err)
 	return settled
+}
+
+// acceptanceVerdict asks the node whether the chain accepted a transaction that has left its mempool.
+//
+// Leaving the mempool nearly always means a block carrying the transaction was merged. Without asking,
+// the only way to tell that apart from a lost transaction was to submit it again and read the refusal,
+// so every broadcast that succeeded ended in a resubmission the node refused over all of its inputs.
+// An accepted or rejected verdict settles the transaction without one. Any other answer - not merged
+// yet, not found, unknown - is left to the resubmission, which puts a lost transaction back.
+//
+// A node that predates the recent-chain lookup answers by scanning every block it holds, which outlasts
+// the RPC timeout, and the late answer would then be read as the reply to the next request on the
+// route. So after one failure the wallet stops asking for the rest of the session. Only the sync loop
+// calls this, so transactionStatusUnavailable needs no lock.
+func (s *server) acceptanceVerdict(pending *pendingBroadcast) appmessage.TransactionStatus {
+	if s.transactionStatusUnavailable {
+		return appmessage.TransactionStatusUnknown
+	}
+	response, err := s.backgroundRPCClient.GetTransactionStatus(pending.transactionID)
+	if err != nil {
+		if errors.Is(err, router.ErrTimeout) {
+			s.transactionStatusUnavailable = true
+			log.Infof("The node took too long to report the status of transaction %s; pending transactions "+
+				"are checked by resubmitting them for the rest of this session: %s", pending.transactionID, err)
+		} else {
+			log.Debugf("Could not ask the node whether transaction %s was accepted: %s", pending.transactionID, err)
+		}
+		return appmessage.TransactionStatusUnknown
+	}
+	return response.Status
 }

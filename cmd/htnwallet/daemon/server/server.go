@@ -43,6 +43,7 @@ type server struct {
 	startTimeOfLastCompletedRefresh time.Time
 	limitOfLastCompletedRefresh     uint32 // The per-address UTXO limit utxosSortedByAmount was fetched with
 	utxoSetIsStale                  bool   // A broadcast found utxosSortedByAmount holding coins already spent
+	transactionStatusUnavailable    bool   // The node's GetTransactionStatus timed out; see acceptanceVerdict
 	addressSet                      walletAddressSet
 	importedAddresses               walletAddressSet // Every address of an imported key; see trackImportedKeys
 	txMassCalculator                *txmass.Calculator
