@@ -1,6 +1,7 @@
 package server
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -98,9 +99,26 @@ func (s *server) checkPendingBroadcasts(now time.Time) {
 		for _, outpoint := range pending.inputOutpoints {
 			delete(s.usedOutpoints, outpoint)
 		}
+		s.forgetSettledInputs(pending.inputOutpoints)
 		delete(s.pendingBroadcasts, *consensushashing.TransactionID(pending.transaction))
 		s.lock.Unlock()
 	}
+}
+
+// forgetSettledInputs drops a settled transaction's inputs from the wallet's UTXO set. Settled means the
+// node refuses those inputs: this transaction or another spent them, or they vanished in a reorg. A
+// compound reuses the set between refreshes and selects the smallest coins first, so once usedOutpoints
+// stops hiding them it would pick the same coins again and have its broadcast refused. An input that is
+// in fact still unspent comes back with the next refresh. The caller holds s.lock.
+func (s *server) forgetSettledInputs(inputOutpoints []externalapi.DomainOutpoint) {
+	settledInputs := make(map[externalapi.DomainOutpoint]struct{}, len(inputOutpoints))
+	for _, outpoint := range inputOutpoints {
+		settledInputs[outpoint] = struct{}{}
+	}
+	s.utxosSortedByAmount = slices.DeleteFunc(s.utxosSortedByAmount, func(utxo *walletUTXO) bool {
+		_, settled := settledInputs[*utxo.Outpoint]
+		return settled
+	})
 }
 
 func (s *server) checkPendingBroadcast(pending *pendingBroadcast) pendingBroadcastVerdict {

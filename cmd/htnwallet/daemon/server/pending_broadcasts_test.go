@@ -205,6 +205,26 @@ func TestSettledBroadcastReleasesItsInputs(t *testing.T) {
 	}
 }
 
+// TestSettledBroadcastInputsLeaveTheReusedUTXOSet pins that a compound reusing the wallet's UTXO set
+// cannot pick a settled transaction's inputs again once usedOutpoints no longer hides them: the node
+// refuses the transaction because those coins are spent, so they leave the set too. Other coins stay.
+func TestSettledBroadcastInputsLeaveTheReusedUTXOSet(t *testing.T) {
+	transaction := broadcastTestTransaction(1)
+	broadcastTime := time.Now()
+	node := &pendingBroadcastNode{submitRejection: "transaction spends 1 output(s) not in the virtual UTXO set"}
+	walletServer := newPendingBroadcastTestServer(t, node, transaction, broadcastTime)
+	spentOutpoint := transaction.Inputs[0].PreviousOutpoint
+	otherOutpoint := externalapi.DomainOutpoint{TransactionID: spentOutpoint.TransactionID, Index: spentOutpoint.Index + 1}
+	walletServer.utxosSortedByAmount = []*walletUTXO{{Outpoint: &spentOutpoint}, {Outpoint: &otherOutpoint}}
+
+	walletServer.checkPendingBroadcasts(broadcastTime.Add(pendingBroadcastGracePeriod))
+
+	if len(walletServer.utxosSortedByAmount) != 1 || *walletServer.utxosSortedByAmount[0].Outpoint != otherOutpoint {
+		t.Fatalf("after settling, the UTXO set holds %d coins, want only the unrelated one",
+			len(walletServer.utxosSortedByAmount))
+	}
+}
+
 // TestTransientRefusalKeepsBroadcastPending pins that refusals that say nothing about the transaction's
 // fate - it raced back into the mempool, or the compound rate limit - keep it tracked.
 func TestTransientRefusalKeepsBroadcastPending(t *testing.T) {
