@@ -299,9 +299,9 @@ var testnetHardForkGates = HardForkGates{
 	StrictUTXOCommitmentVersion:   10,
 	StrictMinersViewFieldsVersion: 12,
 	StrictCoinbaseVersion:         10,
-	RefuseMismatchedImportVersion: unscheduledHardForkGate,
-	ValidateHeaderBitsVersion:     unscheduledHardForkGate,
-	ValidateIBDPruningListVersion: unscheduledHardForkGate,
+	RefuseMismatchedImportVersion: 12,
+	ValidateHeaderBitsVersion:     12,
+	ValidateIBDPruningListVersion: 12,
 	OffsetModeValueChecksVersion:  10,
 	MLDSA44SignaturesBlockVersion: 11,
 
@@ -743,7 +743,7 @@ var TestnetParams = Params{
 		350,
 		400,
 		450,
-		1525959,
+		1527934,
 	},
 	PruningMultiplier: []uint64{
 		0,
