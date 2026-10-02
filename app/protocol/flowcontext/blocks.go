@@ -37,6 +37,19 @@ func (f *FlowContext) OnNewBlock(block *externalapi.DomainBlock) error {
 
 	allAcceptedTransactions := make([]*externalapi.DomainTransaction, 0, len(newBlocks))
 	for i := 0; i < len(newBlocks); i++ {
+		// A block disqualified from the chain is never a tip, so nothing this node builds merges it and its
+		// transactions are never accepted through it. Taking them out of the mempool would leave them in no
+		// block that counts and in no mempool: the sender's inputs stay unspent, neither output appears,
+		// and nothing resends them.
+		isDisqualified, err := f.isDisqualifiedFromChain(newBlocks[i])
+		if err != nil {
+			return err
+		}
+		if isDisqualified {
+			log.Debugf("Keeping the transactions of block %s in the mempool: it is disqualified from the chain",
+				consensushashing.BlockHash(newBlocks[i]))
+			continue
+		}
 		// log.Debugf("OnNewBlock: passing block %s transactions to mining manager", hash)
 		acceptedTransactions, err := f.Domain().MiningManager().HandleNewBlockTransactions(newBlocks[i].Transactions)
 		if err != nil {
@@ -45,7 +58,23 @@ func (f *FlowContext) OnNewBlock(block *externalapi.DomainBlock) error {
 		allAcceptedTransactions = append(allAcceptedTransactions, acceptedTransactions...)
 	}
 
+	// A block that was pending verification when it arrived had its transactions removed above, and may
+	// have been disqualified since - possibly by this very block, through its selected chain.
+	restoredTransactions, err := f.Domain().MiningManager().RestoreTransactionsOfDisqualifiedBlocks()
+	if err != nil {
+		return err
+	}
+	allAcceptedTransactions = append(allAcceptedTransactions, restoredTransactions...)
+
 	return f.broadcastTransactionsAfterBlockAdded(newBlocks, allAcceptedTransactions)
+}
+
+func (f *FlowContext) isDisqualifiedFromChain(block *externalapi.DomainBlock) (bool, error) {
+	blockInfo, err := f.Domain().Consensus().GetBlockInfo(consensushashing.BlockHash(block))
+	if err != nil {
+		return false, err
+	}
+	return blockInfo.Exists && blockInfo.BlockStatus == externalapi.StatusDisqualifiedFromChain, nil
 }
 
 // OnNewBlockTemplate calls the handler function whenever a new block template is available for miners.
