@@ -32,8 +32,14 @@ const maxChainBlocksSearchedFromTip = 2000
 // transaction accepted in the last few thousand chain blocks is found here in a fraction of the time,
 // and the answer carries the accepting block with it.
 //
-// Returns nil when the transaction is not in that window, which is not a verdict - the caller falls
-// back to the full search.
+// Only an acceptance is returned. Walking back from the tip meets the latest chain blocks first, and
+// once one chain block accepts a transaction every later one that merges another copy of it rejects
+// that copy as a duplicate - so the first mention found from the tip is usually such a rejection, and
+// reporting it would call an accepted transaction invalid. A rejection is walked past; whether it is
+// the transaction's real fate is for findTransactionAcceptance, which walks the chain upward.
+//
+// Returns nil when no acceptance is in that window, which is not a verdict - the caller falls back to
+// the full search.
 func findRecentlyAcceptedTransaction(context *rpccontext.Context,
 	transactionID *externalapi.DomainTransactionID,
 ) *transactionAcceptance {
@@ -45,8 +51,8 @@ func findRecentlyAcceptedTransaction(context *rpccontext.Context,
 	for i := 0; i < maxChainBlocksSearchedFromTip && current != nil; i++ {
 		acceptanceData, err := context.Domain.Consensus().GetBlockAcceptanceData(current)
 		if err == nil {
-			if merged, accepted := verdictForTransaction(acceptanceData, transactionID); merged {
-				return &transactionAcceptance{acceptingBlock: current, accepted: accepted}
+			if _, accepted := verdictForTransaction(acceptanceData, transactionID); accepted {
+				return &transactionAcceptance{acceptingBlock: current, accepted: true}
 			}
 		}
 
