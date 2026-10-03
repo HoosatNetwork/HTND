@@ -6,6 +6,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
@@ -55,30 +56,13 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	}
 	usableAddressesCacheMutex.Unlock()
 
-	// "Usable" has to mean the address holds a coin that can actually be spent, so the index's own
-	// answer - which is only that it has entries for this address - is checked against consensus. An
-	// address whose every listed coin is one consensus does not hold is not usable: every transaction
-	// built on it is refused. The 30 second cache above keeps this off the hot path for repeat asks.
-	buffer := memory.Malloc[utxoindex.UTXOPair](1000)
-	if buffer == nil {
-		return false, appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
-	}
-	pairs, buffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, 0, buffer)
+	hasUTXOs, err := holdsSpendableCoin(context.UTXOIndex, context.Domain.Consensus(), scriptPublicKey, addressString)
 	if err != nil {
-		memory.Free(buffer)
 		if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
 			return false, appmessage.RPCErrorf("UTXO index is resyncing after a pruning-point update; retry shortly")
 		}
 		return false, err
 	}
-	defer memory.Free(buffer)
-
-	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents)
-	if err != nil {
-		return false, err
-	}
-	rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the usable-address check")
-	hasUTXOs := len(pairs) > 0
 
 	usableAddressesCacheMutex.Lock()
 	// Simple safety bound: if the cache grows too big (e.g. scanning huge ranges), clear it.
@@ -89,6 +73,66 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	usableAddressesCacheMutex.Unlock()
 
 	return hasUTXOs, nil
+}
+
+// usabilityProbeSize is how many of an address's coins the usable-address check reads before
+// falling back to reading them all.
+const usabilityProbeSize = 32
+
+// addressUTXOLister is the part of the UTXO index holdsSpendableCoin reads.
+type addressUTXOLister interface {
+	UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[utxoindex.UTXOPair]) (
+		[]utxoindex.UTXOPair, *memory.Block[utxoindex.UTXOPair], []*externalapi.DomainHash, error)
+}
+
+// virtualUTXOChecker is the part of consensus holdsSpendableCoin checks the index's coins against.
+type virtualUTXOChecker interface {
+	GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) (
+		[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error)
+}
+
+// holdsSpendableCoin reports whether the address holds a coin that can actually be spent. The index's
+// own answer - only that it has entries for this address - is checked against consensus: an address
+// whose every listed coin is one consensus does not hold is not usable, since every transaction built
+// on it is refused.
+//
+// One spendable coin settles the question, so it first reads only the first usabilityProbeSize coins.
+// Reading and checking every coin an address holds dominated the CPU of a busy node: a pool or exchange
+// address holds thousands, and each one costs a decode and a seek into virtual's UTXO set, all to
+// answer yes. Only when every probed coin is one consensus no longer holds - the index trailing a block
+// that spent them - does it read them all, so the answer is the same as checking every coin.
+func holdsSpendableCoin(index addressUTXOLister, consensus virtualUTXOChecker,
+	scriptPublicKey *externalapi.ScriptPublicKey, addressString string,
+) (bool, error) {
+	for _, limit := range []uint32{usabilityProbeSize, 0} {
+		bufferSize := usabilityProbeSize
+		if limit == 0 {
+			bufferSize = 1000
+		}
+		buffer := memory.Malloc[utxoindex.UTXOPair](bufferSize)
+		if buffer == nil {
+			return false, appmessage.RPCErrorf("Could not allocate memory for address '%s'", addressString)
+		}
+		pairs, buffer, indexVirtualParents, err := index.UTXOs(scriptPublicKey, limit, buffer)
+		if err != nil {
+			memory.Free(buffer)
+			return false, err
+		}
+		read := len(pairs)
+		kept, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, pairs, indexVirtualParents)
+		memory.Free(buffer)
+		if err != nil {
+			return false, err
+		}
+		readAll := limit == 0 || read < int(limit)
+		if len(kept) > 0 || readAll {
+			rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the usable-address check")
+			return len(kept) > 0, nil
+		}
+		// Every probed coin was withheld and there may be more: read them all. Not logged here, since
+		// the full read counts these same coins again.
+	}
+	panic("unreachable: the full read always returns")
 }
 
 var usableAddressesPool = sync.Pool{
