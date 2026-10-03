@@ -40,9 +40,9 @@ func pruningPointUTXOs(t *testing.T, syncer testapi.TestConsensus, pruningPoint 
 
 // TestImportedPruningPointListGateActive is HTN-006's activated path: a syncee that holds only a headers proof, the
 // pruning point headers and the headers above the pruning point imports the pruning point with
-// ValidateIBDPruningListVersion moved to version 1, so IsValidPruningPoint and ArePruningPointsInValidChain both run.
-// The selected-chain walk ArePruningPointsInValidChain used to do reached virtual genesis here and failed the import
-// with an error. The list is also checked with every pruning point's commitment followed (anchor at version 1),
+// ValidateIBDPruningListVersion moved to version 1, so ArePruningPointsInValidChain runs (and, on a branch where that
+// gate also covers it, IsValidPruningPoint). The selected-chain walk ArePruningPointsInValidChain used to do failed the
+// import here with "Pruning point is not expected pruning point at index". The list is also checked with every pruning point's commitment followed (anchor at version 1),
 // which on the syncee reads the headers of pruning points it holds nothing else for.
 func TestImportedPruningPointListGateActive(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, cfg *consensus.Config) {

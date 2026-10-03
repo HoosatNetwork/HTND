@@ -40,7 +40,7 @@ fi
 # consensus rule that the network has not agreed to. (MLDSA44SignaturesBlockVersion is exempt: a custom
 # network's JSON config may set it, see infrastructure/config/network.go.)
 HARDFORK_GATE_WRITES=$(find . -type f -name '*.go' -not -name '*_test.go' -not -path './vendor/*' \
-  -exec grep -Hn -E '\.HardForkGates(\(\))?(\.(StrictUTXOCommitment|StrictMinersViewFields|StrictCoinbase|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningList|OffsetModeValueChecks)Version)?[[:space:]]*=[^=]' {} + \
+  -exec grep -Hn -E '\.HardForkGates(\(\))?(\.(StrictUTXOCommitment|StrictMinersViewFields|StrictCoinbase|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningPoint|ValidateIBDPruningList|OffsetModeValueChecks)Version)?[[:space:]]*=[^=]' {} + \
   | grep -v -E '^[^:]*:[0-9]+:[[:space:]]*//' || true)
 if [ -n "${HARDFORK_GATE_WRITES}" ]
 then

@@ -178,12 +178,13 @@ func TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated(t *testing
 
 	// 6. And none of the gates may have been reachable during any of the above.
 	for name, gate := range map[string]uint16{
-		"StrictUTXOCommitmentVersion":   config.HardForkGates.StrictUTXOCommitmentVersion,
-		"StrictMinersViewFieldsVersion": config.HardForkGates.StrictMinersViewFieldsVersion,
-		"StrictCoinbaseVersion":         config.HardForkGates.StrictCoinbaseVersion,
-		"RefuseMismatchedImportVersion": config.HardForkGates.RefuseMismatchedImportVersion,
-		"ValidateHeaderBitsVersion":     config.HardForkGates.ValidateHeaderBitsVersion,
-		"ValidateIBDPruningListVersion": config.HardForkGates.ValidateIBDPruningListVersion,
+		"StrictUTXOCommitmentVersion":    config.HardForkGates.StrictUTXOCommitmentVersion,
+		"StrictMinersViewFieldsVersion":  config.HardForkGates.StrictMinersViewFieldsVersion,
+		"StrictCoinbaseVersion":          config.HardForkGates.StrictCoinbaseVersion,
+		"RefuseMismatchedImportVersion":  config.HardForkGates.RefuseMismatchedImportVersion,
+		"ValidateHeaderBitsVersion":      config.HardForkGates.ValidateHeaderBitsVersion,
+		"ValidateIBDPruningPointVersion": config.HardForkGates.ValidateIBDPruningPointVersion,
+		"ValidateIBDPruningListVersion":  config.HardForkGates.ValidateIBDPruningListVersion,
 	} {
 		if dagconfig.HardForkActive(gate, 9) {
 			t.Errorf("%s was active at block version 9 during this run", name)

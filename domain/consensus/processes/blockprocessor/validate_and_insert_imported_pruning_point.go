@@ -33,17 +33,20 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 	return nil
 }
 
-// validateImportedPruningPointChain runs HTN-006's two checks, gated at
-// HardForkGates.ValidateIBDPruningListVersion.
+// validateImportedPruningPointChain runs HTN-006's two checks, each behind its own gate:
+// IsValidPruningPoint at HardForkGates.ValidateIBDPruningPointVersion and
+// ArePruningPointsInValidChain at HardForkGates.ValidateIBDPruningListVersion.
 //
 // Both were commented out, under the note "Currently HTN pruning points are messed up, so need to
 // disable this check". That is still true: HTN-006 measured a 62.5% blue-score mismatch rate, so
 // turning these on for existing block versions would very likely reject the majority of the chain
-// that exists. They are restored here as real code behind a block-version-11 gate rather than left as
-// comments, so that activating them later is a version bump and not an archaeology exercise.
+// that exists. They are restored here as real code behind gates rather than left as comments, so
+// that activating them later is a version bump and not an archaeology exercise.
 //
-// Until a network reaches block version 11 the gate is inactive, so IBD behaves exactly as
-// it does today.
+// Until a network reaches a check's gate, that check does not run, so IBD behaves exactly as it
+// does today. The gates are separate because the checks carry different risk: IsValidPruningPoint
+// looks only at the imported pruning point and the headers above it, while the list check depends on
+// header pruning point commitments, which are trustworthy only from HeaderPruningPointVersion on.
 //
 // What they check, and why it matters:
 //
@@ -56,38 +59,39 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 func (bp *blockProcessor) validateImportedPruningPointChain(
 	stagingArea *model.StagingArea, newPruningPointHash *externalapi.DomainHash,
 ) error {
-	active, err := bp.pruningListValidationIsActive(stagingArea, newPruningPointHash)
-	if err != nil {
+	blockVersion, ok, err := bp.importedPruningPointVersion(stagingArea, newPruningPointHash)
+	if err != nil || !ok {
 		return err
-	}
-	if !active {
-		return nil
 	}
 
-	isValidPruningPoint, err := bp.pruningManager.IsValidPruningPoint(stagingArea, newPruningPointHash)
-	if err != nil {
-		return err
-	}
-	if !isValidPruningPoint {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint,
-			"%s is not a valid pruning point", newPruningPointHash)
+	if dagconfig.HardForkActive(bp.hardForkGates.ValidateIBDPruningPointVersion, blockVersion) {
+		isValidPruningPoint, err := bp.pruningManager.IsValidPruningPoint(stagingArea, newPruningPointHash)
+		if err != nil {
+			return err
+		}
+		if !isValidPruningPoint {
+			return errors.Wrapf(ruleerrors.ErrUnexpectedPruningPoint,
+				"%s is not a valid pruning point", newPruningPointHash)
+		}
 	}
 
-	arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea,
-		bp.pruningListAnchorVersion())
-	if err != nil {
-		return err
-	}
-	if !arePruningPointsInValidChain {
-		return errors.Wrapf(ruleerrors.ErrInvalidPruningPointsChain,
-			"pruning points do not compose a valid chain to genesis")
+	if dagconfig.HardForkActive(bp.hardForkGates.ValidateIBDPruningListVersion, blockVersion) {
+		arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea,
+			bp.pruningListAnchorVersion())
+		if err != nil {
+			return err
+		}
+		if !arePruningPointsInValidChain {
+			return errors.Wrapf(ruleerrors.ErrInvalidPruningPointsChain,
+				"pruning points do not compose a valid chain to genesis")
+		}
 	}
 
 	return nil
 }
 
-// pruningListValidationIsActive reports whether the imported pruning point is at or past
-// HardForkGates.ValidateIBDPruningListVersion.
+// importedPruningPointVersion returns the block version the imported pruning point's checks are
+// gated on. ok is false without an activation table, where no gate can be reached.
 //
 // The version is derived from the pruning point header's own DAA score. That is a weaker anchor
 // than the selected-parent derivation used elsewhere - at import time this node has no resolved DAG
@@ -96,17 +100,16 @@ func (bp *blockProcessor) validateImportedPruningPointChain(
 // anything it is judged against. A peer cannot use it to escape the check for long: claiming a low
 // DAA score to stay below the activation version produces a pruning point that then fails to line
 // up with the headers this node has.
-func (bp *blockProcessor) pruningListValidationIsActive(
+func (bp *blockProcessor) importedPruningPointVersion(
 	stagingArea *model.StagingArea, newPruningPointHash *externalapi.DomainHash,
-) (bool, error) {
+) (blockVersion uint16, ok bool, err error) {
 	if len(bp.powScores) == 0 {
-		return false, nil
+		return 0, false, nil
 	}
 
 	header, err := bp.blockHeaderStore.BlockHeader(bp.databaseContext, stagingArea, newPruningPointHash)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
-	blockVersion := constants.BlockVersionForDAAScore(bp.powScores, header.DAAScore())
-	return dagconfig.HardForkActive(bp.hardForkGates.ValidateIBDPruningListVersion, blockVersion), nil
+	return constants.BlockVersionForDAAScore(bp.powScores, header.DAAScore()), true, nil
 }

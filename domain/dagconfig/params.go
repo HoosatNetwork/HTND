@@ -242,9 +242,15 @@ type HardForkGates struct {
 	// equal the difficulty this node computes for it.
 	ValidateHeaderBitsVersion uint16
 
-	// ValidateIBDPruningListVersion activates HTN-006: from this block version, an imported pruning
-	// point is checked with IsValidPruningPoint, and the pruning point list is checked to form a
-	// valid chain to genesis with ArePruningPointsInValidChain.
+	// ValidateIBDPruningPointVersion activates the first half of HTN-006: from this block version, an
+	// imported pruning point is checked with IsValidPruningPoint, which requires it to be on the
+	// selected chain of the headers selected tip, at least pruning depth below it.
+	ValidateIBDPruningPointVersion uint16
+
+	// ValidateIBDPruningListVersion activates the second half of HTN-006: from this block version,
+	// the pruning point list stored with an imported pruning point is checked with
+	// ArePruningPointsInValidChain against the pruning point headers' commitments. Those commitments
+	// are trusted only from HeaderPruningPointVersion on, so this must activate no earlier than that.
 	ValidateIBDPruningListVersion uint16
 
 	// OffsetModeValueChecksVersion activates the offset-mode value checks: from this block version,
@@ -315,14 +321,15 @@ const unscheduledHardForkGate = ^uint16(0)
 // mainnetHardForkGates schedules the gated rules on mainnet. A change here is a mainnet hard fork:
 // it needs a coordinated activation with enough lead time for every node operator and miner.
 var mainnetHardForkGates = HardForkGates{
-	StrictUTXOCommitmentVersion:   10,
-	StrictMinersViewFieldsVersion: unscheduledHardForkGate,
-	StrictCoinbaseVersion:         10,
-	RefuseMismatchedImportVersion: unscheduledHardForkGate,
-	ValidateHeaderBitsVersion:     unscheduledHardForkGate,
-	ValidateIBDPruningListVersion: unscheduledHardForkGate,
-	OffsetModeValueChecksVersion:  10,
-	MLDSA44SignaturesBlockVersion: 11,
+	StrictUTXOCommitmentVersion:    10,
+	StrictMinersViewFieldsVersion:  unscheduledHardForkGate,
+	StrictCoinbaseVersion:          10,
+	RefuseMismatchedImportVersion:  unscheduledHardForkGate,
+	ValidateHeaderBitsVersion:      unscheduledHardForkGate,
+	ValidateIBDPruningPointVersion: unscheduledHardForkGate,
+	ValidateIBDPruningListVersion:  unscheduledHardForkGate,
+	OffsetModeValueChecksVersion:   10,
+	MLDSA44SignaturesBlockVersion:  11,
 
 	ParentsIncestVersion: unscheduledHardForkGate,
 	MergeSetSizeLimitVersion: unscheduledHardForkGate,
@@ -337,17 +344,20 @@ var mainnetHardForkGates = HardForkGates{
 
 // testnetHardForkGates schedules the gated rules on testnet and the other test networks. It may run
 // ahead of mainnetHardForkGates to exercise a rule before it is scheduled on mainnet.
+//
+// ValidateIBDPruningListVersion is unscheduled: the old ArePruningPointsInValidChain failed every
+// headers-proof IBD, so it could not ride version 12 with ValidateIBDPruningPointVersion. Schedule
+// it no earlier than HeaderPruningPointVersion.
 var testnetHardForkGates = HardForkGates{
-	StrictUTXOCommitmentVersion:   10,
-	StrictMinersViewFieldsVersion: 12,
-	StrictCoinbaseVersion:         10,
-	RefuseMismatchedImportVersion: 12,
-	ValidateHeaderBitsVersion:     12,
-	// Unscheduled until ArePruningPointsInValidChain can pass on a real chain: at version 12 it
-	// would fail every headers-proof IBD. Schedule it no earlier than HeaderPruningPointVersion.
-	ValidateIBDPruningListVersion: unscheduledHardForkGate,
-	OffsetModeValueChecksVersion:  10,
-	MLDSA44SignaturesBlockVersion: 11,
+	StrictUTXOCommitmentVersion:    10,
+	StrictMinersViewFieldsVersion:  12,
+	StrictCoinbaseVersion:          10,
+	RefuseMismatchedImportVersion:  12,
+	ValidateHeaderBitsVersion:      12,
+	ValidateIBDPruningPointVersion: 12,
+	ValidateIBDPruningListVersion:  unscheduledHardForkGate,
+	OffsetModeValueChecksVersion:   10,
+	MLDSA44SignaturesBlockVersion:  11,
 
 	ParentsIncestVersion: 13,
 	MergeSetSizeLimitVersion: 13,
