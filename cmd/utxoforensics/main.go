@@ -210,6 +210,11 @@ var (
 		"verdict and where each one stops. Also walks the list through each pruning point's own header, which "+
 		"a pruned node can do. Mainnet parameters")
 
+	ppListAnchor = flag.Uint("pplistanchor", uint(^uint16(0)), "the anchor block version -pplistcheck passes to "+
+		"ArePruningPointsInValidChain: the version header pruning points are enforced from. Header commitments "+
+		"are followed down to the first pruning point below it. The default, 65535, is never reached, so only "+
+		"the current pruning point is checked against the headers above it")
+
 	depthAudit = flag.Int("depthaudit", 0, "chain blocks back from the headers-selected tip to use when "+
 		"bracketing the pruning depth the network actually selected with. Every mined header commits the "+
 		"deepest pruning point satisfying blueScore(block) >= blueScore(pruningPoint) + pruningDepth, so each "+
@@ -274,6 +279,10 @@ func main() {
 
 	if *dbPath == "" {
 		fmt.Fprintln(os.Stderr, "-db is required")
+		os.Exit(2)
+	}
+	if *ppListAnchor > uint(^uint16(0)) {
+		fmt.Fprintf(os.Stderr, "-pplistanchor %d is not a block version\n", *ppListAnchor)
 		os.Exit(2)
 	}
 
@@ -387,7 +396,7 @@ func main() {
 	}
 
 	if *ppListCheck {
-		if _, err := pruningListCheck(s, sa, &dagconfig.MainnetParams); err != nil {
+		if _, err := pruningListCheck(s, sa, &dagconfig.MainnetParams, uint16(*ppListAnchor)); err != nil {
 			fmt.Printf("  %v\n", err)
 		}
 	}

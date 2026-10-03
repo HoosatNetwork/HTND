@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -13,9 +14,10 @@ import (
 )
 
 // TestPruningListCheck runs -pplistcheck against a TestConsensus that has advanced its pruning point several times,
-// first as the consensus wrote it and then with a too-shallow pruning point staged on top. In both, each reproduced
-// check must return what the node's own pruning manager returns on the same data, and the ungated header walk must
-// pass the untouched list and fail the shallow one.
+// first as the consensus wrote it and then with a too-shallow pruning point staged on top, each with the anchor at
+// block version 1 (follow commitments to genesis) and unreached. In each, both reproduced checks must return what the
+// node's own pruning manager returns on the same data, the list check must pass the untouched list and fail the
+// shallow one, and so must the ungated header walk.
 func TestPruningListCheck(t *testing.T) {
 	config := &consensus.Config{Params: dagconfig.MainnetParams}
 	config.SkipProofOfWork = true
@@ -65,8 +67,9 @@ func TestPruningListCheck(t *testing.T) {
 			return "FAIL"
 		}
 	}
-	check := func(scenario string, stagingArea *model.StagingArea, wantHeaderWalk string) {
-		verdicts, err := pruningListCheck(s, stagingArea, &config.Params)
+	checkWithAnchor := func(scenario string, stagingArea *model.StagingArea, anchor uint16, want string) {
+		scenario = fmt.Sprintf("%s, anchor %d", scenario, anchor)
+		verdicts, err := pruningListCheck(s, stagingArea, &config.Params, anchor)
 		if err != nil {
 			t.Fatalf("%s: pruningListCheck: %+v", scenario, err)
 		}
@@ -75,19 +78,27 @@ func TestPruningListCheck(t *testing.T) {
 			t.Fatalf("%s: PruningPoint: %+v", scenario, err)
 		}
 
-		want := nodeVerdict(tc.PruningManager().IsValidPruningPoint(stagingArea, pruningPoint))
-		if verdicts.validPruningPoint.outcome != want {
-			t.Errorf("%s: IsValidPruningPoint: the node says %s, the tool %s: %s", scenario, want,
+		node := nodeVerdict(tc.PruningManager().IsValidPruningPoint(stagingArea, pruningPoint))
+		if verdicts.validPruningPoint.outcome != node {
+			t.Errorf("%s: IsValidPruningPoint: the node says %s, the tool %s: %s", scenario, node,
 				verdicts.validPruningPoint.outcome, verdicts.validPruningPoint.detail)
 		}
-		want = nodeVerdict(tc.PruningManager().ArePruningPointsInValidChain(stagingArea))
-		if verdicts.validChain.outcome != want {
-			t.Errorf("%s: ArePruningPointsInValidChain: the node says %s, the tool %s: %s", scenario, want,
+		node = nodeVerdict(tc.PruningManager().ArePruningPointsInValidChain(stagingArea, anchor))
+		if node != want {
+			t.Errorf("%s: ArePruningPointsInValidChain: want %s, the node says %s", scenario, want, node)
+		}
+		if verdicts.validChain.outcome != node {
+			t.Errorf("%s: ArePruningPointsInValidChain: the node says %s, the tool %s: %s", scenario, node,
 				verdicts.validChain.outcome, verdicts.validChain.detail)
 		}
-		if verdicts.headerWalk.outcome != wantHeaderWalk {
-			t.Errorf("%s: header walk: want %s, got %s: %s", scenario, wantHeaderWalk,
+		if verdicts.headerWalk.outcome != want {
+			t.Errorf("%s: header walk: want %s, got %s: %s", scenario, want,
 				verdicts.headerWalk.outcome, verdicts.headerWalk.detail)
+		}
+	}
+	check := func(scenario string, stagingArea *model.StagingArea, want string) {
+		for _, anchor := range []uint16{1, ^uint16(0)} {
+			checkWithAnchor(scenario, stagingArea, anchor, want)
 		}
 	}
 

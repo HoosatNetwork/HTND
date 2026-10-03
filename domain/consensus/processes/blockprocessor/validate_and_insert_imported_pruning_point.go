@@ -49,8 +49,10 @@ func (bp *blockProcessor) validateAndInsertImportedPruningPoint(
 //
 //   - IsValidPruningPoint: that the pruning point the peer gave us is the one our own headers imply.
 //     Without it, IBD adopts whatever pruning point the peer names.
-//   - ArePruningPointsInValidChain: that the pruning point list forms a chain back to genesis.
-//     Without it, a peer can supply a list with an unrelated or fabricated ancestry.
+//   - ArePruningPointsInValidChain: that the pruning point list matches what the pruning point
+//     headers commit to, down to the anchor, the first pruning point mined before header pruning
+//     points were enforced (pruningListAnchorVersion). Without it, a peer can supply a list with an
+//     unrelated or fabricated ancestry.
 func (bp *blockProcessor) validateImportedPruningPointChain(
 	stagingArea *model.StagingArea, newPruningPointHash *externalapi.DomainHash,
 ) error {
@@ -71,7 +73,8 @@ func (bp *blockProcessor) validateImportedPruningPointChain(
 			"%s is not a valid pruning point", newPruningPointHash)
 	}
 
-	arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea)
+	arePruningPointsInValidChain, err := bp.pruningManager.ArePruningPointsInValidChain(stagingArea,
+		bp.pruningListAnchorVersion())
 	if err != nil {
 		return err
 	}
