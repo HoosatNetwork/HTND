@@ -20,6 +20,8 @@
 //	-reconstruct    Rebuild the pruning point's absolute UTXO set from virtual's UTXO table plus the
 //	                stored diff chain and diff it entry-by-entry against the served bucket, which
 //	                separates "the set has the wrong members" from "the set has the wrong values".
+//	-pplistcheck    Run the two checks ValidateIBDPruningListVersion gates (HTN-006) against this
+//	                datadir's pruning point and pruning point list, and report where each stops.
 //	-depthaudit N   Bracket the pruning depth the NETWORK selected with, by reading it out of mined
 //	                headers, and report which finality interval the stored pruning point sequence is
 //	                consistent with. Use it to tell whether this node picks pruning points with the
@@ -202,6 +204,12 @@ var (
 		"point's header commitment, and - if it matches - use it as a network-sourced base to discriminate the "+
 		"two DAA-stamp rules on the next selected-chain blocks")
 
+	ppListCheck = flag.Bool("pplistcheck", false, "run, read-only, the two checks ValidateIBDPruningListVersion "+
+		"turns on for an imported pruning point (HTN-006) - IsValidPruningPoint on the current pruning point and "+
+		"ArePruningPointsInValidChain on the stored list - step for step against this datadir, and report the "+
+		"verdict and where each one stops. Also walks the list through each pruning point's own header, which "+
+		"a pruned node can do. Mainnet parameters")
+
 	depthAudit = flag.Int("depthaudit", 0, "chain blocks back from the headers-selected tip to use when "+
 		"bracketing the pruning depth the network actually selected with. Every mined header commits the "+
 		"deepest pruning point satisfying blueScore(block) >= blueScore(pruningPoint) + pruningDepth, so each "+
@@ -376,6 +384,12 @@ func main() {
 
 	if *baseTest {
 		baseCheck(s, sa)
+	}
+
+	if *ppListCheck {
+		if _, err := pruningListCheck(s, sa, &dagconfig.MainnetParams); err != nil {
+			fmt.Printf("  %v\n", err)
+		}
 	}
 
 	if *depthAudit > 0 {
@@ -988,7 +1002,11 @@ func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
 		}
 		prefixBytes = activePrefix.Serialize()
 	}
-	dbManager := consensusdatabase.New(db)
+	return newStores(consensusdatabase.New(db), prefixBytes)
+}
+
+// newStores opens every store this tool reads under one consensus prefix.
+func newStores(dbManager model.DBManager, prefixBytes []byte) (*stores, error) {
 	pb := consensusdatabase.MakeBucket(prefixBytes)
 
 	bs, err := blockstore.New(dbManager, pb, 100, false)
@@ -3239,20 +3257,28 @@ func scanHeaderGHOSTDAGAgreement(s *stores, sa *model.StagingArea, depth int) {
 // factory wires level 0: the reachability store the node already uses (the old per-level one when it holds data for
 // virtual genesis, otherwise the one under the consensus prefix), DAG topology, GHOSTDAG, DAG traversal, then the
 // difficulty manager itself, with mainnet parameters.
-func newDifficultyManager(s *stores, sa *model.StagingArea) (model.DifficultyManager, error) {
-	params := dagconfig.MainnetParams
+// newDAGTopology opens this datadir's reachability data, under level 0 or, for older datadirs, the prefix root.
+func newDAGTopology(s *stores, sa *model.StagingArea) (model.ReachabilityManager, model.DAGTopologyManager, error) {
 	level0 := s.prefix.Bucket([]byte{0})
-
 	reachabilityStore := reachabilitydatastore.New(level0, 10_000, false)
 	hasOldReachability, err := reachabilityStore.HasReachabilityData(s.db, sa, model.VirtualGenesisBlockHash)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !hasOldReachability {
 		reachabilityStore = reachabilitydatastore.New(s.prefix, 10_000, false)
 	}
 	reachabilityManager := reachabilitymanager.New(s.db, s.gd, reachabilityStore)
 	dagTopologyManager := dagtopologymanager.New(s.db, reachabilityManager, blockrelationstore.New(level0, 10_000, false), s.gd)
+	return reachabilityManager, dagTopologyManager, nil
+}
+
+func newDifficultyManager(s *stores, sa *model.StagingArea) (model.DifficultyManager, error) {
+	params := dagconfig.MainnetParams
+	reachabilityManager, dagTopologyManager, err := newDAGTopology(s, sa)
+	if err != nil {
+		return nil, err
+	}
 	ghostdagManager := ghostdagmanager.New(s.db, dagTopologyManager, nil, s.gd, s.headers, s.state, params.K,
 		params.GenesisHash, s.daa, params.POWScores)
 	dagTraversalManager := dagtraversalmanager.New(s.db, dagTopologyManager, s.gd, reachabilityManager, ghostdagManager,
