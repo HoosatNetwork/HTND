@@ -75,9 +75,14 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 	return hasUTXOs, nil
 }
 
-// usabilityProbeSize is how many of an address's coins the usable-address check reads before
-// falling back to reading them all.
-const usabilityProbeSize = 32
+// usabilityProbeLimits are the reads the usable-address check makes in turn, each one only when every
+// coin the read before it returned was withheld and the address may hold more. 0 reads them all.
+//
+// The first reads a single coin because that is nearly always the whole answer: a withheld coin is the
+// index trailing a block by a moment, so an address's first coin is almost always one consensus holds.
+// The check runs for every address a wallet scans, and with 32 coins per probe it was still most of a
+// busy node's CPU - 32 index decodes and 32 seeks into virtual's UTXO set per address.
+var usabilityProbeLimits = []uint32{1, 32, 0}
 
 // addressUTXOLister is the part of the UTXO index holdsSpendableCoin reads.
 type addressUTXOLister interface {
@@ -96,7 +101,7 @@ type virtualUTXOChecker interface {
 // whose every listed coin is one consensus does not hold is not usable, since every transaction built
 // on it is refused.
 //
-// One spendable coin settles the question, so it first reads only the first usabilityProbeSize coins.
+// One spendable coin settles the question, so it reads in the steps of usabilityProbeLimits.
 // Reading and checking every coin an address holds dominated the CPU of a busy node: a pool or exchange
 // address holds thousands, and each one costs a decode and a seek into virtual's UTXO set, all to
 // answer yes. Only when every probed coin is one consensus no longer holds - the index trailing a block
@@ -104,8 +109,8 @@ type virtualUTXOChecker interface {
 func holdsSpendableCoin(index addressUTXOLister, consensus virtualUTXOChecker,
 	scriptPublicKey *externalapi.ScriptPublicKey, addressString string,
 ) (bool, error) {
-	for _, limit := range []uint32{usabilityProbeSize, 0} {
-		bufferSize := usabilityProbeSize
+	for _, limit := range usabilityProbeLimits {
+		bufferSize := int(limit)
 		if limit == 0 {
 			bufferSize = 1000
 		}
@@ -129,8 +134,8 @@ func holdsSpendableCoin(index addressUTXOLister, consensus virtualUTXOChecker,
 			rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the usable-address check")
 			return len(kept) > 0, nil
 		}
-		// Every probed coin was withheld and there may be more: read them all. Not logged here, since
-		// the full read counts these same coins again.
+		// Every probed coin was withheld and there may be more: read further. Not logged here, since
+		// the next read counts these same coins again.
 	}
 	panic("unreachable: the full read always returns")
 }

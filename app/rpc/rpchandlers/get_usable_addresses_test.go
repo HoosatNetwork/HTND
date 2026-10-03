@@ -61,15 +61,18 @@ func TestHoldsSpendableCoinProbesBeforeReadingEverything(t *testing.T) {
 		wantUsable bool
 		wantLimits []uint32
 	}{
-		{name: "spendable coin within the probe", coinCount: 5000, held: []int{3}, wantUsable: true,
-			wantLimits: []uint32{usabilityProbeSize}},
-		{name: "probe all stale, spendable coin past it", coinCount: 100, held: []int{usabilityProbeSize + 10},
-			wantUsable: true, wantLimits: []uint32{usabilityProbeSize, 0}},
-		{name: "fewer coins than the probe, all stale", coinCount: 5, wantUsable: false,
-			wantLimits: []uint32{usabilityProbeSize}},
-		{name: "exactly the probe, all stale", coinCount: usabilityProbeSize, wantUsable: false,
-			wantLimits: []uint32{usabilityProbeSize, 0}},
-		{name: "no coins", coinCount: 0, wantUsable: false, wantLimits: []uint32{usabilityProbeSize}},
+		{name: "first coin spendable", coinCount: 5000, held: []int{0}, wantUsable: true,
+			wantLimits: []uint32{1}},
+		{name: "first coin stale, spendable coin within the second probe", coinCount: 5000, held: []int{3},
+			wantUsable: true, wantLimits: []uint32{1, 32}},
+		{name: "both probes stale, spendable coin past them", coinCount: 100, held: []int{42},
+			wantUsable: true, wantLimits: []uint32{1, 32, 0}},
+		{name: "one coin, stale", coinCount: 1, wantUsable: false, wantLimits: []uint32{1, 32}},
+		{name: "fewer coins than the second probe, all stale", coinCount: 5, wantUsable: false,
+			wantLimits: []uint32{1, 32}},
+		{name: "exactly the second probe, all stale", coinCount: 32, wantUsable: false,
+			wantLimits: []uint32{1, 32, 0}},
+		{name: "no coins", coinCount: 0, wantUsable: false, wantLimits: []uint32{1}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
