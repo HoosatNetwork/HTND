@@ -6,7 +6,9 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 // gateVerdict is what one of the gated checks would make of this datadir: PASS and FAIL are the
@@ -39,10 +41,14 @@ func gateError(format string, args ...any) gateVerdict {
 // than that, so a FAIL or ERROR here means the gate would also refuse on a syncee, while a PASS here does not prove
 // a syncee would pass. To check a syncee itself, point -prefix at the staging consensus an IBD is still building.
 //
-// A third walk follows each stored pruning point's own header commitment back through the list instead of the
-// selected chain - the shape upstream kaspad's check had, and one a pruned node holds the data for. It is not what
-// the gate runs; it separates "the list is wrong" from "this node cannot read the data the gate walks".
-func pruningListCheck(s *stores, sa *model.StagingArea, params *dagconfig.Params) (pruningListVerdicts, error) {
+// anchorBlockVersion is the version below which ArePruningPointsInValidChain stops following header commitments. The
+// node passes the version its header pruning point gate activates at.
+//
+// A third walk follows each stored pruning point's own header commitment back through the list one index at a time,
+// all the way to genesis, with no anchor and no tolerance for skipped indices. It is not what the gate runs; it shows
+// how far the list lines up with the headers when nothing is tolerated.
+func pruningListCheck(s *stores, sa *model.StagingArea, params *dagconfig.Params, anchorBlockVersion uint16,
+) (pruningListVerdicts, error) {
 	fmt.Printf("\n=== pruning point list check (HTN-006, gated at ValidateIBDPruningListVersion)\n")
 
 	pruningPoint, err := s.pruning.PruningPoint(s.db, sa)
@@ -78,8 +84,10 @@ func pruningListCheck(s *stores, sa *model.StagingArea, params *dagconfig.Params
 		pruningDepth)
 	fmt.Printf("     => %s: %s\n", v.validPruningPoint.outcome, v.validPruningPoint.detail)
 
-	fmt.Printf("\n  -- ArePruningPointsInValidChain (selected-chain walk from the headers selected tip to genesis)\n")
-	v.validChain = checkPruningPointsInValidChain(s, sa, params.GenesisHash, headersTip, currentIndex)
+	fmt.Printf("\n  -- ArePruningPointsInValidChain (pruning point header walk down to the first pruning point below "+
+		"block version %d)\n", anchorBlockVersion)
+	v.validChain = checkPruningPointsInValidChain(s, sa, params, pruningPoint, headersTip, currentIndex,
+		anchorBlockVersion)
 	fmt.Printf("     => %s: %s\n", v.validChain.outcome, v.validChain.detail)
 
 	fmt.Printf("\n  -- pruning point header walk (not gated; each stored pruning point's own header commitment)\n")
@@ -139,11 +147,9 @@ func checkIsValidPruningPoint(s *stores, sa *model.StagingArea, dagTopology mode
 		}
 	}
 
-	// The node subtracts in uint64; a pruning point scored above the tip wraps around and passes.
 	if pruningPointScore > tipScore {
-		return gatePass("the pruning point's stored blue score exceeds the tip's, so the node's uint64 "+
-			"subtraction wraps and the depth check passes vacuously - a pass that means nothing (%d > %d)",
-			pruningPointScore, tipScore)
+		return gateFail("the pruning point's stored blue score exceeds the tip's (%d > %d)", pruningPointScore,
+			tipScore)
 	}
 	depth := tipScore - pruningPointScore
 	if depth < pruningDepth-1 {
@@ -152,81 +158,171 @@ func checkIsValidPruningPoint(s *stores, sa *model.StagingArea, dagTopology mode
 	return gatePass("depth %d >= pruningDepth-1 = %d", depth, pruningDepth-1)
 }
 
-// checkPruningPointsInValidChain mirrors pruningManager.ArePruningPointsInValidChain: walk the selected chain from the
-// headers selected tip to genesis collecting each header's pruning point, then compare that list, oldest first, with
-// the stored list by index.
-func checkPruningPointsInValidChain(s *stores, sa *model.StagingArea,
-	genesis, headersTip *externalapi.DomainHash, currentIndex uint64,
+// checkPruningPointsInValidChain mirrors pruningManager.ArePruningPointsInValidChain: the headers above the pruning
+// point must commit to it, then each matched stored pruning point's own header commitment must name a stored pruning
+// point within the window below it, down to the first matched pruning point below anchorBlockVersion.
+func checkPruningPointsInValidChain(s *stores, sa *model.StagingArea, params *dagconfig.Params,
+	pruningPoint, headersTip *externalapi.DomainHash, currentIndex uint64, anchorBlockVersion uint16,
 ) gateVerdict {
-	var expected []*externalapi.DomainHash
+	genesis := params.GenesisHash
+	if currentIndex == 0 {
+		if pruningPoint.Equal(genesis) {
+			return gatePass("the only stored pruning point is genesis")
+		}
+		return gateFail("the only stored pruning point %s is not genesis", pruningPoint)
+	}
+
+	// Newest first: the distinct commitments of the headers on the selected chain above the pruning point.
+	var tipCommitments []*externalapi.DomainHash
+	above := make(map[externalapi.DomainHash]struct{})
 	current := headersTip
 	walked := 0
-	reachedGenesis := false
-	for {
-		if current == nil {
-			return gateError("a nil selected parent after %d blocks (the node would dereference it)", walked)
-		}
-		if current.Equal(model.VirtualBlockHash) {
-			break
+	for !current.Equal(pruningPoint) {
+		if current.Equal(model.VirtualGenesisBlockHash) {
+			return gateFail("the selected chain reaches virtual genesis, where this node's data ends, %d blocks below "+
+				"the tip without passing the pruning point", walked)
 		}
 		header, err := s.headers.BlockHeader(s.db, sa, current)
-		if err != nil && current.Equal(model.VirtualGenesisBlockHash) {
-			// The node stops only at VirtualBlockHash, so it asks for this header too and errors.
-			return gateError("the selected chain reaches virtual genesis - the root under this node's retained "+
-				"DAG - %d blocks below the tip, before genesis, after collecting %d distinct pruning points; "+
-				"the node asks for its header and errors: %v", walked, len(expected), err)
-		}
 		if err != nil {
-			return gateError("header of %s, %d selected-chain blocks below the tip, is unreadable after "+
-				"collecting %d distinct pruning points: %v", current, walked, len(expected), err)
+			return gateError("header of %s, %d selected-chain blocks below the tip: %v", current, walked, err)
 		}
-		if len(expected) == 0 || !expected[len(expected)-1].Equal(header.PruningPoint()) {
-			expected = append(expected, header.PruningPoint())
-		}
-		if current.Equal(genesis) {
-			reachedGenesis = true
-			break
+		above[*current] = struct{}{}
+		if len(tipCommitments) == 0 || !tipCommitments[len(tipCommitments)-1].Equal(header.PruningPoint()) {
+			tipCommitments = append(tipCommitments, header.PruningPoint())
 		}
 		data, err := s.gd.Get(s.db, sa, current, false)
 		if err != nil {
-			return gateError("GHOSTDAG data of %s, %d selected-chain blocks below the tip, is unreadable after "+
-				"collecting %d distinct pruning points: %v", current, walked, len(expected), err)
+			return gateError("GHOSTDAG data of %s, %d selected-chain blocks below the tip: %v", current, walked, err)
+		}
+		if data.SelectedParent() == nil {
+			return gateFail("the selected chain ends at %s without passing the pruning point", current)
 		}
 		current = data.SelectedParent()
 		walked++
-		if walked%1_000_000 == 0 {
-			fmt.Printf("     ... walked %d blocks, %d distinct pruning points\n", walked, len(expected))
+	}
+	adopted := tipCommitments[:0]
+	for _, commitment := range tipCommitments {
+		if _, isAbove := above[*commitment]; !isAbove {
+			adopted = append(adopted, commitment)
 		}
 	}
-	fmt.Printf("     walked %d selected-chain blocks, reached genesis: %t, %d distinct header pruning points\n",
-		walked, reachedGenesis, len(expected))
+	fmt.Printf("     %d selected-chain blocks above the pruning point commit to %d distinct adopted pruning point(s)\n",
+		walked, len(adopted))
 
-	if reachedGenesis && !expected[len(expected)-1].Equal(genesis) {
-		expected = append(expected, genesis)
-	} else if !reachedGenesis && len(expected) == 0 {
-		return gateFail("the walk ended without reaching genesis or collecting a pruning point")
+	blockVersion := func(hash *externalapi.DomainHash, header externalapi.BlockHeader) (uint16, error) {
+		daaScore, err := s.daa.DAAScore(s.db, sa, hash)
+		if database.IsNotFoundError(err) {
+			daaScore = header.DAAScore()
+		} else if err != nil {
+			return 0, err
+		}
+		return constants.BlockVersionForDAAScore(params.POWScores, daaScore), nil
 	}
-	for i, j := 0, len(expected)-1; i < j; i, j = i+1, j-1 {
-		expected[i], expected[j] = expected[j], expected[i]
+	window := func(blockVersion uint16) uint64 {
+		finalityDepth := max(params.FinalityDepthForBlockVersion(blockVersion), 1)
+		pruningDepth := params.PruningDepthForBlockVersion(blockVersion)
+		return 2 * ((pruningDepth + finalityDepth - 1) / finalityDepth)
+	}
+	pending := make(map[externalapi.DomainHash]uint64)
+	expect := func(hash *externalapi.DomainHash, committerIndex, window uint64) {
+		if _, ok := pending[*hash]; ok {
+			return
+		}
+		lowest := uint64(0)
+		if committerIndex > window {
+			lowest = committerIndex - window
+		}
+		pending[*hash] = lowest
 	}
 
-	toValidate := int(currentIndex) + 1
-	if len(expected) < toValidate {
-		fmt.Printf("     the chain implies %d pruning points, the store has %d; comparing the first %d\n",
-			len(expected), currentIndex+1, len(expected))
-		toValidate = len(expected)
+	pruningPointHeader, err := s.headers.BlockHeader(s.db, sa, pruningPoint)
+	if err != nil {
+		return gateError("header of the pruning point: %v", err)
 	}
-	for i := 0; i < toValidate; i++ {
-		stored, err := s.pruning.PruningPointByIndex(s.db, sa, uint64(i))
+	pruningPointVersion, err := blockVersion(pruningPoint, pruningPointHeader)
+	if err != nil {
+		return gateError("DAA score of the pruning point: %v", err)
+	}
+	for _, commitment := range adopted {
+		expect(commitment, currentIndex+1, window(pruningPointVersion))
+	}
+
+	following := true
+	gaps := 0
+	var newerBlueScore uint64
+	for index := currentIndex; ; index-- {
+		for hash, lowest := range pending {
+			if lowest > index {
+				return gateFail("a header commits to %s, but no stored pruning point at index %d or above is it; "+
+					"%d newer index(es) checked, %d gap(s)", &hash, lowest, currentIndex-index, gaps)
+			}
+		}
+
+		stored, err := s.pruning.PruningPointByIndex(s.db, sa, index)
 		if err != nil {
-			return gateError("stored pruning point [%d] is unreadable: %v", i, err)
+			return gateError("stored pruning point [%d] is unreadable: %v", index, err)
 		}
-		if !stored.Equal(expected[i]) {
-			return gateError("stored pruning point [%d] %s is not the chain's %s (the node returns an "+
-				"error here, not false); %d earlier index(es) agree", i, stored, expected[i], i)
+		_, matched := pending[*stored]
+		delete(pending, *stored)
+
+		if index == currentIndex && !matched {
+			return gateFail("no header above the pruning point [%d] %s commits to it", index, stored)
 		}
+		if index == 0 {
+			if !stored.Equal(genesis) {
+				return gateFail("stored pruning point [0] %s is not genesis", stored)
+			}
+			if len(pending) > 0 {
+				return gateFail("%d header commitment(s) name no stored pruning point", len(pending))
+			}
+			return gatePass("all %d index(es) checked back to genesis, %d gap(s), anchor not reached",
+				currentIndex+1, gaps)
+		}
+		if stored.Equal(genesis) {
+			return gateFail("genesis is stored at pruning point index %d", index)
+		}
+
+		allFound := func() gateVerdict {
+			return gatePass("%d index(es) checked, %d gap(s); every commitment followed down to the anchor is in "+
+				"the list", currentIndex-index+1, gaps)
+		}
+		if !matched {
+			gaps++
+			if !following && len(pending) == 0 {
+				return allFound()
+			}
+			continue
+		}
+		header, err := s.headers.BlockHeader(s.db, sa, stored)
+		if err != nil {
+			return gateError("header of stored pruning point [%d] %s: %v", index, stored, err)
+		}
+		if index < currentIndex && header.BlueScore() >= newerBlueScore {
+			return gateFail("stored pruning point [%d] %s has blue score %d, not below the newer matched pruning "+
+				"point's %d", index, stored, header.BlueScore(), newerBlueScore)
+		}
+		newerBlueScore = header.BlueScore()
+		if !following {
+			if len(pending) == 0 {
+				return allFound()
+			}
+			continue
+		}
+		version, err := blockVersion(stored, header)
+		if err != nil {
+			return gateError("DAA score of stored pruning point [%d] %s: %v", index, stored, err)
+		}
+		if version < anchorBlockVersion {
+			following = false
+			fmt.Printf("     anchor: [%d] %s at block version %d, below %d\n", index, stored, version,
+				anchorBlockVersion)
+			if len(pending) == 0 {
+				return allFound()
+			}
+			continue
+		}
+		expect(header.PruningPoint(), index, window(version))
 	}
-	return gatePass("all %d compared index(es) agree", toValidate)
 }
 
 // checkPruningPointHeaderWalk validates the stored list the way a pruned node can: the selected chain from the headers
