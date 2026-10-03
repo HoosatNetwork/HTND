@@ -8,6 +8,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
 )
@@ -18,7 +19,18 @@ var bucketName = []byte("blocks")
 type blockStore struct {
 	shardID model.StagingShardID
 	lock    sync.Mutex
-	cache   *lrucache.LRUCache[*externalapi.DomainBlock]
+	// cache holds blocks serialized, outside the Go heap, with each block's PoW hash as the entry's
+	// meta. It used to hold decoded blocks, bounded only by entry count; once ML-DSA-44 transactions
+	// arrived - ~3.7 KB of signature and public key per input - 10,000 cached testnet blocks were over
+	// 3 GB of decoded objects, the live heap sat at GOMEMLIMIT, and the garbage collector took ~60% of
+	// the CPU during virtual resolution. See lrucache.OffHeap.
+	//
+	// The PoW hash is not part of DbBlock, so it does not survive serialization, and the cache is the
+	// only place it outlives the block's arrival. It must come back with every cache hit: relay will
+	// not announce a block without one (relayBlock), and a peer that receives a relayed block without
+	// one bans the connection (handleRelayInvsFlow). A block read from the database has none, as
+	// before.
+	cache *lrucache.OffHeap[string]
 	// existsCache remembers blocks HasBlock found in the database, without their bodies. HasBlock
 	// asks about the key only, so answering it needs neither the block nor a slot in cache.
 	existsCache *lrucache.LRUCache[struct{}]
@@ -27,11 +39,14 @@ type blockStore struct {
 	countKey    model.DBKey
 }
 
-// New instantiates a new BlockStore
-func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockStore, error) {
+// New instantiates a new BlockStore. Its block cache holds at most cacheSize blocks whose serialized
+// sizes add up to at most cacheByteBudget bytes.
+func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, cacheByteBudget int,
+	preallocate bool,
+) (model.BlockStore, error) {
 	blockStore := &blockStore{
 		shardID:     staging.GenerateShardingID(),
-		cache:       lrucache.New[*externalapi.DomainBlock](cacheSize, preallocate),
+		cache:       lrucache.NewOffHeap[string](cacheSize, cacheByteBudget, preallocate),
 		existsCache: lrucache.New[struct{}](cacheSize, preallocate),
 		bucket:      prefixBucket.Bucket(bucketName),
 		countKey:    prefixBucket.Key([]byte("blocks-count")),
@@ -101,12 +116,18 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 		return block.Clone(), nil
 	}
 
-	bs.lock.Lock()
-	blockCached, ok := bs.cache.Get(blockHash)
-	bs.lock.Unlock()
-	if ok && blockCached != nil {
-		// log.Infof("Block found %s from cache", blockHash)
-		return blockCached.Clone(), nil
+	var cachedBlock *externalapi.DomainBlock
+	hit, err := bs.cache.Decode(blockHash, func(blockBytes []byte, powHash string) error {
+		var err error
+		cachedBlock, err = bs.deserializeBlock(blockBytes)
+		if err != nil {
+			return err
+		}
+		cachedBlock.PoWHash = powHash
+		return nil
+	})
+	if hit {
+		return cachedBlock, err
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
@@ -114,15 +135,13 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 		return nil, err
 	}
 
-	// log.Infof("Block found %s from DB", blockHash)
+	// The decoded block is not cached, so the caller can own it without a clone.
 	blockDeserialized, err := bs.deserializeBlock(blockBytes)
 	if err != nil {
 		return nil, err
 	}
-	bs.lock.Lock()
-	bs.cache.Add(blockHash, blockDeserialized)
-	bs.lock.Unlock()
-	return blockDeserialized.Clone(), nil
+	bs.cache.Add(blockHash, blockBytes, blockDeserialized.PoWHash)
+	return blockDeserialized, nil
 }
 
 // HasBlock returns whether a block with a given hash exists in the store.
@@ -133,12 +152,12 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 		return true, nil
 	}
 
-	bs.lock.Lock()
 	cachedHas := bs.cache.Has(blockHash)
 	if !cachedHas {
+		bs.lock.Lock()
 		_, cachedHas = bs.existsCache.Get(blockHash)
+		bs.lock.Unlock()
 	}
-	bs.lock.Unlock()
 	if cachedHas {
 		return true, nil
 	}
@@ -180,8 +199,8 @@ func (bs *blockStore) Blocks(dbContext model.DBReader, stagingArea *model.Stagin
 // Delete deletes the block associated with the given blockHash
 func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := bs.stagingShard(stagingArea)
-	bs.lock.Lock()
 	bs.cache.Remove(blockHash)
+	bs.lock.Lock()
 	bs.existsCache.Remove(blockHash)
 	bs.lock.Unlock()
 
@@ -192,9 +211,11 @@ func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *external
 	stagingShard.toDelete[*blockHash] = struct{}{}
 }
 
-func (bs *blockStore) serializeBlock(block *externalapi.DomainBlock) ([]byte, error) {
-	dbBlock := serialization.DomainBlockToDbBlock(block)
-	return dbBlock.MarshalVT()
+// serializeBlockOffHeap serializes block into a buffer outside the Go heap, for the commit to write
+// to the database and then hand to the cache. With ML-DSA-44 inputs a testnet block is ~250 KB that
+// would otherwise be serialized onto the heap. See lrucache.MarshalOffHeap.
+func (bs *blockStore) serializeBlockOffHeap(block *externalapi.DomainBlock) (*memory.Block[byte], error) {
+	return lrucache.MarshalOffHeap(serialization.DomainBlockToDbBlock(block))
 }
 
 func (bs *blockStore) deserializeBlock(blockBytes []byte) (*externalapi.DomainBlock, error) {
@@ -291,7 +312,5 @@ func (bs *blockStore) AllBlockHashesIterator(dbContext model.DBReader) (model.Bl
 }
 
 func (bs *blockStore) CacheLen() int {
-	bs.lock.Lock()
-	defer bs.lock.Unlock()
 	return bs.cache.Len()
 }

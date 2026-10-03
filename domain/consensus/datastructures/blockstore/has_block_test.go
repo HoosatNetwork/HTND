@@ -42,7 +42,7 @@ func TestHasBlockRemembersAFoundBlockAndReportsFaults(t *testing.T) {
 	dbManager, prefixBucket, teardown := testutils.NewTestDB(t)
 	defer teardown()
 
-	storeIface, err := New(dbManager, prefixBucket, 10, false)
+	storeIface, err := New(dbManager, prefixBucket, 10, 1<<20, false)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

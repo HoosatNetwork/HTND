@@ -1018,7 +1018,7 @@ func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
 func newStores(dbManager model.DBManager, prefixBytes []byte) (*stores, error) {
 	pb := consensusdatabase.MakeBucket(prefixBytes)
 
-	bs, err := blockstore.New(dbManager, pb, 100, false)
+	bs, err := blockstore.New(dbManager, pb, 100, 64<<20, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +1028,7 @@ func newStores(dbManager model.DBManager, prefixBytes []byte) (*stores, error) {
 	}
 	return &stores{
 		db: dbManager, prefix: pb, headers: bhs, blocks: bs,
-		accept:     acceptancedatastore.New(pb, 100, false),
+		accept:     acceptancedatastore.New(pb, 100, 64<<20, false),
 		ms:         multisetstore.New(pb, 100, false),
 		gd:         ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
 		daa:        daablocksstore.New(pb, 100, 100, false),

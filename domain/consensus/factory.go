@@ -209,8 +209,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	// Data Structures
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
 	daaWindowStore := daawindowstore.New(prefixBucket, 50_000, preallocateCaches)
-	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, preallocateCaches)
-	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, preallocateCaches)
+	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, acceptanceDataCacheBytes, preallocateCaches)
+	blockCacheBytes := parseBlockCacheBytes(os.Getenv("HTND_BLOCK_CACHE_MB"))
+	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, blockCacheBytes, preallocateCaches)
 	if err != nil {
 		return nil, false, err
 	}
@@ -751,6 +752,28 @@ func parseLargeCacheDivisor(value string) int {
 		return 1
 	}
 	return min(divisor, maxLargeCacheDivisor)
+}
+
+// defaultBlockCacheMB is the default budget of the block store's cache, in MiB of serialized blocks.
+// The cache keeps them outside the Go heap (see blockstore), so this memory is not counted toward
+// GOMEMLIMIT and costs the garbage collector nothing, but it is still part of the process's resident
+// memory. Before ML-DSA-44 the cache's 10,000-block count limit alone kept it near 100 MB; with
+// ML-DSA inputs the same count held over 3 GB of decoded blocks on the heap.
+const defaultBlockCacheMB = 256
+
+// acceptanceDataCacheBytes is the budget of the acceptance data store's cache, in bytes of serialized
+// acceptance data kept outside the Go heap. Its 1,000-entry count limit was the only bound when the
+// cache held decoded values, and that alone came to ~300 MB on an ML-DSA testnet.
+const acceptanceDataCacheBytes = 128 << 20
+
+// parseBlockCacheBytes returns the block cache budget in bytes from HTND_BLOCK_CACHE_MB: the default
+// when unset or invalid, otherwise the value in MiB.
+func parseBlockCacheBytes(value string) int {
+	megabytes, err := strconv.Atoi(value)
+	if value == "" || err != nil || megabytes <= 0 {
+		megabytes = defaultBlockCacheMB
+	}
+	return megabytes << 20
 }
 
 func (f *factory) NewTestConsensus(config *Config, testName string) (
