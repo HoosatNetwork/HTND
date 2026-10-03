@@ -181,15 +181,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	dbManager := consensusdatabase.New(db)
 	prefixBucket := consensusdatabase.MakeBucket(dbPrefix.Serialize())
 
-	largeCacheDivisor := 1
-	if v := os.Getenv("HTND_LARGE_CACHE_DIVISOR"); v != "" {
-		if divisor, err := strconv.Atoi(v); err == nil && divisor > 0 {
-			if divisor > 50 {
-				divisor = 50
-			}
-			largeCacheDivisor = divisor << 20
-		}
-	}
+	largeCacheDivisor := parseLargeCacheDivisor(os.Getenv("HTND_LARGE_CACHE_DIVISOR"))
 
 	pruningDepth := config.PruningDepth()
 	if pruningDepth > uint64(math.MaxInt) {
@@ -741,6 +733,24 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	}
 
 	return c, false, nil
+}
+
+// maxLargeCacheDivisor caps HTND_LARGE_CACHE_DIVISOR so a typo can't shrink the large caches to nothing.
+const maxLargeCacheDivisor = 50
+
+// parseLargeCacheDivisor returns the factor HTND_LARGE_CACHE_DIVISOR divides the pruning- and
+// finality-window cache sizes by: 1 when unset or invalid, otherwise the value capped at
+// maxLargeCacheDivisor. The value is used as-is - it once went through a leftover `<< 20` from when
+// the variable was a size in MiB, which made any setting divide the caches by over a million.
+func parseLargeCacheDivisor(value string) int {
+	if value == "" {
+		return 1
+	}
+	divisor, err := strconv.Atoi(value)
+	if err != nil || divisor <= 0 {
+		return 1
+	}
+	return min(divisor, maxLargeCacheDivisor)
 }
 
 func (f *factory) NewTestConsensus(config *Config, testName string) (
