@@ -57,7 +57,7 @@ type consensusStateManager struct {
 
 	stores []model.Store
 
-	// unpricedTransactionFeeAllowance is dagconfig.HardForkGates.UnpricedTransactionFeeAllowance, used from
+	// unpricedTransactionFeeAllowance is dagconfig.Params.UnpricedTransactionFeeAllowance, used from
 	// HardForkGates.OffsetModeValueChecksVersion onward: see offset_value_checks.go.
 	unpricedTransactionFeeAllowance uint64
 

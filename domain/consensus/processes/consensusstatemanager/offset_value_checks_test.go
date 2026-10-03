@@ -57,7 +57,7 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 	}
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams, &dagconfig.TestnetParamsB5,
 		&dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
-		if params.HardForkGates.UnpricedTransactionFeeAllowance == 0 {
+		if params.UnpricedTransactionFeeAllowance == 0 {
 			t.Errorf("%s: unpriced transaction fee allowance is not set", params.Name)
 		}
 	}

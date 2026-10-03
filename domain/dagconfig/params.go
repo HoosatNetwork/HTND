@@ -191,6 +191,14 @@ type Params struct {
 
 	POWScores []uint64
 
+	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
+	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
+	// coinbase on a node with an offset UTXO baseline, from the block version at which
+	// HardForkGates.OffsetModeValueChecksVersion activates the offset-mode value checks. It bounds the
+	// fee a miner with a more complete UTXO set may legitimately claim for transactions this node
+	// cannot fully price. Blocks below that version are unaffected by it.
+	UnpricedTransactionFeeAllowance uint64
+
 	// HardForkGates is the block version at which each version-gated consensus rule activates on
 	// this network.
 	HardForkGates HardForkGates
@@ -261,14 +269,6 @@ type HardForkGates struct {
 	// node could not price. See consensusstatemanager/offset_value_checks.go.
 	OffsetModeValueChecksVersion uint16
 
-	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
-	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
-	// coinbase on a node with an offset UTXO baseline, from the block version at which
-	// OffsetModeValueChecksVersion activates the offset-mode value checks. It bounds the fee a
-	// miner with a more complete UTXO set may legitimately claim for transactions this node cannot
-	// fully price. Blocks below that version are unaffected by it.
-	UnpricedTransactionFeeAllowance uint64
-
 	// MLDSA44SignaturesBlockVersion is the block version from which post-quantum ML-DSA-44
 	// (FIPS 204) signatures are consensus-valid: opcode 0xa6 executes as OP_CHECKSIGMLDSA44
 	// instead of failing as an unknown opcode, counts as one signature operation, and the ML-DSA-44
@@ -338,8 +338,6 @@ var mainnetHardForkGates = HardForkGates{
 	HeaderBlueScoreVersion: unscheduledHardForkGate,
 	HeaderPruningPointVersion: unscheduledHardForkGate,
 	IndirectParentsVersion: unscheduledHardForkGate,
-
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 }
 
 // testnetHardForkGates schedules the gated rules on testnet and the other test networks. It may run
@@ -366,8 +364,6 @@ var testnetHardForkGates = HardForkGates{
 	HeaderBlueScoreVersion: 13,
 	HeaderPruningPointVersion: 13,
 	IndirectParentsVersion: 13,
-
-	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 }
 
 // HardForkActive reports whether the rule gated at activationVersion applies to a block of
@@ -686,6 +682,8 @@ var MainnetParams = Params{
 
 	HardForkGates: mainnetHardForkGates,
 
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	MaxBlockLevel: 225,
@@ -898,6 +896,8 @@ var TestnetParams = Params{
 
 	HardForkGates: testnetHardForkGates,
 
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.
 	MaxBlockLevel: 225,
@@ -987,6 +987,8 @@ var TestnetParamsB5 = Params{
 
 	HardForkGates: testnetHardForkGates,
 
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+
 	MaxBlockLevel: 225,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
@@ -1060,6 +1062,8 @@ var TestnetParamsB10 = Params{
 
 	HardForkGates: testnetHardForkGates,
 
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+
 	MaxBlockLevel: 250,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, 3600, 3600, 3600},
 }
@@ -1132,6 +1136,8 @@ var SimnetParams = Params{
 
 	HardForkGates: testnetHardForkGates,
 
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
+
 	MaxBlockLevel: 250,
 	MergeDepth:    []uint64{defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, defaultMergeDepth, defaultMergeDepth},
 }
@@ -1199,6 +1205,8 @@ var DevnetParams = Params{
 	DisallowDirectBlocksOnTopOfGenesis:      true,
 
 	HardForkGates: testnetHardForkGates,
+
+	UnpricedTransactionFeeAllowance: defaultUnpricedTransactionFeeAllowance,
 
 	// This is technically 255, but we clamped it at 256 - block level of mainnet genesis
 	// This means that any block that has a level lower or equal to genesis will be level 0.

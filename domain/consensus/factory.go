@@ -395,7 +395,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.POWScores,
 		&hardForkGates,
 		config.OnDisqualification,
-		config.HardForkGates.UnpricedTransactionFeeAllowance)
+		config.UnpricedTransactionFeeAllowance)
 	if err != nil {
 		return nil, false, err
 	}
