@@ -979,6 +979,10 @@ const virtualUTXOEntriesChunkSize = 1024
 // against virtual as it stands when that chunk runs, so a block accepted between chunks can show in
 // later chunks and not earlier ones - but every answer is one virtual actually gave.
 //
+// The outpoints are encoded and sorted by database key before the lock is taken. Encoding does not
+// read the database, and sorting first makes each chunk one contiguous key range, which is the range
+// its cursor walks. Answers are still written back in request order.
+//
 // It also returns virtual's parents as they stood during the lookup, or nil if they changed between
 // chunks. A caller comparing the answers with a secondary index can tell from them whether the index
 // described the same virtual state: an index that has not yet applied virtual's latest change still
@@ -986,14 +990,37 @@ const virtualUTXOEntriesChunkSize = 1024
 func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) (
 	[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error,
 ) {
+	return s.virtualUTXOEntries(outpoints, nil, maxWait)
+}
+
+// GetVirtualUTXOEntriesPreferring is GetVirtualUTXOEntries. Where preferred[i] serializes to the
+// same bytes virtual stored for outpoints[i], entries[i] is that same preferred value rather than a
+// newly decoded copy. The UTXO index already holds those entries; the RPC check was allocating a
+// second copy of every coin only to throw the index's copy away.
+func (s *consensus) GetVirtualUTXOEntriesPreferring(outpoints []*externalapi.DomainOutpoint,
+	preferred []externalapi.UTXOEntry, maxWait time.Duration,
+) ([]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error) {
+	if preferred != nil && len(preferred) != len(outpoints) {
+		return nil, nil, false, errors.Errorf("%d preferred entries given for %d outpoints", len(preferred), len(outpoints))
+	}
+	return s.virtualUTXOEntries(outpoints, preferred, maxWait)
+}
+
+func (s *consensus) virtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, preferred []externalapi.UTXOEntry,
+	maxWait time.Duration,
+) ([]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error) {
+	ordered, err := s.consensusStateStore.PrepareOrderedVirtualUTXOKeys(outpoints)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
 	var virtualParents []*externalapi.DomainHash
-	for start := 0; start < len(outpoints); start += virtualUTXOEntriesChunkSize {
-		end := min(start+virtualUTXOEntriesChunkSize, len(outpoints))
+	for start := 0; start < len(ordered); start += virtualUTXOEntriesChunkSize {
+		end := min(start+virtualUTXOEntriesChunkSize, len(ordered))
 		if !tryLockFor(s.lock, maxWait) {
 			return nil, nil, false, nil
 		}
-		chunkVirtualParents, err := s.virtualUTXOEntriesNoLock(outpoints[start:end], entries[start:end])
+		chunkVirtualParents, err := s.virtualUTXOEntriesNoLock(outpoints, ordered[start:end], entries, preferred)
 		s.lock.Unlock()
 		if err != nil {
 			return nil, nil, false, err
@@ -1008,23 +1035,23 @@ func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoin
 	return entries, virtualParents, true, nil
 }
 
-// virtualUTXOEntriesNoLock fills entries with virtual's entry for each outpoint and returns virtual's
-// parents.
+// virtualUTXOEntriesNoLock fills entries for one key-sorted chunk and returns virtual's parents.
 //
 // It does not populate the cache on a miss: an address with more coins than the cache holds would
 // otherwise scan through it evicting everything block validation put there, going cold for the path
 // that actually needs it, for no benefit to itself - see HTN-207. Without the cache, every refresh of
 // a wallet reads all its coins from the database, so the misses are read in key order through one
 // cursor rather than one Get each.
-func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) (
-	[]*externalapi.DomainHash, error,
-) {
+func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, ordered []model.OrderedVirtualUTXOKey,
+	entries []externalapi.UTXOEntry, preferred []externalapi.UTXOEntry,
+) ([]*externalapi.DomainHash, error) {
 	stagingArea := model.NewStagingArea()
 	virtualParents, err := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
 	if err != nil {
 		return nil, err
 	}
-	err = s.consensusStateStore.UTXOsByOutpointsWithoutPopulatingCache(s.databaseContext, stagingArea, outpoints, entries)
+	err = s.consensusStateStore.UTXOsByOrderedKeysWithoutPopulatingCache(
+		s.databaseContext, stagingArea, outpoints, ordered, entries, preferred)
 	if err != nil {
 		return nil, err
 	}

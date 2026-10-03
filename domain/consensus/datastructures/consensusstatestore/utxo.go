@@ -2,7 +2,6 @@ package consensusstatestore
 
 import (
 	"bytes"
-	"slices"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
@@ -111,24 +110,40 @@ func (css *consensusStateStore) UTXOByOutpointWithoutPopulatingCache(dbContext m
 // The outpoints that are neither staged nor cached are read in key order through one cursor instead
 // of one Get each. A Get starts a fresh descent of every level of the LSM tree for its key, and a
 // wallet's coins are spread over the whole UTXO set, so a lookup of tens of thousands of them paid
-// that descent tens of thousands of times. Seeking one iterator forward lets pebble continue from
-// where the previous seek left each level (TrySeekUsingNext) and reuse the blocks it has already
-// loaded.
+// that descent tens of thousands of times. The keys are encoded once and the cursor is bounded to
+// the range those keys cover, so each seek compares the bytes it already has.
 func (css *consensusStateStore) UTXOsByOutpointsWithoutPopulatingCache(dbContext model.DBReader,
 	stagingArea *model.StagingArea, outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry,
 ) error {
 	if len(entries) != len(outpoints) {
 		return errors.Errorf("%d entries given for %d outpoints", len(entries), len(outpoints))
 	}
+	ordered, err := css.PrepareOrderedVirtualUTXOKeys(outpoints)
+	if err != nil {
+		return err
+	}
+	return css.UTXOsByOrderedKeysWithoutPopulatingCache(dbContext, stagingArea, outpoints, ordered, entries, nil)
+}
+
+// UTXOsByOrderedKeysWithoutPopulatingCache fills entries from a key-sorted slice. See the
+// interface comment for the preferred-entry reuse.
+func (css *consensusStateStore) UTXOsByOrderedKeysWithoutPopulatingCache(dbContext model.DBReader,
+	stagingArea *model.StagingArea, outpoints []*externalapi.DomainOutpoint, ordered []model.OrderedVirtualUTXOKey,
+	entries []externalapi.UTXOEntry, preferred []externalapi.UTXOEntry,
+) error {
+	if len(entries) != len(outpoints) {
+		return errors.Errorf("%d entries given for %d outpoints", len(entries), len(outpoints))
+	}
+	if preferred != nil && len(preferred) != len(outpoints) {
+		return errors.Errorf("%d preferred entries given for %d outpoints", len(preferred), len(outpoints))
+	}
 	stagingShard := css.stagingShard(stagingArea)
 
-	type dbLookup struct {
-		index int
-		key   model.DBKey
-	}
-	var lookups []dbLookup
-	for i, outpoint := range outpoints {
+	misses := make([]model.OrderedVirtualUTXOKey, 0, len(ordered))
+	for _, item := range ordered {
+		i := item.Index
 		entries[i] = nil
+		outpoint := outpoints[i]
 		if stagingShard.virtualUTXODiffStaging != nil {
 			if stagingShard.virtualUTXODiffStaging.ToRemove().Contains(outpoint) {
 				continue
@@ -142,53 +157,62 @@ func (css *consensusStateStore) UTXOsByOutpointsWithoutPopulatingCache(dbContext
 			entries[i] = entry
 			continue
 		}
-		key, err := css.utxoKey(outpoint)
-		if err != nil {
-			return err
-		}
-		lookups = append(lookups, dbLookup{index: i, key: key})
+		misses = append(misses, item)
 	}
-	if len(lookups) == 0 {
+	if len(misses) == 0 {
 		return nil
 	}
 
-	slices.SortFunc(lookups, func(a, b dbLookup) int {
-		return bytes.Compare(a.key.Bytes(), b.key.Bytes())
-	})
-
-	cursor, err := dbContext.Cursor(css.utxoSetBucket)
+	// misses is a subsequence of a key-sorted slice, so it is still sorted. Bounding the cursor
+	// to that range lets the database skip sstables outside it. The bound is exclusive, so it
+	// is the successor of the last key, clamped to the bucket.
+	cursor, err := css.openBoundedUTXOCursor(dbContext, misses[0].Key, css.cursorUpper(misses[len(misses)-1].Key))
 	if err != nil {
 		return err
 	}
 	defer cursor.Close()
 
-	for _, lookup := range lookups {
-		err := cursor.Seek(lookup.key)
+	var encoder utxoEntryEncoder
+	for _, miss := range misses {
+		err := cursor.SeekFullKey(miss.Key)
 		if database.IsNotFoundError(err) {
-			// Pebble reports this only once nothing is left at or after the key, but the LevelDB cursor
-			// also reports it whenever the exact key is missing, so it cannot end the walk.
+			// Nothing remains at or after this key. Later keys are greater, so they are absent too,
+			// but a bound can also exhaust the cursor between two misses, so keep walking.
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		foundKey, err := cursor.Key()
+		foundKey, err := cursor.FullKey()
+		if database.IsNotFoundError(err) {
+			continue
+		}
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(foundKey.Bytes(), lookup.key.Bytes()) {
+		if !bytes.Equal(foundKey, miss.Key) {
 			continue
 		}
 		serializedUTXOEntry, err := cursor.Value()
 		if err != nil {
 			return err
 		}
+		if preferred != nil && preferred[miss.Index] != nil {
+			match, err := encoder.matches(preferred[miss.Index], serializedUTXOEntry)
+			if err != nil {
+				return err
+			}
+			if match {
+				entries[miss.Index] = preferred[miss.Index]
+				continue
+			}
+		}
 		// deserializeUTXOEntry copies what it keeps, so the entry outlives the cursor's next move.
 		entry, err := deserializeUTXOEntry(serializedUTXOEntry)
 		if err != nil {
 			return err
 		}
-		entries[lookup.index] = entry
+		entries[miss.Index] = entry
 	}
 	return nil
 }

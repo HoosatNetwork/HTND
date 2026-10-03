@@ -440,3 +440,8 @@ func (id *DomainTransactionID) ByteArray() *[DomainHashSize]byte {
 func (id *DomainTransactionID) ByteSlice() []byte {
 	return (*DomainHash)(id).ByteSlice()
 }
+
+// AppendBytes appends the transaction ID bytes to dst. It does not allocate when dst has room.
+func (id *DomainTransactionID) AppendBytes(dst []byte) []byte {
+	return (*DomainHash)(id).AppendBytes(dst)
+}

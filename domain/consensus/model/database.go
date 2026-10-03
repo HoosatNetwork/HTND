@@ -15,10 +15,21 @@ type DBCursor interface {
 	// exist.
 	Seek(key DBKey) error
 
+	// SeekFullKey moves the iterator to the first key greater than or equal to key.
+	// key is the full database key, bucket prefix included. ErrNotFound means nothing
+	// remains at or after key. A missing key with a successor leaves the cursor on
+	// that successor; FullKey reports it.
+	SeekFullKey(key []byte) error
+
 	// Key returns the key of the current key/value pair, or ErrNotFound if done.
 	// The caller should not modify the contents of the returned key, and
 	// its contents may change on the next call to Next.
 	Key() (DBKey, error)
+
+	// FullKey returns the current full key, bucket prefix included, or ErrNotFound if
+	// the cursor is exhausted. The caller should not modify the returned slice. Its
+	// contents may change on the next cursor movement, and it is not valid after that.
+	FullKey() ([]byte, error)
 
 	// Value returns the value of the current key/value pair, or ErrNotFound if done.
 	// The caller should not modify the contents of the returned slice, and its

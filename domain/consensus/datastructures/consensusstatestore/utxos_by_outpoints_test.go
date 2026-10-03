@@ -1,6 +1,8 @@
 package consensusstatestore
 
 import (
+	"bytes"
+	"math"
 	"math/rand"
 	"os"
 	"strconv"
@@ -197,14 +199,17 @@ func BenchmarkVirtualUTXOLookup(b *testing.B) {
 	random := rand.New(rand.NewSource(2))
 
 	all := make([]*externalapi.DomainOutpoint, 0, setSize)
+	stored := make([]externalapi.UTXOEntry, 0, setSize)
 	const batchSize = 50_000
 	for len(all) < setSize {
 		toAdd := map[externalapi.DomainOutpoint]externalapi.UTXOEntry{}
 		for i := 0; i < batchSize && len(all) < setSize; i++ {
 			outpoint := randomOutpoint(random)
-			all = append(all, outpoint)
-			toAdd[*outpoint] = utxo.NewUTXOEntry(uint64(len(all)),
+			entry := utxo.NewUTXOEntry(uint64(len(all)),
 				&externalapi.ScriptPublicKey{Script: make([]byte, 34), Version: 0}, false, uint64(len(all)))
+			all = append(all, outpoint)
+			stored = append(stored, entry)
+			toAdd[*outpoint] = entry
 		}
 		stageAndCommitUTXOs(b, dbManager, store, toAdd, map[externalapi.DomainOutpoint]externalapi.UTXOEntry{})
 	}
@@ -214,8 +219,11 @@ func BenchmarkVirtualUTXOLookup(b *testing.B) {
 	store.virtualUTXOSetCache.Clear()
 
 	lookups := make([]*externalapi.DomainOutpoint, lookupCount)
+	preferred := make([]externalapi.UTXOEntry, lookupCount)
 	for i := range lookups {
-		lookups[i] = all[random.Intn(len(all))]
+		at := random.Intn(len(all))
+		lookups[i] = all[at]
+		preferred[i] = stored[at]
 	}
 	entries := make([]externalapi.UTXOEntry, lookupCount)
 
@@ -239,6 +247,148 @@ func BenchmarkVirtualUTXOLookup(b *testing.B) {
 			}
 		}
 	})
+	b.Run("sorted-cursor-reuse", func(b *testing.B) {
+		for b.Loop() {
+			ordered, err := store.PrepareOrderedVirtualUTXOKeys(lookups)
+			if err != nil {
+				b.Fatalf("PrepareOrderedVirtualUTXOKeys: %v", err)
+			}
+			err = store.UTXOsByOrderedKeysWithoutPopulatingCache(dbManager, model.NewStagingArea(), lookups, ordered, entries, preferred)
+			if err != nil {
+				b.Fatalf("lookup: %v", err)
+			}
+		}
+	})
+}
+
+// TestOrderedVirtualUTXOKeyMatchesUTXOKey pins that the bulk lookup's reused encoder writes the
+// same bytes as the single-key path. A mismatch would make every seek miss.
+func TestOrderedVirtualUTXOKeyMatchesUTXOKey(t *testing.T) {
+	store := New(consensusdatabase.MakeBucket([]byte("utxo-key-encoding")), 1, false).(*consensusStateStore)
+	random := rand.New(rand.NewSource(7))
+	zeroID := randomOutpoint(random)
+	maxID := randomOutpoint(random)
+	outpoints := []*externalapi.DomainOutpoint{
+		randomOutpoint(random),
+		externalapi.NewDomainOutpoint(&zeroID.TransactionID, 0),
+		externalapi.NewDomainOutpoint(&maxID.TransactionID, math.MaxUint32),
+	}
+	ordered, err := store.PrepareOrderedVirtualUTXOKeys(outpoints)
+	if err != nil {
+		t.Fatalf("PrepareOrderedVirtualUTXOKeys: %v", err)
+	}
+	if len(ordered) != len(outpoints) {
+		t.Fatalf("got %d keys for %d outpoints", len(ordered), len(outpoints))
+	}
+	for _, item := range ordered {
+		want, err := store.utxoKey(outpoints[item.Index])
+		if err != nil {
+			t.Fatalf("utxoKey: %v", err)
+		}
+		if !bytes.Equal(item.Key, want.Bytes()) {
+			t.Fatalf("outpoint %s: encoded key %x, utxoKey %x", outpoints[item.Index], item.Key, want.Bytes())
+		}
+	}
+	for i := 1; i < len(ordered); i++ {
+		if bytes.Compare(ordered[i-1].Key, ordered[i].Key) > 0 {
+			t.Fatalf("keys are not sorted: %x then %x", ordered[i-1].Key, ordered[i].Key)
+		}
+	}
+}
+
+// TestUTXOsByOrderedKeysReusesAMatchingEntry pins two things the RPC filter relies on. An entry
+// whose bytes are what the database stored is returned as that same value, and an entry that only
+// differs by BlockDAAScore is not. It looks up the middle of three stored coins on its own, so the
+// cursor bound has a key on either side of the range it is allowed to see.
+func TestUTXOsByOrderedKeysReusesAMatchingEntry(t *testing.T) {
+	for _, engine := range []string{"leveldb", "pebble"} {
+		t.Run(engine, func(t *testing.T) {
+			dbManager, _ := newBackendTestDB(t, engine)
+			store := New(consensusdatabase.MakeBucket([]byte("utxo-entry-reuse")), 4, false).(*consensusStateStore)
+			random := rand.New(rand.NewSource(9))
+
+			outpoints := make([]*externalapi.DomainOutpoint, 3)
+			stored := make([]externalapi.UTXOEntry, 3)
+			toAdd := map[externalapi.DomainOutpoint]externalapi.UTXOEntry{}
+			for i := range outpoints {
+				outpoints[i] = randomOutpoint(random)
+				stored[i] = utxo.NewUTXOEntry(uint64(1000+i),
+					&externalapi.ScriptPublicKey{Script: []byte{byte(i), 0xac}, Version: 0}, i == 1, uint64(50+i))
+				toAdd[*outpoints[i]] = stored[i]
+			}
+			stageAndCommitUTXOs(t, dbManager, store, toAdd, map[externalapi.DomainOutpoint]externalapi.UTXOEntry{})
+			store.virtualUTXOSetCache.Clear()
+
+			ordered, err := store.PrepareOrderedVirtualUTXOKeys(outpoints)
+			if err != nil {
+				t.Fatalf("PrepareOrderedVirtualUTXOKeys: %v", err)
+			}
+			middle := -1
+			for i, item := range ordered {
+				if i > 0 && i < len(ordered)-1 {
+					middle = item.Index
+				}
+			}
+			if middle < 0 {
+				t.Fatal("three distinct keys should have a middle one")
+			}
+
+			entries := make([]externalapi.UTXOEntry, len(outpoints))
+			preferred := make([]externalapi.UTXOEntry, len(outpoints))
+			preferred[middle] = stored[middle]
+			err = store.UTXOsByOrderedKeysWithoutPopulatingCache(dbManager, model.NewStagingArea(),
+				outpoints, ordered[1:2], entries, preferred)
+			if err != nil {
+				t.Fatalf("middle lookup: %v", err)
+			}
+			if entries[middle] != stored[middle] {
+				t.Fatalf("the middle coin's bytes match the entry already held; got a new %#v", entries[middle])
+			}
+			for i, entry := range entries {
+				if i != middle && entry != nil {
+					t.Fatalf("the bounded lookup returned outpoint %d, which is outside its key range", i)
+				}
+			}
+
+			// The index does not hold the object consensus stored. It holds one with the same fields.
+			copied := utxo.NewUTXOEntry(stored[middle].Amount(), stored[middle].ScriptPublicKey(),
+				stored[middle].IsCoinbase(), stored[middle].BlockDAAScore())
+			preferred[middle] = copied
+			entries = make([]externalapi.UTXOEntry, len(outpoints))
+			err = store.UTXOsByOrderedKeysWithoutPopulatingCache(dbManager, model.NewStagingArea(),
+				outpoints, ordered[1:2], entries, preferred)
+			if err != nil {
+				t.Fatalf("copied-entry lookup: %v", err)
+			}
+			if entries[middle] != copied {
+				t.Fatalf("an entry with the same fields as the stored coin must be reused, got %#v", entries[middle])
+			}
+
+			drifted := utxo.NewUTXOEntry(stored[middle].Amount(), stored[middle].ScriptPublicKey(),
+				stored[middle].IsCoinbase(), stored[middle].BlockDAAScore()+1)
+			for i := range preferred {
+				preferred[i] = stored[i]
+			}
+			preferred[middle] = drifted
+			entries = make([]externalapi.UTXOEntry, len(outpoints))
+			err = store.UTXOsByOrderedKeysWithoutPopulatingCache(dbManager, model.NewStagingArea(),
+				outpoints, ordered, entries, preferred)
+			if err != nil {
+				t.Fatalf("full lookup: %v", err)
+			}
+			if entries[middle] == drifted || entries[middle] == nil || !entries[middle].Equal(stored[middle]) {
+				t.Fatalf("a drifted stamp must be replaced by virtual's entry, got %#v", entries[middle])
+			}
+			for i, entry := range entries {
+				if i == middle {
+					continue
+				}
+				if entry != stored[i] {
+					t.Fatalf("outpoint %d matched the entry already held and was copied instead", i)
+				}
+			}
+		})
+	}
 }
 
 func benchEnvInt(name string, defaultValue int) int {
