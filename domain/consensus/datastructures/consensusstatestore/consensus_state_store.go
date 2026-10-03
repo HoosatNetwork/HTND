@@ -16,17 +16,25 @@ type consensusStateStore struct {
 	tipsCache                       []*externalapi.DomainHash
 	tipsKey                         model.DBKey
 	utxoSetBucket                   model.DBBucket
+	utxoSetKeyPrefix                []byte
+	utxoSetKeyLimit                 []byte
 	importingPruningPointUTXOSetKey model.DBKey
 }
 
 // New instantiates a new ConsensusStateStore
 func New(prefixBucket model.DBBucket, utxoSetCacheSize int, preallocate bool) model.ConsensusStateStore {
+	utxoSetBucket := prefixBucket.Bucket(utxoSetBucketName)
+	// Copy the prefix. Key encoding reads it outside the consensus lock, and the bucket's
+	// path slice must not be aliased by that.
+	utxoSetKeyPrefix := append([]byte(nil), utxoSetBucket.Path()...)
 	return &consensusStateStore{
 		shardID:                         staging.GenerateShardingID(),
 		virtualUTXOSetCache:             utxolrucache.New(utxoSetCacheSize, preallocate),
 		tipsKey:                         prefixBucket.Key(tipsKeyName),
 		importingPruningPointUTXOSetKey: prefixBucket.Key(importingPruningPointUTXOSetKeyName),
-		utxoSetBucket:                   prefixBucket.Bucket(utxoSetBucketName),
+		utxoSetBucket:                   utxoSetBucket,
+		utxoSetKeyPrefix:                utxoSetKeyPrefix,
+		utxoSetKeyLimit:                 prefixLimit(utxoSetKeyPrefix),
 	}
 }
 
