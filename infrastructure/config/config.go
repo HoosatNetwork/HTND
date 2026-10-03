@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/HoosatNetwork/HTND/v2/util/network"
+	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/jessevdk/go-flags"
@@ -141,7 +141,7 @@ type Flags struct {
 	ProxyUser                       string        `long:"proxyuser" description:"Username for proxy server"`
 	ProxyPass                       string        `long:"proxypass" default-mask:"-" description:"Password for proxy server"`
 	DbType                          string        `long:"dbtype" description:"Database backend to use for the Block DAG"`
-	Profile                         string        `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
+	Profile                         string        `long:"profile" description:"Enable HTTP profiling on the given port (all interfaces) or host:port, e.g. 127.0.0.1:6061 -- NOTE port must be between 1024 and 65535"`
 	LogLevel                        string        `short:"d" long:"loglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                            bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
 	MinRelayTxFee                   float64       `long:"minrelaytxfee" description:"The minimum transaction fee in HTN/kB to be considered a non-zero fee."`
@@ -491,12 +491,10 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Validate profile port number
+	// Validate the profile port or address
 	if cfg.Profile != "" {
-		profilePort, err := strconv.Atoi(cfg.Profile)
-		if err != nil || profilePort < 1024 || profilePort > 65535 {
-			str := "%s: The profile port must be between 1024 and 65535"
-			err := errors.Errorf(str, funcName)
+		if _, err := profiling.ListenAddress(cfg.Profile); err != nil {
+			err := errors.Errorf("%s: %s", funcName, err)
 			fmt.Fprintln(os.Stderr, err)
 			fmt.Fprintln(os.Stderr, usageMessage)
 			return nil, err
