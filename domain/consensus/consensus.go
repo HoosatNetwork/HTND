@@ -455,6 +455,8 @@ func (s *consensus) ValidateAndInsertBlock(block *externalapi.DomainBlock, updat
 	if updateVirtual {
 		s.lock.Lock()
 		if s.virtualNotUpdated {
+			startDAAScore, _ := s.virtualDrainDAAScoresNoLock()
+			progress := newVirtualDrainProgress("before inserting a block", startDAAScore)
 			// We enter the loop in locked state
 			for {
 				_, isCompletelyResolved, err := s.resolveVirtualChunkNoLock(virtualResolveChunk)
@@ -462,7 +464,10 @@ func (s *consensus) ValidateAndInsertBlock(block *externalapi.DomainBlock, updat
 					s.lock.Unlock()
 					return err
 				}
+				daaScore, targetDAAScore := s.virtualDrainDAAScoresNoLock()
+				progress.chunkResolved(daaScore, targetDAAScore)
 				if isCompletelyResolved {
+					progress.finished(daaScore)
 					// Make sure we enter the block insertion function w/o releasing the lock.
 					// Otherwise, we might actually enter it in `s.virtualNotUpdated == true` state
 					_, err = s.validateAndInsertBlockNoLock(block, updateVirtual, powSkip)
@@ -1593,12 +1598,20 @@ func (s *consensus) resolveVirtualChunkWithLock(maxBlocksToResolve uint64) (virt
 // score/parents off an intermediate virtual snapshot that's about to be superseded, rather
 // than the state real validation will eventually judge the mined block against.
 func (s *consensus) ensureVirtualUpdatedNoLock() error {
+	if !s.virtualNotUpdated {
+		return nil
+	}
+	startDAAScore, _ := s.virtualDrainDAAScoresNoLock()
+	progress := newVirtualDrainProgress("before building a block", startDAAScore)
 	for s.virtualNotUpdated {
 		_, isCompletelyResolved, err := s.resolveVirtualChunkNoLock(virtualResolveChunk)
 		if err != nil {
 			return err
 		}
+		daaScore, targetDAAScore := s.virtualDrainDAAScoresNoLock()
+		progress.chunkResolved(daaScore, targetDAAScore)
 		if isCompletelyResolved {
+			progress.finished(daaScore)
 			return nil
 		}
 		// Unlock to allow other threads to enter consensus, then relock for the next chunk.
