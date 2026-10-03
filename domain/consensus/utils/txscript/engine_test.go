@@ -57,7 +57,7 @@ func TestBadPC(t *testing.T) {
 	scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("NOP", 0), Version: 0}
 
 	for _, test := range tests {
-		vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Errorf("Failed to create script: %v", err)
 		}
@@ -125,7 +125,7 @@ func TestCheckErrorCondition(t *testing.T) {
 
 			scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm(test.script, 0), Version: 0}
 
-			vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, &consensushashing.SighashReusedValues{})
+			vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, nil, &consensushashing.SighashReusedValues{})
 			if err != nil {
 				t.Errorf("TestCheckErrorCondition: %d: failed to create script: %v", i, err)
 			}
@@ -181,7 +181,7 @@ func TestUnsupportedScriptPublicKeyVersionFails(t *testing.T) {
 		Version: constants.MaxScriptPublicKeyVersion + 1,
 	}
 
-	_, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, &consensushashing.SighashReusedValues{})
+	_, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, nil, &consensushashing.SighashReusedValues{})
 	if err == nil || !IsErrorCode(err, ErrUnsupportedScriptVersion) {
 		t.Fatalf("expected ErrUnsupportedScriptVersion, got %v", err)
 	}
@@ -284,7 +284,7 @@ func TestDisasmPC(t *testing.T) {
 
 	scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("OP_DROP NOP TRUE", 0), Version: 0}
 
-	vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, &consensushashing.SighashReusedValues{})
+	vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, nil, &consensushashing.SighashReusedValues{})
 	if err != nil {
 		t.Fatalf("failed to create script: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestDisasmScript(t *testing.T) {
 	}
 
 	scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("OP_DROP NOP TRUE", 0), Version: 0}
-	vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, &consensushashing.SighashReusedValues{})
+	vm, err := NewEngine(scriptPubKey, tx, 0, 0, nil, nil, nil, &consensushashing.SighashReusedValues{})
 	if err != nil {
 		t.Fatalf("failed to create script: %v", err)
 	}

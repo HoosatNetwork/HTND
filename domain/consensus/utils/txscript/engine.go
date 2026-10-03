@@ -63,6 +63,7 @@ type Engine struct {
 	flags               ScriptFlags
 	sigCache            *SigCache
 	sigCacheECDSA       *SigCacheECDSA
+	mldsa44Cache        *MLDSA44Cache
 	sigHashReusedValues *consensushashing.SighashReusedValues
 	isP2SH              bool     // treat execution as pay-to-script-hash
 	savedFirstStack     [][]byte // stack from first script for ps2h scripts
@@ -496,10 +497,11 @@ func (vm *Engine) SetAltStack(data [][]byte) {
 // transaction, and input index. The flags modify the behavior of the script
 // engine according to the description provided by each flag.
 func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues,
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, mldsa44Cache *MLDSA44Cache,
+	sighashReusedValues *consensushashing.SighashReusedValues,
 ) (*Engine, error) {
 	vm := &Engine{}
-	err := vm.Init(scriptPubKey, tx, txIdx, flags, sigCache, sigCacheECDSA, sighashReusedValues)
+	err := vm.Init(scriptPubKey, tx, txIdx, flags, sigCache, sigCacheECDSA, mldsa44Cache, sighashReusedValues)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +510,8 @@ func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.Domain
 
 // init initializes the Engine with the provided parameters.
 func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues,
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, mldsa44Cache *MLDSA44Cache,
+	sighashReusedValues *consensushashing.SighashReusedValues,
 ) error {
 	// The provided transaction input index must refer to a valid input.
 	if txIdx < 0 || txIdx >= len(tx.Inputs) {
@@ -530,6 +533,7 @@ func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalap
 	vm.flags = flags
 	vm.sigCache = sigCache
 	vm.sigCacheECDSA = sigCacheECDSA
+	vm.mldsa44Cache = mldsa44Cache
 
 	if vm.scriptVersion > constants.MaxScriptPublicKeyVersion {
 		str := fmt.Sprintf("unsupported script public key version %d (max: %d)",

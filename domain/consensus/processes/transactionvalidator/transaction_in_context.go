@@ -260,7 +260,7 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 
 		scriptPubKey := utxoEntry.ScriptPublicKey()
 		vm := v.enginePool.Get().(*txscript.Engine)
-		err := vm.Init(scriptPubKey, tx, i, flags, v.sigCache, v.sigCacheECDSA, sighashReusedValues)
+		err := vm.Init(scriptPubKey, tx, i, flags, v.sigCache, v.sigCacheECDSA, v.mldsa44Cache, sighashReusedValues)
 		if err != nil {
 			vm.Reset()
 			v.enginePool.Put(vm)

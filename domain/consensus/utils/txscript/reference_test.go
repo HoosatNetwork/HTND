@@ -343,7 +343,7 @@ func testScripts(t *testing.T, tests [][]any, useSigCache bool) {
 		// used, then create a new engine to execute the scripts.
 		tx := createSpendingTx(scriptSig, scriptPubKey)
 
-		vm, err := NewEngine(scriptPubKey, tx, 0, flags, sigCache, sigCacheECDSA, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, flags, sigCache, sigCacheECDSA, nil, &consensushashing.SighashReusedValues{})
 		if err == nil {
 			err = vm.Execute()
 		}

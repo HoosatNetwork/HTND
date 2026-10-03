@@ -16,7 +16,6 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/kaspanet/go-secp256k1"
 )
 
@@ -2417,13 +2416,11 @@ func opcodeCheckSigMLDSA44(op *parsedOpcode, vm *Engine) error {
 		return nil
 	}
 
-	var pubKey mldsa44.PublicKey
-	if err := pubKey.UnmarshalBinary(pkBytes); err != nil {
+	valid, parsed := vm.mldsa44Cache.verify(sigHash, pkBytes, sigBytes)
+	if !parsed {
 		vm.dstack.PushBool(false)
 		return nil
 	}
-
-	valid := mldsa44.Verify(&pubKey, sigHash.ByteSlice(), nil, sigBytes)
 	if !valid {
 		str := "signature not empty on failed checksig"
 		return scriptError(ErrNullFail, str)

@@ -43,7 +43,7 @@ func newMLDSA44SpendTx(t *testing.T, publicKey *mldsa44.PublicKey) (*externalapi
 }
 
 func executeMLDSA44(tx *externalapi.DomainTransaction, scriptPubKey *externalapi.ScriptPublicKey, flags ScriptFlags) error {
-	vm, err := NewEngine(scriptPubKey, tx, 0, flags, nil, nil, &consensushashing.SighashReusedValues{})
+	vm, err := NewEngine(scriptPubKey, tx, 0, flags, nil, nil, nil, &consensushashing.SighashReusedValues{})
 	if err != nil {
 		return err
 	}
