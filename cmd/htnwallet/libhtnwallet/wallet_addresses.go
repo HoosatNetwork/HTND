@@ -35,6 +35,29 @@ func WalletAddressesAtPath(params *dagconfig.Params, extendedPublicKeys []string
 		return []util.Address{address}, nil
 	}
 
+	// The three forms lock the same key, so derive it once: the derivation is most of the cost, and the
+	// daemon's address scan runs this for every index it scans. The checks AddressWithSingleSigAddressType
+	// makes pass whenever this condition holds; the loop below keeps its errors for everything else.
+	if len(extendedPublicKeys) == 1 && minimumSignatures <= 1 {
+		serializedPublicKey, err := derivedPublicKey(extendedPublicKeys[0], path, ecdsa)
+		if err != nil {
+			return nil, err
+		}
+		addressP2PK, err := p2pkAddressFromPublicKey(params, serializedPublicKey, ecdsa)
+		if err != nil {
+			return nil, err
+		}
+		addressP2PKH, err := p2pkhAddressFromPublicKey(params, serializedPublicKey, ecdsa)
+		if err != nil {
+			return nil, err
+		}
+		addressP2SH, err := p2shAddressWrappingP2PKH(params, addressP2PKH)
+		if err != nil {
+			return nil, err
+		}
+		return []util.Address{addressP2PK, addressP2PKH, addressP2SH}, nil
+	}
+
 	singleSigTypes := []SingleSigAddressType{SingleSigAddressTypeP2PK, SingleSigAddressTypeP2PKH, SingleSigAddressTypeP2SH}
 	addresses := make([]util.Address, 0, len(singleSigTypes))
 	for _, singleSigType := range singleSigTypes {

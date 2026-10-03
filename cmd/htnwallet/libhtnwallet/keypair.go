@@ -236,43 +236,25 @@ func AddressWithMultiSigAddressType(
 }
 
 func p2pkAddress(params *dagconfig.Params, extendedPublicKey string, path string, ecdsa bool) (util.Address, error) {
-	extendedKey, err := bip32.DeserializeExtendedKey(extendedPublicKey)
+	serializedPublicKey, err := derivedPublicKey(extendedPublicKey, path, ecdsa)
 	if err != nil {
 		return nil, err
 	}
-
-	derivedKey, err := extendedKey.DeriveFromPath(path)
-	if err != nil {
-		return nil, err
-	}
-
-	publicKey, err := derivedKey.PublicKey()
-	if err != nil {
-		return nil, err
-	}
-
-	if ecdsa {
-		serializedECDSAPublicKey, err := publicKey.Serialize()
-		if err != nil {
-			return nil, err
-		}
-		return util.NewAddressPublicKeyECDSA(serializedECDSAPublicKey[:], params.Prefix)
-	}
-
-	schnorrPublicKey, err := publicKey.ToSchnorr()
-	if err != nil {
-		return nil, err
-	}
-
-	serializedSchnorrPublicKey, err := schnorrPublicKey.Serialize()
-	if err != nil {
-		return nil, err
-	}
-
-	return util.NewAddressPublicKey(serializedSchnorrPublicKey[:], params.Prefix)
+	return p2pkAddressFromPublicKey(params, serializedPublicKey, ecdsa)
 }
 
 func p2pkhAddress(params *dagconfig.Params, extendedPublicKey string, path string, ecdsa bool) (util.Address, error) {
+	serializedPublicKey, err := derivedPublicKey(extendedPublicKey, path, ecdsa)
+	if err != nil {
+		return nil, err
+	}
+	return p2pkhAddressFromPublicKey(params, serializedPublicKey, ecdsa)
+}
+
+// derivedPublicKey returns the serialized public key at path: the 33-byte compressed key when ecdsa is
+// set, and the 32-byte Schnorr key otherwise. Deriving it is most of an address's cost, so callers that
+// need several forms of one key derive it once and encode it with the *FromPublicKey functions.
+func derivedPublicKey(extendedPublicKey string, path string, ecdsa bool) ([]byte, error) {
 	extendedKey, err := bip32.DeserializeExtendedKey(extendedPublicKey)
 	if err != nil {
 		return nil, err
@@ -293,7 +275,7 @@ func p2pkhAddress(params *dagconfig.Params, extendedPublicKey string, path strin
 		if err != nil {
 			return nil, err
 		}
-		return util.NewAddressPublicKeyHashECDSA(serializedECDSAPublicKey[:], params.Prefix)
+		return serializedECDSAPublicKey[:], nil
 	}
 
 	schnorrPublicKey, err := publicKey.ToSchnorr()
@@ -306,7 +288,21 @@ func p2pkhAddress(params *dagconfig.Params, extendedPublicKey string, path strin
 		return nil, err
 	}
 
-	return util.NewAddressPublicKeyHash(serializedSchnorrPublicKey[:], params.Prefix)
+	return serializedSchnorrPublicKey[:], nil
+}
+
+func p2pkAddressFromPublicKey(params *dagconfig.Params, serializedPublicKey []byte, ecdsa bool) (util.Address, error) {
+	if ecdsa {
+		return util.NewAddressPublicKeyECDSA(serializedPublicKey, params.Prefix)
+	}
+	return util.NewAddressPublicKey(serializedPublicKey, params.Prefix)
+}
+
+func p2pkhAddressFromPublicKey(params *dagconfig.Params, serializedPublicKey []byte, ecdsa bool) (util.Address, error) {
+	if ecdsa {
+		return util.NewAddressPublicKeyHashECDSA(serializedPublicKey, params.Prefix)
+	}
+	return util.NewAddressPublicKeyHash(serializedPublicKey, params.Prefix)
 }
 
 // p2shP2PKHAddress returns a P2SH address whose redeem script is a standard
@@ -316,7 +312,11 @@ func p2shP2PKHAddress(params *dagconfig.Params, extendedPublicKey string, path s
 	if err != nil {
 		return nil, err
 	}
+	return p2shAddressWrappingP2PKH(params, addrP2PKH)
+}
 
+// p2shAddressWrappingP2PKH returns the P2SH address whose redeem script pays addrP2PKH.
+func p2shAddressWrappingP2PKH(params *dagconfig.Params, addrP2PKH util.Address) (util.Address, error) {
 	redeemScriptPublicKey, err := txscript.PayToAddrScript(addrP2PKH)
 	if err != nil {
 		return nil, err

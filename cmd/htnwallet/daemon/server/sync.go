@@ -81,6 +81,33 @@ const (
 	numIndexesToQueryForRecentAddresses = 1000
 )
 
+// addressesToQueryCached is addressesToQuery, remembering the batches collectRecentAddresses scans. Every
+// sync rescans each of them, every two seconds, and deriving a batch of 1000 indexes takes most of a second
+// of CPU - a wallet with a few thousand used addresses kept a core busy deriving the same keys again. A
+// batch never changes while the daemon runs: the extended public keys, the ML-DSA-44 key pools and the
+// imported keys are all fixed once it has started.
+//
+// The far scan's ranges are not cached: they move forward by numIndexesToQueryForFarAddresses on every sync
+// and are not scanned again, so keeping them would only grow memory. The caller holds s.lock, and must not
+// modify the returned set.
+func (s *server) addressesToQueryCached(start, end uint32) (walletAddressSet, error) {
+	if end-start != numIndexesToQueryForRecentAddresses || start%numIndexesToQueryForRecentAddresses != 0 {
+		return s.addressesToQuery(start, end)
+	}
+	if addresses, ok := s.recentAddressBatches[start]; ok {
+		return addresses, nil
+	}
+	addresses, err := s.addressesToQuery(start, end)
+	if err != nil {
+		return nil, err
+	}
+	if s.recentAddressBatches == nil {
+		s.recentAddressBatches = make(map[uint32]walletAddressSet)
+	}
+	s.recentAddressBatches[start] = addresses
+	return addresses, nil
+}
+
 // addressesToQuery scans the addresses in the given range. Because
 // each cosigner in a multisig has its own unique path for generating
 // addresses it goes over all the cosigners and add their addresses
@@ -196,7 +223,7 @@ func (s *server) collectAddressesWithLock(start, end uint32) (scanned bool, err 
 // collectAddresses scans the given index range and reports whether it did. A closed RPC route (the client
 // is reconnecting) skips the scan without an error; callers must then not treat the range as scanned.
 func (s *server) collectAddresses(start, end uint32) (scanned bool, err error) {
-	addressSet, err := s.addressesToQuery(start, end)
+	addressSet, err := s.addressesToQueryCached(start, end)
 	if err != nil {
 		return false, err
 	}
