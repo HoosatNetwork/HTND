@@ -343,7 +343,9 @@ var testnetHardForkGates = HardForkGates{
 	StrictCoinbaseVersion:         10,
 	RefuseMismatchedImportVersion: 12,
 	ValidateHeaderBitsVersion:     12,
-	ValidateIBDPruningListVersion: 12,
+	// Unscheduled until ArePruningPointsInValidChain can pass on a real chain: at version 12 it
+	// would fail every headers-proof IBD. Schedule it no earlier than HeaderPruningPointVersion.
+	ValidateIBDPruningListVersion: unscheduledHardForkGate,
 	OffsetModeValueChecksVersion:  10,
 	MLDSA44SignaturesBlockVersion: 11,
 
