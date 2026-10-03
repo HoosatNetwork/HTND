@@ -319,19 +319,10 @@ var MainnetParams = Params{
 	RPCPort:     "42420",
 	DefaultPort: "42421",
 	DNSSeeds: []string{
-		// This DNS seeder is run by Toni Lukkaroinen
-		"mainnet-dnsseed.hoosat.fi",
-		// These DNS seeders are run by Cryptonoob
 		"mainnet-node-1.hoosat.org",
 		"mainnet-node-2.hoosat.org",
 		"mainnet-node-3.hoosat.org",
 		"mainnet-node-4.hoosat.org",
-		// These DNS seeders are ran by Evern00b
-		"hoosat.seed-fi.evern00b.com",
-		"hoosat.seed-de.evern00b.com",
-		"hoosat.seed-in.evern00b.com",
-		// Seeder run by Foztor in the UK
-		"htn-mainnet-seed.htn.foztor.net",
 	},
 
 	// DAG parameters
@@ -394,15 +385,7 @@ var MainnetParams = Params{
 	// template generation regardless of that (RepairBlockStatuses leaving a UTXO-valid virtual parent
 	// with no stored multiset) is fixed by RepairMissingMultisets, see consensus.go.
 	POWScores: []uint64{
-		17500000,
-		21821800,
-		29335426,
-		43334184,
-		192792190,
-		213340776,
-		217137983,
-		218735007,
-		227679830,
+		1, 1, 1, 1, 1, 1, 1, 1, 1,
 	},
 
 	PruningMultiplier: []uint64{

@@ -162,12 +162,7 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 		err = csm.transactionValidator.ValidateTransactionInContextAndPopulateFee(
 			stagingArea, transaction, newPruningPoint, newPruningPointBlock.Header.DAAScore())
 		if err != nil {
-			if !errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
-				return err
-			}
-			csm.logToleratedIssue("imported-pruning-point-missing-input", newPruningPoint,
-				errors.Wrapf(err, "transaction %s skipped", transactionID))
-			continue
+			return err
 		}
 		log.Tracef("Validation against the pruning point's past UTXO "+
 			"passed for transaction %s", transactionID)
@@ -226,10 +221,7 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 ) (resolvedMultiset model.Multiset, matchesHeader bool, err error) {
 	header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
 	if err != nil {
-		// Without the header there is nothing to check against; proceed with whatever the peer supplied.
-		log.Warnf("Could not fetch pruning point %s header to validate the imported UTXO set (%s) - "+
-			"proceeding with the accumulated multiset", newPruningPoint, err)
-		return accumulatedMultiset, false, nil
+		return nil, false, errors.Wrapf(err, "pruning point %s header is required to check the imported UTXO set", newPruningPoint)
 	}
 	expectedCommitment := header.UTXOCommitment()
 
@@ -314,19 +306,11 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 			newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash(), refusalReason)
 	}
 
-	// The record that every later chain-replay record has to be read against: if the set this node
-	// starts from does not hash to what the pruning point's header commits to, every block resolved
-	// forward inherits that exact offset, and its own commitment mismatch is a symptom rather than a
-	// cause.
-	csm.recordPruningPointImportSurvey(stagingArea, newPruningPoint, recomputedMultiset,
-		"imported-multiset-mismatch",
-		fmt.Sprintf("neither the accumulated multiset (%s) nor a fresh multiset over the %d deduplicated "+
-			"stored entries (%s) matches the pruning point's header commitment; the served UTXO set is "+
-			"incomplete, so every block resolved forward from here inherits this offset",
-			accumulatedMultiset.Hash(), entryCount, recomputedMultiset.Hash()),
-		nil, nil)
-
-	return recomputedMultiset, false, nil
+	return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		"imported pruning point %s UTXO set does not match its own header commitment (header %s, "+
+			"fresh multiset over %d stored entries %s); sync stops and another peer must supply a set "+
+			"that reproduces the commitment",
+		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 }
 
 // refuseMismatchedImportIsActive reports whether newPruningPoint is at or past

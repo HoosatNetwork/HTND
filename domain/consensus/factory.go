@@ -76,6 +76,7 @@ type Config struct {
 	IsArchival bool
 	// EnableSanityCheckPruningUTXOSet checks the full pruning point utxo set against the commitment at every pruning movement
 	EnableSanityCheckPruningUTXOSet bool
+	RefuseMismatchedImportedPruningPointUTXOSet bool
 	// EnableUTXODebugDiagnostics runs the expensive [UTXO-DEBUG] startup self-consistency checks
 	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) - each pass can take
 	// 15-20+ minutes on a mature chain. Off by default; only for actively investigating a UTXO
@@ -96,10 +97,6 @@ type Config struct {
 	// of these blocks. A recovery step to ask for, like RepairBlockStatuses, not something to run on
 	// every boot.
 	RepairMissingMultisets bool
-	// EnableAutoExodusExportOnPruning exports an acceptance-data Exodus bundle after a pruning point moves.
-	// AutoExodusExportDir is the parent directory for those best-effort diagnostic bundles.
-	EnableAutoExodusExportOnPruning bool
-	AutoExodusExportDir             string
 
 	SkipAddingGenesis bool
 
@@ -383,19 +380,13 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		mergeDepthRootStore,
 		windowHeapSliceStore,
 		5000,
-		config.EnableSanityCheckPruningUTXOSet,
+		config.RefuseMismatchedImportedPruningPointUTXOSet,
 		config.POWScores)
 	if err != nil {
 		return nil, false, err
 	}
 
 	var c *consensus
-	var autoExodusExport func(*externalapi.DomainHash)
-	if config.EnableAutoExodusExportOnPruning {
-		autoExodusExport = func(pruningPoint *externalapi.DomainHash) {
-			go c.exportPruningPointExodusBundle(pruningPoint, config.AutoExodusExportDir, config.Name)
-		}
-	}
 
 	pruningManager := pruningmanager.New(
 		dbManager,
@@ -427,7 +418,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.DataRetentionDuration,
 		config.PruningInterval,
 		config.EnableSanityCheckPruningUTXOSet,
-		autoExodusExport,
+		nil,
 		config.K,
 		config.DifficultyAdjustmentWindowSize,
 		config.TargetTimePerBlock,

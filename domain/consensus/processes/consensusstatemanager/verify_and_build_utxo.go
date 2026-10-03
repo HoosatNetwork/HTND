@@ -38,7 +38,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// RuleError from these checks is downgraded to a logged issue so virtual resolution can advance.
 	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
-	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	tolerate := false
 
 	// HTN-002/HTN-004, gated at hardforks.StrictUTXOCommitmentVersion: from that block version
 	// onward the toleration above stops applying, and these four checks fail closed as they were
@@ -473,37 +473,10 @@ func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.S
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) bool {
-	if csm.pruningPointBaselineIsOffset(stagingArea) {
-		return true
-	}
-
-	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
-	if err != nil {
-		return false
-	}
-	selectedParent := ghostdagData.SelectedParent()
-	if selectedParent == nil || selectedParent.Equal(csm.genesisHash) ||
-		selectedParent.Equal(model.VirtualGenesisBlockHash) {
-		return false
-	}
-
-	if pruningPoint := csm.currentPruningPoint(stagingArea); pruningPoint != nil && selectedParent.Equal(pruningPoint) {
-		return true
-	}
-
-	selectedParentMultiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParent)
-	if err != nil {
-		return false
-	}
-	selectedParentHeader, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, selectedParent)
-	if err != nil {
-		return false
-	}
-	return !selectedParentMultiset.Hash().Equal(selectedParentHeader.UTXOCommitment())
+	return false
 }
 
-// currentPruningPoint returns the node's current pruning point, or nil if there isn't one readable
-// yet (still on genesis, or the store lookup failed). Shared by every signal above that needs it.
+
 func (csm *consensusStateManager) currentPruningPoint(stagingArea *model.StagingArea) *externalapi.DomainHash {
 	hasPruningPoint, err := csm.pruningStore.HasPruningPoint(csm.databaseContext, stagingArea)
 	if err != nil || !hasPruningPoint {

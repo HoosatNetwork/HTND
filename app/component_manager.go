@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/utxobaseline"
 	"github.com/HoosatNetwork/HTND/v2/app/rpc"
 	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
@@ -176,15 +177,14 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		DataRetentionDuration:             dataRetentionDuration,
 		PruningInterval:                   pruningInterval,
 		EnableSanityCheckPruningUTXOSet:   cfg.EnableSanityCheckPruningUTXOSet,
+		RefuseMismatchedImportedPruningPointUTXOSet: !cfg.AllowMismatchedPruningUTXO,
 		EnableUTXODebugDiagnostics:        cfg.EnableUTXODebugDiagnostics,
 		RepairBlockStatuses:               cfg.RepairBlockStatuses,
 		RepairMissingMultisets:            cfg.RepairMissingMultisets,
-		EnableAutoExodusExportOnPruning:   cfg.EnableAutoExodusExportOnPruning,
-		AutoExodusExportDir:               cfg.AutoExodusExportDir,
 		UseHoohashCLibrary:                cfg.UseHoohashCLibrary,
 		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
 		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
-		OnDisqualifiedBlockStreak:         stopNodeOnDisqualifiedBlockStreak,
+		OnDisqualifiedBlockStreak:         recoverFromDisqualifiedBlockStreak,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
@@ -214,6 +214,8 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	if err != nil {
 		return nil, err
 	}
+	bindDisqualifiedStreakRecovery(domain, cfg.ShutdownOnDisqualifiedStreak)
+	utxobaseline.Refresh(domain)
 
 	netAdapter, err := netadapter.NewNetAdapter(cfg)
 	if err != nil {

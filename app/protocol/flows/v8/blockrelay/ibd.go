@@ -230,17 +230,12 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 		// 	}
 		// }
 
-		if flow.Config().NetParams().DisallowDirectBlocksOnTopOfGenesis && !flow.Config().AllowSubmitBlockWhenNotSynced {
-			isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
-			if err != nil {
-				return err
-			}
-
-			if isGenesisVirtualSelectedParent {
-				log.Infof("Cannot IBD to %s because it won't change the pruning point. The node needs to IBD "+
-					"to the recent pruning point before normal operation can resume.", relayBlockHash)
-				return nil
-			}
+		isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
+		if err != nil {
+			return err
+		}
+		if isGenesisVirtualSelectedParent {
+			log.Infof("Virtual selected parent is genesis; continuing header/body catch-up to %s", relayBlockHash)
 		}
 
 		err = flow.syncPruningPointFutureHeaders(
@@ -1310,4 +1305,32 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 	}
 	flow.peer.Connection().Disconnect()
 	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
+}
+
+
+func (flow *handleIBDFlow) localFloorIsGenesis() bool {
+	pp, err := flow.Domain().Consensus().PruningPoint()
+	if err != nil || pp == nil {
+		return true
+	}
+	if flow.Config() != nil && flow.Config().ActiveNetParams != nil &&
+		pp.Equal(flow.Config().ActiveNetParams.GenesisHash) {
+		return true
+	}
+	return false
+}
+
+func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
+	// An empty node must keep retrying the coin set. Forbidding the only
+	// --connect peer after UnexpectedPruningPoint left fresh IBD dead.
+	if flow.peer.IBDCoinSetForbidden() && !flow.localFloorIsGenesis() {
+		return false
+	}
+	if flow.Config().AllowIBDFromUnverifiedPeer {
+		return true
+	}
+	if flow.peer.UTXOBaselineAdvertised() == "ok" {
+		return true
+	}
+	return flow.localFloorIsGenesis()
 }
