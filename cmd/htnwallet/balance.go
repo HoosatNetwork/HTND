@@ -29,7 +29,7 @@ func balance(conf *balanceConfig) error {
 	}
 	if conf.Verbose {
 		pendingSuffix = ""
-		println("Address                                                                       Available              Pending")
+		println("Address                                                                        Available             Pending")
 		println("------------------------------------------------------------------------------------------------------------")
 		for _, addressBalance := range response.AddressBalances {
 			fmt.Printf("%s %s %s\n", addressBalance.Address, utils.FomatHSAT(addressBalance.Available), utils.FomatHSAT(addressBalance.Pending))
