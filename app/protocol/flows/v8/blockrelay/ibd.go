@@ -1307,7 +1307,6 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
 }
 
-
 func (flow *handleIBDFlow) localFloorIsGenesis() bool {
 	pp, err := flow.Domain().Consensus().PruningPoint()
 	if err != nil || pp == nil {

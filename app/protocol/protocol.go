@@ -81,8 +81,8 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 			flows = v8.Register(m, netConnection, router, errChan, &isStopping)
 		default:
 			err = protocolerrors.Errorf(false, "peer protocol version %d is not accepted", peer.ProtocolVersion())
-		m.handleError(err, netConnection, router.OutgoingRoute())
-		return
+			m.handleError(err, netConnection, router.OutgoingRoute())
+			return
 		}
 		log.Debugf("Registered p2p flows for peer %s.", peer)
 

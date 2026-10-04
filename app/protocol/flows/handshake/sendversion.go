@@ -5,8 +5,8 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
-	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/utxobaseline"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/pkg/errors"

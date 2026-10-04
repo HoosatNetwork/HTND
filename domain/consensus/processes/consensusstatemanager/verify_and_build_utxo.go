@@ -476,7 +476,6 @@ func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(staging
 	return false
 }
 
-
 func (csm *consensusStateManager) currentPruningPoint(stagingArea *model.StagingArea) *externalapi.DomainHash {
 	hasPruningPoint, err := csm.pruningStore.HasPruningPoint(csm.databaseContext, stagingArea)
 	if err != nil || !hasPruningPoint {

@@ -171,20 +171,20 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	warnAboutPersistentRepairFlags(cfg)
 
 	consensusConfig := consensus.Config{
-		Params:                            *cfg.ActiveNetParams,
-		IsArchival:                        cfg.IsArchivalNode,
-		DeletionDepth:                     cfg.DeletionDepth,
-		DataRetentionDuration:             dataRetentionDuration,
-		PruningInterval:                   pruningInterval,
-		EnableSanityCheckPruningUTXOSet:   cfg.EnableSanityCheckPruningUTXOSet,
+		Params:                          *cfg.ActiveNetParams,
+		IsArchival:                      cfg.IsArchivalNode,
+		DeletionDepth:                   cfg.DeletionDepth,
+		DataRetentionDuration:           dataRetentionDuration,
+		PruningInterval:                 pruningInterval,
+		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
 		RefuseMismatchedImportedPruningPointUTXOSet: !cfg.AllowMismatchedPruningUTXO,
-		EnableUTXODebugDiagnostics:        cfg.EnableUTXODebugDiagnostics,
-		RepairBlockStatuses:               cfg.RepairBlockStatuses,
-		RepairMissingMultisets:            cfg.RepairMissingMultisets,
-		UseHoohashCLibrary:                cfg.UseHoohashCLibrary,
-		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
-		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
-		OnDisqualifiedBlockStreak:         recoverFromDisqualifiedBlockStreak,
+		EnableUTXODebugDiagnostics:                  cfg.EnableUTXODebugDiagnostics,
+		RepairBlockStatuses:                         cfg.RepairBlockStatuses,
+		RepairMissingMultisets:                      cfg.RepairMissingMultisets,
+		UseHoohashCLibrary:                          cfg.UseHoohashCLibrary,
+		PastMedianTimeValidationTolerance:           cfg.PastMedianTimeValidationTolerance,
+		MaxConsecutiveDisqualifiedBlocks:            maxConsecutiveDisqualifiedBlocks,
+		OnDisqualifiedBlockStreak:                   recoverFromDisqualifiedBlockStreak,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
