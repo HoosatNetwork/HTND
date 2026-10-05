@@ -941,7 +941,11 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 	for len(queue) > 0 {
 		header := queue[0]
 		queue = queue[1:]
-		for _, parent := range header.DirectParents() {
+		var parents []*externalapi.DomainHash
+		for _, level := range header.Parents() {
+			parents = append(parents, level...)
+		}
+		for _, parent := range parents {
 			if parent.Equal(cp.Hash) {
 				return true, nil
 			}
