@@ -90,7 +90,7 @@ func (flow *receiveVersionFlow) start() (*appmessage.NetAddress, error) {
 		return nil, err
 	}
 	if constants.BlockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, virtualDAAScore) >=
-		protocolVersionHardForkBlockVersion {
+		protocolVersionHardFork11BlockVersion {
 		minVersion = maxAcceptableProtocolVersion
 	}
 	if msgVersion.ProtocolVersion < minVersion {
