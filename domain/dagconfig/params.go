@@ -191,16 +191,11 @@ type Params struct {
 
 	POWScores []uint64
 	 
-	// PruningPointAnchor is a checkpoint: an imported pruning point list must contain it, and the list
-	// is checked back to it and no further. nil disables the check, falling back to the newest-end
-	// check. Setting it is a hard fork decision: it is trusted, not derived.
-	// Foztor 5 October 27
-	PruningPointAnchor *externalapi.DomainHash
-
-	// PruningPointAnchorBlueScore is the blue score of PruningPointAnchor, used to reject a pruning
-	// point that is older than the checkpoint.
-	// Foztor 5 October 27
-	PruningPointAnchorBlueScore uint64
+	// PruningPointCheckpoint is a permanent, release-pinned stamp: a block, with its blue score, DAA score
+	// and UTXO commitment, that every pruning point imported by IBD must be at or descended from. nil
+	// disables the check. It is trusted, not derived; once shipped it must never be moved or removed.
+	// Foztor - validated as present on mainnet 5 October 27 and x referened to var|HTN
+	PruningPointCheckpoint *Checkpoint
 
 	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
 	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
@@ -353,13 +348,32 @@ var mainnetHardForkGates = HardForkGates{
 }
 
 // Foztor October 2027.   Something to anchor onto in the absence of a sensible way to walk back to genesis
-var mainnetPruningPointAnchor = func() *externalapi.DomainHash {
-	hash, err := externalapi.NewDomainHashFromString("27c1163f701f881ed90560e63031156c29d99100acc40ad019e0fadc61fb43b5")
-	if err != nil {
-		panic(err)
-	}
-	return hash
-}()
+// Checkpoint pins one block of a network's history.
+type Checkpoint struct {
+	Hash           *externalapi.DomainHash
+	BlueScore      uint64
+	DAAScore       uint64
+	UTXOCommitment *externalapi.DomainHash
+}
+
+func mustHash(hashString string) *externalapi.DomainHash {
+	hash, err := externalapi.NewDomainHashFromString(hashString)
+ 	if err != nil {
+ 		panic(err)
+ 	}
+ 	return hash
+}
+
+// mainnetPruningPointCheckpoint is the stamp agreed by the node operators: a block on the mainnet selected
+// chain that was a pruning point. It stands in for genesis, which the pruning point list cannot be walked back to.
+// Setting all historical blocks to ver 10 is not an appropraite way to fake a walk back to genesis
+
+var mainnetPruningPointCheckpoint = &Checkpoint{
+	Hash:           mustHash("27c1163f701f881ed90560e63031156c29d99100acc40ad019e0fadc61fb43b5"),
+	BlueScore:      221022005,
+	DAAScore:       233742961,
+	UTXOCommitment: mustHash("f5072e6ddf17067bb05a5a99ee095fac922d285c0d0318f42275989b55b9ffff"),
+}
 
 // testnetHardForkGates schedules the gated rules on testnet and the other test networks. It may run
 // ahead of mainnetHardForkGates to exercise a rule before it is scheduled on mainnet.
@@ -624,8 +638,8 @@ var MainnetParams = Params{
 		245320163,
 		^uint64(0),
 	},
-	PruningPointAnchor:          mainnetPruningPointAnchor,
-	PruningPointAnchorBlueScore: 221022005,
+	PruningPointCheckpoint: mainnetPruningPointCheckpoint,
+
 
 	PruningMultiplier: []uint64{
 		0,

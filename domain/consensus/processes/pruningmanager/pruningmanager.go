@@ -50,10 +50,9 @@ type pruningManager struct {
 	genesisHash    *externalapi.DomainHash
 	powScores      []uint64
 	hardForkGates  *dagconfig.HardForkGates
+	pruningPointCheckpoint      *dagconfig.Checkpoint
 	// finalityDepthForBlockVersion and pruningDepthForBlockVersion are evaluated with the chain's current block
 	// version on every use (see currentDepths), never cached.
-	pruningPointAnchor          *externalapi.DomainHash
-	pruningPointAnchorBlueScore uint64
 	finalityDepthForBlockVersion    func(blockVersion uint16) uint64
 	pruningDepthForBlockVersion     func(blockVersion uint16) uint64
 	deletionDepth                   uint64
@@ -98,8 +97,7 @@ func New(
 	genesisHash *externalapi.DomainHash,
 	powScores []uint64,
 	hardForkGates *dagconfig.HardForkGates,
-	pruningPointAnchor *externalapi.DomainHash,
-	pruningPointAnchorBlueScore uint64,
+	pruningPointCheckpoint *dagconfig.Checkpoint,
 	finalityDepthForBlockVersion func(blockVersion uint16) uint64,
 	pruningDepthForBlockVersion func(blockVersion uint16) uint64,
 	deletionDepth uint64,
@@ -136,8 +134,7 @@ func New(
 		genesisHash:                     genesisHash,
 		powScores:                       powScores,
 		hardForkGates:                   hardForkGates,
-		pruningPointAnchor:              pruningPointAnchor,
-		pruningPointAnchorBlueScore:     pruningPointAnchorBlueScore,
+		pruningPointCheckpoint:          pruningPointCheckpoint,
 		finalityDepthForBlockVersion:    finalityDepthForBlockVersion,
 		pruningDepthForBlockVersion:     pruningDepthForBlockVersion,
 		deletionDepth:                   deletionDepth,
@@ -837,8 +834,8 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 		return false, err
 	}
 	// Foztor - check our version 11 anchor/checkpoint is present.... 5 October 26
-	if pm.pruningPointAnchor != nil {
-		return pm.pruningPointListReachesAnchor(stagingArea, pruningPoint, pruningPointHeader, currentIndex)
+	if ok, err := pm.pruningPointMeetsCheckpoint(stagingArea, pruningPoint, pruningPointHeader); err != nil || !ok {
+		return false, err
 	}
 	pruningPointVersion, err := pm.pruningPointBlockVersion(stagingArea, pruningPoint, pruningPointHeader)
 	if err != nil {
@@ -880,92 +877,75 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 	return false, nil
 }
 
-// pruningPointListReachesAnchor replays the newest-end rule on every stored pruning point from the
-// current one down to pm.pruningPointAnchor, and requires the anchor to be among them. Nothing below
-// the anchor is read.
-func (pm *pruningManager) pruningPointListReachesAnchor(stagingArea *model.StagingArea,
-	current *externalapi.DomainHash, currentHeader externalapi.BlockHeader, currentIndex uint64,
+// pruningPointMeetsCheckpoint enforces pm.pruningPointCheckpoint on an imported pruning point. The pruning
+// point must not be older than the checkpoint, and if the checkpoint header is held it must carry the pinned
+// scores and UTXO commitment. Above the checkpoint the pruning point must be a descendant of the checkpoint
+// block. That last check needs the checkpoint header and both reachability entries, which a joiner holds only
+// while its headers reach back that far; when they do not, the check cannot run and is skipped with a warning.
+func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
-	if current.Equal(pm.pruningPointAnchor) {
+	cp := pm.pruningPointCheckpoint
+	if cp == nil {
 		return true, nil
 	}
-	if currentHeader.BlueScore() < pm.pruningPointAnchorBlueScore {
-		log.Warnf("ArePruningPointsInValidChain: pruning point %s has blue score %d, below the anchor's %d",
-			current, currentHeader.BlueScore(), pm.pruningPointAnchorBlueScore)
+	if pruningPointHeader.BlueScore() < cp.BlueScore {
+		log.Warnf("ArePruningPointsInValidChain: pruning point %s has blue score %d, below the checkpoint %s at %d",
+			pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
 		return false, nil
 	}
 
-	index := currentIndex
-	header := currentHeader
-	for {
-		version, err := pm.pruningPointBlockVersion(stagingArea, current, header)
-		if err != nil {
-			return false, err
-		}
-		previous := header.PruningPoint()
-		window := pm.pruningPointCommitmentWindow(version)
-		lowest := uint64(0)
-		if index > window {
-			lowest = index - window
-		}
-
-		// Find the stored entry the header commits to, within the window below this index.
-		foundIndex, found := uint64(0), false
-		for i := index; i > lowest; i-- {
-			stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, i-1)
-			if err != nil {
-				return false, err
-			}
-			if stored.Equal(previous) {
-				foundIndex, found = i-1, true
-				break
-			}
-		}
-		if !found {
-			log.Warnf("ArePruningPointsInValidChain: %s commits to %s, which is not stored within %d "+
-				"entries below index %d", current, previous, window, index)
-			return false, nil
-		}
-
-		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previous)
-		if err != nil {
-			return false, err
-		}
-		if previousHeader.BlueScore() >= header.BlueScore() {
-			log.Warnf("ArePruningPointsInValidChain: %s has blue score %d, not below %d", previous,
-				previousHeader.BlueScore(), header.BlueScore())
-			return false, nil
-		}
-
-		if previous.Equal(pm.pruningPointAnchor) {
-			return true, nil
-		}
-
-		/*
-		 * Anchors ages out.. hmm... howto re-create genesis without re-creating it...
-		 *
-	        if previousHeader.BlueScore() < pm.pruningPointAnchorBlueScore {
-			// A header's commitment can skip a stored pruning point, so the anchor may be in the list
-			// without being on the commitment path. Look for it by index.
-			for i := foundIndex; ; i-- {
-				stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, i)
-				if err != nil {
-					return false, err
-				}
-				if stored.Equal(pm.pruningPointAnchor) {
-					return true, nil
-				}
-				if i == 0 {
-					break
-				}
-			}
-			log.Warnf("ArePruningPointsInValidChain: the list passes the anchor without containing it")
-			return false, nil
-		} 
-		*/
-		current, header, index = previous, previousHeader, foundIndex
+	hasCheckpoint, err := pm.blockHeaderStore.HasBlockHeader(pm.databaseContext, stagingArea, cp.Hash)
+	if err != nil {
+		return false, err
 	}
+	if !hasCheckpoint {
+		if pruningPoint.Equal(cp.Hash) {
+			return false, errors.Errorf("checkpoint %s is the pruning point but its header is missing", cp.Hash)
+		}
+		log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not among the headers, so it cannot be checked",
+			cp.Hash)
+		return true, nil
+	}
+	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, cp.Hash)
+	if err != nil {
+		return false, err
+	}
+	if header.BlueScore() != cp.BlueScore || header.DAAScore() != cp.DAAScore ||
+		!header.UTXOCommitment().Equal(cp.UTXOCommitment) {
+		log.Warnf("ArePruningPointsInValidChain: the header stored as checkpoint %s does not carry the pinned "+
+			"blue score %d, DAA score %d and UTXO commitment %s", cp.Hash, cp.BlueScore, cp.DAAScore, cp.UTXOCommitment)
+		return false, nil
+	}
+	if pruningPoint.Equal(cp.Hash) {
+		return true, nil
+	}
+
+	hasPruningPointReachability, err := pm.reachabilityDataStore.HasReachabilityData(pm.databaseContext, stagingArea, pruningPoint)
+	if err != nil {
+		return false, err
+	}
+	hasCheckpointReachability, err := pm.reachabilityDataStore.HasReachabilityData(pm.databaseContext, stagingArea, cp.Hash)
+	if err != nil {
+		return false, err
+	}
+	if !hasPruningPointReachability || !hasCheckpointReachability {
+		log.Warnf("ArePruningPointsInValidChain: no reachability data for the checkpoint %s or pruning point %s, "+
+			"so the checkpoint cannot be checked", cp.Hash, pruningPoint)
+		return true, nil
+	}
+	isAncestor, err := pm.dagTopologyManager.IsAncestorOf(stagingArea, cp.Hash, pruningPoint)
+	if err != nil {
+		return false, err
+	}
+	if !isAncestor {
+		log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the past of pruning point %s",
+			cp.Hash, pruningPoint)
+		return false, nil
+	}
+	return true, nil
 }
+
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
 // the headers selected tip down to, not including, pruningPoint commit to, newest first. Commitments to blocks on that
