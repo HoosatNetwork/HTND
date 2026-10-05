@@ -323,7 +323,7 @@ const unscheduledHardForkGate = ^uint16(0)
 // it needs a coordinated activation with enough lead time for every node operator and miner.
 var mainnetHardForkGates = HardForkGates{
 	StrictUTXOCommitmentVersion:    10,
-	StrictMinersViewFieldsVersion:  11,
+	StrictMinersViewFieldsVersion:  10,
 	StrictCoinbaseVersion:          10,
 	RefuseMismatchedImportVersion:  10,
 	ValidateHeaderBitsVersion:      10,
@@ -349,7 +349,7 @@ var mainnetHardForkGates = HardForkGates{
 // it no earlier than HeaderPruningPointVersion.
 var testnetHardForkGates = HardForkGates{
 	StrictUTXOCommitmentVersion:    10,
-	StrictMinersViewFieldsVersion:  12,
+	StrictMinersViewFieldsVersion:  10,
 	StrictCoinbaseVersion:          10,
 	RefuseMismatchedImportVersion:  12,
 	ValidateHeaderBitsVersion:      12,
