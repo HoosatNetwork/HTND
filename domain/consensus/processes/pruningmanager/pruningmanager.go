@@ -936,13 +936,33 @@ func (pm *pruningManager) pruningPointListReachesAnchor(stagingArea *model.Stagi
 				previousHeader.BlueScore(), header.BlueScore())
 			return false, nil
 		}
+
 		if previous.Equal(pm.pruningPointAnchor) {
 			return true, nil
 		}
-		if previousHeader.BlueScore() < pm.pruningPointAnchorBlueScore {
+
+		/*
+		 * Anchors ages out.. hmm... howto re-create genesis without re-creating it...
+		 *
+	        if previousHeader.BlueScore() < pm.pruningPointAnchorBlueScore {
+			// A header's commitment can skip a stored pruning point, so the anchor may be in the list
+			// without being on the commitment path. Look for it by index.
+			for i := foundIndex; ; i-- {
+				stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, i)
+				if err != nil {
+					return false, err
+				}
+				if stored.Equal(pm.pruningPointAnchor) {
+					return true, nil
+				}
+				if i == 0 {
+					break
+				}
+			}
 			log.Warnf("ArePruningPointsInValidChain: the list passes the anchor without containing it")
 			return false, nil
-		}
+		} 
+		*/
 		current, header, index = previous, previousHeader, foundIndex
 	}
 }
