@@ -330,7 +330,7 @@ var mainnetHardForkGates = HardForkGates{
 	ValidateIBDPruningPointVersion: 10,
 	ValidateIBDPruningListVersion:  10,
 	OffsetModeValueChecksVersion:   10,
-	MLDSA44SignaturesBlockVersion:  11,
+	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point.  Foztor. 5/Oct/27
 
 	ParentsIncestVersion:      10,
 	MergeSetSizeLimitVersion:  10,
@@ -356,7 +356,7 @@ var testnetHardForkGates = HardForkGates{
 	ValidateIBDPruningPointVersion: 12,
 	ValidateIBDPruningListVersion:  unscheduledHardForkGate,
 	OffsetModeValueChecksVersion:   10,
-	MLDSA44SignaturesBlockVersion:  11,
+	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point. Foztor 5/Oct/27
 
 	ParentsIncestVersion:      10,
 	MergeSetSizeLimitVersion:  10,

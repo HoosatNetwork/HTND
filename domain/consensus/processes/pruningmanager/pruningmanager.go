@@ -633,10 +633,11 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 func (pm *pruningManager) validatePruningPointBeforeStaging(stagingArea *model.StagingArea,
 	pruningPointHash *externalapi.DomainHash,
 ) error {
-	refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPointHash)
-	if err != nil || !refuseMismatch {
-		return err
-	}
+	// Foztor 5th Oct 27 - We don't tolerate this stuff no more
+	// refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPointHash)
+	// if err != nil || !refuseMismatch {
+		// return err
+	// }
 	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
 	if err != nil {
 		return err
@@ -1006,23 +1007,7 @@ func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.Stagi
 	return utxoSetHash, stats, nil
 }
 
-func refuseMismatchedPruningPointForVersion(gates dagconfig.HardForkGates, blockVersion uint16) bool {
-	return dagconfig.HardForkActive(gates.RefuseMismatchedImportVersion, blockVersion)
-}
 
-func (pm *pruningManager) refuseMismatchedPruningPoint(stagingArea *model.StagingArea,
-	pruningPointHash *externalapi.DomainHash,
-) (bool, error) {
-	if len(pm.powScores) == 0 {
-		return false, nil
-	}
-	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
-	if err != nil {
-		return false, err
-	}
-	blockVersion := constants.BlockVersionForDAAScore(pm.powScores, header.DAAScore())
-	return refuseMismatchedPruningPointForVersion(*pm.hardForkGates, blockVersion), nil
-}
 
 // This function takes 2 points (currentPruningHash, previousPruningHash) and traverses the UTXO diff children DAG
 // until it finds a common descendant, at the worse case this descendant will be the current SelectedTip.
@@ -2361,18 +2346,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
 					methodUsed, utxoSetDiff)
 			}
-			refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPoint)
-			if err != nil {
-				return err
-			}
-			if pm.shouldSanityCheckPruningUTXOSet || refuseMismatch {
 				return validationErr
-			}
-			log.Warnf("Pruning point %s: the UTXO set this node now serves does NOT match the chain's "+
-				"commitment for it. Every peer that syncs from this node inherits this set, gap included. "+
-				"Continuing because no node currently holds a matching set; run with "+
-				"--enable-sanity-check-pruning-utxo to refuse the advancement instead. Details: %s",
-				pruningPoint, validationErr)
 		} else {
 			log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
 				pruningPoint)

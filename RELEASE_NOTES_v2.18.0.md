@@ -8,7 +8,8 @@ Release date:  TBD
   - A block's coinbase must match exactly the amounts this node computes. v2.17.4 tolerated small differences.
   - A pruning point imported during IBD, and its UTXO set, are checked against the headers.
 - **Mining pools must run this build before mining on it.** Blocks from an older build that break the new header or coinbase rules are rejected.
-- **ML-DSA-44 post-quantum signatures** are in consensus, the mempool and htnwallet. They are live on testnet. On mainnet they are dormant until block version 11 gets an activation DAA score, which is not set in this release.
+- **Block Version 11** activates at DAAScore 245320163  
+- **ML-DSA-44 post-quantum signatures** are in consensus, the mempool and htnwallet. They are are dormant until block version 15 (placeholder) gets an activation DAA score, which is not set in this release.
 - **The node no longer stops after a streak of disqualified blocks.** It repairs the disqualified tip chains and resolves virtual again, with peers still connected.
 - **Payments carried by a disqualified block are no longer lost.** Their transactions stay in, or return to, the mempool.
 - **Much faster under load.** Block and header reads and RPC transaction submissions no longer wait on the consensus lock. IBD body download is pipelined. Virtual resolution over full blocks and ML-DSA traffic is many times faster. Pebble files are capped at 256 MB so bloom filters stay cached.

@@ -926,9 +926,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	// shrinks. GetInfo already advertises the same fact through UTXOSetHealth, so a peer can see it
 	// before asking; this is what stops the answer being given anyway.
 	//
-	// The gate is block version 11, which no network reaches yet, so this is inert today, and it must
-	// stay that way until a coordinated rebaseline: essentially every node currently serves a set
-	// that fails this check, so refusing now would simply stop IBD working for everyone.
+	// Unconditional: a node whose own set does not hash to the pruning point's commitment refuses to serve it.
 	if err := s.refuseToServeUnverifiableUTXOSet(stagingArea, pruningPointHash); err != nil {
 		return nil, err
 	}
@@ -953,18 +951,6 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 func (s *consensus) refuseToServeUnverifiableUTXOSet(stagingArea *model.StagingArea,
 	pruningPointHash *externalapi.DomainHash,
 ) error {
-	if len(s.powScores) == 0 {
-		return nil
-	}
-
-	header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, pruningPointHash)
-	if err != nil {
-		return err
-	}
-	blockVersion := constants.BlockVersionForDAAScore(s.powScores, header.DAAScore())
-	if !dagconfig.HardForkActive(s.hardForkGates.RefuseMismatchedImportVersion, blockVersion) {
-		return nil
-	}
 
 	health := s.consensusStateManager.UTXOSetHealth(stagingArea)
 	if health == nil || !health.Checked || health.BaselineVerified {
