@@ -938,6 +938,7 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 	for {
 		previous := currentHeader.PruningPoint()
 		if previous.Equal(cp.Hash) {
+			log.Infof("ArePruningPointsInValidChain: the checkpoint %s is in the pruning-point chain of %s.  Hurrah, we are not following some split chain ", cp.Hash, pruningPoint);
 			return true, nil
 		}
 		if previous.Equal(pm.genesisHash) {
@@ -958,8 +959,8 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 		if previousHeader.BlueScore() < cp.BlueScore {
 			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the pruning-point chain "+
 				"of pruning point %s", cp.Hash, pruningPoint)
-			// return false, nil
-			return true, nil
+			return false, nil
+			// return true, nil // Only when debugging
 		}
 		currentHeader = previousHeader
 	}
