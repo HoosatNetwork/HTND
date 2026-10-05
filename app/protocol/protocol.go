@@ -113,7 +113,7 @@ func registerFlowsForProtocol(m *Manager, netConnection *netadapter.NetConnectio
 	errChan chan error, isStopping *uint32, protocolVersion uint32,
 ) ([]*common.Flow, error) {
 	switch protocolVersion {
-	case 8:
+	case 8, 11: // Foztor 5th Oct 2027 - really they are the same thing, just a HF enforcement
 		return v8.Register(m, netConnection, router, errChan, isStopping), nil
 	default:
 		return nil, protocolerrors.Errorf(false, "peer protocol version %d is not accepted", protocolVersion)

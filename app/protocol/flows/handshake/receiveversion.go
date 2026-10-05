@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
@@ -22,8 +23,11 @@ var (
 	// connected peer may support.
 	minAcceptableProtocolVersion = uint32(8)
 
-	maxAcceptableProtocolVersion = uint32(8)
+	maxAcceptableProtocolVersion = uint32(11)
 )
+
+const protocolVersionHardFork11BlockVersion = uint16(11)
+
 
 type receiveVersionFlow struct {
 	HandleHandshakeContext
@@ -80,9 +84,17 @@ func (flow *receiveVersionFlow) start() (*appmessage.NetAddress, error) {
 	// NOTE: If minAcceptableProtocolVersion is raised to be higher than
 	// appmessage.RejectVersion, this should send a reject packet before
 	// disconnecting.
-	if msgVersion.ProtocolVersion < minAcceptableProtocolVersion {
-		return nil, protocolerrors.Errorf(false, "protocol version must be %d or greater",
-			minAcceptableProtocolVersion)
+	minVersion := minAcceptableProtocolVersion
+	virtualDAAScore, err := flow.Domain().Consensus().GetVirtualDAAScore()
+	if err != nil {
+		return nil, err
+	}
+	if constants.BlockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, virtualDAAScore) >=
+		protocolVersionHardForkBlockVersion {
+		minVersion = maxAcceptableProtocolVersion
+	}
+	if msgVersion.ProtocolVersion < minVersion {
+		return nil, protocolerrors.Errorf(false, "protocol version must be %d or greater", minVersion)
 	}
 
 	err = validatePeerVersion(flow.Config().ForceSameVersion, msgVersion.UserAgent)
