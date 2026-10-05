@@ -3,7 +3,8 @@
 Release date:  TBD
 
 ## TL;DR
-- **Update your node. This release is a mainnet hard fork that takes effect as soon as you upgrade.** Its new rules activate at block version 10, which mainnet already runs. Nodes on v2.17.4 or older will keep following blocks this build rejects.
+- **Update your node. This release is a mainnet hard fork that takes effect as soon as you upgrade.** Its new rules activate at block version 11.
+  - Nodes that do not upgrade will leave mainnet as block version 11 activates.
   - Block headers are validated in full. A header's DAA score, blue work, blue score, pruning point, indirect parents and difficulty bits must match what this node computes. Parent and merge set structure is checked as well.
   - A block's coinbase must match exactly the amounts this node computes. v2.17.4 tolerated small differences.
   - A pruning point imported during IBD, and its UTXO set, are checked against the headers.
