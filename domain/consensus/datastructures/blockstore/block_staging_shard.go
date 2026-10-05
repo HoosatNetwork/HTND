@@ -3,6 +3,7 @@ package blockstore
 import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 type blockStagingShard struct {
@@ -23,15 +24,17 @@ func (bs *blockStore) stagingShard(stagingArea *model.StagingArea) *blockStaging
 
 func (bss *blockStagingShard) Commit(dbTx model.DBTransaction) error {
 	for hash, block := range bss.toAdd {
-		blockBytes, err := bss.store.serializeBlock(block)
+		buffer, err := bss.store.serializeBlockOffHeap(block)
 		if err != nil {
 			return err
 		}
-		err = dbTx.Put(bss.store.hashAsKey(&hash), blockBytes)
+		err = dbTx.Put(bss.store.hashAsKey(&hash), buffer.Slice())
 		if err != nil {
+			memory.Free(buffer)
 			return err
 		}
-		bss.store.cache.Add(&hash, block)
+		// The database copied the bytes, so the cache can keep the buffer itself.
+		bss.store.cache.AddBuffer(&hash, buffer, block.PoWHash)
 	}
 
 	for hash := range bss.toDelete {
@@ -40,6 +43,9 @@ func (bss *blockStagingShard) Commit(dbTx model.DBTransaction) error {
 			return err
 		}
 		bss.store.cache.Remove(&hash)
+		bss.store.lock.Lock()
+		bss.store.existsCache.Remove(&hash)
+		bss.store.lock.Unlock()
 	}
 
 	err := bss.commitCount(dbTx)

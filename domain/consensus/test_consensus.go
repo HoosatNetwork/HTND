@@ -32,6 +32,10 @@ func (tc *testConsensus) DAGParams() *dagconfig.Params {
 	return tc.dagParams
 }
 
+func (tc *testConsensus) HardForkGates() *dagconfig.HardForkGates {
+	return tc.consensus.hardForkGates
+}
+
 func (tc *testConsensus) BuildBlockWithParents(parentHashes []*externalapi.DomainHash,
 	coinbaseData *externalapi.DomainCoinbaseData, transactions []*externalapi.DomainTransaction) (
 	*externalapi.DomainBlock, externalapi.UTXODiff, error,

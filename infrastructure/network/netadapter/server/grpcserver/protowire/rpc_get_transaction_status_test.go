@@ -54,3 +54,23 @@ func TestOrphanIsNotReportedAsAccepted(t *testing.T) {
 		t.Errorf("expected ORPHAN on the wire, got %d", int32(wire))
 	}
 }
+
+// TestStatusWithoutAcceptingBlockDecodes pins that an answer naming no accepting block - pending, not
+// found, unknown - decodes on the client. Its hash goes on the wire as an empty string, and decoding
+// that as a hash failed, so a client could not read any status but accepted, confirmed or invalid.
+func TestStatusWithoutAcceptingBlockDecodes(t *testing.T) {
+	sent := appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusNotFound, nil, 0)
+	wire := &HoosatdMessage_GetTransactionStatusResponse{}
+	if err := wire.fromAppMessage(sent); err != nil {
+		t.Fatalf("fromAppMessage: %+v", err)
+	}
+	decoded, err := wire.GetTransactionStatusResponse.toAppMessage()
+	if err != nil {
+		t.Fatalf("a status without an accepting block did not decode: %+v", err)
+	}
+	received := decoded.(*appmessage.GetTransactionStatusResponseMessage)
+	if received.Status != appmessage.TransactionStatusNotFound || received.AcceptingBlockHash != nil {
+		t.Fatalf("decoded status %s with accepting block %v, want not-found and none",
+			received.Status, received.AcceptingBlockHash)
+	}
+}

@@ -35,6 +35,20 @@ func (d *dbTransaction) Cursor(bucket model.DBBucket) (model.DBCursor, error) {
 	return newDBCursor(cursor), nil
 }
 
+// CursorRange begins a cursor over bucket limited to full keys in [lower, upper).
+// A nil bound leaves that side at the bucket's own prefix range.
+func (d *dbTransaction) CursorRange(bucket model.DBBucket, lower, upper []byte) (model.DBCursor, error) {
+	opener, ok := d.transaction.(database.BoundCursorOpener)
+	if !ok {
+		return d.Cursor(bucket)
+	}
+	cursor, err := opener.CursorBounds(dbBucketToDatabaseBucket(bucket), lower, upper)
+	if err != nil {
+		return nil, err
+	}
+	return newDBCursor(cursor), nil
+}
+
 func (d *dbTransaction) Put(key model.DBKey, value []byte) error {
 	return d.transaction.Put(dbKeyToDatabaseKey(key), value)
 }

@@ -31,6 +31,12 @@ func (g *ghostdagDataStoreMock) IsStaged(*model.StagingArea) bool {
 	return len(g.data) != 0
 }
 
+func (g *ghostdagDataStoreMock) GetWithoutCaching(_ model.DBReader, blockHash *externalapi.DomainHash,
+	isTrustedData bool,
+) (*externalapi.BlockGHOSTDAGData, error) {
+	return g.Get(nil, nil, blockHash, isTrustedData)
+}
+
 func (g *ghostdagDataStoreMock) Get(_ model.DBReader, _ *model.StagingArea, blockHash *externalapi.DomainHash,
 	_ bool,
 ) (*externalapi.BlockGHOSTDAGData, error) {

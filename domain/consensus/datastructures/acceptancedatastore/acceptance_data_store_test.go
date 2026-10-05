@@ -13,7 +13,7 @@ func TestAcceptanceDataStoreRoundTripAndDelete(t *testing.T) {
 	dbManager, prefixBucket, teardown := testutils.NewTestDB(t)
 	defer teardown()
 
-	store := New(prefixBucket, 10, false)
+	store := New(prefixBucket, 10, 1<<20, false)
 
 	blockHash := testutils.Hash(1)
 	relatedBlockHash := testutils.Hash(2)

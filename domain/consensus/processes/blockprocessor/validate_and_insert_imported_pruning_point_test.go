@@ -326,8 +326,8 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint, nil)
 
 			// HTN-005, gate on: the same set is refused with ErrBadPruningPointUTXOSet.
-			previousImportGate := dagconfig.RefuseMismatchedImportVersion
-			dagconfig.RefuseMismatchedImportVersion = 1
+			previousImportGate := synceeStaging.HardForkGates().RefuseMismatchedImportVersion
+			synceeStaging.HardForkGates().RefuseMismatchedImportVersion = 1
 			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint,
 				ruleerrors.ErrBadPruningPointUTXOSet)
 
@@ -337,7 +337,7 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 			// means other than the MuHash.
 			assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
 				pruningPoint, ruleerrors.ErrBadPruningPointUTXOSet)
-			dagconfig.RefuseMismatchedImportVersion = previousImportGate
+			synceeStaging.HardForkGates().RefuseMismatchedImportVersion = previousImportGate
 
 			// And with the gate off again, that same one-sompi-short set is accepted - which is
 			// precisely how a node ends up on an offset baseline without anything going wrong

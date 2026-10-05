@@ -55,15 +55,7 @@ func (csm *consensusStateManager) calculateMultiset(stagingArea *model.StagingAr
 	// already in both is absent from ToAdd/ToRemove, so ApplyAcceptanceDataToMultiset needs virtual
 	// itself to know the set already holds it (tip-child case). When the DAA stamp differs, Remove+Add.
 	baseUTXO := func(outpoint *externalapi.DomainOutpoint) (externalapi.UTXOEntry, bool, error) {
-		has, err := csm.consensusStateStore.HasUTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
-		if err != nil || !has {
-			return nil, false, err
-		}
-		entry, _, err := csm.consensusStateStore.UTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
-		if err != nil {
-			return nil, false, err
-		}
-		return entry, true, nil
+		return csm.consensusStateStore.LookupUTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
 	}
 	var multisetWriter utxo.MultisetWriter = ms
 	var recorder *muhashjournal.Recorder

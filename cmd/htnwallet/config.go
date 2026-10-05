@@ -12,6 +12,7 @@ import (
 const (
 	createSubCmd                    = "create"
 	balanceSubCmd                   = "balance"
+	utxosSubCmd                     = "utxos"
 	sendSubCmd                      = "send"
 	autoCompoundSubCmd              = "auto-compound"
 	voteSubCmd                      = "vote"
@@ -23,6 +24,11 @@ const (
 	showAddressesSubCmd             = "show-addresses"
 	newAddressSubCmd                = "new-address"
 	dumpUnencryptedDataSubCmd       = "dump-unencrypted-data"
+	importPrivateKeySubCmd          = "import-private-key"
+	importWebWalletSubCmd           = "import-web-wallet"
+	generateMLDSA44KeysSubCmd       = "generate-mldsa44-keys"
+	exportMLDSA44KeysSubCmd         = "export-mldsa44-keys"
+	importMLDSA44KeysSubCmd         = "import-mldsa44-keys"
 	startDaemonSubCmd               = "start-daemon"
 	versionSubCmd                   = "version"
 	getDaemonVersionSubCmd          = "get-daemon-version"
@@ -47,6 +53,11 @@ type createConfig struct {
 	NumPublicKeys     uint32 `long:"num-public-keys" short:"n" description:"Total number of keys" default:"1"`
 	ECDSA             bool   `long:"ecdsa" description:"Create an ECDSA wallet"`
 	Import            bool   `long:"import" short:"i" description:"Import private keys (as opposed to generating them)"`
+	config.NetworkFlags
+}
+
+type utxosConfig struct {
+	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
 	config.NetworkFlags
 }
 
@@ -77,7 +88,7 @@ type autoCompoundConfig struct {
 	DaemonAddress            string   `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
 	ToAddress                string   `long:"to-address" short:"t" description:"The public address to compound your HTN to" required:"true"`
 	FromAddresses            []string `long:"from-address" short:"a" description:"Specific public address to send Hoosat from. Repeat multiple times (adding -a before each) to accept several addresses" required:"false"`
-	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" description:"Will use an existing change address (in case no change address was ever used, it will use a new one)"`
+	UseExistingChangeAddress bool     `long:"use-existing-change-address" short:"u" hidden:"true" description:"Always on for auto-compound; accepted so existing command lines keep working"`
 	Verbose                  bool     `long:"show-serialized" short:"s" description:"Show a list of hex encoded sent transactions"`
 	Limit                    string   `long:"limit" short:"l" description:"Limit the number of UTXO to fetch before sending (default: 10,000), (0 equals no limit)"`
 	config.NetworkFlags
@@ -135,14 +146,14 @@ type parseConfig struct {
 
 type showAddressesConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
-	AddressType   string `long:"address-type" description:"Address type to show: p2pk (default), p2pkh, or p2sh"`
+	AddressType   string `long:"address-type" description:"Address type to show: p2pk (default), p2pkh, p2sh, mldsa44 (same as mldsa44-p2pkh), or mldsa44-p2sh"`
 	IncludaAll    bool   `long:"include-all" description:"Include all single-sig forms (p2pk, p2pkh, p2sh). Overrides --address-type"`
 	config.NetworkFlags
 }
 
 type newAddressConfig struct {
 	DaemonAddress string `long:"daemonaddress" short:"d" description:"Wallet daemon server to connect to"`
-	AddressType   string `long:"address-type" description:"Address type to create as primary: p2pk (default), p2pkh, or p2sh"`
+	AddressType   string `long:"address-type" description:"Address type to create as primary: p2pk (default), p2pkh, p2sh, or post-quantum mldsa44 (same as mldsa44-p2pkh) or mldsa44-p2sh"`
 	IncludaAll    bool   `long:"include-all" description:"Also print all single-sig forms (p2pk, p2pkh, p2sh) when available"`
 	config.NetworkFlags
 }
@@ -164,6 +175,44 @@ type dumpUnencryptedDataConfig struct {
 	config.NetworkFlags
 }
 
+type importPrivateKeyConfig struct {
+	KeysFile   string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	Password   string `long:"password" short:"p" description:"Wallet password"`
+	PrivateKey string `long:"private-key" short:"k" description:"Schnorr private key in hex, as genkeypair prints it (prompted for if not given)"`
+	Yes        bool   `long:"yes" short:"y" description:"Assume \"yes\" to all questions"`
+	config.NetworkFlags
+}
+
+type importWebWalletConfig struct {
+	KeysFile       string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	Password       string `long:"password" short:"p" description:"Wallet password"`
+	Export         string `long:"export" short:"e" description:"An encrypted web wallet export, as the web wallet's export() returns it (otherwise the mnemonic is prompted for)"`
+	ExportFile     string `long:"export-file" short:"F" description:"A file containing an encrypted web wallet export"`
+	ExportPassword string `long:"export-password" description:"The password the web wallet export was encrypted with (prompted for if not given)"`
+	NumAddresses   uint32 `long:"num-addresses" short:"n" description:"Number of receive addresses, and as many change addresses, to import" default:"256"`
+	Yes            bool   `long:"yes" short:"y" description:"Assume \"yes\" to all questions"`
+	config.NetworkFlags
+}
+
+type generateMLDSA44KeysConfig struct {
+	KeysFile string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	Password string `long:"password" short:"p" description:"Wallet password"`
+	Count    uint32 `long:"count" short:"c" description:"Number of address indexes per key chain to hold ML-DSA-44 keys for" default:"500"`
+	config.NetworkFlags
+}
+
+type exportMLDSA44KeysConfig struct {
+	KeysFile   string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	OutputFile string `long:"output" short:"o" description:"File to write the ML-DSA-44 cosigner keys to" required:"true"`
+	config.NetworkFlags
+}
+
+type importMLDSA44KeysConfig struct {
+	KeysFile  string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
+	InputFile string `long:"input" short:"i" description:"A cosigner's file from export-mldsa44-keys" required:"true"`
+	config.NetworkFlags
+}
+
 type versionConfig struct{}
 
 type getDaemonVersionConfig struct {
@@ -182,6 +231,10 @@ func parseCommandLine() (subCommand string, config any) {
 	balanceConf := &balanceConfig{DaemonAddress: defaultListen}
 	_, _ = parser.AddCommand(balanceSubCmd, "Shows the balance of a public address",
 		"Shows the balance for a public address in Hoosat", balanceConf)
+
+	utxosConf := &utxosConfig{DaemonAddress: defaultListen}
+	_, _ = parser.AddCommand(utxosSubCmd, "Lists the UTXOs of the wallet",
+		"Lists every UTXO on the wallet's addresses with its address, amount and derivation path", utxosConf)
 
 	spamConf := &autoCompoundConfig{DaemonAddress: defaultListen}
 	_, _ = parser.AddCommand(autoCompoundSubCmd, "Sends a Hoosat compound transactions automatically",
@@ -230,6 +283,37 @@ func parseCommandLine() (subCommand string, config any) {
 		"Prints the unencrypted wallet data including its private keys. Anyone that sees it can access "+
 			"the funds. Use only on safe environment.", dumpUnencryptedDataConf)
 
+	importPrivateKeyConf := &importPrivateKeyConfig{}
+	_, _ = parser.AddCommand(importPrivateKeySubCmd, "Creates a wallet from a Schnorr private key, such as one from genkeypair",
+		"Creates a keys file holding only the given Schnorr private key - such as one printed by the genkeypair "+
+			"utility - encrypted with a new password, like create does for a new wallet. Run the daemon on that keys file "+
+			"to use it; it is a wallet of its own, separate from any htnwallet wallet.", importPrivateKeyConf)
+
+	importWebWalletConf := &importWebWalletConfig{}
+	_, _ = parser.AddCommand(importWebWalletSubCmd, "Creates a wallet from an HTN web wallet",
+		"Creates a keys file holding only an HTN web wallet (github.com/HoosatNetwork/htn-wallet), from its mnemonic "+
+			"or from an encrypted export, encrypted with a new password, like create does for a new wallet. The web "+
+			"wallet derives every address with hardened derivation, so a fixed number of receive and change addresses "+
+			"is imported (--num-addresses); import it again with a larger number to extend it. Run the daemon on that "+
+			"keys file to use it; it is a wallet of its own, separate from any htnwallet wallet.", importWebWalletConf)
+	generateMLDSA44KeysConf := &generateMLDSA44KeysConfig{}
+	_, _ = parser.AddCommand(generateMLDSA44KeysSubCmd, "Generates the wallet's post-quantum ML-DSA-44 keys",
+		"Derives ML-DSA-44 keys from the wallet's mnemonic(s) and stores their public key hashes in the keys file, "+
+			"so the daemon can create and watch ML-DSA-44 addresses. New wallets get 500 per key chain "+
+			"automatically; run this for an older wallet, or to go beyond that. Stop the daemon first. "+
+			"Multisig cosigners must export and import the result again afterwards.", generateMLDSA44KeysConf)
+
+	exportMLDSA44KeysConf := &exportMLDSA44KeysConfig{}
+	_, _ = parser.AddCommand(exportMLDSA44KeysSubCmd, "Exports this multisig wallet's ML-DSA-44 keys for the other cosigners",
+		"Writes the ML-DSA-44 public key hashes this multisig wallet holds to a file. Every cosigner of an ML-DSA-44 "+
+			"multisig needs every other cosigner's file, because ML-DSA-44 keys cannot be derived from extended public keys. "+
+			"The file holds no secrets.", exportMLDSA44KeysConf)
+
+	importMLDSA44KeysConf := &importMLDSA44KeysConfig{}
+	_, _ = parser.AddCommand(importMLDSA44KeysSubCmd, "Imports a cosigner's ML-DSA-44 keys into this multisig wallet",
+		"Adds the ML-DSA-44 public key hashes from another cosigner's export-mldsa44-keys file. Stop the daemon first.",
+		importMLDSA44KeysConf)
+
 	startDaemonConf := &startDaemonConfig{
 		RPCServer: defaultRPCServer,
 		Listen:    defaultListen,
@@ -264,6 +348,13 @@ func parseCommandLine() (subCommand string, config any) {
 			printErrorAndExit(err)
 		}
 		config = balanceConf
+	case utxosSubCmd:
+		combineNetworkFlags(&utxosConf.NetworkFlags, &cfg.NetworkFlags)
+		err := utxosConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = utxosConf
 	case autoCompoundSubCmd:
 		combineNetworkFlags(&spamConf.NetworkFlags, &cfg.NetworkFlags)
 		err := spamConf.ResolveNetwork(parser)
@@ -349,6 +440,45 @@ func parseCommandLine() (subCommand string, config any) {
 			printErrorAndExit(err)
 		}
 		config = dumpUnencryptedDataConf
+	case importPrivateKeySubCmd:
+		combineNetworkFlags(&importPrivateKeyConf.NetworkFlags, &cfg.NetworkFlags)
+		err := importPrivateKeyConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = importPrivateKeyConf
+	case importWebWalletSubCmd:
+		combineNetworkFlags(&importWebWalletConf.NetworkFlags, &cfg.NetworkFlags)
+		err := importWebWalletConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		err = validateImportWebWalletConfig(importWebWalletConf)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = importWebWalletConf
+	case generateMLDSA44KeysSubCmd:
+		combineNetworkFlags(&generateMLDSA44KeysConf.NetworkFlags, &cfg.NetworkFlags)
+		err := generateMLDSA44KeysConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = generateMLDSA44KeysConf
+	case exportMLDSA44KeysSubCmd:
+		combineNetworkFlags(&exportMLDSA44KeysConf.NetworkFlags, &cfg.NetworkFlags)
+		err := exportMLDSA44KeysConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = exportMLDSA44KeysConf
+	case importMLDSA44KeysSubCmd:
+		combineNetworkFlags(&importMLDSA44KeysConf.NetworkFlags, &cfg.NetworkFlags)
+		err := importMLDSA44KeysConf.ResolveNetwork(parser)
+		if err != nil {
+			printErrorAndExit(err)
+		}
+		config = importMLDSA44KeysConf
 	case startDaemonSubCmd:
 		combineNetworkFlags(&startDaemonConf.NetworkFlags, &cfg.NetworkFlags)
 		err := startDaemonConf.ResolveNetwork(parser)

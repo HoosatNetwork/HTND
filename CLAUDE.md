@@ -27,7 +27,7 @@ go test -tags=ci ./...                      # what CI runs; skips tests guarded 
 
 | Path | What lives there |
 |---|---|
-| `main.go` | Loads config, raises rlimit, sets up panic auto-report and optional pprof (`HTND_PROFILER` → 127.0.0.1:6060), then calls `app.StartAppWithConfig`. |
+| `main.go` | Loads config, raises rlimit, sets up panic auto-report and optional pprof (`HTND_PROFILER` → 127.0.0.1:6060, or the `--profile` address when given), then calls `app.StartAppWithConfig`. |
 | `app/` | `app.go` opens the DB (pebble by default, `--dbtype=leveldb` optional). `component_manager.go` wires domain, netadapter, addressmanager, connmanager, protocol, rpc, utxoindex and autoupdate. |
 | `app/appmessage/` | Transport-agnostic message types for P2P (`p2p_*`) and RPC (`rpc_*`), plus domain converters. |
 | `app/protocol/` | P2P flows. The current protocol version is `flows/v8`; `register.go` maps message commands to flow funcs. Also contains handshake, IBD and block/tx relay. |
@@ -93,7 +93,7 @@ Touch every layer, following an existing command such as `GetBlockCount`:
 ## Tunables via environment
 
 - **Runtime:** `GOGC`, and `GOMEMLIMIT` (main.go defaults it to 8 GB).
-- **Profiling:** `HTND_PROFILER`.
+- **Profiling:** `HTND_PROFILER` turns on block and mutex profiling and serves pprof on 127.0.0.1:6060. `--profile=<port|host:port>` serves pprof on that address instead (a bare port listens on every interface), which a second node on the same machine needs.
 - **Pebble tuning:** `HTND_PEBBLE_CACHE_MB`, `HTND_MEMTABLE_SIZE_MB`, `HTND_BASE_FILE_SIZE_MB`, etc.
 - **IBD UTXO survey:** `HTND_UTXO_SURVEY*` (see `docs/utxo-survey.md`).
 - **MuHash journal:** the hidden `--muhash-journal=<path>` flag records every element added to or removed from each block's UTXO multiset (see `domain/consensus/utils/muhashjournal`); analyze with `cmd/muhashjournal`.

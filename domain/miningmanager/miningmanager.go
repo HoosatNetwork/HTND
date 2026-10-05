@@ -49,6 +49,8 @@ type MiningManager interface {
 	ValidateAndInsertTransactionReplacement(transaction *externalapi.DomainTransaction, isHighPriority bool) (
 		acceptedTransactions []*externalapi.DomainTransaction, replacedTransaction *externalapi.DomainTransaction, err error)
 	RevalidateHighPriorityTransactions() (validTransactions []*externalapi.DomainTransaction, err error)
+	NoteDisqualifiedBlock(blockHash *externalapi.DomainHash)
+	RestoreTransactionsOfDisqualifiedBlocks() ([]*externalapi.DomainTransaction, error)
 }
 
 type miningManager struct {
@@ -58,6 +60,7 @@ type miningManager struct {
 	cachedBlockTemplate  *externalapi.DomainBlockTemplate
 	cachingTime          time.Time
 	cacheLock            *sync.Mutex
+	disqualifiedBlocks   *disqualifiedBlockQueue
 }
 
 // blockTemplateCacheMaxAge is how long a built template is reused for identical coinbase data.

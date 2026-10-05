@@ -41,16 +41,6 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		return err
 	}
 
-	// DISABLED, not gated: no ticket and no recorded reason. checkParentsIncest rejects a block one
-	// of whose parents is an ancestor of another, which is a structural rule rather than a
-	// UTXO-state one, so the chain either satisfies it or it does not - that is a cheap thing to
-	// measure and has not been. Until it is, this cannot be switched on, for the same reason as
-	// every gate in dagconfig/params.go: a rule turned on for existing versions rejects history.
-	// err = v.checkParentsIncest(stagingArea, blockHash)
-	// if err != nil {
-	// 	return err
-	// }
-
 	if !isBlockWithTrustedData {
 		err = v.checkPruningPointViolation(stagingArea, blockHash)
 		if err != nil {
@@ -72,6 +62,21 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		if err != nil {
 			return err
 		}
+
+		// checkParentsIncest rejects a block one of whose direct parents is an ancestor of another.
+		// It had been disabled with no gate, so it is off before HardForkGates.ParentsIncestVersion.
+		// It runs after GHOSTDAG rather than before the pruning violation check, where upstream had
+		// it, because the gate is keyed on the selected parent, which GHOSTDAG chooses.
+		active, err := v.hardForkActiveFor(stagingArea, blockHash, v.hardForkGates.ParentsIncestVersion)
+		if err != nil {
+			return err
+		}
+		if active {
+			err = v.checkParentsIncest(stagingArea, blockHash)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	blockLevel := header.BlockLevel(v.maxBlockLevel)
@@ -82,7 +87,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 		}
 	}
 
-	// Stage the DAA window, and - from dagconfig.ValidateHeaderBitsVersion onward - check that the
+	// Stage the DAA window, and - from HardForkGates.ValidateHeaderBitsVersion onward - check that the
 	// difficulty the header claims is the one this node computes.
 	//
 	// HTN-007: the comment that used to sit here said the header's difficulty was validated "within
@@ -115,7 +120,7 @@ func (v *blockValidator) ValidatePruningPointViolationAndProofOfWorkAndDifficult
 	return nil
 }
 
-// checkHeaderBits enforces HTN-007's rule once dagconfig.ValidateHeaderBitsVersion has activated.
+// checkHeaderBits enforces HTN-007's rule once HardForkGates.ValidateHeaderBitsVersion has activated.
 //
 // The version is derived from the block's selected parent's DAA score, as this node computed it,
 // never from the header's own version field: the field is peer-supplied, and a rule that adds
@@ -135,7 +140,7 @@ func (v *blockValidator) checkHeaderBits(stagingArea *model.StagingArea,
 	if err != nil {
 		return err
 	}
-	if !dagconfig.HardForkActive(dagconfig.ValidateHeaderBitsVersion, blockVersion) {
+	if !dagconfig.HardForkActive(v.hardForkGates.ValidateHeaderBitsVersion, blockVersion) {
 		return nil
 	}
 

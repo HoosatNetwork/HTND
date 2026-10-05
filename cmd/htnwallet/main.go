@@ -12,6 +12,8 @@ func main() {
 		err = create(config.(*createConfig))
 	case balanceSubCmd:
 		err = balance(config.(*balanceConfig))
+	case utxosSubCmd:
+		err = utxos(config.(*utxosConfig))
 	case autoCompoundSubCmd:
 		err = autoCompound(config.(*autoCompoundConfig))
 	case sendSubCmd:
@@ -32,6 +34,16 @@ func main() {
 		err = newAddress(config.(*newAddressConfig))
 	case dumpUnencryptedDataSubCmd:
 		err = dumpUnencryptedData(config.(*dumpUnencryptedDataConfig))
+	case importPrivateKeySubCmd:
+		err = importPrivateKey(config.(*importPrivateKeyConfig))
+	case importWebWalletSubCmd:
+		err = importWebWallet(config.(*importWebWalletConfig))
+	case generateMLDSA44KeysSubCmd:
+		err = generateMLDSA44Keys(config.(*generateMLDSA44KeysConfig))
+	case exportMLDSA44KeysSubCmd:
+		err = exportMLDSA44Keys(config.(*exportMLDSA44KeysConfig))
+	case importMLDSA44KeysSubCmd:
+		err = importMLDSA44Keys(config.(*importMLDSA44KeysConfig))
 	case startDaemonSubCmd:
 		err = startDaemon(config.(*startDaemonConfig))
 	case sweepSubCmd:

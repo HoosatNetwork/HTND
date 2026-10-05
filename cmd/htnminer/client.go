@@ -46,10 +46,20 @@ func (mc *minerClient) connect() error {
 	return nil
 }
 
+// requestTemplateRefresh asks the templates loop to fetch a new template as soon as it can.
+func (mc *minerClient) requestTemplateRefresh() {
+	select {
+	case mc.newBlockTemplateNotificationChan <- struct{}{}:
+	default:
+	}
+}
+
 func newMinerClient(cfg *configFlags) (*minerClient, error) {
 	minerClient := &minerClient{
-		cfg:                              cfg,
-		newBlockTemplateNotificationChan: make(chan struct{}),
+		cfg: cfg,
+		// Buffered so a notification arriving while the templates loop is inside an RPC call is kept
+		// instead of dropped, which left the threads on a stale template until the next poll.
+		newBlockTemplateNotificationChan: make(chan struct{}, 1),
 	}
 
 	err := minerClient.connect()

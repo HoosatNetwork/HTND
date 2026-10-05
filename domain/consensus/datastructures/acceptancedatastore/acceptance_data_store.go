@@ -6,6 +6,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/lrucache"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
 )
@@ -15,15 +16,23 @@ var bucketName = []byte("acceptance-data")
 // acceptanceDataStore represents a store of AcceptanceData
 type acceptanceDataStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache[externalapi.AcceptanceData]
-	bucket  model.DBBucket
+	// cache holds acceptance data serialized, outside the Go heap (see lrucache.OffHeap). Acceptance
+	// data carries every merged transaction whole, ML-DSA-44 signatures included, and the decoded
+	// cache this replaced held ~300 MB of it on the heap and deep-cloned it on every hit.
+	//
+	// What serialization drops comes back empty from a hit, as it always did from a miss: the
+	// transactions' cached Fee, Mass and ID. Fee is kept per transaction in TransactionAcceptanceData,
+	// and no reader takes Fee or Mass from these transactions (RPC recomputes a zero mass).
+	cache  *lrucache.OffHeap[struct{}]
+	bucket model.DBBucket
 }
 
-// New instantiates a new AcceptanceDataStore
-func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.AcceptanceDataStore {
+// New instantiates a new AcceptanceDataStore. Its cache holds at most cacheSize entries whose
+// serialized sizes add up to at most cacheByteBudget bytes.
+func New(prefixBucket model.DBBucket, cacheSize int, cacheByteBudget int, preallocate bool) model.AcceptanceDataStore {
 	return &acceptanceDataStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New[externalapi.AcceptanceData](cacheSize, preallocate),
+		cache:   lrucache.NewOffHeap[struct{}](cacheSize, cacheByteBudget, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -51,9 +60,14 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 	if ok && acceptanceData != nil {
 		return acceptanceData.Clone(), nil
 	}
-	acceptanceDataCached, ok := ads.cache.Get(blockHash)
-	if ok && acceptanceDataCached != nil {
-		return acceptanceDataCached.Clone(), nil
+	var cached externalapi.AcceptanceData
+	hit, err := ads.cache.Decode(blockHash, func(acceptanceDataBytes []byte, _ struct{}) error {
+		var err error
+		cached, err = ads.deserializeAcceptanceData(acceptanceDataBytes)
+		return err
+	})
+	if hit {
+		return cached, err
 	}
 
 	acceptanceDataBytes, err := dbContext.Get(ads.hashAsKey(blockHash))
@@ -64,12 +78,13 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 		return nil, err
 	}
 
+	// The decoded value is not cached, so the caller can own it without a clone.
 	acceptanceDataDeserialized, err := ads.deserializeAcceptanceData(acceptanceDataBytes)
 	if err != nil {
 		return nil, err
 	}
-	ads.cache.Add(blockHash, acceptanceDataDeserialized)
-	return acceptanceDataDeserialized.Clone(), nil
+	ads.cache.Add(blockHash, acceptanceDataBytes, struct{}{})
+	return acceptanceDataDeserialized, nil
 }
 
 // Delete deletes the acceptanceData associated with the given blockHash
@@ -83,9 +98,12 @@ func (ads *acceptanceDataStore) Delete(stagingArea *model.StagingArea, blockHash
 	stagingShard.toDelete[*blockHash] = struct{}{}
 }
 
-func (ads *acceptanceDataStore) serializeAcceptanceData(acceptanceData externalapi.AcceptanceData) ([]byte, error) {
-	dbAcceptanceData := serialization.DomainAcceptanceDataToDbAcceptanceData(acceptanceData)
-	return dbAcceptanceData.MarshalVT()
+// serializeAcceptanceDataOffHeap serializes acceptanceData into a buffer outside the Go heap, for the
+// commit to write to the database and then hand to the cache. See lrucache.MarshalOffHeap.
+func (ads *acceptanceDataStore) serializeAcceptanceDataOffHeap(acceptanceData externalapi.AcceptanceData) (
+	*memory.Block[byte], error,
+) {
+	return lrucache.MarshalOffHeap(serialization.DomainAcceptanceDataToDbAcceptanceData(acceptanceData))
 }
 
 func (ads *acceptanceDataStore) deserializeAcceptanceData(acceptanceDataBytes []byte) (externalapi.AcceptanceData, error) {

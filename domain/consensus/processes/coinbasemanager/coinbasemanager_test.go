@@ -204,6 +204,12 @@ func (s *singleBlockStore) AllBlockHashesIterator(model.DBReader) (model.BlockIt
 	panic("not implemented")
 }
 func (s *singleBlockStore) CacheLen() int { panic("not implemented") }
+func (s *singleBlockStore) HasBlockWithoutCaching(model.DBReader, *externalapi.DomainHash) (bool, error) {
+	panic("not implemented")
+}
+func (s *singleBlockStore) BlockWithoutCaching(model.DBReader, *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
+	panic("not implemented")
+}
 func (s *singleBlockStore) HasBlock(model.DBReader, *model.StagingArea, *externalapi.DomainHash) (bool, error) {
 	panic("not implemented")
 }

@@ -184,6 +184,33 @@ func (c *LRUCache[V]) Has(key *externalapi.DomainHash) bool {
 	return ok && e.key == *key
 }
 
+// Peek returns the value if present, without changing LRU order.
+func (c *LRUCache[V]) Peek(key *externalapi.DomainHash) (value V, ok bool) {
+	if key == nil {
+		return
+	}
+	e, exists := c.cache[hash(*key)]
+	if !exists || e.key != *key {
+		return
+	}
+	return e.value, true
+}
+
+// RemoveOldest evicts the least recently used entry and returns it. ok is false when the cache is
+// empty. It lets a caller that weighs entries evict by its own budget rather than by count.
+func (c *LRUCache[V]) RemoveOldest() (key externalapi.DomainHash, value V, ok bool) {
+	e := c.tail
+	if e == nil {
+		return
+	}
+	key, value = e.key, e.value
+	c.unlink(e)
+	delete(c.cache, hash(e.key))
+	c.length--
+	c.putEntry(e)
+	return key, value, true
+}
+
 // Remove deletes an entry if it exists
 func (c *LRUCache[V]) Remove(key *externalapi.DomainHash) {
 	// c.mu.Lock()

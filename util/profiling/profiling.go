@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"runtime"
 	runtimepprof "runtime/pprof"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
+	"github.com/pkg/errors"
 
 	"github.com/HoosatNetwork/HTND/v2/util/panics"
 )
@@ -21,12 +24,36 @@ import (
 // custom format for compliance with file name rules on all OSes).
 var heapDumpFileName = fmt.Sprintf("heap-%s.pprof", time.Now().Format("01-02-2006T15.04.05"))
 
-// Start starts the profiling server
+// ListenAddress returns the address the profiling server listens on for a --profile value. A bare
+// port listens on every interface, as --profile always has. host:port listens on exactly that
+// address, which keeps pprof off the network (127.0.0.1:6061) and lets several nodes on one machine
+// each run a profiler on their own port.
+func ListenAddress(profile string) (string, error) {
+	host, port := "", profile
+	if strings.Contains(profile, ":") {
+		var err error
+		host, port, err = net.SplitHostPort(profile)
+		if err != nil {
+			return "", errors.Errorf("the profile address %q is neither a port nor host:port: %s", profile, err)
+		}
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1024 || portNumber > 65535 {
+		return "", errors.Errorf("the profile port %q must be between 1024 and 65535", port)
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
+// Start starts the profiling server on profile, a port or host:port - see ListenAddress.
 // WARNING: The pprof endpoint is exposed on /debug/pprof. Do not use in production environments without proper access controls. (gosec G108)
-func Start(port string, log *logger.Logger) {
+func Start(profile string, log *logger.Logger) {
+	listenAddr, err := ListenAddress(profile)
+	if err != nil {
+		log.Errorf("Not starting the profile server: %s", err)
+		return
+	}
 	spawn := panics.GoroutineWrapperFunc(log)
 	spawn("profiling.Start", func() {
-		listenAddr := net.JoinHostPort("", port)
 		log.Infof("Profile server listening on %s", listenAddr)
 		mux := http.NewServeMux()
 		profileRedirect := http.RedirectHandler("/debug/pprof", http.StatusSeeOther)

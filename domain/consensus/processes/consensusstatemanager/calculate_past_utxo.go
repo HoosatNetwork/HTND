@@ -273,9 +273,22 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	}
 	log.Tracef("The past median time for block %s is: %d", blockHash, selectedParentMedianTime)
 
+	err = csm.prewarmMergeSetScriptCaches(stagingArea, mergeSetBlocks, selectedParentPastUTXODiff, daaScore)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	multiblockAcceptanceData := make(externalapi.AcceptanceData, len(mergeSetBlocks))
-	accumulatedUTXODiff := selectedParentPastUTXODiff.CloneMutable()
+	// Recording which outpoints the merge set changes lets the block's diff to its selected parent be
+	// computed from those alone - see diffFromSelectedParentPast.
+	accumulatedUTXODiff, err := utxo.CloneMutableRecordingChanges(selectedParentPastUTXODiff)
+	if err != nil {
+		accumulatedUTXODiff = selectedParentPastUTXODiff.CloneMutable()
+	}
 	accumulatedMass := uint64(0)
+	// Outpoints spent by a transaction this pass has already accepted. This, and not the diff's
+	// ToRemove, is the double-spend set: ToRemove is seeded from virtual and grows with arrival order.
+	spentInPass := make(map[externalapi.DomainOutpoint]struct{})
 
 	for i, mergeSetBlock := range mergeSetBlocks {
 		mergeSetBlockHash := consensushashing.BlockHash(mergeSetBlock)
@@ -296,8 +309,8 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 
 			var rejection *transactionRejection
 			isAccepted, accumulatedMass, rejection, err = csm.maybeAcceptTransaction(stagingArea,
-				transaction, blockHash, mergeSetBlockHash, isSelectedParent, accumulatedUTXODiff, accumulatedMass,
-				selectedParentMedianTime, daaScore)
+				transaction, blockHash, mergeSetBlockHash, isSelectedParent, accumulatedUTXODiff, spentInPass,
+				accumulatedMass, selectedParentMedianTime, daaScore)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -328,6 +341,79 @@ func (csm *consensusStateManager) applyMergeSetBlocks(stagingArea *model.Staging
 	return multiblockAcceptanceData, accumulatedUTXODiff, rejectionReasons, nil
 }
 
+// prewarmMergeSetScriptCaches verifies the merge set's signatures on every core before the
+// sequential acceptance pass, so that pass finds them in the signature caches instead of verifying
+// them one transaction at a time.
+//
+// The pass has to stay sequential - whether a transaction is accepted depends on what the ones
+// before it spent and created - but its signature checks do not depend on each other. This changes
+// no verdict, for three reasons:
+//   - It works on clones. populateTransactionWithUTXOEntriesFromVirtualOrDiff writes UTXOEntry into
+//     the transaction and later skips inputs that already have one, so populating the merge set's
+//     own transactions here would change what the pass sees.
+//   - Its view is the selected parent's past UTXO set, before any of the merge set is applied. A
+//     transaction whose inputs are not all in that view - one spending an output created earlier in
+//     this merge set, a double spend, a coin missing from an offset set - is skipped and left to the
+//     pass to verify as before.
+//   - The caches record only signature hash, key and signature triples that verified. A clone whose
+//     entries differ from the ones the pass resolves has a different signature hash, so it cannot
+//     produce a hit the pass would not have earned.
+//
+// The only effect besides the caches is that the UTXO lookups here fill the read-only cache of
+// virtual's UTXO set, which the pass reads next anyway. A transaction carried by several merge-set
+// blocks is verified once.
+func (csm *consensusStateManager) prewarmMergeSetScriptCaches(stagingArea *model.StagingArea,
+	mergeSetBlocks []*externalapi.DomainBlock, selectedParentPastUTXODiff externalapi.UTXODiff, daaScore uint64,
+) error {
+	var candidates []*externalapi.DomainTransaction
+	seen := make(map[externalapi.DomainTransactionID]struct{})
+	for _, mergeSetBlock := range mergeSetBlocks {
+		for _, transaction := range mergeSetBlock.Transactions {
+			if transaction == nil || transactionhelper.IsCoinBase(transaction) {
+				continue
+			}
+			transactionID := consensushashing.TransactionID(transaction)
+			if transactionID == nil {
+				continue
+			}
+			if _, ok := seen[*transactionID]; ok {
+				continue
+			}
+			seen[*transactionID] = struct{}{}
+
+			clone := transaction.Clone()
+			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, clone,
+				selectedParentPastUTXODiff, nil)
+			if err != nil {
+				if errors.As(err, &ruleerrors.RuleError{}) {
+					continue
+				}
+				return err
+			}
+			candidates = append(candidates, clone)
+		}
+	}
+	if len(candidates) > 1 {
+		csm.transactionValidator.PrewarmScriptCaches(candidates, daaScore)
+	}
+	return nil
+}
+
+// noteSpentInputs records the inputs this accepted transaction actually spent. Inputs left without
+// an entry were absent from the set and were not removed from it, so a later transaction that spends
+// one of them is still missing a coin, not double-spending.
+func noteSpentInputs(spentInPass map[externalapi.DomainOutpoint]struct{}, transaction *externalapi.DomainTransaction) {
+	if spentInPass == nil || transaction == nil {
+		return
+	}
+	for _, input := range transaction.Inputs {
+		if input == nil || input.UTXOEntry == nil {
+			continue
+		}
+		spentInPass[input.PreviousOutpoint] = struct{}{}
+	}
+}
+
 // maybeAcceptTransaction decides whether one merge-set transaction is accepted, and - when it is not
 // - says why.
 //
@@ -348,6 +434,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	mergeSetBlockHash *externalapi.DomainHash,
 	isSelectedParent bool,
 	accumulatedUTXODiff externalapi.MutableUTXODiff,
+	spentInPass map[externalapi.DomainOutpoint]struct{},
 	accumulatedMassBefore uint64,
 	_ int64,
 	blockDAAScore uint64,
@@ -371,7 +458,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	defer log.Tracef("maybeAcceptTransaction end for transaction %s in block %s", transactionID, blockHash)
 
 	log.Tracef("Populating transaction %s with UTXO entries", transactionID)
-	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable())
+	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable(), spentInPass)
 	if err != nil {
 		csm.noteAcceptanceRejection(blockHash, transactionIDPtr, len(transaction.Inputs), err)
 		// An input this view has already spent is a double spend and stays rejected. An input that is
@@ -387,7 +474,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		}
 		inheritsOffset := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 		if acceptDespiteMissingInputs(err, inheritsOffset, resolvedInputs) {
-			// Below block version 11 (dagconfig.OffsetModeValueChecksVersion) this path takes the
+			// Below block version 11 (HardForkGates.OffsetModeValueChecksVersion) this path takes the
 			// transaction on trust: fee 0, no checks, every output created. From it the found inputs must pass
 			// every check they can decide and the outputs may not exceed them - see
 			// offset_value_checks.go. A failure is an ordinary consensus rejection of the transaction.
@@ -409,6 +496,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			}
 			csm.journalMissingInputVerdict(stagingArea, blockHash, mergeSetBlockHash, transaction, transactionID,
 				true, inheritsOffset, resolvedInputs)
+			noteSpentInputs(spentInPass, transaction)
 			log.Debugf("Transaction %s in block %s spends coins this set does not hold; its outputs are "+
 				"kept so the gap does not spread", transactionID, blockHash)
 			logTransactionVerdict("accepted despite missing inputs", verdictContext, transaction, transactionID,
@@ -484,6 +572,7 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 		return false, 0, nil, errors.Wrapf(err, "failed to add transaction %s in block %s to accumulated diff",
 			transactionID, blockHash)
 	}
+	noteSpentInputs(spentInPass, transaction)
 
 	if isCoinbase && transactionIDPtr != nil {
 		for i := range transaction.Outputs {

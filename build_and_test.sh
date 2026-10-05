@@ -34,11 +34,13 @@ then
   exit 1
 fi
 
-# The hardfork activation gates in domain/dagconfig/params.go are vars only so that tests can
-# exercise a rule that is otherwise unreachable. Nothing in production may assign to one: a gate
-# flipped at runtime would activate a consensus rule that the network has not agreed to.
+# The hardfork activation gates (Params.HardForkGates, declared per network in
+# domain/dagconfig/params.go) are mutable only so that tests can exercise a rule that is otherwise
+# unreachable. Nothing in production may assign to one: a gate flipped at runtime would activate a
+# consensus rule that the network has not agreed to. (MLDSA44SignaturesBlockVersion is exempt: a custom
+# network's JSON config may set it, see infrastructure/config/network.go.)
 HARDFORK_GATE_WRITES=$(find . -type f -name '*.go' -not -name '*_test.go' -not -path './vendor/*' \
-  -exec grep -Hn -E 'dagconfig\.(StrictUTXOCommitment|StrictMinersViewFields|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningList|OffsetModeValueChecks)Version[[:space:]]*=[^=]' {} + \
+  -exec grep -Hn -E '\.HardForkGates(\(\))?(\.(StrictUTXOCommitment|StrictMinersViewFields|StrictCoinbase|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningPoint|ValidateIBDPruningList|OffsetModeValueChecks)Version)?[[:space:]]*=[^=]' {} + \
   | grep -v -E '^[^:]*:[0-9]+:[[:space:]]*//' || true)
 if [ -n "${HARDFORK_GATE_WRITES}" ]
 then

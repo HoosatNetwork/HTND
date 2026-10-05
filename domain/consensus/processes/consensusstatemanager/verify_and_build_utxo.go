@@ -40,7 +40,7 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
 	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
 
-	// HTN-002/HTN-004, gated at dagconfig.StrictUTXOCommitmentVersion: from that block version
+	// HTN-002/HTN-004, gated at HardForkGates.StrictUTXOCommitmentVersion: from that block version
 	// onward the toleration above - and the miner's-view toleration below - stop applying, and these
 	// four checks fail closed as they were always meant to.
 	//
@@ -169,14 +169,16 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 
 	coinbaseTransaction := block.Transactions[0]
 	coinbaseErr := csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-	// From block version 11 (dagconfig.OffsetModeValueChecksVersion), a coinbase mismatch on an offset baseline is no
-	// longer tolerated wholesale: only a coinbase of the expected shape that exceeds the expected
-	// amounts by at most the fees this node could not price is. Anything else - a subsidy over-pay,
-	// a different payee - is notTolerable and disqualifies the block. See offset_value_checks.go.
+	strictCoinbase, err := csm.hardForkActiveFor(stagingArea, blockHash, csm.hardForkGates.StrictCoinbaseVersion)
+	if err != nil {
+		return err
+	}
+	// Once the offset-mode checks activate, a mismatch is bounded by the fees this node could not
+	// price. Once StrictCoinbaseVersion activates, even that allowance and underpayment end.
 	if coinbaseErr != nil && tolerate && errors.Is(coinbaseErr, ruleerrors.ErrBadCoinbaseTransaction) &&
-		csm.offsetModeValueChecksActive(block.Header.DAAScore()) {
+		(strictCoinbase || csm.offsetModeValueChecksActive(block.Header.DAAScore())) {
 		if boundedErr := csm.checkCoinbaseOnOffsetBaseline(stagingArea, block, blockHash, coinbaseTransaction,
-			acceptanceData); boundedErr != nil {
+			acceptanceData, strictCoinbase); boundedErr != nil {
 			coinbaseErr = boundedErr
 		}
 	}
@@ -257,12 +259,11 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	//
 	// It deliberately does NOT consult ErrMissingTxOut.HasDoubleSpend here, though it used to.
 	//
-	// That flag means "the outpoint was in the diff's toRemove", which is a statement about double
-	// spending only when the diff is the accumulated one being built during acceptance - there
-	// toRemove records spends this very pass made. The diff handed to THIS function is different: it
-	// is the block's past relative to virtual, where toRemove means "virtual holds this coin and this
-	// block's past does not". That covers coins created after the block as much as coins spent before
-	// it, so reading it as a double spend convicts blocks that never spent anything twice.
+	// That flag means an earlier transaction in the same acceptance pass already spent the outpoint.
+	// This function validates each of the block's own transactions against the past diff on its own
+	// and passes no such set. A hit in toRemove is reported as a plain missing coin: on this diff
+	// toRemove means virtual holds the coin and the block's past does not, which covers coins created
+	// after the block as much as coins spent before it.
 	//
 	// The cost was not theoretical. A node syncing mainnet refused 150 blocks this way, started block
 	// body sync eight times, and accepted zero blocks - IBD reached 99% of headers and then made no
@@ -335,7 +336,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 
 			// Populate UTXO entries
 			stagingMu.Lock()
-			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff)
+			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff, nil)
 			stagingMu.Unlock()
 			if err != nil {
 				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})
@@ -506,7 +507,7 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 //
 // Needs no persisted marker; works on an already-synced database.
 // utxoCommitmentIsStrictFor reports whether blockHash is at or past
-// dagconfig.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
+// HardForkGates.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
 //
 // The version comes from the block's selected parent's DAA score, as this node computed it - the
 // same anchoring HTN-001/003 established for every other version-dependent rule. A block's own
@@ -519,17 +520,17 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) (bool, error) {
-	return csm.hardForkActiveFor(stagingArea, blockHash, dagconfig.StrictUTXOCommitmentVersion)
+	return csm.hardForkActiveFor(stagingArea, blockHash, csm.hardForkGates.StrictUTXOCommitmentVersion)
 }
 
 // minersViewFieldsAreStrictFor reports whether blockHash is at or past
-// dagconfig.StrictMinersViewFieldsVersion, and so may not have a failing UTXO commitment or
+// HardForkGates.StrictMinersViewFieldsVersion, and so may not have a failing UTXO commitment or
 // accepted-ID merkle root tolerated as the miner's view. The version is derived as in
 // utxoCommitmentIsStrictFor.
 func (csm *consensusStateManager) minersViewFieldsAreStrictFor(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) (bool, error) {
-	return csm.hardForkActiveFor(stagingArea, blockHash, dagconfig.StrictMinersViewFieldsVersion)
+	return csm.hardForkActiveFor(stagingArea, blockHash, csm.hardForkGates.StrictMinersViewFieldsVersion)
 }
 
 func (csm *consensusStateManager) hardForkActiveFor(stagingArea *model.StagingArea,

@@ -71,9 +71,29 @@ func TestMinersViewFieldsToleratedOnCleanBaseline(t *testing.T) {
 			parent = blockHash
 		}
 
+		block, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{parent}, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildBlockWithParents for strict gate: %+v", err)
+		}
+		h := block.Header
+		block.Header = blockheader.NewImmutableBlockHeader(h.Version(), h.Parents(), h.HashMerkleRoot(),
+			h.AcceptedIDMerkleRoot(), bogus, h.TimeInMilliseconds(), h.Bits(), h.Nonce(), h.DAAScore(),
+			h.BlueScore(), h.BlueWork(), h.PruningPoint())
+		previousGate := tc.HardForkGates().StrictMinersViewFieldsVersion
+		tc.HardForkGates().StrictMinersViewFieldsVersion = 1
+		err = tc.ValidateAndInsertBlock(block, true, true)
+		tc.HardForkGates().StrictMinersViewFieldsVersion = previousGate
+		if err != nil {
+			t.Fatalf("strict gate ValidateAndInsertBlock: %+v", err)
+		}
+		strictHash := consensushashing.BlockHash(block)
+		if status := blockStatus(t, tc, strictHash); status != externalapi.StatusDisqualifiedFromChain {
+			t.Fatalf("strict gate accepted a block with a wrong UTXO commitment: %s", status)
+		}
+
 		// A coinbase that pays one sompi more than its merge set earns. Everything else about the block,
 		// both commitments included, is what the block builder produced.
-		block, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{parent}, nil, nil)
+		block, _, err = tc.BuildBlockWithParents([]*externalapi.DomainHash{parent}, nil, nil)
 		if err != nil {
 			t.Fatalf("BuildBlockWithParents: %+v", err)
 		}

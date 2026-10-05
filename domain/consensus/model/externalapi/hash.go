@@ -113,6 +113,12 @@ func (hash *DomainHash) ByteSlice() []byte {
 	return hash.ByteArray()[:]
 }
 
+// AppendBytes appends the hash bytes to dst. It does not allocate when dst has room,
+// and it does not copy the hash into its own slice first.
+func (hash *DomainHash) AppendBytes(dst []byte) []byte {
+	return append(dst, hash.hashArray[:]...)
+}
+
 // Uint32Array converts the hash bytes in DomainHash to an array of 8 uint32 values.
 // It combines 4 bytes at a time to create a uint32 value.
 func (hash *DomainHash) Uint32Array() [8]uint32 {

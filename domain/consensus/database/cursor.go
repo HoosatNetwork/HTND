@@ -33,6 +33,13 @@ func (d *dbCursor) Seek(key model.DBKey) error {
 	return d.cursor.Seek(dbKeyToDatabaseKey(key))
 }
 
+func (d *dbCursor) SeekFullKey(key []byte) error {
+	if d.isClosed {
+		return errors.New("Tried using a closed DBCursor")
+	}
+	return d.cursor.SeekFullKey(key)
+}
+
 func (d *dbCursor) Key() (model.DBKey, error) {
 	if d.isClosed {
 		return nil, errors.New("Tried using a closed DBCursor")
@@ -43,6 +50,13 @@ func (d *dbCursor) Key() (model.DBKey, error) {
 	}
 
 	return newDBKey(key), nil
+}
+
+func (d *dbCursor) FullKey() ([]byte, error) {
+	if d.isClosed {
+		return nil, errors.New("Tried using a closed DBCursor")
+	}
+	return d.cursor.FullKey()
 }
 
 func (d *dbCursor) Value() ([]byte, error) {

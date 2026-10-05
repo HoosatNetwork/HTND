@@ -89,3 +89,50 @@ func TestReleaseUsedOutpoints(t *testing.T) {
 		t.Fatalf("unrelated outpoint should remain reserved")
 	}
 }
+
+func TestBroadcastErrorMeansUTXOSetIsStale(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "already spent",
+			err:      errors.New("error submitting transaction: Rejected transaction abc output (def: 1) already spent by transaction ghi"),
+			expected: true,
+		},
+		{
+			name:     "rejected transaction",
+			err:      errors.New("rpc error: code = Unknown desc = error submitting transaction: Rejected transaction abc"),
+			expected: true,
+		},
+		{
+			name:     "compound rate limit",
+			err:      errors.New("error submitting transaction: Rejected transaction abc: Compound transaction rate limit exceeded"),
+			expected: false,
+		},
+		{
+			name:     "transient transport failure",
+			err:      errors.New("context deadline exceeded"),
+			expected: false,
+		},
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			actual := broadcastErrorMeansUTXOSetIsStale(testCase.err)
+			if actual != testCase.expected {
+				t.Fatalf("unexpected result: got %t, want %t", actual, testCase.expected)
+			}
+		})
+	}
+}

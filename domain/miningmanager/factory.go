@@ -30,6 +30,7 @@ func (f *factory) NewMiningManager(consensusReference consensusreference.Consens
 		blockTemplateBuilder: blockTemplateBuilder,
 		cachingTime:          time.Time{},
 		cacheLock:            &sync.Mutex{},
+		disqualifiedBlocks:   newDisqualifiedBlockQueue(),
 	}
 }
 

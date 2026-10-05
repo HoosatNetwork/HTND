@@ -570,7 +570,7 @@ func (csm *consensusStateManager) resolveSingleBlockStatus(stagingArea *model.St
 		// Later down the process, the diff will be reversed in reverseUTXODiffs.
 		log.Debugf("Block %s is not the new selected tip, and is not the tip of the currently verified chain, "+
 			"therefore temporarily setting selectedParent as it's diffChild", blockHash)
-		utxoDiff, err := selectedParentPastUTXOSet.DiffFrom(pastUTXOSet)
+		utxoDiff, err := csm.diffFromSelectedParentPast(blockHash, selectedParentPastUTXOSet, pastUTXOSet)
 		if err != nil {
 			return 0, nil, errors.Wrapf(err, "resolveSingleBlockStatus: failed to diff block %s against its "+
 				"selected parent %s (this=selectedParentPastUTXOSet of %s, other=pastUTXOSet of %s)",

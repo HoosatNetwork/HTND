@@ -38,6 +38,7 @@ var commandTypes = []reflect.Type{
 	reflect.TypeFor[protowire.HoosatdMessage_SubmitTransactionRequest](),
 
 	reflect.TypeFor[protowire.HoosatdMessage_GetUtxosByAddressesRequest](),
+	reflect.TypeFor[protowire.HoosatdMessage_GetWalletUtxosRequest](),
 	reflect.TypeFor[protowire.HoosatdMessage_GetBalanceByAddressRequest](),
 	reflect.TypeFor[protowire.HoosatdMessage_GetCoinSupplyRequest](),
 

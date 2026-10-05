@@ -41,9 +41,20 @@ func BytesPrefix(prefix []byte) *pebble.IterOptions {
 
 // Cursor begins a new cursor over the given prefix.
 func (db *DB) Cursor(bucket *database.Bucket) (database.Cursor, error) {
-	// log.Infof("Bucket path = %x", bucket.Path())
-	// log.Infof("Opening cursor for bucket path: %x", bucket.Path())
-	iterator, err := db.db.NewIter(BytesPrefix(bucket.Path()))
+	return db.CursorBounds(bucket, nil, nil)
+}
+
+// CursorBounds begins a cursor over bucket limited to full keys in [lower, upper).
+// A nil bound leaves that side at the bucket's own prefix range.
+func (db *DB) CursorBounds(bucket *database.Bucket, lower, upper []byte) (database.Cursor, error) {
+	opts := BytesPrefix(bucket.Path())
+	if lower != nil && bytes.Compare(lower, opts.LowerBound) > 0 {
+		opts.LowerBound = lower
+	}
+	if upper != nil && (opts.UpperBound == nil || bytes.Compare(upper, opts.UpperBound) < 0) {
+		opts.UpperBound = upper
+	}
+	iterator, err := db.db.NewIter(opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create iterator")
 	}
@@ -94,11 +105,19 @@ func (c *DBCursor) Seek(key *database.Key) error {
 	if c.isClosed {
 		return errors.New("cannot seek a closed cursor")
 	}
-	found := c.iterator.SeekGE(key.Bytes())
+	return c.SeekFullKey(key.Bytes())
+}
+
+// SeekFullKey moves the iterator to the first key greater than or equal to key.
+// key is the full database key. ErrNotFound means nothing remains at or after it.
+func (c *DBCursor) SeekFullKey(key []byte) error {
+	if c.isClosed {
+		return errors.New("cannot seek a closed cursor")
+	}
+	found := c.iterator.SeekGE(key)
 	c.firstCalled = true
-	// log.Infof("Seek %s, found: %t", key.Bytes(), found)
 	if !found {
-		return errors.Wrapf(database.ErrNotFound, "no key found for seek %s", key)
+		return database.ErrNotFound
 	}
 	return nil
 }
@@ -124,6 +143,25 @@ func (c *DBCursor) Key() (*database.Key, error) {
 	suffix := bytes.TrimPrefix(fullKeyPath, c.bucket.Path())
 	// log.Infof("Key: fullKeyPath=%x, suffix=%x", fullKeyPath, suffix)
 	return c.bucket.Key(suffix), nil
+}
+
+// FullKey returns the current full key, bucket prefix included. The returned slice
+// is owned by the iterator and is invalid after the next cursor movement.
+func (c *DBCursor) FullKey() ([]byte, error) {
+	if c.isClosed {
+		return nil, errors.New("cannot get the key of a closed cursor")
+	}
+	if !c.iterator.Valid() {
+		if iterErr := c.iterator.Error(); iterErr != nil {
+			return nil, errors.Wrap(iterErr, "iterator error")
+		}
+		return nil, database.ErrNotFound
+	}
+	fullKey := c.iterator.Key()
+	if fullKey == nil {
+		return nil, database.ErrNotFound
+	}
+	return fullKey, nil
 }
 
 // Value returns the value of the current key/value pair, or ErrNotFound if done.

@@ -67,6 +67,16 @@ func (s *server) estimateMassAfterSignatures(transaction *serialization.Partiall
 	}
 
 	for i, input := range transaction.PartiallySignedInputs {
+		if libhtnwallet.IsMLDSA44Input(input) {
+			// The signer stores the signature and the public key together; see
+			// libhtnwallet.MLDSA44SignatureWithPublicKeySize. A single-sig input has one pair; a
+			// multisig one is extracted with its first MinimumSignatures signatures.
+			for j := 0; j < len(input.PubKeySignaturePairs) && uint64(j) < uint64(max(input.MinimumSignatures, 1)); j++ {
+				input.PubKeySignaturePairs[j].Signature = make([]byte, libhtnwallet.MLDSA44SignatureWithPublicKeySize)
+			}
+			transaction.Tx.Inputs[i].SigOpCount = byte(len(input.PubKeySignaturePairs))
+			continue
+		}
 		for j, pubKeyPair := range input.PubKeySignaturePairs {
 			index, err := checkedUint32FromInt(j)
 			if err != nil {

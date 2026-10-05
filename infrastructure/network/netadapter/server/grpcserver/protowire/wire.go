@@ -821,6 +821,20 @@ func toRPCPayload(message appmessage.Message) (isHoosatdMessage_Payload, error) 
 			return nil, err
 		}
 		return payload, nil
+	case *appmessage.GetWalletUTXOsRequestMessage:
+		payload := new(HoosatdMessage_GetWalletUtxosRequest)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	case *appmessage.GetWalletUTXOsResponseMessage:
+		payload := new(HoosatdMessage_GetWalletUtxosResponse)
+		err := payload.fromAppMessage(message)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
 	case *appmessage.GetBalanceByAddressRequestMessage:
 		payload := new(HoosatdMessage_GetBalanceByAddressRequest)
 		err := payload.fromAppMessage(message)

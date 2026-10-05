@@ -66,6 +66,28 @@ func (bss *blockStatusStore) Get(dbContext model.DBReader, stagingArea *model.St
 	return statusDeserialized, nil
 }
 
+// GetWithoutCaching reads a block's last committed status from the database alone, reporting
+// whether it exists, for callers that do not hold the consensus lock. The status cache is an
+// lrucache.LRUCache, which is not safe for concurrent use - a Get reorders it - and block processing
+// writes it under the lock, so a lock-free reader must not touch it. A status changes as a block is
+// verified; this returns the one in the last committed transaction.
+func (bss *blockStatusStore) GetWithoutCaching(dbContext model.DBReader, blockHash *externalapi.DomainHash) (
+	status externalapi.BlockStatus, exists bool, err error,
+) {
+	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	status, err = bss.deserializeBlockStatus(statusBytes)
+	if err != nil {
+		return 0, false, err
+	}
+	return status, true, nil
+}
+
 // Exists returns true if the blockStatus for the given blockHash exists
 func (bss *blockStatusStore) Exists(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	stagingShard := bss.stagingShard(stagingArea)

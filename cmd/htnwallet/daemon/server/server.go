@@ -41,9 +41,15 @@ type server struct {
 	shutdown                        chan struct{}
 	forceSyncChan                   chan struct{}
 	startTimeOfLastCompletedRefresh time.Time
+	limitOfLastCompletedRefresh     uint32 // The per-address UTXO limit utxosSortedByAmount was fetched with
+	utxoSetIsStale                  bool   // A broadcast found utxosSortedByAmount holding coins already spent
+	transactionStatusUnavailable    bool   // The node's GetTransactionStatus timed out; see acceptanceVerdict
 	addressSet                      walletAddressSet
+	importedAddresses               walletAddressSet            // Every address of an imported key; see trackImportedKeys
+	recentAddressBatches            map[uint32]walletAddressSet // Derived address batches by start index; see addressesToQueryCached
 	txMassCalculator                *txmass.Calculator
 	usedOutpoints                   map[externalapi.DomainOutpoint]time.Time
+	pendingBroadcasts               map[externalapi.DomainTransactionID]*pendingBroadcast
 	firstSyncDone                   atomic.Bool
 
 	isLogFinalProgressLineShown bool
@@ -120,6 +126,11 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		isLogFinalProgressLineShown: false,
 		maxUsedAddressesForLog:      0,
 		maxProcessedAddressesForLog: 0,
+	}
+
+	err = serverInstance.trackImportedKeys()
+	if err != nil {
+		return errors.Wrap(err, "Error reading the imported keys")
 	}
 
 	log.Infof("Read, syncing the wallet...")
