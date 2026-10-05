@@ -934,7 +934,6 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
 	cp := pm.pruningPointCheckpoint
-	current := pruningPoint
 	currentHeader := pruningPointHeader
 	for {
 		previous := currentHeader.PruningPoint()
@@ -951,7 +950,7 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s was not reached from pruning point "+
 				"%s, and the pruning-point chain is missing header %s, so the checkpoint cannot be checked",
 				cp.Hash, pruningPoint, previous)
-			return true, nil // inconclusive, same as before
+			return true, nil // inconclusive
 		}
 		if err != nil {
 			return false, err
@@ -959,10 +958,10 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 		if previousHeader.BlueScore() < cp.BlueScore {
 			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the pruning-point chain "+
 				"of pruning point %s", cp.Hash, pruningPoint)
-			// return false, nil // Just while we debug
-			 return true, nil
+			// return false, nil
+			return true, nil
 		}
-		current, currentHeader = previous, previousHeader
+		currentHeader = previousHeader
 	}
 }
 
