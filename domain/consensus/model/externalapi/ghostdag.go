@@ -54,22 +54,6 @@ func (bgd *BlockGHOSTDAGData) BlueWork() *big.Int {
 }
 
 // DynamicK returns the dynamic K that was used for this block's GHOSTDAG calculation.
-// CompareBlueWork compares bgd's blue work with other's as big.Int.Cmp does, returning -1, 0 or +1,
-// without copying either. BlueWork returns a copy for callers that keep or modify it; a caller that
-// only orders blocks needs none, and difficultyManager.blockWindow orders a whole DAA window of them
-// for every header. A nil blue work orders before any other.
-func (bgd *BlockGHOSTDAGData) CompareBlueWork(other *BlockGHOSTDAGData) int {
-	switch {
-	case bgd.blueWork == nil && other.blueWork == nil:
-		return 0
-	case bgd.blueWork == nil:
-		return -1
-	case other.blueWork == nil:
-		return 1
-	}
-	return bgd.blueWork.Cmp(other.blueWork)
-}
-
 func (bgd *BlockGHOSTDAGData) DynamicK() KType {
 	return bgd.dynamicK
 }

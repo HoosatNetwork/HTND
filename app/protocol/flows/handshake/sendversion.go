@@ -60,6 +60,7 @@ func (flow *sendVersionFlow) start() error {
 	msg := appmessage.NewMsgVersion(localAddress, flow.NetAdapter().ID(),
 		flow.Config().ActiveNetParams.Name, subnetworkID, flow.Config().ProtocolVersion)
 	msg.AddUserAgent(userAgentName, userAgentVersion, flow.Config().UserAgentComments...)
+	// Baseline state is not advertised. A peer string is not a check.
 
 	// Advertise the services flag
 	msg.Services = defaultServices

@@ -61,7 +61,6 @@ var handlers = map[appmessage.MessageCommand]handler{
 	appmessage.CmdGetMempoolEntriesByAddressesRequestMessage:                rpchandlers.HandleGetMempoolEntriesByAddresses,
 	appmessage.CmdGetUsableAddressesRequestMessage:                          rpchandlers.HandleGetUsableAddresses,
 	appmessage.CmdGetPaginatedUTXOsByAddressesRequestMessage:                rpchandlers.HandleGetPaginatedUTXOsByAddresses,
-	appmessage.CmdGetWalletUTXOsRequestMessage:                              rpchandlers.HandleGetWalletUTXOs,
 }
 
 func (m *Manager) routerInitializer(rtr *router.Router, netConnection *netadapter.NetConnection) {
@@ -111,7 +110,6 @@ var addressIndexCommands = map[appmessage.MessageCommand]struct{}{
 	appmessage.CmdGetUTXOsByAddressesRequestMessage:          {},
 	appmessage.CmdGetPaginatedUTXOsByAddressesRequestMessage: {},
 	appmessage.CmdGetUsableAddressesRequestMessage:           {},
-	appmessage.CmdGetWalletUTXOsRequestMessage:               {},
 }
 
 const addressIndexRequestsQueueSize = 100

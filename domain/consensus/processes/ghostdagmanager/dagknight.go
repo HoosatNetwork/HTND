@@ -78,10 +78,6 @@ func (gm *ghostdagManager) getTipsInG(stagingArea *model.StagingArea, G []*exter
 // Input: G - a block DAG represented as a set of block hashes
 // Output: The selected tip of G, and a total ordering over all blocks in G
 func (gm *ghostdagManager) OrderDAG(stagingArea *model.StagingArea, G []*externalapi.DomainHash) (*externalapi.DomainHash, []*externalapi.DomainHash, error) {
-	return gm.orderDAG(stagingArea, G, newDAGKnightMemo())
-}
-
-func (gm *ghostdagManager) orderDAG(stagingArea *model.StagingArea, G []*externalapi.DomainHash, memo *dagKnightMemo) (*externalapi.DomainHash, []*externalapi.DomainHash, error) {
 	// Step 1: Filter out any nil blocks from G to ensure validity
 	G = filterNil(G)
 
@@ -106,7 +102,7 @@ func (gm *ghostdagManager) orderDAG(stagingArea *model.StagingArea, G []*externa
 			return nil, nil, err
 		}
 		// Recursive call to order the past
-		selectedTip, order, err := gm.orderDAG(stagingArea, pastB, memo)
+		selectedTip, order, err := gm.OrderDAG(stagingArea, pastB)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -121,27 +117,28 @@ func (gm *ghostdagManager) orderDAG(stagingArea *model.StagingArea, G []*externa
 	// Step 6: While |P| > 1, iteratively reduce P to a single element
 	for len(P) > 1 {
 		// Step 6a: Find the latest common chain ancestor g of all blocks in P
-		g, err := gm.latestCommonChainAncestor(stagingArea, P, G, memo)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// future(g) is needed by both step 6b and step 6c. It is the same pure function of (g, G) in
-		// both, so it is computed once here instead of once in each.
-		futureG, err := gm.getFuture(stagingArea, g, G)
+		g, err := gm.latestCommonChainAncestor(stagingArea, P, G)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		// Step 6b: Partition P into maximal disjoint sets P1, ..., Pn where the LCA of each Pi is in future(g)
-		partitions := gm.partitionByLCAFuture(stagingArea, P, futureG, memo)
+		partitions, err := gm.partitionByLCAFuture(stagingArea, P, g, G)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		// Step 6c: For each partition Pi, calculate its rank using CalculateRank(Pi, future(g))
 		minRank := -1
 		minRankPartitions := make([][]*externalapi.DomainHash, 0)
 
+		futureG, err := gm.getFuture(stagingArea, g, G)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		for _, Pi := range partitions {
-			ranki, err := gm.calculateRank(stagingArea, Pi, futureG, memo)
+			ranki, err := gm.CalculateRank(stagingArea, Pi, futureG)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -160,7 +157,7 @@ func (gm *ghostdagManager) orderDAG(stagingArea *model.StagingArea, G []*externa
 			tieBreakPartitions = append(tieBreakPartitions, partition...)
 		}
 
-		selectedP, err := gm.tieBreaking(stagingArea, futureG, tieBreakPartitions, minRank, memo)
+		selectedP, err := gm.TieBreaking(stagingArea, futureG, tieBreakPartitions, minRank)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -194,57 +191,9 @@ func (gm *ghostdagManager) orderDAG(stagingArea *model.StagingArea, G []*externa
 	return p, ordering, nil
 }
 
-// dagKnightMemo memoizes pure lookups for the duration of ONE top-level DAGKnight call (OrderDAG,
-// CalculateRank, TieBreaking or KColouring) and is thrown away when that call returns.
-//
-// Everything it holds is a function of immutable data read through a single staging area: a
-// block's selected parent never changes once its GHOSTDAG data exists, so neither does the latest
-// common chain ancestor of two blocks. The memo is never shared between calls, staging areas or
-// goroutines, which is what separates it from the process-global LRU caches that 78da7235d
-// removed: those outlived the staging area they were filled from, and the orderDAG/LCA caches were
-// keyed by a 128-bit FNV digest of the input set rather than the set itself. The partition cache
-// commit also swapped the pairwise-with-the-whole-group partitioning for a transitive union-find
-// whose groups came out of a Go map in random order, and truncated large inputs by blue score -
-// both of which changed the result, not just its cost. None of that is reintroduced here: keys are
-// the exact block hashes, results are identical to recomputing them, and the algorithm is
-// unchanged.
-type dagKnightMemo struct {
-	selectedParents map[externalapi.DomainHash]*externalapi.DomainHash
-	lcas            map[[2]externalapi.DomainHash]*externalapi.DomainHash
-}
-
-func newDAGKnightMemo() *dagKnightMemo {
-	return &dagKnightMemo{
-		selectedParents: make(map[externalapi.DomainHash]*externalapi.DomainHash),
-		lcas:            make(map[[2]externalapi.DomainHash]*externalapi.DomainHash),
-	}
-}
-
-// selectedParent returns the selected parent of block, reading its GHOSTDAG data at most once per memo.
-func (gm *ghostdagManager) selectedParent(stagingArea *model.StagingArea, block *externalapi.DomainHash, memo *dagKnightMemo) (*externalapi.DomainHash, error) {
-	if selectedParent, ok := memo.selectedParents[*block]; ok {
-		return selectedParent, nil
-	}
-	gd, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, block, false)
-	if err != nil {
-		return nil, err
-	}
-	selectedParent := gd.SelectedParent()
-	memo.selectedParents[*block] = selectedParent
-	return selectedParent, nil
-}
-
 // latestCommonChainAncestor finds the latest common chain ancestor of all blocks in P
 // In DAGKnight, this refers to the deepest block that is a chain ancestor of all blocks in P
-//
-// The result is the first block of P[0]'s selected-parent chain (P[0] itself, its selected parent,
-// ... down to the virtual genesis marker) that is also on the selected-parent chain of every other
-// block in P. The chains of any two blocks share a suffix once they meet, so that block is the fold
-// of the pairwise meeting point over P, and the pairwise meeting point is found by walking both
-// chains only down to where they meet - O(fork depth) - instead of materializing both chains all
-// the way to genesis, which made every call O(chain length) in database reads while consensus held
-// its lock.
-func (gm *ghostdagManager) latestCommonChainAncestor(stagingArea *model.StagingArea, P, _ []*externalapi.DomainHash, memo *dagKnightMemo) (*externalapi.DomainHash, error) {
+func (gm *ghostdagManager) latestCommonChainAncestor(stagingArea *model.StagingArea, P, G []*externalapi.DomainHash) (*externalapi.DomainHash, error) {
 	if len(P) == 0 {
 		return nil, errors.New("empty set P")
 	}
@@ -252,85 +201,53 @@ func (gm *ghostdagManager) latestCommonChainAncestor(stagingArea *model.StagingA
 		return P[0], nil
 	}
 
-	lca := P[0]
+	// Start from the first block and find the chain (selected parent path)
+	chain1, err := gm.getChainPath(stagingArea, P[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Find intersection of all chains
+	commonAncestors := chain1
 	for _, block := range P[1:] {
-		var err error
-		lca, err = gm.chainMeetingPoint(stagingArea, lca, block, memo)
+		chain, err := gm.getChainPath(stagingArea, block)
 		if err != nil {
 			return nil, err
 		}
+		commonAncestors = intersect(commonAncestors, chain)
 	}
-	return lca, nil
+
+	if len(commonAncestors) == 0 {
+		return model.VirtualGenesisBlockHash, nil
+	}
+
+	// Return the "latest" (deepest) common ancestor
+	// Assuming the chain is ordered from tip to genesis, the first one is the latest
+	return commonAncestors[0], nil
 }
 
-// chainMeetingPoint returns the first block that lies on both a's and b's selected-parent chains
-// (each chain includes the block itself and ends at model.VirtualGenesisBlockHash).
-//
-// It walks the two chains alternately, one block at a time, remembering what each side has seen, and
-// stops at the first block one side steps onto that the other has already seen. That block is the
-// meeting point m: every block either walk visits before m is on only its own chain, and every block
-// after m is on both chains and is reached by each walk only after m, so m is always the first shared
-// block to be seen by both. It does not rely on blue scores or reachability, only on the same
-// selected-parent links the old full-chain walk followed.
-func (gm *ghostdagManager) chainMeetingPoint(stagingArea *model.StagingArea, a, b *externalapi.DomainHash, memo *dagKnightMemo) (*externalapi.DomainHash, error) {
-	if a.Equal(b) {
-		return a, nil
-	}
-	key := [2]externalapi.DomainHash{*a, *b}
-	if b.Less(a) {
-		key = [2]externalapi.DomainHash{*b, *a}
-	}
-	if lca, ok := memo.lcas[key]; ok {
-		return lca, nil
+// getChainPath returns the chain path from block to genesis (selected parent chain)
+func (gm *ghostdagManager) getChainPath(stagingArea *model.StagingArea, block *externalapi.DomainHash) ([]*externalapi.DomainHash, error) {
+	path := []*externalapi.DomainHash{block}
+	current := block
+
+	for !current.Equal(model.VirtualGenesisBlockHash) {
+		gd, err := gm.ghostdagDataStore.Get(gm.databaseContext, stagingArea, current, false)
+		if err != nil {
+			return nil, err
+		}
+		current = gd.SelectedParent()
+		path = append(path, current)
 	}
 
-	seenA := map[externalapi.DomainHash]struct{}{*a: {}}
-	seenB := map[externalapi.DomainHash]struct{}{*b: {}}
-	x, y := a, b
-	var lca *externalapi.DomainHash
-	for lca == nil {
-		xDone := x.Equal(model.VirtualGenesisBlockHash)
-		yDone := y.Equal(model.VirtualGenesisBlockHash)
-		if xDone && yDone {
-			// Both chains end at the virtual genesis marker, so the walk that reached it second
-			// has already returned it above. Kept only so this loop can never spin.
-			lca = model.VirtualGenesisBlockHash
-			break
-		}
-		if !xDone {
-			next, err := gm.selectedParent(stagingArea, x, memo)
-			if err != nil {
-				return nil, err
-			}
-			x = next
-			if _, ok := seenB[*x]; ok {
-				lca = x
-				break
-			}
-			seenA[*x] = struct{}{}
-		}
-		if !yDone {
-			next, err := gm.selectedParent(stagingArea, y, memo)
-			if err != nil {
-				return nil, err
-			}
-			y = next
-			if _, ok := seenA[*y]; ok {
-				lca = y
-				break
-			}
-			seenB[*y] = struct{}{}
-		}
-	}
-	memo.lcas[key] = lca
-	return lca, nil
+	return path, nil
 }
 
 // partitionByLCAFuture partitions P into maximal disjoint sets where LCA of each set is in future(g)
-func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, P []*externalapi.DomainHash, futureG []*externalapi.DomainHash, memo *dagKnightMemo) [][]*externalapi.DomainHash {
-	futureGSet := make(map[externalapi.DomainHash]struct{}, len(futureG))
-	for _, h := range futureG {
-		futureGSet[*h] = struct{}{}
+func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, P []*externalapi.DomainHash, g *externalapi.DomainHash, G []*externalapi.DomainHash) ([][]*externalapi.DomainHash, error) {
+	futureG, err := gm.getFuture(stagingArea, g, G)
+	if err != nil {
+		return nil, err
 	}
 
 	// We will build maximal groups where every pair agrees on the chain after g
@@ -354,7 +271,7 @@ func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, 
 			// Check if other agrees with ALL blocks already in the group w.r.t. future(g)
 			agreesWithGroup := true
 			for _, existing := range group {
-				if !gm.agreesOnFuture(stagingArea, existing, other, futureGSet, memo) {
+				if !gm.agreesOnFuture(stagingArea, existing, other, futureG) {
 					agreesWithGroup = false
 					break
 				}
@@ -369,21 +286,20 @@ func (gm *ghostdagManager) partitionByLCAFuture(stagingArea *model.StagingArea, 
 		partitions = append(partitions, group)
 	}
 
-	return partitions
+	return partitions, nil
 }
 
 // Helper: checks if two blocks agree after g
-func (gm *ghostdagManager) agreesOnFuture(stagingArea *model.StagingArea, A, B *externalapi.DomainHash, futureGSet map[externalapi.DomainHash]struct{}, memo *dagKnightMemo) bool {
+func (gm *ghostdagManager) agreesOnFuture(stagingArea *model.StagingArea, A, B *externalapi.DomainHash, futureG []*externalapi.DomainHash) bool {
 	// Get latest common chain ancestor
-	lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{A, B}, nil, memo)
+	lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{A, B}, nil)
 	if err != nil {
 		return false
 	}
 
 	// They agree w.r.t. future(g) if their LCA is NOT in future(g)
 	// (meaning the disagreement happened before or at g)
-	_, inFutureG := futureGSet[*lca]
-	return !inFutureG
+	return !contains(futureG, lca)
 }
 
 // contains checks if slice contains the element
@@ -445,10 +361,6 @@ type KColouringResult struct {
 // Input: P - a set of blocks in G, G - a block DAG
 // Output: The rank of P in G, which is the smallest k where P has a winning k-colouring
 func (gm *ghostdagManager) CalculateRank(stagingArea *model.StagingArea, P, G []*externalapi.DomainHash) (int, error) {
-	return gm.calculateRank(stagingArea, P, G, newDAGKnightMemo())
-}
-
-func (gm *ghostdagManager) calculateRank(stagingArea *model.StagingArea, P, G []*externalapi.DomainHash, memo *dagKnightMemo) (int, error) {
 	// Step 1: Filter out any nil blocks from P
 	validP := make([]*externalapi.DomainHash, 0, len(P))
 	for _, p := range P {
@@ -478,7 +390,7 @@ func (gm *ghostdagManager) calculateRank(stagingArea *model.StagingArea, P, G []
 		// Step 3: For each block r in P
 		for _, r := range reps {
 			// Step 3a: Compute the k-colouring Ck of past_G(r)
-			res, err := gm.kColouring(stagingArea, r, G, k, false, nil, memo)
+			res, err := gm.KColouring(stagingArea, r, G, k, false, nil)
 			if err != nil {
 				return 0, err
 			}
@@ -524,7 +436,7 @@ func (gm *ghostdagManager) calculateRank(stagingArea *model.StagingArea, P, G []
 		// Step 3 again: For backtracking one block r in P
 		for _, r := range P {
 			// Step 3a: Compute the k-colouring Ck of past_G(r)
-			res, err := gm.kColouring(stagingArea, r, G, k, false, nil, memo)
+			res, err := gm.KColouring(stagingArea, r, G, k, false, nil)
 			if err != nil {
 				return 0, err
 			}
@@ -567,10 +479,6 @@ func (gm *ghostdagManager) calculateRank(stagingArea *model.StagingArea, P, G []
 // Input: G - a block DAG, Ps - list of tips P1, ..., Pm with the same rank k
 // Output: The winning tip Pi among Ps
 func (gm *ghostdagManager) TieBreaking(stagingArea *model.StagingArea, G []*externalapi.DomainHash, Ps []*externalapi.DomainHash, k int) (*externalapi.DomainHash, error) {
-	return gm.tieBreaking(stagingArea, G, Ps, k, newDAGKnightMemo())
-}
-
-func (gm *ghostdagManager) tieBreaking(stagingArea *model.StagingArea, G []*externalapi.DomainHash, Ps []*externalapi.DomainHash, k int, memo *dagKnightMemo) (*externalapi.DomainHash, error) {
 	Ps = filterNil(Ps)
 	if len(Ps) == 0 {
 		return nil, errors.New("no tips")
@@ -581,19 +489,7 @@ func (gm *ghostdagManager) tieBreaking(stagingArea *model.StagingArea, G []*exte
 
 	virtual := model.VirtualGenesisBlockHash
 	// Global k-colouring (ignore error for now – we handle empty below)
-	F, _ := gm.kColouring(stagingArea, virtual, G, k, true, nil, memo)
-
-	// anticone_G(B) depends only on B and G, and G is fixed for this whole call, yet the loop below
-	// asks for it once per (Pi, kp, B). Compute each one once. Errors were already ignored here.
-	anticones := make(map[externalapi.DomainHash][]*externalapi.DomainHash)
-	anticoneOf := func(B *externalapi.DomainHash) []*externalapi.DomainHash {
-		if anticone, ok := anticones[*B]; ok {
-			return anticone
-		}
-		anticone, _ := gm.getAnticone(stagingArea, B, G)
-		anticones[*B] = anticone
-		return anticone
-	}
+	F, _ := gm.KColouring(stagingArea, virtual, G, k, true, nil)
 
 	bestIdx := 0
 	bestScore := "" // lexicographically smallest wins
@@ -602,11 +498,11 @@ func (gm *ghostdagManager) tieBreaking(stagingArea *model.StagingArea, G []*exte
 		Ci := make(map[externalapi.DomainHash]struct{})
 
 		for kp := k / 2; kp <= k; kp++ {
-			res, _ := gm.kColouring(stagingArea, virtual, G, kp, false, Pi, memo)
+			res, _ := gm.KColouring(stagingArea, virtual, G, kp, false, Pi)
 			chain := res.Chain
 
 			for _, B := range F.Blues {
-				anticoneB := anticoneOf(B)
+				anticoneB, _ := gm.getAnticone(stagingArea, B, G)
 				if len(intersect(anticoneB, chain)) >= kp {
 					Ci[*B] = struct{}{}
 				}
@@ -648,10 +544,6 @@ func (gm *ghostdagManager) tieBreaking(stagingArea *model.StagingArea, G []*exte
 //
 // Output: (Blues, Chain) where Blues is the k-colouring of past_G(C), Chain is the k-chain
 func (gm *ghostdagManager) KColouring(stagingArea *model.StagingArea, C *externalapi.DomainHash, G []*externalapi.DomainHash, k int, freeSearch bool, conditioning *externalapi.DomainHash) (KColouringResult, error) {
-	return gm.kColouring(stagingArea, C, G, k, freeSearch, conditioning, newDAGKnightMemo())
-}
-
-func (gm *ghostdagManager) kColouring(stagingArea *model.StagingArea, C *externalapi.DomainHash, G []*externalapi.DomainHash, k int, freeSearch bool, conditioning *externalapi.DomainHash, memo *dagKnightMemo) (KColouringResult, error) {
 	// Step 1: Compute past_G(C)
 	pastC, err := gm.getPast(stagingArea, C, G)
 	if err != nil {
@@ -683,7 +575,7 @@ func (gm *ghostdagManager) kColouring(stagingArea *model.StagingArea, C *externa
 		// Note: past(B) ∩ G = pastB since pastB ⊆ G
 
 		// Step 2b: Check if B agrees with C (with conditioning)
-		agrees, err := gm.agrees(stagingArea, B, C, conditioning, memo)
+		agrees, err := gm.agrees(stagingArea, B, C, conditioning)
 		if err != nil {
 			return KColouringResult{}, err
 		}
@@ -697,7 +589,7 @@ func (gm *ghostdagManager) kColouring(stagingArea *model.StagingArea, C *externa
 		// Step 2d: If B agrees with C, or freeSearch is true, or k > rank(C)
 		if agrees || freeSearch || k > rankC {
 			nextFreeSearch := freeSearch || !agrees
-			res, err := gm.kColouring(stagingArea, B, pastB, k, nextFreeSearch, conditioning, memo)
+			res, err := gm.KColouring(stagingArea, B, pastB, k, nextFreeSearch, conditioning)
 			if err != nil {
 				return KColouringResult{}, err
 			}
@@ -747,9 +639,11 @@ func (gm *ghostdagManager) kColouring(stagingArea *model.StagingArea, C *externa
 		// Check condition: |chain_G ∩ anticone_G(B)| ≤ k
 		if len(intersect(chainG, anticoneB)) <= k {
 			// Check condition: |blues_G ∩ anticone_G(Bmax)| < k
-			// anticone_G(Bmax) is exactly the set computed in step 6 (sorting it does not change the
-			// size of an intersection with it), so it is reused rather than recomputed per B.
-			if len(intersect(bluesG, anticone)) < k {
+			anticoneBmax, err := gm.getAnticone(stagingArea, Bmax, G)
+			if err != nil {
+				return KColouringResult{}, err
+			}
+			if len(intersect(bluesG, anticoneBmax)) < k {
 				// Add B to blues_G
 				bluesG = append(bluesG, B)
 			}
@@ -848,19 +742,19 @@ func (gm *ghostdagManager) getFuture(stagingArea *model.StagingArea, block *exte
 // agrees checks if B agrees with C based on selected parent, with optional conditioning
 // Used in KColouring to determine parent relationships.
 // If conditioning is provided, recursively checks agreement with the conditioning block.
-func (gm *ghostdagManager) agrees(stagingArea *model.StagingArea, B, C *externalapi.DomainHash, conditioning *externalapi.DomainHash, memo *dagKnightMemo) (bool, error) {
+func (gm *ghostdagManager) agrees(stagingArea *model.StagingArea, B, C *externalapi.DomainHash, conditioning *externalapi.DomainHash) (bool, error) {
 	if B.Equal(C) {
 		return true, nil
 	}
 
-	lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{B, C}, nil, memo)
+	lca, err := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{B, C}, nil)
 	if err != nil {
 		return false, err
 	}
 
 	if conditioning != nil {
 		// Avoid deep recursion with simple check
-		condLCA, _ := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{B, conditioning}, nil, memo)
+		condLCA, _ := gm.latestCommonChainAncestor(stagingArea, []*externalapi.DomainHash{B, conditioning}, nil)
 		if !lca.Equal(condLCA) { // stricter chain-descendant check
 			return false, nil
 		}
@@ -910,10 +804,7 @@ func (gm *ghostdagManager) getPast(stagingArea *model.StagingArea, block *extern
 			return nil, err
 		}
 		for _, parent := range parents {
-			if _, inG := gSet[*parent]; inG {
-				if _, ok := visited[*parent]; ok {
-					continue
-				}
+			if _, ok := visited[*parent]; !ok && contains(G, parent) {
 				visited[*parent] = struct{}{}
 				queue = append(queue, parent)
 			}

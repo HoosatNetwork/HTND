@@ -112,7 +112,15 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		L0StopWritesThreshold:     getEnvInt("HTND_L0_STOP_WRITES_THRESHOLD", 40),    // was 48 → must be >= L0CompactionThreshold; 200–500 range common in heavy-ingest
 		L0CompactionFileThreshold: getEnvInt("HTND_L0_COMPACTION_FILE_THRESHOLD", 6), // was 16 → align with compaction trigger
 
-		TargetFileSizes: cappedTargetFileSizes(baseFileSize, maxTargetFileSize(baseFileSize)),
+		TargetFileSizes: [7]int64{
+			baseFileSize,
+			baseFileSize * 4,
+			baseFileSize * 10,
+			baseFileSize * 25,
+			baseFileSize * 50,
+			baseFileSize * 100,
+			baseFileSize * 200,
+		},
 
 		MaxManifestFileSize: 128 << 20,
 		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 40860),
@@ -227,41 +235,6 @@ func Options(cacheSizeMiB int) *pebble.Options {
 // ──────────────────────────────────────────────────────────────
 // Helpers (unchanged)
 // ──────────────────────────────────────────────────────────────
-
-// defaultMaxTargetFileSize caps how large compactions make an sstable at any level.
-//
-// Pebble keeps one bloom filter block per sstable, sized by the table's key count. Uncapped, the
-// targets grew to 200x the base size - 12.8 GB at the last level with a 64 MB base - and tables of about
-// 1 GB already gave filter blocks of megabytes. Every point read that reaches such a table needs its
-// whole filter, so once the block cache could not keep them, each Get read and checksummed megabytes
-// from disk. Measured on a mainnet node after a UTXO index reset: 90% of CPU in pebble Gets, almost all
-// of it in readFilterBlock, under the consensus lock, holding block processing to about 2 blocks per
-// second. 256 MB tables keep each filter small enough to stay cached.
-//
-// Only the split point of new compaction output changes. Existing tables stay as they are, readable,
-// until compactions rewrite them.
-const defaultMaxTargetFileSize = 256 << 20
-
-// maxTargetFileSize returns the cap on target file sizes, HTND_MAX_FILE_SIZE_MB if set, never below the
-// base file size.
-func maxTargetFileSize(baseFileSize int64) int64 {
-	maxSize := int64(defaultMaxTargetFileSize)
-	if mb := getEnvInt("HTND_MAX_FILE_SIZE_MB", 0); mb > 0 {
-		maxSize = int64(mb) << 20
-	}
-	return max(maxSize, baseFileSize)
-}
-
-// cappedTargetFileSizes grows the target file size per level from baseFileSize as before, capped at
-// maxSize.
-func cappedTargetFileSizes(baseFileSize, maxSize int64) [7]int64 {
-	multipliers := [7]int64{1, 4, 10, 25, 50, 100, 200}
-	var sizes [7]int64
-	for i, multiplier := range multipliers {
-		sizes[i] = min(baseFileSize*multiplier, maxSize)
-	}
-	return sizes
-}
 
 func getEnvInt(key string, defaultVal int) int {
 	if v := os.Getenv(key); v != "" {

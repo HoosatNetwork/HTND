@@ -31,9 +31,9 @@ const missingInputReportFormat = "Rejected %d transaction(s) during block accept
 // useless. On a DAG the same transaction is carried by several blocks and only the first merge
 // accepts it; every later copy is refused because the coins are already consumed. That is correct,
 // constant, and says nothing about this node's health. It is also indistinguishable at this point
-// from a genuine gap, because a double spend is only an outpoint an earlier transaction in this
-// same merge-set pass has spent. A spend already folded into virtual, and a coin virtual holds
-// that the set being validated does not, both read simply as "not found".
+// from a genuine gap, because populateTransactionWithUTXOEntriesFromVirtualOrDiff can only tell a
+// double spend from a missing coin when the spend happened inside the accumulated diff it was given
+// - a spend folded into virtual by an earlier block reads simply as "not found".
 //
 // The discriminator used here is how MANY inputs went missing. A transaction that was already
 // accepted has had every one of its inputs consumed, so all of them come back missing. A node with

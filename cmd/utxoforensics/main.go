@@ -20,8 +20,6 @@
 //	-reconstruct    Rebuild the pruning point's absolute UTXO set from virtual's UTXO table plus the
 //	                stored diff chain and diff it entry-by-entry against the served bucket, which
 //	                separates "the set has the wrong members" from "the set has the wrong values".
-//	-pplistcheck    Run the two checks ValidateIBDPruningListVersion gates (HTN-006) against this
-//	                datadir's pruning point and pruning point list, and report where each stops.
 //	-depthaudit N   Bracket the pruning depth the NETWORK selected with, by reading it out of mined
 //	                headers, and report which finality interval the stored pruning point sequence is
 //	                consistent with. Use it to tell whether this node picks pruning points with the
@@ -204,17 +202,6 @@ var (
 		"point's header commitment, and - if it matches - use it as a network-sourced base to discriminate the "+
 		"two DAA-stamp rules on the next selected-chain blocks")
 
-	ppListCheck = flag.Bool("pplistcheck", false, "run, read-only, the two checks ValidateIBDPruningListVersion "+
-		"turns on for an imported pruning point (HTN-006) - IsValidPruningPoint on the current pruning point and "+
-		"ArePruningPointsInValidChain on the newest end of the stored list - step for step against this datadir, and report the "+
-		"verdict and where each one stops. Also walks the list through each pruning point's own header, which "+
-		"a pruned node can do. Mainnet parameters")
-
-	ppListAnchor = flag.Uint("pplistanchor", uint(^uint16(0)), "the anchor block version -pplistcheck passes to "+
-		"ArePruningPointsInValidChain: the version header pruning points are enforced from. The current pruning "+
-		"point's own commitment is followed only when it is at or above it. The default, 65535, is never "+
-		"reached, so only the current pruning point is checked against the headers above it")
-
 	depthAudit = flag.Int("depthaudit", 0, "chain blocks back from the headers-selected tip to use when "+
 		"bracketing the pruning depth the network actually selected with. Every mined header commits the "+
 		"deepest pruning point satisfying blueScore(block) >= blueScore(pruningPoint) + pruningDepth, so each "+
@@ -270,19 +257,8 @@ func main() {
 		}
 	}
 
-	if *ppFingerprintCompare != "" {
-		compareSetFingerprints(*ppFingerprintCompare)
-		if *dbPath == "" {
-			return
-		}
-	}
-
 	if *dbPath == "" {
 		fmt.Fprintln(os.Stderr, "-db is required")
-		os.Exit(2)
-	}
-	if *ppListAnchor > uint(^uint16(0)) {
-		fmt.Fprintf(os.Stderr, "-pplistanchor %d is not a block version\n", *ppListAnchor)
 		os.Exit(2)
 	}
 
@@ -325,14 +301,6 @@ func main() {
 			os.Exit(1)
 		}
 		diffPruningPointSets(s, s2, sa)
-	}
-
-	if *ppFingerprintOut != "" {
-		writeSetFingerprint(s, sa, *ppFingerprintOut)
-	}
-
-	if *ppFingerprintDump != "" {
-		dumpPartitions(s, *ppFingerprintDump)
 	}
 
 	if *canonicalArtifactFlag {
@@ -393,12 +361,6 @@ func main() {
 
 	if *baseTest {
 		baseCheck(s, sa)
-	}
-
-	if *ppListCheck {
-		if _, err := pruningListCheck(s, sa, &dagconfig.MainnetParams, uint16(*ppListAnchor)); err != nil {
-			fmt.Printf("  %v\n", err)
-		}
 	}
 
 	if *depthAudit > 0 {
@@ -1011,14 +973,10 @@ func openStores(db *pebble.DB, prefixFlag int) (*stores, error) {
 		}
 		prefixBytes = activePrefix.Serialize()
 	}
-	return newStores(consensusdatabase.New(db), prefixBytes)
-}
-
-// newStores opens every store this tool reads under one consensus prefix.
-func newStores(dbManager model.DBManager, prefixBytes []byte) (*stores, error) {
+	dbManager := consensusdatabase.New(db)
 	pb := consensusdatabase.MakeBucket(prefixBytes)
 
-	bs, err := blockstore.New(dbManager, pb, 100, 64<<20, false)
+	bs, err := blockstore.New(dbManager, pb, 100, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +986,7 @@ func newStores(dbManager model.DBManager, prefixBytes []byte) (*stores, error) {
 	}
 	return &stores{
 		db: dbManager, prefix: pb, headers: bhs, blocks: bs,
-		accept:     acceptancedatastore.New(pb, 100, 64<<20, false),
+		accept:     acceptancedatastore.New(pb, 100, false),
 		ms:         multisetstore.New(pb, 100, false),
 		gd:         ghostdagdatastore.New(pb.Bucket([]byte{0}), 100, false),
 		daa:        daablocksstore.New(pb, 100, 100, false),
@@ -3266,28 +3224,20 @@ func scanHeaderGHOSTDAGAgreement(s *stores, sa *model.StagingArea, depth int) {
 // factory wires level 0: the reachability store the node already uses (the old per-level one when it holds data for
 // virtual genesis, otherwise the one under the consensus prefix), DAG topology, GHOSTDAG, DAG traversal, then the
 // difficulty manager itself, with mainnet parameters.
-// newDAGTopology opens this datadir's reachability data, under level 0 or, for older datadirs, the prefix root.
-func newDAGTopology(s *stores, sa *model.StagingArea) (model.ReachabilityManager, model.DAGTopologyManager, error) {
+func newDifficultyManager(s *stores, sa *model.StagingArea) (model.DifficultyManager, error) {
+	params := dagconfig.MainnetParams
 	level0 := s.prefix.Bucket([]byte{0})
+
 	reachabilityStore := reachabilitydatastore.New(level0, 10_000, false)
 	hasOldReachability, err := reachabilityStore.HasReachabilityData(s.db, sa, model.VirtualGenesisBlockHash)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !hasOldReachability {
 		reachabilityStore = reachabilitydatastore.New(s.prefix, 10_000, false)
 	}
 	reachabilityManager := reachabilitymanager.New(s.db, s.gd, reachabilityStore)
 	dagTopologyManager := dagtopologymanager.New(s.db, reachabilityManager, blockrelationstore.New(level0, 10_000, false), s.gd)
-	return reachabilityManager, dagTopologyManager, nil
-}
-
-func newDifficultyManager(s *stores, sa *model.StagingArea) (model.DifficultyManager, error) {
-	params := dagconfig.MainnetParams
-	reachabilityManager, dagTopologyManager, err := newDAGTopology(s, sa)
-	if err != nil {
-		return nil, err
-	}
 	ghostdagManager := ghostdagmanager.New(s.db, dagTopologyManager, nil, s.gd, s.headers, s.state, params.K,
 		params.GenesisHash, s.daa, params.POWScores)
 	dagTraversalManager := dagtraversalmanager.New(s.db, dagTopologyManager, s.gd, reachabilityManager, ghostdagManager,

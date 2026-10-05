@@ -79,6 +79,12 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
+	err := s.refreshUTXOs(limit)
+	if err != nil {
+		return nil, err
+	}
+	log.Infof("Fetched %d UTXO from the Node", len(s.utxosSortedByAmount))
+
 	toAddress, err := util.DecodeAddress(address, s.params.Prefix)
 	if err != nil {
 		return nil, err
@@ -93,25 +99,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	refreshed := false
-	if s.compoundNeedsUTXORefresh(limit, time.Now()) {
-		err = s.refreshCompoundUTXOs(limit)
-		if err != nil {
-			return nil, err
-		}
-		refreshed = true
-	}
-
 	selectedUTXOs, _, _, err := s.selectUTXOsForCompounding(feePerInput, fromAddresses)
-	if err != nil && !refreshed {
-		// The reused set may just have run out of coins this daemon has not already spent; only a
-		// fresh one can tell that apart from there being nothing left to compound.
-		err = s.refreshCompoundUTXOs(limit)
-		if err != nil {
-			return nil, err
-		}
-		selectedUTXOs, _, _, err = s.selectUTXOsForCompounding(feePerInput, fromAddresses)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -120,9 +108,15 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		return nil, errors.Errorf("nothing to compound")
 	}
 
+	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
+	if err != nil {
+		return nil, err
+	}
+
 	// For compounding we want to consolidate inputs into a single output.
 	// Send the net amount (after fees) to the requested address and avoid creating
 	// an additional change output to keep base mass low and prevent dust.
+	// Note: changeAddress is still used by maybeAutoCompoundTransaction for split/merge flows.
 	unsignedTransaction, spentUTXOs, err := s.buildCompoundTransactionWithinStandardMass(selectedUTXOs, toAddress)
 	if err != nil {
 		return nil, err
@@ -136,36 +130,11 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		s.usedOutpoints[*spentUTXO.Outpoint] = time.Now()
 	}
 
-	return s.requireStandardMass(unsignedTransaction)
-}
-
-// compoundUTXOSetMaxAge is how long a compound reuses the wallet's UTXO set before fetching it again.
-//
-// A refresh asks the node for up to limit coins of every wallet address, and the node checks each one
-// against virtual's UTXO set with a database read. On a wallet with many coins that takes minutes,
-// while a compound spends at most targetCompoundInputs of them. Refreshing for every compound made the
-// refresh, not the compound rate, set the pace. Reusing the set is safe because the coins this daemon
-// spent stay in usedOutpoints and are skipped. What it costs is that coins received since the refresh
-// wait for the next one, and that coins spent elsewhere are only noticed when a broadcast is refused
-// over them (utxoSetIsStale).
-const compoundUTXOSetMaxAge = 10 * time.Minute
-
-// compoundNeedsUTXORefresh reports whether a compound must fetch the wallet's UTXO set again rather
-// than reuse the one it has.
-func (s *server) compoundNeedsUTXORefresh(limit uint32, now time.Time) bool {
-	return s.utxoSetIsStale ||
-		s.startTimeOfLastCompletedRefresh.IsZero() ||
-		s.limitOfLastCompletedRefresh != limit ||
-		now.Sub(s.startTimeOfLastCompletedRefresh) > compoundUTXOSetMaxAge
-}
-
-func (s *server) refreshCompoundUTXOs(limit uint32) error {
-	err := s.refreshUTXOs(limit)
+	unsignedTransactions, err := s.maybeAutoCompoundTransaction(unsignedTransaction, toAddress, changeAddress, changeWalletAddress)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	log.Infof("Fetched %d UTXO from the Node", len(s.utxosSortedByAmount))
-	return nil
+	return unsignedTransactions, nil
 }
 
 // Add this constant next to your others
@@ -178,9 +147,9 @@ var targetCompoundInputs = 88
 // 66-byte push of the signature). Other input types are bigger - a P2PKH input also carries its
 // public key (99 bytes), a P2SH input carries the public key and the redeem script (137) - so the
 // same 88 inputs that measure 98890 mass from a P2PK wallet measure 101794 from a P2PKH one and
-// 105138 from a P2SH one, against a 100000 limit. Going over used to push those wallets into split
-// and merge transactions, whose splits paid the change address rather than the requested destination;
-// now it would refuse the compound outright (requireStandardMass).
+// 105138 from a P2SH one, against a 100000 limit. Going over is what pushed those wallets into
+// maybeSplitAndMergeTransaction, whose split transactions pay the change address rather than the
+// requested destination.
 //
 // Sizing by measured mass instead of by count keeps a compound a single transaction paying the
 // destination directly, whatever the inputs look like, rather than depending on a constant that only
@@ -287,11 +256,11 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			}
 		}
 
-		selectedUTXO, err := s.libhtnwalletUTXO(highestUTXO.Outpoint, highestUTXO.UTXOEntry, highestUTXO.address)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
+		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
+			Outpoint:       highestUTXO.Outpoint,
+			UTXOEntry:      highestUTXO.UTXOEntry,
+			DerivationPath: s.walletAddressPath(highestUTXO.address),
+		})
 		totalValue += highestUTXO.UTXOEntry.Amount()
 	}
 	// log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
@@ -320,11 +289,11 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 			}
 		}
 
-		selectedUTXO, err := s.libhtnwalletUTXO(utxo.Outpoint, utxo.UTXOEntry, utxo.address)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
+		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
+			Outpoint:       utxo.Outpoint,
+			UTXOEntry:      utxo.UTXOEntry,
+			DerivationPath: s.walletAddressPath(utxo.address),
+		})
 		totalValue += utxo.UTXOEntry.Amount()
 	}
 	// log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
@@ -397,7 +366,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, errors.Errorf("couldn't find funds to spend")
 	}
 
-	changeAddress, _, err := s.changeAddress(useExistingChangeAddress, fromAddresses, allInputsAreMLDSA44(selectedUTXOs))
+	changeAddress, changeWalletAddress, err := s.changeAddress(useExistingChangeAddress, fromAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +388,11 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, err
 	}
 
-	return s.requireStandardMass(unsignedTransaction)
+	unsignedTransactions, err := s.maybeAutoCompoundTransaction(unsignedTransaction, toAddress, changeAddress, changeWalletAddress)
+	if err != nil {
+		return nil, err
+	}
+	return unsignedTransactions, nil
 }
 
 func (s *server) sortUTXOsByAmountAscending() {
@@ -489,11 +462,11 @@ func (s *server) selectUTXOsForTransactionAtDAAScore(spendAmount uint64, isSendA
 			}
 		}
 
-		selectedUTXO, err := s.libhtnwalletUTXO(utxo.Outpoint, utxo.UTXOEntry, utxo.address)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
+		selectedUTXOs = append(selectedUTXOs, &libhtnwallet.UTXO{
+			Outpoint:       utxo.Outpoint,
+			UTXOEntry:      utxo.UTXOEntry,
+			DerivationPath: s.walletAddressPath(utxo.address),
+		})
 
 		totalValue += utxo.UTXOEntry.Amount()
 
@@ -528,47 +501,6 @@ func (s *server) selectUTXOsForTransactionAtDAAScore(spendAmount uint64, isSendA
 	}
 
 	return selectedUTXOs, totalReceived, totalValue - totalSpend, nil
-}
-
-// libhtnwalletUTXO returns the libhtnwallet.UTXO for a coin held at address: its derivation path, the
-// imported key that spends it for an imported wallet's coin, and for ML-DSA-44 multisig its redeem
-// script, which the signers cannot rebuild themselves.
-func (s *server) libhtnwalletUTXO(outpoint *externalapi.DomainOutpoint, utxoEntry externalapi.UTXOEntry,
-	address *walletAddress,
-) (*libhtnwallet.UTXO, error) {
-	if address.imported != nil {
-		return &libhtnwallet.UTXO{
-			Outpoint:                  outpoint,
-			UTXOEntry:                 utxoEntry,
-			DerivationPath:            libhtnwallet.ImportedKeyDerivationPath,
-			ImportedExtendedPublicKey: address.imported.ExtendedPublicKey,
-		}, nil
-	}
-	redeemScript, err := s.walletAddressRedeemScript(address)
-	if err != nil {
-		return nil, err
-	}
-	return &libhtnwallet.UTXO{
-		Outpoint:       outpoint,
-		UTXOEntry:      utxoEntry,
-		DerivationPath: s.walletAddressPath(address),
-		RedeemScript:   redeemScript,
-	}, nil
-}
-
-// allInputsAreMLDSA44 reports whether every selected coin is held by an ML-DSA-44 address, in which
-// case the change goes to one too (see changeAddress).
-func allInputsAreMLDSA44(selectedUTXOs []*libhtnwallet.UTXO) bool {
-	if len(selectedUTXOs) == 0 {
-		return false
-	}
-	for _, selectedUTXO := range selectedUTXOs {
-		// A P2SH output does not say what is behind it; the carried redeem script does.
-		if !libhtnwallet.IsMLDSA44Coin(selectedUTXO.UTXOEntry.ScriptPublicKey().Script, selectedUTXO.RedeemScript) {
-			return false
-		}
-	}
-	return true
 }
 
 func walletAddressesContain(addresses []*walletAddress, contain *walletAddress) bool {

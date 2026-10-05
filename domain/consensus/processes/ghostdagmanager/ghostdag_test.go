@@ -345,12 +345,6 @@ func (ds *GHOSTDAGDataStoreImpl) Commit(_ model.DBTransaction) error {
 	panic("implement me")
 }
 
-func (ds *GHOSTDAGDataStoreImpl) GetWithoutCaching(_ model.DBReader, blockHash *externalapi.DomainHash,
-	isTrustedData bool,
-) (*externalapi.BlockGHOSTDAGData, error) {
-	return ds.Get(nil, nil, blockHash, isTrustedData)
-}
-
 func (ds *GHOSTDAGDataStoreImpl) Get(_ model.DBReader, _ *model.StagingArea, blockHash *externalapi.DomainHash, _ bool) (*externalapi.BlockGHOSTDAGData, error) {
 	v, ok := ds.dagMap[*blockHash]
 	if ok {
@@ -487,10 +481,6 @@ func (b *blockHeadersStore) BlockHeader(_ model.DBReader, _ *model.StagingArea, 
 		return header, nil
 	}
 	return nil, errors.New("Header isn't in the store")
-}
-
-func (b *blockHeadersStore) BlockHeaderWithoutCaching(_ model.DBReader, blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error) {
-	return b.BlockHeader(nil, nil, blockHash)
 }
 
 func (b *blockHeadersStore) HasBlockHeader(_ model.DBReader, _ *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {

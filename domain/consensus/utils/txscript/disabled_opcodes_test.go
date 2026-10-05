@@ -76,7 +76,7 @@ func TestDisabledOpcodesRequireFlag(t *testing.T) {
 			tx := newMinimalTestTx(mustParseShortForm(test.sigScript, 0))
 			scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm(test.pubKeyScript, 0), Version: 0}
 
-			vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+			vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 			if err != nil {
 				t.Fatalf("NewEngine (no flags): %v", err)
 			}
@@ -85,7 +85,7 @@ func TestDisabledOpcodesRequireFlag(t *testing.T) {
 				t.Fatalf("expected ErrDisabledOpcode without flag, got %v", err)
 			}
 
-			vm, err = NewEngine(scriptPubKey, tx, 0, ScriptEnableDisabledOpcodes, nil, nil, nil, &consensushashing.SighashReusedValues{})
+			vm, err = NewEngine(scriptPubKey, tx, 0, ScriptEnableDisabledOpcodes, nil, nil, &consensushashing.SighashReusedValues{})
 			if err != nil {
 				t.Fatalf("NewEngine (with flag): %v", err)
 			}

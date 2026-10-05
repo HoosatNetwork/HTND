@@ -11,8 +11,8 @@ const validCharacters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
 
 const (
 	appMajor uint = 2
-	appMinor uint = 18
-	appPatch uint = 0
+	appMinor uint = 17
+	appPatch uint = 3
 )
 
 // shortCommitLength is the number of hex digits kept from the full commit hash
@@ -28,7 +28,8 @@ const shortCommitLength = 9
 // toolchain stamps into the binary at build time. The commit must be resolved at
 // build time: a running node generally has neither the source repository nor a
 // git binary available, so it cannot be looked up on startup.
-var appBuild = ""
+var appBuild = "14"
+const stampedVersion = "2.17.3-15"
 
 var version = "" // string used for memoization of version
 
@@ -90,6 +91,9 @@ func buildCommit() string {
 
 // Version returns the application version as a properly formed string
 func Version() string {
+	if stampedVersion != "" {
+		return stampedVersion
+	}
 	return version
 }
 

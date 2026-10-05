@@ -34,16 +34,7 @@ const (
 	// That brings the total to 1+(15*74)+3+513 = 1627. This value also
 	// adds a few extra bytes to provide a little buffer.
 	// (1 + 15*74 + 3) + (15*34 + 3) + 23 = 1650
-	//
-	// ML-DSA-44 spends are larger than that. A P2PKH spend is OP_PUSHDATA2
-	// <2421-byte signature+hashtype> OP_PUSHDATA2 <1312-byte pubkey> = 3739
-	// bytes. The largest ML-DSA-44 multisig (txscript.MaxMLDSA44MultiSigSignatures
-	// of txscript.MaxMLDSA44MultiSigKeys, 2-of-11) spends with two of those plus
-	// an OP_1 each (2*3740), an OP_0 for each of the 9 non-signers, and the
-	// 485-byte redeem script behind OP_PUSHDATA2 (488): 7480 + 9 + 488 = 7977.
-	// The limit admits exactly that. The per-transaction mass cap below still
-	// bounds how many such inputs a transaction holds.
-	maximumStandardSignatureScriptSize = 7977
+	maximumStandardSignatureScriptSize = 1650
 
 	// MaximumStandardTransactionMass is the maximum mass allowed for transactions that
 	// are considered standard and will therefore be relayed and considered for mining.

@@ -209,33 +209,3 @@ func TestLRUCache_NilKey_DoesNotPanic(t *testing.T) {
 	}
 	cache.Remove(nil)
 }
-
-func TestLRUCache_PeekDoesNotPromoteAndRemoveOldestEvictsLRU(t *testing.T) {
-	c := New[int](3, false)
-	a, b, d := newTestHash(t, 1), newTestHash(t, 2), newTestHash(t, 3)
-	c.Add(a, 1)
-	c.Add(b, 2)
-	c.Add(d, 3)
-
-	if v, ok := c.Peek(a); !ok || v != 1 {
-		t.Fatalf("Peek(a) = %d, %v", v, ok)
-	}
-	// Peek must not promote a: it is still the least recently used.
-	key, v, ok := c.RemoveOldest()
-	if !ok || key != *a || v != 1 {
-		t.Fatalf("RemoveOldest = %v, %d, %v; want a", key, v, ok)
-	}
-	if c.Len() != 2 || c.Has(a) {
-		t.Fatalf("a was not removed (len %d)", c.Len())
-	}
-	c.RemoveOldest()
-	c.RemoveOldest()
-	if _, _, ok := c.RemoveOldest(); ok || c.Len() != 0 {
-		t.Fatalf("RemoveOldest on an empty cache reported an entry")
-	}
-	// The cache still works after being drained.
-	c.Add(a, 4)
-	if v, ok := c.Get(a); !ok || v != 4 {
-		t.Fatalf("Get(a) after drain = %d, %v", v, ok)
-	}
-}

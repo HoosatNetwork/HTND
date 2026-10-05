@@ -1,7 +1,6 @@
 package consensusstatemanager
 
 import (
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/muhashjournal"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxosurvey"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 )
@@ -12,9 +11,6 @@ func init() {
 	// The survey package owns no logger of its own so that it stays a leaf dependency; it reports
 	// where it is writing, and any problem writing there, through this one.
 	utxosurvey.SetLogger(func(format string, args ...any) {
-		log.Warnf(format, args...)
-	})
-	muhashjournal.SetLogger(func(format string, args ...any) {
 		log.Warnf(format, args...)
 	})
 }

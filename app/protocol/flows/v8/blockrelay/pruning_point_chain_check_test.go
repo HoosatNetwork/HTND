@@ -175,15 +175,9 @@ func TestPruningPointThatMissesTheChainIsRefused(t *testing.T) {
 		}
 		cfg.MergeSetSizeLimit = 10
 		cfg.PruningProofM = 40
-		// Activate every block version up to 10 from DAA score 1 and none above it: POWScores[i] is the
-		// activation score of block version i+2, and a later version would mine a different DAG.
 		cfg.POWScores = make([]uint64, len(cfg.POWScores))
 		for i := range cfg.POWScores {
-			if i+2 <= 10 {
-				cfg.POWScores[i] = 1
-			} else {
-				cfg.POWScores[i] = math.MaxUint64
-			}
+			cfg.POWScores[i] = 1
 		}
 		factory := consensus.NewFactory()
 

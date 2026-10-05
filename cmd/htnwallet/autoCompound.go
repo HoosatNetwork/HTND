@@ -10,7 +10,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
-	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/bip32"
 	"github.com/pkg/errors"
 )
 
@@ -38,7 +37,7 @@ func autoCompound(conf *autoCompoundConfig) error {
 		conf.Password = keys.GetPassword("Enter wallet password: ")
 	}
 
-	mnemonics, importedKeys, err := keysFile.DecryptSigningKeys(conf.NetParams(), conf.Password)
+	mnemonics, err := keysFile.DecryptMnemonics(conf.Password)
 	if err != nil {
 		return errors.Wrap(err, "wrong password")
 	}
@@ -53,12 +52,12 @@ func autoCompound(conf *autoCompoundConfig) error {
 	ticker := time.NewTicker(tickerSecond)
 	defer ticker.Stop()
 
-	if err := compoundOnce(conf, daemonClient, mnemonics, importedKeys, keysFile.ECDSA); err != nil {
+	if err := compoundOnce(conf, daemonClient, mnemonics, keysFile.ECDSA); err != nil {
 		fmt.Printf("[%s] compound failed: %v\n", time.Now().Format("15:04:05"), err)
 	}
 	for {
 		<-ticker.C
-		if err := compoundOnce(conf, daemonClient, mnemonics, importedKeys, keysFile.ECDSA); err != nil {
+		if err := compoundOnce(conf, daemonClient, mnemonics, keysFile.ECDSA); err != nil {
 			fmt.Printf("[%s] compound failed: %v\n", time.Now().Format("15:04:05"), err)
 			continue
 		}
@@ -69,21 +68,16 @@ func compoundOnce(
 	conf *autoCompoundConfig,
 	client pb.HtnwalletdClient, // CORRECT TYPE
 	mnemonics []string,
-	importedKeys map[string]*bip32.ExtendedKey,
 	ecdsa bool,
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), daemonTimeout)
 	defer cancel()
 
 	// 1. Create unsigned tx
-	//
-	// Always ask for an existing change address. A compound pays everything to the destination, so it
-	// has no use for a fresh one, and a daemon that allocated one per compound would walk the internal
-	// index past the ML-DSA-44 key pool after as many compounds as the pool has keys.
 	resp, err := client.CreateUnsignedCompoundTransaction(ctx, &pb.CreateUnsignedCompoundTransactionRequest{
 		From:                     conf.FromAddresses,
 		Address:                  conf.ToAddress,
-		UseExistingChangeAddress: true,
+		UseExistingChangeAddress: conf.UseExistingChangeAddress,
 		Limit:                    &conf.Limit,
 	})
 	if err != nil {
@@ -100,15 +94,20 @@ func compoundOnce(
 
 	// 2. Sign every transaction the daemon produced, not just the first.
 	//
-	// The daemon returns a list. It used to return [split_1 ... split_N, mergeTx] for a compound over
-	// the standard mass, where only mergeTx paid the requested address, so taking just the first
-	// transaction moved the coins to the change address instead. Today a compound is always one
-	// transaction within the standard mass - chained transactions are not accepted by nodes, whose
-	// mempools refuse inputs younger than their minimum input age - but signing all of them keeps
-	// this correct whatever the daemon returns.
+	// createUnsignedCompoundTransaction can return more than one. When the compound exceeds
+	// MaximumStandardTransactionMass it is split, and maybeSplitAndMergeTransaction returns
+	// [split_1 ... split_N, mergeTx]: every split pays the CHANGE address, and only mergeTx pays the
+	// address the user asked for. Taking UnsignedTransactions[0] and dropping the rest therefore
+	// broadcast a transaction that moved the coins to the change address, reported its txid as
+	// success, and left the destination with nothing - which is exactly what a P2PKH or P2SH wallet
+	// saw, because their larger signature scripts are what pushed the compound over the mass limit
+	// and into splitting in the first place.
+	//
+	// Order is preserved: the daemon's broadcast submits sequentially, so each split is in the
+	// mempool before mergeTx - which spends their outputs - is submitted.
 	signedTxs := make([][]byte, len(resp.UnsignedTransactions))
 	for i, unsignedTx := range resp.UnsignedTransactions {
-		signedTx, err := libhtnwallet.SignWithImportedKeys(conf.NetParams(), mnemonics, importedKeys, unsignedTx, ecdsa)
+		signedTx, err := libhtnwallet.Sign(conf.NetParams(), mnemonics, unsignedTx, ecdsa)
 		if err != nil {
 			return errors.Wrapf(err, "signing failed for transaction %d of %d", i+1, len(resp.UnsignedTransactions))
 		}

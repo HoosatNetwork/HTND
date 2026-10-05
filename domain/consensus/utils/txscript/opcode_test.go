@@ -73,7 +73,6 @@ func TestOpcodeDisasm(t *testing.T) {
 		0x9f: "OP_LESSTHAN", 0xa0: "OP_GREATERTHAN",
 		0xa1: "OP_LESSTHANOREQUAL", 0xa2: "OP_GREATERTHANOREQUAL",
 		0xa3: "OP_MIN", 0xa4: "OP_MAX", 0xa5: "OP_WITHIN",
-		0xa6: "OP_CHECKSIGMLDSA44",
 		0xa8: "OP_SHA256", 0xa9: "OP_CHECKMULTISIGECDSA",
 		0xaa: "OP_BLAKE2B",
 		0xab: "OP_CHECKSIGECDSA", 0xac: "OP_CHECKSIG", 0xad: "OP_CHECKSIGVERIFY",
@@ -182,5 +181,5 @@ func TestOpcodeDisasm(t *testing.T) {
 
 func isOpUnknown(opcodeVal int) bool {
 	return opcodeVal >= 0xb2 && opcodeVal <= 0xf9 || opcodeVal == 0xfc ||
-		opcodeVal == 0xa7
+		opcodeVal == 0xa6 || opcodeVal == 0xa7
 }

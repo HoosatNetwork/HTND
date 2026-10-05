@@ -81,8 +81,6 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 	}
 	tx.StoreFee(totalSompiIn - totalSompiOut)
 
-	scriptFlags := v.scriptFlagsForDAAScore(povDAAScore)
-
 	// 2. The remaining checks can run in parallel.
 	type result struct {
 		idx int   // original order (optional, for debugging)
@@ -102,11 +100,11 @@ func (v *transactionValidator) ValidateTransactionInContextAndPopulateFee(
 		errCh <- result{idx: 1, err: err}
 	}()
 	go func() {
-		err := v.validateTransactionSigOpCounts(tx, scriptFlags)
+		err := v.validateTransactionSigOpCounts(tx)
 		errCh <- result{idx: 2, err: err}
 	}()
 	go func() {
-		err := v.validateTransactionScripts(tx, scriptFlags)
+		err := v.validateTransactionScripts(tx)
 		errCh <- result{idx: 3, err: err}
 	}()
 
@@ -233,19 +231,7 @@ func (v *transactionValidator) checkTransactionSequenceLock(stagingArea *model.S
 	return nil
 }
 
-// scriptFlagsForDAAScore returns the script flags that apply to a transaction validated at
-// povDAAScore. The block version is derived from povDAAScore and POWScores, never from the
-// process-global version or a header's version field, which a miner chooses.
-func (v *transactionValidator) scriptFlagsForDAAScore(povDAAScore uint64) txscript.ScriptFlags {
-	flags := txscript.ScriptNoFlags
-	blockVersion := constants.BlockVersionForDAAScore(v.dagParams.POWScores, povDAAScore)
-	if v.dagParams.MLDSA44SignaturesActive(blockVersion) {
-		flags |= txscript.ScriptEnableMLDSA44
-	}
-	return flags
-}
-
-func (v *transactionValidator) validateTransactionScripts(tx *externalapi.DomainTransaction, flags txscript.ScriptFlags) error {
+func (v *transactionValidator) validateTransactionScripts(tx *externalapi.DomainTransaction) error {
 	var missingOutpoints []*externalapi.DomainOutpoint
 	sighashReusedValues := &consensushashing.SighashReusedValues{}
 
@@ -260,7 +246,7 @@ func (v *transactionValidator) validateTransactionScripts(tx *externalapi.Domain
 
 		scriptPubKey := utxoEntry.ScriptPublicKey()
 		vm := v.enginePool.Get().(*txscript.Engine)
-		err := vm.Init(scriptPubKey, tx, i, flags, v.sigCache, v.sigCacheECDSA, v.mldsa44Cache, sighashReusedValues)
+		err := vm.Init(scriptPubKey, tx, i, txscript.ScriptNoFlags, v.sigCache, v.sigCacheECDSA, sighashReusedValues)
 		if err != nil {
 			vm.Reset()
 			v.enginePool.Put(vm)
@@ -380,14 +366,14 @@ func (v *transactionValidator) sequenceLockActive(sequenceLock *sequenceLock, bl
 	return true
 }
 
-func (v *transactionValidator) validateTransactionSigOpCounts(tx *externalapi.DomainTransaction, flags txscript.ScriptFlags) error {
+func (v *transactionValidator) validateTransactionSigOpCounts(tx *externalapi.DomainTransaction) error {
 	for i := 0; i < len(tx.Inputs); i++ {
 		utxoEntry := tx.Inputs[i].UTXOEntry
 
 		// Count the precise number of signature operations in the
 		// referenced public key script.
 		sigScript := tx.Inputs[i].SignatureScript
-		sigOpCount := txscript.GetPreciseSigOpCountWithFlags(sigScript, utxoEntry.ScriptPublicKey(), flags)
+		sigOpCount := txscript.GetPreciseSigOpCount(sigScript, utxoEntry.ScriptPublicKey())
 
 		if sigOpCount != int(tx.Inputs[i].SigOpCount) {
 			return errors.Wrapf(ruleerrors.ErrWrongSigOpCount,

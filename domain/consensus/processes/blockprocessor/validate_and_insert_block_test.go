@@ -64,14 +64,11 @@ func TestBlockStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("AddBlock: %+v", err)
 		}
-		// A coinbase paying more than the merge set earns disqualifies the block. A wrong accepted-ID merkle
-		// root no longer does: it reports the miner's UTXO history and is tolerated until the strict fork.
-		disqualifiedBlock.Transactions[0].Outputs[0].Value++
 		disqualifiedBlock.Header = blockheader.NewImmutableBlockHeader(
 			disqualifiedBlock.Header.Version(),
 			disqualifiedBlock.Header.Parents(),
-			merkle.CalculateHashMerkleRoot(disqualifiedBlock.Transactions),
-			disqualifiedBlock.Header.AcceptedIDMerkleRoot(),
+			disqualifiedBlock.Header.HashMerkleRoot(),
+			externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{}), // This should disqualify the block
 			disqualifiedBlock.Header.UTXOCommitment(),
 			disqualifiedBlock.Header.TimeInMilliseconds(),
 			disqualifiedBlock.Header.Bits(),

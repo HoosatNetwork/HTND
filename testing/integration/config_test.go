@@ -182,8 +182,6 @@ func commonConfig() *config.Config {
 	*commonConfig.ActiveNetParams = dagconfig.SimnetParams // Copy so that we can make changes safely
 	commonConfig.ActiveNetParams.SkipProofOfWork = true
 	commonConfig.ActiveNetParams.BlockCoinbaseMaturity = 10
-	// The tests spend coinbase outputs as soon as consensus maturity allows, and fresh outputs at once.
-	commonConfig.InputMinAgeDAA = 0
 	commonConfig.TargetOutboundPeers = 0
 	commonConfig.DisableDNSSeed = true
 	commonConfig.Simnet = true

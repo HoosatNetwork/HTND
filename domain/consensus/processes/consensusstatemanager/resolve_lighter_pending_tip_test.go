@@ -10,7 +10,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/merkle"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 )
 
@@ -93,21 +92,19 @@ func lighterPendingTipScenario(t *testing.T, attempt int, maxBlocksToResolve uin
 		}
 	}
 
-	// A child of the heavier tip whose coinbase pays more than its merge set earns, so it is disqualified when it is
-	// resolved, and the heavier tip stays virtual's selected parent and a DAG tip. (A wrong UTXO commitment no longer
-	// disqualifies: it reports the miner's UTXO history and is tolerated until the strict fork.)
+	// A valid child of the heavier tip whose header commits to a UTXO set it does not have, so it is disqualified when
+	// it is resolved, and the heavier tip stays virtual's selected parent and a DAG tip.
 	child, _, err := tc.BuildBlockWithParents([]*externalapi.DomainHash{heavierTip},
 		&externalapi.DomainCoinbaseData{ScriptPublicKey: scriptPublicKey, ExtraData: []byte("disqualified")}, nil)
 	if err != nil {
 		t.Fatalf("Error building the child of the heavier tip: %+v", err)
 	}
-	child.Transactions[0].Outputs[0].Value++
 	child.Header = blockheader.NewImmutableBlockHeader(
 		child.Header.Version(),
 		child.Header.Parents(),
-		merkle.CalculateHashMerkleRoot(child.Transactions),
+		child.Header.HashMerkleRoot(),
 		child.Header.AcceptedIDMerkleRoot(),
-		child.Header.UTXOCommitment(),
+		externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1}),
 		child.Header.TimeInMilliseconds(),
 		child.Header.Bits(),
 		child.Header.Nonce(),

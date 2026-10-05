@@ -10,7 +10,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/util"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/pkg/errors"
 )
 
@@ -35,14 +34,6 @@ type UTXO struct {
 	Outpoint       *externalapi.DomainOutpoint
 	UTXOEntry      externalapi.UTXOEntry
 	DerivationPath string
-	// ImportedExtendedPublicKey is set for a UTXO on an imported key's address: it is the imported key
-	// (ImportedKeyExtendedPublicKey) that spends it, in place of the wallet's own keys derived at
-	// DerivationPath.
-	ImportedExtendedPublicKey string
-	// RedeemScript is set for coins whose redeem script cannot be rebuilt from extended public keys:
-	// ML-DSA-44 P2SH, single-sig or multisig. It is carried into the unsigned transaction for the
-	// signers and extractor.
-	RedeemScript []byte
 }
 
 // CreateUnsignedTransaction creates an unsigned transaction
@@ -124,20 +115,6 @@ func createUnsignedTransaction(
 	inputs := make([]*externalapi.DomainTransactionInput, len(selectedUTXOs))
 	partiallySignedInputs := make([]*serialization.PartiallySignedInput, len(selectedUTXOs))
 	for i, utxo := range selectedUTXOs {
-		if utxo.ImportedExtendedPublicKey != "" {
-			inputs[i] = &externalapi.DomainTransactionInput{PreviousOutpoint: *utxo.Outpoint}
-			partiallySignedInputs[i] = &serialization.PartiallySignedInput{
-				PrevOutput: &externalapi.DomainTransactionOutput{
-					Value:           utxo.UTXOEntry.Amount(),
-					ScriptPublicKey: utxo.UTXOEntry.ScriptPublicKey(),
-				},
-				MinimumSignatures:    1,
-				PubKeySignaturePairs: []*serialization.PubKeySignaturePair{{ExtendedPublicKey: utxo.ImportedExtendedPublicKey}},
-				DerivationPath:       ImportedKeyDerivationPath,
-			}
-			continue
-		}
-
 		emptyPubKeySignaturePairs := make([]*serialization.PubKeySignaturePair, len(extendedPublicKeys))
 		for i, extendedPublicKey := range extendedPublicKeys {
 			extendedKey, err := bip32.DeserializeExtendedKey(extendedPublicKey)
@@ -157,7 +134,6 @@ func createUnsignedTransaction(
 
 		inputs[i] = &externalapi.DomainTransactionInput{PreviousOutpoint: *utxo.Outpoint}
 		partiallySignedInputs[i] = &serialization.PartiallySignedInput{
-			RedeemScript: utxo.RedeemScript,
 			PrevOutput: &externalapi.DomainTransactionOutput{
 				Value:           utxo.UTXOEntry.Amount(),
 				ScriptPublicKey: utxo.UTXOEntry.ScriptPublicKey(),
@@ -248,31 +224,6 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 	*externalapi.DomainTransaction, error,
 ) {
 	for i, input := range partiallySignedTransaction.PartiallySignedInputs {
-		if input.RedeemScript != nil && txscript.IsMultiSigMLDSA44RedeemScript(input.RedeemScript) {
-			sigScript, err := mldsa44MultiSigSignatureScript(input)
-			if err != nil {
-				return nil, errors.Wrapf(err, "input %d", i)
-			}
-			partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
-			continue
-		}
-		if input.RedeemScript != nil && isMLDSA44SingleSigRedeemScript(input.RedeemScript) {
-			signature, publicKey, err := mldsa44SingleSigSignatureAndPublicKey(input)
-			if err != nil {
-				return nil, errors.Wrapf(err, "input %d", i)
-			}
-			sigScript, err := txscript.NewScriptBuilder().
-				AddFullData(signature).
-				AddFullData(publicKey).
-				AddData(input.RedeemScript).
-				Script()
-			if err != nil {
-				return nil, err
-			}
-			partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
-			continue
-		}
-
 		isMultisig := len(input.PubKeySignaturePairs) > 1
 		scriptBuilder := txscript.NewScriptBuilder()
 		if isMultisig {
@@ -375,19 +326,6 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 					return nil, err
 				}
 				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
-			case txscript.PubKeyHashMLDSA44Ty:
-				signature, publicKey, err := mldsa44SingleSigSignatureAndPublicKey(input)
-				if err != nil {
-					return nil, errors.Wrapf(err, "input %d", i)
-				}
-				sigScript, err := txscript.NewScriptBuilder().
-					AddFullData(signature).
-					AddFullData(publicKey).
-					Script()
-				if err != nil {
-					return nil, err
-				}
-				partiallySignedTransaction.Tx.Inputs[i].SignatureScript = sigScript
 			case txscript.ScriptHashTy:
 				derivedPublicKey, err := bip32.DeserializeExtendedKey(input.PubKeySignaturePairs[0].ExtendedPublicKey)
 				if err != nil {
@@ -458,45 +396,6 @@ func ExtractTransactionDeserialized(partiallySignedTransaction *serialization.Pa
 		}
 	}
 	return partiallySignedTransaction.Tx, nil
-}
-
-// mldsa44SingleSigSignatureAndPublicKey splits what the signer of a single-sig ML-DSA-44 input stored,
-// <sig||hashtype><pubkey> (see MLDSA44SignatureWithPublicKeySize).
-func mldsa44SingleSigSignatureAndPublicKey(input *serialization.PartiallySignedInput) (signature, publicKey []byte, err error) {
-	if len(input.PubKeySignaturePairs) != 1 {
-		return nil, nil, errors.Errorf("single-sig ML-DSA-44 input has %d signers", len(input.PubKeySignaturePairs))
-	}
-	signatureWithPublicKey := input.PubKeySignaturePairs[0].Signature
-	if len(signatureWithPublicKey) != MLDSA44SignatureWithPublicKeySize {
-		return nil, nil, errors.Errorf("ML-DSA-44 signature and public key are %d bytes, expected %d",
-			len(signatureWithPublicKey), MLDSA44SignatureWithPublicKeySize)
-	}
-	signatureLength := len(signatureWithPublicKey) - mldsa44.PublicKeySize
-	return signatureWithPublicKey[:signatureLength], signatureWithPublicKey[signatureLength:], nil
-}
-
-// mldsa44MultiSigSignatureScript builds the signature script of an ML-DSA-44 multisig input from the
-// signatures its cosigners stored (each <sig||hashtype><pubkey>, see MLDSA44SignatureWithPublicKeySize).
-// It uses the first MinimumSignatures of them: more would only add 3.7 KB each and can push the
-// script past MaxScriptSize.
-func mldsa44MultiSigSignatureScript(input *serialization.PartiallySignedInput) ([]byte, error) {
-	signatures := make([][]byte, len(input.PubKeySignaturePairs))
-	publicKeys := make([][]byte, len(input.PubKeySignaturePairs))
-	used := uint32(0)
-	for slot, pair := range input.PubKeySignaturePairs {
-		if pair.Signature == nil || used == input.MinimumSignatures {
-			continue
-		}
-		if len(pair.Signature) != MLDSA44SignatureWithPublicKeySize {
-			return nil, errors.Errorf("ML-DSA-44 signature and public key are %d bytes, expected %d",
-				len(pair.Signature), MLDSA44SignatureWithPublicKeySize)
-		}
-		signatureLength := len(pair.Signature) - mldsa44.PublicKeySize
-		signatures[slot] = pair.Signature[:signatureLength]
-		publicKeys[slot] = pair.Signature[signatureLength:]
-		used++
-	}
-	return txscript.MultiSigMLDSA44SignatureScript(input.RedeemScript, signatures, publicKeys)
 }
 
 func partiallySignedInputMultisigRedeemScript(input *serialization.PartiallySignedInput, ecdsa bool) ([]byte, error) {

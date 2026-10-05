@@ -21,13 +21,6 @@ type virtualUTXOSource interface {
 		[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error)
 }
 
-// virtualUTXOEntrySource is a virtualUTXOSource that can hand back an entry the caller already holds
-// when the stored bytes match it, instead of decoding a second copy.
-type virtualUTXOEntrySource interface {
-	GetVirtualUTXOEntriesPreferring(outpoints []*externalapi.DomainOutpoint, preferred []externalapi.UTXOEntry, maxWait time.Duration) (
-		[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error)
-}
-
 // virtualCheckMaxLockWait is how long the check waits for the consensus lock before serving the
 // index's answer unchecked. Ordinary block processing releases the lock within milliseconds; what holds
 // it longer is work such as a pruning point UTXO set update, which runs for minutes - longer than any
@@ -66,19 +59,10 @@ func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.U
 		return pairs, 0, false, nil
 	}
 	outpoints := make([]*externalapi.DomainOutpoint, len(pairs))
-	preferred := make([]externalapi.UTXOEntry, len(pairs))
 	for i := range pairs {
 		outpoints[i] = &pairs[i].Outpoint
-		preferred[i] = pairs[i].Entry
 	}
-	var entries []externalapi.UTXOEntry
-	var virtualParents []*externalapi.DomainHash
-	var checked bool
-	if preferring, ok := source.(virtualUTXOEntrySource); ok {
-		entries, virtualParents, checked, err = preferring.GetVirtualUTXOEntriesPreferring(outpoints, preferred, virtualCheckMaxLockWait)
-	} else {
-		entries, virtualParents, checked, err = source.GetVirtualUTXOEntries(outpoints, virtualCheckMaxLockWait)
-	}
+	entries, virtualParents, checked, err := source.GetVirtualUTXOEntries(outpoints, virtualCheckMaxLockWait)
 	if err != nil {
 		return nil, 0, false, err
 	}

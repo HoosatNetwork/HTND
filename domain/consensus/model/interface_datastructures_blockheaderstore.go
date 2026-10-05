@@ -8,9 +8,6 @@ type BlockHeaderStore interface {
 	IsStaged(stagingArea *StagingArea) bool
 	UnstageAll(stagingArea *StagingArea)
 	BlockHeader(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error)
-	// BlockHeaderWithoutCaching reads a committed header from the database, bypassing the cache, for
-	// callers that do not hold the consensus lock.
-	BlockHeaderWithoutCaching(dbContext DBReader, blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error)
 	HasBlockHeader(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
 	BlockHeaders(dbContext DBReader, stagingArea *StagingArea, blockHashes []*externalapi.DomainHash) ([]externalapi.BlockHeader, error)
 	Delete(stagingArea *StagingArea, blockHash *externalapi.DomainHash)

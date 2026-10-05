@@ -3,7 +3,6 @@ package utxo
 import (
 	"fmt"
 	"math"
-	"weak"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
@@ -16,20 +15,6 @@ type mutableUTXODiff struct {
 	toRemove utxoCollection
 
 	immutableReferences []*immutableUTXODiff
-
-	// changed, when not nil, collects every outpoint whose toAdd/toRemove state this diff has
-	// mutated since CloneMutableRecordingChanges made it, as a clone of changedFrom. See
-	// DiffFromChanged. changedFrom is weak: during virtual resolution each block's past is cloned
-	// from the one before it, and a strong reference would keep every past of a chunk alive.
-	changed     map[externalapi.DomainOutpoint]struct{}
-	changedFrom weak.Pointer[mutableUTXODiff]
-}
-
-// recordChange notes that outpoint's state may have changed, if this diff records changes.
-func (mud *mutableUTXODiff) recordChange(outpoint *externalapi.DomainOutpoint) {
-	if mud.changed != nil {
-		mud.changed[*outpoint] = struct{}{}
-	}
 }
 
 // NewMutableUTXODiff creates an empty mutable UTXO-Diff
@@ -155,7 +140,6 @@ func (mud *mutableUTXODiff) snapshot(outpoint *externalapi.DomainOutpoint) utxoD
 }
 
 func (mud *mutableUTXODiff) restore(u *utxoDiffUndoEntry) {
-	mud.recordChange(&u.outpoint)
 	if u.hadToAdd {
 		mud.toAdd.add(&u.outpoint, u.toAddEntry)
 	} else {
@@ -254,7 +238,6 @@ func sameCoin(a, b externalapi.UTXOEntry) bool {
 }
 
 func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-	mud.recordChange(outpoint)
 	if mud.toRemove.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
 		existing, _ := mud.toRemove.Get(outpoint)
 		if !sameCoin(existing, entry) {
@@ -345,7 +328,6 @@ func (mud *mutableUTXODiff) addEntry(outpoint *externalapi.DomainOutpoint, entry
 }
 
 func (mud *mutableUTXODiff) removeEntry(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-	mud.recordChange(outpoint)
 	if mud.toAdd.containsWithDAAScore(outpoint, entry.BlockDAAScore()) {
 		existing, _ := mud.toAdd.Get(outpoint)
 		if !sameCoin(existing, entry) {

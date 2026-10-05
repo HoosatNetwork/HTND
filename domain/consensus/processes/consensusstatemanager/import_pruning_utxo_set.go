@@ -8,10 +8,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/transactionhelper"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
@@ -162,12 +162,7 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 		err = csm.transactionValidator.ValidateTransactionInContextAndPopulateFee(
 			stagingArea, transaction, newPruningPoint, newPruningPointBlock.Header.DAAScore())
 		if err != nil {
-			if !errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
-				return err
-			}
-			csm.logToleratedIssue("imported-pruning-point-missing-input", newPruningPoint,
-				errors.Wrapf(err, "transaction %s skipped", transactionID))
-			continue
+			return err
 		}
 		log.Tracef("Validation against the pruning point's past UTXO "+
 			"passed for transaction %s", transactionID)
@@ -226,10 +221,7 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 ) (resolvedMultiset model.Multiset, matchesHeader bool, err error) {
 	header, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, newPruningPoint)
 	if err != nil {
-		// Without the header there is nothing to check against; proceed with whatever the peer supplied.
-		log.Warnf("Could not fetch pruning point %s header to validate the imported UTXO set (%s) - "+
-			"proceeding with the accumulated multiset", newPruningPoint, err)
-		return accumulatedMultiset, false, nil
+		return nil, false, errors.Wrapf(err, "pruning point %s header is required to check the imported UTXO set", newPruningPoint)
 	}
 	expectedCommitment := header.UTXOCommitment()
 
@@ -290,9 +282,9 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 	// so a node that refuses them all never syncs. It is for finding a clean peer once one exists,
 	// and for a node that should stay off a broken baseline rather than join it.
 	//
-	// HTN-005, gated at HardForkGates.RefuseMismatchedImportVersion: from that block version onward this
-	// refusal is not optional and the operator flag is no longer what decides it. No network reaches
-	// block version 11 yet, so today only the flag can trigger this, exactly as before - the flag's default
+	// HTN-005, gated at hardforks.RefuseMismatchedImportVersion: from that block version onward this
+	// refusal is not optional and the operator flag is no longer what decides it. The gate is
+	// unscheduled, so today only the flag can trigger this, exactly as before - the flag's default
 	// and meaning are deliberately untouched.
 	refuse := csm.refuseMismatchedImportedPruningPointUTXOSet
 	refusalReason := "this node is configured to refuse an unverifiable set rather than build on it"
@@ -314,23 +306,15 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 			newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash(), refusalReason)
 	}
 
-	// The record that every later chain-replay record has to be read against: if the set this node
-	// starts from does not hash to what the pruning point's header commits to, every block resolved
-	// forward inherits that exact offset, and its own commitment mismatch is a symptom rather than a
-	// cause.
-	csm.recordPruningPointImportSurvey(stagingArea, newPruningPoint, recomputedMultiset,
-		"imported-multiset-mismatch",
-		fmt.Sprintf("neither the accumulated multiset (%s) nor a fresh multiset over the %d deduplicated "+
-			"stored entries (%s) matches the pruning point's header commitment; the served UTXO set is "+
-			"incomplete, so every block resolved forward from here inherits this offset",
-			accumulatedMultiset.Hash(), entryCount, recomputedMultiset.Hash()),
-		nil, nil)
-
-	return recomputedMultiset, false, nil
+	return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		"imported pruning point %s UTXO set does not match its own header commitment (header %s, "+
+			"fresh multiset over %d stored entries %s); sync stops and another peer must supply a set "+
+			"that reproduces the commitment",
+		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 }
 
 // refuseMismatchedImportIsActive reports whether newPruningPoint is at or past
-// HardForkGates.RefuseMismatchedImportVersion, and so may not be imported with a UTXO set that
+// hardforks.RefuseMismatchedImportVersion, and so may not be imported with a UTXO set that
 // disagrees with its commitment.
 //
 // The version comes from the pruning point header's own DAA score. At import time this node has no
@@ -341,6 +325,9 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 func (csm *consensusStateManager) refuseMismatchedImportIsActive(stagingArea *model.StagingArea,
 	newPruningPoint *externalapi.DomainHash,
 ) (bool, error) {
+	if !hardforks.IsScheduled(hardforks.RefuseMismatchedImportVersion) {
+		return false, nil
+	}
 	if len(csm.powScores) == 0 {
 		return false, nil
 	}
@@ -350,7 +337,7 @@ func (csm *consensusStateManager) refuseMismatchedImportIsActive(stagingArea *mo
 		return false, err
 	}
 	blockVersion := constants.BlockVersionForDAAScore(csm.powScores, header.DAAScore())
-	return dagconfig.HardForkActive(csm.hardForkGates.RefuseMismatchedImportVersion, blockVersion), nil
+	return hardforks.Active(hardforks.RefuseMismatchedImportVersion, blockVersion), nil
 }
 
 // spendingTransactionsByOutpoint maps each outpoint the block spends to the transaction that spends

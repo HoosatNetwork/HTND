@@ -15,12 +15,6 @@ type fakeGHOSTDAGDataStore struct {
 	data map[externalapi.DomainHash]*externalapi.BlockGHOSTDAGData
 }
 
-func (f *fakeGHOSTDAGDataStore) GetWithoutCaching(_ model.DBReader, blockHash *externalapi.DomainHash,
-	isTrustedData bool,
-) (*externalapi.BlockGHOSTDAGData, error) {
-	return f.Get(nil, nil, blockHash, isTrustedData)
-}
-
 func (f *fakeGHOSTDAGDataStore) Get(_ model.DBReader, _ *model.StagingArea,
 	blockHash *externalapi.DomainHash, _ bool,
 ) (*externalapi.BlockGHOSTDAGData, error) {

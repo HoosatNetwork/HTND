@@ -594,44 +594,6 @@ message GetPaginatedUtxosByAddressesResponseMessage {
   RPCError error = 1000;
 }
 
-// GetWalletUtxosRequestMessage requests the current UTXOs of an HD wallet, found by deriving its addresses
-// from its extended public keys - the receive (external) and change (internal) key chains - until gapLimit
-// addresses in a row hold no coin.
-//
-// A single key is a single-sig wallet, scanned at m/<keyChain>/<index> in its P2PK, P2PKH and P2SH forms.
-// Several keys are a multisig wallet with minimumSignatures, scanned at m/<cosigner>/<keyChain>/<index>
-// for every cosigner. ecdsa selects ECDSA keys instead of Schnorr.
-//
-// The index only knows current coins, so an address that was used and emptied counts as unused. Set
-// gapLimit above the longest run of emptied addresses the wallet may have; it defaults to 100.
-//
-// This call is only available when this htnd was started with `--utxoindex`
-message GetWalletUtxosRequestMessage {
-  repeated string extendedPublicKeys = 1;
-  uint32 minimumSignatures           = 2;
-  bool ecdsa                         = 3;
-  uint32 gapLimit                    = 4;
-  uint32 limit                       = 5;
-}
-
-message WalletUtxoEntry {
-  string address         = 1;
-  RpcOutpoint outpoint   = 2;
-  RpcUtxoEntry utxoEntry = 3;
-  string derivationPath  = 4;
-}
-
-message GetWalletUtxosResponseMessage {
-  repeated WalletUtxoEntry entries = 1;
-  // How many indexes of each key chain were scanned, per cosigner the largest.
-  uint32 scannedExternalIndexes    = 2;
-  uint32 scannedInternalIndexes    = 3;
-  // The scan stopped at the entry limit or the index cap, so the wallet may hold more coins than listed.
-  bool truncated                   = 4;
-
-  RPCError error = 1000;
-}
-
 // GetBalanceByAddressRequest returns the total balance in unspent transactions towards a given address
 // 
 // This call is only available when this htnd was started with `--utxoindex`

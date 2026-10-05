@@ -26,7 +26,7 @@ func TestSpendingOutOfRangeOutputOfPoolTransaction(t *testing.T) {
 
 		tcAsConsensus := tc.(externalapi.Consensus)
 		tcAsConsensusPointer := &tcAsConsensus
-		mp := New(configWithoutInputMinAge(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
+		mp := New(DefaultConfig(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 
 		funding := testutils.CreateTransactionWithOutput(100_000)
 		if err := testutils.StageTransactionOutputsToVirtual(tc, funding, 0); err != nil {

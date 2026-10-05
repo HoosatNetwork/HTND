@@ -7,7 +7,6 @@ package txscript
 import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/kaspanet/go-secp256k1"
 	"github.com/pkg/errors"
 
@@ -49,44 +48,6 @@ func RawTxInSignatureECDSA(tx *externalapi.DomainTransaction, idx int, hashType 
 	}
 
 	return append(signature.Serialize()[:], byte(hashType)), nil
-}
-
-// RawTxInSignatureMLDSA44 returns the ML-DSA-44 signature for the input idx of
-// the given transaction, with hashType appended to it. Signing is hedged
-// (FIPS 204 randomized), so two calls over the same input give different, equally
-// valid signatures.
-func RawTxInSignatureMLDSA44(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	key *mldsa44.PrivateKey, sighashReusedValues *consensushashing.SighashReusedValues,
-) ([]byte, error) {
-	hash, err := consensushashing.CalculateSignatureHashMLDSA44(tx, idx, hashType, sighashReusedValues)
-	if err != nil {
-		return nil, err
-	}
-	signature := make([]byte, mldsa44.SignatureSize, mldsa44.SignatureSize+1)
-	err = mldsa44.SignTo(key, hash.ByteSlice(), nil, true, signature)
-	if err != nil {
-		return nil, errors.Errorf("cannot sign tx input: %s", err)
-	}
-
-	return append(signature, byte(hashType)), nil
-}
-
-// SignatureScriptMLDSA44 creates an input signature script for tx to spend HTN sent
-// to an ML-DSA-44 pay-to-pubkey-hash output.
-// The returned script pushes: <sig> <pubkey>.
-//
-// Both pushes are larger than MaxScriptElementSize, so they only execute under
-// ScriptEnableMLDSA44.
-func SignatureScriptMLDSA44(tx *externalapi.DomainTransaction, idx int, hashType consensushashing.SigHashType,
-	privKey *mldsa44.PrivateKey, sighashReusedValues *consensushashing.SighashReusedValues,
-) ([]byte, error) {
-	sig, err := RawTxInSignatureMLDSA44(tx, idx, hashType, privKey, sighashReusedValues)
-	if err != nil {
-		return nil, err
-	}
-	publicKey := privKey.Public().(*mldsa44.PublicKey)
-
-	return NewScriptBuilder().AddFullData(sig).AddFullData(publicKey.Bytes()).Script()
 }
 
 // SignatureScript creates an input signature script for tx to spend HTN sent

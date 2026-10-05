@@ -46,11 +46,6 @@ const (
 	// as consensus.
 	defaultMinimumStandardTransactionVersion = constants.MaxTransactionVersion
 	defaultMaximumStandardTransactionVersion = constants.MaxTransactionVersion
-
-	// defaultInputMinAgeDAAScore is how many DAA score units old every input must be - counted after
-	// consensus coinbase maturity for a coinbase input - before this node accepts or relays a transaction
-	// spending it. It matches htnwallet's inputMinAgeDAAScore. See checkInputMinAge.
-	defaultInputMinAgeDAAScore uint64 = 1000
 )
 
 // Config represents a mempool configuration
@@ -71,12 +66,6 @@ type Config struct {
 	MinimumRelayTransactionFee           util.Amount
 	MinimumStandardTransactionVersion    uint16
 	MaximumStandardTransactionVersion    uint16
-
-	// InputMinAgeDAAScore is mempool policy: a transaction is refused until virtual DAA score >= each
-	// input's DAA score + this value (+ coinbase maturity for a coinbase input), and a transaction
-	// spending outputs that are not in the virtual UTXO set is refused instead of held as an orphan.
-	// 0 disables the check, leaving consensus rules and the orphan pool as they were.
-	InputMinAgeDAAScore uint64
 
 	// Compound transaction rate limiting configuration
 	CompoundTxRateLimitEnabled       bool
@@ -107,7 +96,6 @@ func DefaultConfig(dagParams *dagconfig.Params) *Config {
 		MinimumRelayTransactionFee:           defaultMinimumRelayTransactionFee,
 		MinimumStandardTransactionVersion:    defaultMinimumStandardTransactionVersion,
 		MaximumStandardTransactionVersion:    defaultMaximumStandardTransactionVersion,
-		InputMinAgeDAAScore:                  defaultInputMinAgeDAAScore,
 
 		// Compound transaction rate limiting
 		CompoundTxRateLimitEnabled:       defaultCompoundTxRateLimitEnabled,

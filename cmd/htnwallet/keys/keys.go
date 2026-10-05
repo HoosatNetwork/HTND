@@ -14,7 +14,6 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
@@ -48,160 +47,6 @@ type keysFileJSON struct {
 	LastUsedExternalIndex uint32                     `json:"lastUsedExternalIndex"`
 	LastUsedInternalIndex uint32                     `json:"lastUsedInternalIndex"`
 	ECDSA                 bool                       `json:"ecdsa"`
-	// Imported is left out of an htnwallet wallet's file, so such a file is written exactly as before
-	// imported wallets existed. Older htnwallet versions reject an imported wallet's file.
-	Imported         *importJSON          `json:"imported,omitempty"`
-	MLDSA44          *mldsa44KeyPoolJSON  `json:"mldsa44,omitempty"`
-	MLDSA44Cosigners mldsa44CosignersJSON `json:"mldsa44Cosigners,omitempty"`
-}
-
-// mldsa44CosignersJSON maps a cosigner's master extended public key to its ML-DSA-44 key pool.
-type mldsa44CosignersJSON map[string]*mldsa44KeyPoolJSON
-
-type mldsa44KeyPoolJSON struct {
-	ExternalPublicKeyHashes []string `json:"externalPublicKeyHashes"`
-	InternalPublicKeyHashes []string `json:"internalPublicKeyHashes"`
-}
-
-// MLDSA44KeyPool holds the hashes of a single-sig wallet's ML-DSA-44 public keys, indexed by
-// address index, one list per key chain. See libhtnwallet.MLDSA44PublicKeyHashes for why the wallet
-// stores these rather than deriving them.
-type MLDSA44KeyPool struct {
-	ExternalPublicKeyHashes [][]byte
-	InternalPublicKeyHashes [][]byte
-}
-
-// PublicKeyHash returns the ML-DSA-44 public key hash at index of keychain, and false when the pool
-// does not reach that far.
-func (p *MLDSA44KeyPool) PublicKeyHash(keychain uint8, index uint32) ([]byte, bool) {
-	if p == nil {
-		return nil, false
-	}
-	hashes := p.ExternalPublicKeyHashes
-	if keychain == libhtnwallet.InternalKeychain {
-		hashes = p.InternalPublicKeyHashes
-	}
-	if uint64(index) >= uint64(len(hashes)) {
-		return nil, false
-	}
-	return hashes[index], true
-}
-
-// Size returns the number of indexes the pool covers on both key chains.
-func (p *MLDSA44KeyPool) Size() uint32 {
-	if p == nil {
-		return 0
-	}
-	return uint32(min(len(p.ExternalPublicKeyHashes), len(p.InternalPublicKeyHashes)))
-}
-
-// NewMLDSA44KeyPool computes the ML-DSA-44 key pool for indexes [0, size) of both key chains.
-// multisig selects the mnemonic's multisig cosigner keys.
-func NewMLDSA44KeyPool(mnemonic string, size uint32, multisig bool) (*MLDSA44KeyPool, error) {
-	external, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, libhtnwallet.ExternalKeychain, 0, size, multisig)
-	if err != nil {
-		return nil, err
-	}
-	internal, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, libhtnwallet.InternalKeychain, 0, size, multisig)
-	if err != nil {
-		return nil, err
-	}
-	return &MLDSA44KeyPool{ExternalPublicKeyHashes: external, InternalPublicKeyHashes: internal}, nil
-}
-
-// MLDSA44MultiSigPublicKeyHashes returns every cosigner's ML-DSA-44 public key hash at index of
-// keychain, keyed by the cosigner's extended public key, or an error naming the first cosigner whose
-// keys have not been imported or do not reach that far.
-func (d *File) MLDSA44MultiSigPublicKeyHashes(keychain uint8, index uint32) (map[string][]byte, error) {
-	hashes := make(map[string][]byte, len(d.ExtendedPublicKeys))
-	for _, extendedPublicKey := range d.ExtendedPublicKeys {
-		pool, ok := d.MLDSA44Cosigners[extendedPublicKey]
-		if !ok {
-			return nil, errors.Errorf("the ML-DSA-44 keys of cosigner %s have not been imported", extendedPublicKey)
-		}
-		hash, ok := pool.PublicKeyHash(keychain, index)
-		if !ok {
-			return nil, errors.Errorf("the ML-DSA-44 keys of cosigner %s cover indexes below %d only, and index %d was requested",
-				extendedPublicKey, pool.Size(), index)
-		}
-		hashes[extendedPublicKey] = hash
-	}
-	return hashes, nil
-}
-
-func mldsa44CosignersToJSON(cosigners map[string]*MLDSA44KeyPool) mldsa44CosignersJSON {
-	if len(cosigners) == 0 {
-		return nil
-	}
-	cosignersJSON := make(mldsa44CosignersJSON, len(cosigners))
-	for extendedPublicKey, pool := range cosigners {
-		cosignersJSON[extendedPublicKey] = pool.toJSON()
-	}
-	return cosignersJSON
-}
-
-func mldsa44CosignersFromJSON(cosignersJSON mldsa44CosignersJSON) (map[string]*MLDSA44KeyPool, error) {
-	if len(cosignersJSON) == 0 {
-		return nil, nil
-	}
-	cosigners := make(map[string]*MLDSA44KeyPool, len(cosignersJSON))
-	for extendedPublicKey, poolJSON := range cosignersJSON {
-		pool, err := mldsa44KeyPoolFromJSON(poolJSON)
-		if err != nil {
-			return nil, errors.Wrapf(err, "ML-DSA-44 keys of cosigner %s", extendedPublicKey)
-		}
-		if pool == nil {
-			return nil, errors.Errorf("ML-DSA-44 keys of cosigner %s are empty", extendedPublicKey)
-		}
-		cosigners[extendedPublicKey] = pool
-	}
-	return cosigners, nil
-}
-
-func (p *MLDSA44KeyPool) toJSON() *mldsa44KeyPoolJSON {
-	if p == nil {
-		return nil
-	}
-	encode := func(hashes [][]byte) []string {
-		encoded := make([]string, len(hashes))
-		for i, hash := range hashes {
-			encoded[i] = hex.EncodeToString(hash)
-		}
-		return encoded
-	}
-	return &mldsa44KeyPoolJSON{
-		ExternalPublicKeyHashes: encode(p.ExternalPublicKeyHashes),
-		InternalPublicKeyHashes: encode(p.InternalPublicKeyHashes),
-	}
-}
-
-func mldsa44KeyPoolFromJSON(poolJSON *mldsa44KeyPoolJSON) (*MLDSA44KeyPool, error) {
-	if poolJSON == nil {
-		return nil, nil
-	}
-	decode := func(encoded []string) ([][]byte, error) {
-		hashes := make([][]byte, len(encoded))
-		for i, hashHex := range encoded {
-			hash, err := hex.DecodeString(hashHex)
-			if err != nil {
-				return nil, err
-			}
-			if len(hash) != 32 {
-				return nil, errors.Errorf("ML-DSA-44 public key hash #%d is %d bytes, expected 32", i, len(hash))
-			}
-			hashes[i] = hash
-		}
-		return hashes, nil
-	}
-	external, err := decode(poolJSON.ExternalPublicKeyHashes)
-	if err != nil {
-		return nil, err
-	}
-	internal, err := decode(poolJSON.InternalPublicKeyHashes)
-	if err != nil {
-		return nil, err
-	}
-	return &MLDSA44KeyPool{ExternalPublicKeyHashes: external, InternalPublicKeyHashes: internal}, nil
 }
 
 // EncryptedMnemonic represents an encrypted mnemonic
@@ -221,16 +66,7 @@ type File struct {
 	lastUsedExternalIndex uint32
 	lastUsedInternalIndex uint32
 	ECDSA                 bool
-	Imported              *Import // Set for an imported wallet, which then has no mnemonics or extended public keys
-	// MLDSA44 is nil for multisig wallets and for wallets created before ML-DSA-44 support; see
-	// the generate-mldsa44-keys command.
-	MLDSA44 *MLDSA44KeyPool
-	// MLDSA44Cosigners holds a multisig wallet's ML-DSA-44 key pools, one per cosigner, keyed by the
-	// cosigner's entry in ExtendedPublicKeys. The wallet's own are generated from its mnemonics; the
-	// others are imported from the cosigners (export-mldsa44-keys / import-mldsa44-keys), because
-	// ML-DSA-44 keys cannot be derived from an extended public key.
-	MLDSA44Cosigners map[string]*MLDSA44KeyPool
-	path             string
+	path                  string
 }
 
 func (d *File) toJSON() *keysFileJSON {
@@ -252,19 +88,15 @@ func (d *File) toJSON() *keysFileJSON {
 		CosignerIndex:         d.CosignerIndex,
 		LastUsedExternalIndex: d.lastUsedExternalIndex,
 		LastUsedInternalIndex: d.lastUsedInternalIndex,
-		Imported:              importToJSON(d.Imported),
-		MLDSA44:               d.MLDSA44.toJSON(),
-		MLDSA44Cosigners:      mldsa44CosignersToJSON(d.MLDSA44Cosigners),
 	}
 }
 
 // NewFileFromMnemonic generates a new File from the given mnemonic string
 func NewFileFromMnemonic(params *dagconfig.Params, mnemonic string, password string) (*File, error) {
-	encryptedMnemonics, extendedPublicKeys, mldsa44KeyPools, err := encryptedMnemonicExtendedPublicKeyPairs(params, []string{mnemonic}, password, false)
+	encryptedMnemonics, extendedPublicKeys, err := encryptedMnemonicExtendedPublicKeyPairs(params, []string{mnemonic}, password, false)
 	if err != nil {
 		return nil, err
 	}
-	mldsa44KeyPool := mldsa44KeyPools[extendedPublicKeys[0]]
 	return &File{
 		Version:            LastVersion,
 		NumThreads:         defaultNumThreads,
@@ -272,7 +104,6 @@ func NewFileFromMnemonic(params *dagconfig.Params, mnemonic string, password str
 		ExtendedPublicKeys: extendedPublicKeys,
 		MinimumSignatures:  1,
 		ECDSA:              false,
-		MLDSA44:            mldsa44KeyPool,
 	}, nil
 }
 
@@ -285,27 +116,6 @@ func (d *File) fromJSON(fileJSON *keysFileJSON) error {
 	d.CosignerIndex = fileJSON.CosignerIndex
 	d.lastUsedExternalIndex = fileJSON.LastUsedExternalIndex
 	d.lastUsedInternalIndex = fileJSON.LastUsedInternalIndex
-
-	imported, err := importFromJSON(fileJSON.Imported)
-	if err != nil {
-		return err
-	}
-	if imported != nil && (len(fileJSON.EncryptedPrivateKeys) > 0 || len(fileJSON.ExtendedPublicKeys) > 0) {
-		return errors.New("the keys file holds both an imported wallet and htnwallet keys; " +
-			"a keys file holds one wallet")
-	}
-	d.Imported = imported
-	mldsa44KeyPool, err := mldsa44KeyPoolFromJSON(fileJSON.MLDSA44)
-	if err != nil {
-		return err
-	}
-	d.MLDSA44 = mldsa44KeyPool
-
-	mldsa44Cosigners, err := mldsa44CosignersFromJSON(fileJSON.MLDSA44Cosigners)
-	if err != nil {
-		return err
-	}
-	d.MLDSA44Cosigners = mldsa44Cosigners
 
 	d.EncryptedMnemonics = make([]*EncryptedMnemonic, len(fileJSON.EncryptedPrivateKeys))
 	for i, encryptedPrivateKeyJSON := range fileJSON.EncryptedPrivateKeys {
@@ -528,16 +338,13 @@ func (d *File) Save() error {
 		return err
 	}
 
-	err = renameFile(tempPath, d.path)
+	err = os.Rename(tempPath, d.path)
 	if err != nil {
 		return err
 	}
 
 	return syncDir(dir)
 }
-
-// renameFile is os.Rename, as a variable so tests can fail Save at its last step on every platform.
-var renameFile = os.Rename
 
 const defaultNumThreads = 8
 

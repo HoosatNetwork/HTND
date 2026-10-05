@@ -28,9 +28,6 @@ type TestConsensus interface {
 	externalapi.Consensus
 
 	DAGParams() *dagconfig.Params
-	// HardForkGates returns the gates this consensus and its processes read. A test may change them
-	// between calls to activate a rule its blocks reach; nothing else may.
-	HardForkGates() *dagconfig.HardForkGates
 	DatabaseContext() model.DBManager
 	Database() database.Database
 

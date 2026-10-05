@@ -16,13 +16,12 @@ import (
 func create(conf *createConfig) error {
 	var encryptedMnemonics []*keys.EncryptedMnemonic
 	var signerExtendedPublicKeys []string
-	var mldsa44KeyPools map[string]*keys.MLDSA44KeyPool
 	var err error
 	isMultisig := conf.NumPublicKeys > 1
 	if !conf.Import {
-		encryptedMnemonics, signerExtendedPublicKeys, mldsa44KeyPools, err = keys.CreateMnemonics(conf.NetParams(), conf.NumPrivateKeys, conf.Password, isMultisig)
+		encryptedMnemonics, signerExtendedPublicKeys, err = keys.CreateMnemonics(conf.NetParams(), conf.NumPrivateKeys, conf.Password, isMultisig)
 	} else {
-		encryptedMnemonics, signerExtendedPublicKeys, mldsa44KeyPools, err = keys.ImportMnemonics(conf.NetParams(), conf.NumPrivateKeys, conf.Password, isMultisig)
+		encryptedMnemonics, signerExtendedPublicKeys, err = keys.ImportMnemonics(conf.NetParams(), conf.NumPrivateKeys, conf.Password, isMultisig)
 	}
 	if err != nil {
 		return err
@@ -72,14 +71,6 @@ func create(conf *createConfig) error {
 		MinimumSignatures:  conf.MinimumSignatures,
 		CosignerIndex:      cosignerIndex,
 		ECDSA:              conf.ECDSA,
-	}
-	if isMultisig {
-		file.MLDSA44Cosigners = mldsa44KeyPools
-		fmt.Printf("For ML-DSA-44 multisig addresses, every cosigner has to import the others' ML-DSA-44 keys: "+
-			"run \"htnwallet %s\" here and \"htnwallet %s\" with the other cosigners' files\n\n",
-			exportMLDSA44KeysSubCmd, importMLDSA44KeysSubCmd)
-	} else if len(signerExtendedPublicKeys) == 1 {
-		file.MLDSA44 = mldsa44KeyPools[signerExtendedPublicKeys[0]]
 	}
 
 	err = file.SetPath(conf.NetParams(), conf.KeysFile, conf.Yes)

@@ -11,25 +11,20 @@ import (
 )
 
 const (
-	transcationHashDomain           = "TransactionHash"
-	transcationIDDomain             = "TransactionID"
-	transcationSigningDomain        = "TransactionSigningHash"
-	transcationSigningECDSADomain   = "TransactionSigningHashECDSA"
-	transcationSigningMLDSA44Domain = "TransactionSigningHashMLDSA44"
-	blockDomain                     = "BlockHash"
-	heavyHashDomain                 = "HeavyHash"
-	merkleBranchDomain              = "MerkleBranchHash"
-	coinbaseEntropyDomain           = "CoinbaseEntropyHash"
+	transcationHashDomain         = "TransactionHash"
+	transcationIDDomain           = "TransactionID"
+	transcationSigningDomain      = "TransactionSigningHash"
+	transcationSigningECDSADomain = "TransactionSigningHashECDSA"
+	blockDomain                   = "BlockHash"
+	heavyHashDomain               = "HeavyHash"
+	merkleBranchDomain            = "MerkleBranchHash"
+	coinbaseEntropyDomain         = "CoinbaseEntropyHash"
 )
 
 // transactionSigningECDSADomainHash is a hashed version of transcationSigningECDSADomain that is used
 // to make it a constant size. This is needed because this domain is used by sha256 hash writer, and
 // sha256 doesn't support variable size domain separation.
 var transactionSigningECDSADomainHash = sha256.Sum256([]byte(transcationSigningECDSADomain))
-
-// transactionSigningMLDSA44DomainHash is the fixed-size form of transcationSigningMLDSA44Domain, for
-// the same reason as transactionSigningECDSADomainHash.
-var transactionSigningMLDSA44DomainHash = sha256.Sum256([]byte(transcationSigningMLDSA44Domain))
 
 // NewTransactionHashWriter Returns a new HashWriter used for transaction hashes
 func NewTransactionHashWriter() HashWriter {
@@ -83,13 +78,6 @@ func NewTransactionSigningHashWriter() HashWriter {
 func NewTransactionSigningHashECDSAWriter() HashWriter {
 	hashWriter := HashWriter{sha256.New()}
 	hashWriter.InfallibleWrite(transactionSigningECDSADomainHash[:])
-	return hashWriter
-}
-
-// NewTransactionSigningHashMLDSA44Writer Returns a new HashWriter used for signing on a transaction with ML-DSA-44
-func NewTransactionSigningHashMLDSA44Writer() HashWriter {
-	hashWriter := HashWriter{sha256.New()}
-	hashWriter.InfallibleWrite(transactionSigningMLDSA44DomainHash[:])
 	return hashWriter
 }
 

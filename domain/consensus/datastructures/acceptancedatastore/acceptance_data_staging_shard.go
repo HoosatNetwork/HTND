@@ -3,7 +3,6 @@ package acceptancedatastore
 import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 type acceptanceDataStagingShard struct {
@@ -24,17 +23,15 @@ func (ads *acceptanceDataStore) stagingShard(stagingArea *model.StagingArea) *ac
 
 func (adss *acceptanceDataStagingShard) Commit(dbTx model.DBTransaction) error {
 	for hash, acceptanceData := range adss.toAdd {
-		buffer, err := adss.store.serializeAcceptanceDataOffHeap(acceptanceData)
+		acceptanceDataBytes, err := adss.store.serializeAcceptanceData(acceptanceData)
 		if err != nil {
 			return err
 		}
-		err = dbTx.Put(adss.store.hashAsKey(&hash), buffer.Slice())
+		err = dbTx.Put(adss.store.hashAsKey(&hash), acceptanceDataBytes)
 		if err != nil {
-			memory.Free(buffer)
 			return err
 		}
-		// The database copied the bytes, so the cache can keep the buffer itself.
-		adss.store.cache.AddBuffer(&hash, buffer, struct{}{})
+		adss.store.cache.Add(&hash, acceptanceData)
 	}
 
 	for hash := range adss.toDelete {

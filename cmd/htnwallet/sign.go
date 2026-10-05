@@ -26,7 +26,7 @@ func sign(conf *signConfig) error {
 	if len(conf.Password) == 0 {
 		conf.Password = keys.GetPassword("Password:")
 	}
-	privateKeys, importedKeys, err := keysFile.DecryptSigningKeys(conf.NetParams(), conf.Password)
+	privateKeys, err := keysFile.DecryptMnemonics(conf.Password)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func sign(conf *signConfig) error {
 
 	updatedPartiallySignedTransactions := make([][]byte, len(partiallySignedTransactions))
 	for i, partiallySignedTransaction := range partiallySignedTransactions {
-		updatedPartiallySignedTransactions[i], err = libhtnwallet.SignWithImportedKeys(conf.NetParams(), privateKeys, importedKeys, partiallySignedTransaction, keysFile.ECDSA)
+		updatedPartiallySignedTransactions[i], err = libhtnwallet.Sign(conf.NetParams(), privateKeys, partiallySignedTransaction, keysFile.ECDSA)
 		if err != nil {
 			return err
 		}
