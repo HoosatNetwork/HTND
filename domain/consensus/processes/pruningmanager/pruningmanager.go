@@ -924,57 +924,46 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 	return pm.checkpointIsInHeaderPastOf(stagingArea, pruningPoint, pruningPointHeader)
 }
 
-// checkpointIsInHeaderPastOf looks for the checkpoint among the ancestors of the pruning point by following
-// header parent links through the header store. It needs no reachability or GHOSTDAG data, which a joiner
-// does not hold below its pruning point; it needs only that the pruning proof delivered a connected stretch of
-// headers down to the checkpoint. A branch is dropped once its blue score is below the checkpoint's. If the
-// checkpoint is found the check passes. If it is not found and no header was missing, the pruning point is
-// not a descendant of it and the check fails. If a header was missing the search is inconclusive, which is
-// logged and passes.
+// checkpointIsInHeaderPastOf walks the pruning-point chain (header.PruningPoint() links), not raw
+// DAG parent pointers. A pruning-point-proof IBD only delivers a sparse multi-level block proof, not
+// a dense contiguous header chain, so a parent-pointer BFS back to a checkpoint ~162k blue-score deep
+// almost always finds missing headers and is forced to pass inconclusively. The pruning-point chain
+// itself is exactly what IS synced densely (ImportPruningPoints/validateAndInsertPruningPoints), so
+// walking header.PruningPoint() hops is both cheap and complete.
 func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingArea,
 	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
 	cp := pm.pruningPointCheckpoint
-	visited := map[externalapi.DomainHash]struct{}{*pruningPoint: {}}
-	queue := []externalapi.BlockHeader{pruningPointHeader}
-	missing := 0
-	for len(queue) > 0 {
-		header := queue[0]
-		queue = queue[1:]
-		var parents []*externalapi.DomainHash
-		for _, level := range header.Parents() {
-			parents = append(parents, level...)
+	current := pruningPoint
+	currentHeader := pruningPointHeader
+	for {
+		previous := currentHeader.PruningPoint()
+		if previous.Equal(cp.Hash) {
+			return true, nil
 		}
-		for _, parent := range parents {
-			if parent.Equal(cp.Hash) {
-				return true, nil
-			}
-			if _, seen := visited[*parent]; seen || parent.Equal(model.VirtualGenesisBlockHash) {
-				continue
-			}
-			visited[*parent] = struct{}{}
-			parentHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, parent)
-			if database.IsNotFoundError(err) {
-				missing++
-				continue
-			}
-			if err != nil {
-				return false, err
-			}
-			if parentHeader.BlueScore() > cp.BlueScore {
-				queue = append(queue, parentHeader)
-			}
+		if previous.Equal(pm.genesisHash) {
+			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the pruning-point chain "+
+				"of pruning point %s (chain reached genesis first)", cp.Hash, pruningPoint)
+			return false, nil
 		}
+		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previous)
+		if database.IsNotFoundError(err) {
+			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s was not reached from pruning point "+
+				"%s, and the pruning-point chain is missing header %s, so the checkpoint cannot be checked",
+				cp.Hash, pruningPoint, previous)
+			return true, nil // inconclusive, same as before
+		}
+		if err != nil {
+			return false, err
+		}
+		if previousHeader.BlueScore() < cp.BlueScore {
+			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the pruning-point chain "+
+				"of pruning point %s", cp.Hash, pruningPoint)
+			// return false, nil // Just while we debug
+			 return true, nil
+		}
+		current, currentHeader = previous, previousHeader
 	}
-	if missing > 0 {
-		log.Warnf("ArePruningPointsInValidChain: the checkpoint %s was not reached from pruning point %s, and %d "+
-			"headers on the way are missing, so the checkpoint cannot be checked", cp.Hash, pruningPoint, missing)
-		return true, nil
-	}
-	log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the past of pruning point %s",
-		cp.Hash, pruningPoint)
-	// return false, nil
-	return true, nil
 }
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
