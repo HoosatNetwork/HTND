@@ -921,31 +921,56 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 		return true, nil
 	}
 
-	hasPruningPointReachability, err := pm.reachabilityDataStore.HasReachabilityData(pm.databaseContext, stagingArea, pruningPoint)
-	if err != nil {
-		return false, err
-	}
-	hasCheckpointReachability, err := pm.reachabilityDataStore.HasReachabilityData(pm.databaseContext, stagingArea, cp.Hash)
-	if err != nil {
-		return false, err
-	}
-	if !hasPruningPointReachability || !hasCheckpointReachability {
-		log.Warnf("ArePruningPointsInValidChain: no reachability data for the checkpoint %s or pruning point %s, "+
-			"so the checkpoint cannot be checked", cp.Hash, pruningPoint)
-		return true, nil
-	}
-	isAncestor, err := pm.dagTopologyManager.IsAncestorOf(stagingArea, cp.Hash, pruningPoint)
-	if err != nil {
-		return false, err
-	}
-	if !isAncestor {
-		log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the past of pruning point %s",
-			cp.Hash, pruningPoint)
-		return false, nil
-	}
-	return true, nil
+	return pm.checkpointIsInHeaderPastOf(stagingArea, pruningPoint, pruningPointHeader)
 }
 
+// checkpointIsInHeaderPastOf looks for the checkpoint among the ancestors of the pruning point by following
+// header parent links through the header store. It needs no reachability or GHOSTDAG data, which a joiner
+// does not hold below its pruning point; it needs only that the pruning proof delivered a connected stretch of
+// headers down to the checkpoint. A branch is dropped once its blue score is below the checkpoint's. If the
+// checkpoint is found the check passes. If it is not found and no header was missing, the pruning point is
+// not a descendant of it and the check fails. If a header was missing the search is inconclusive, which is
+// logged and passes.
+func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
+) (bool, error) {
+	cp := pm.pruningPointCheckpoint
+	visited := map[externalapi.DomainHash]struct{}{*pruningPoint: {}}
+	queue := []externalapi.BlockHeader{pruningPointHeader}
+	missing := 0
+	for len(queue) > 0 {
+		header := queue[0]
+		queue = queue[1:]
+		for _, parent := range header.DirectParents() {
+			if parent.Equal(cp.Hash) {
+				return true, nil
+			}
+			if _, seen := visited[*parent]; seen || parent.Equal(model.VirtualGenesisBlockHash) {
+				continue
+			}
+			visited[*parent] = struct{}{}
+			parentHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, parent)
+			if database.IsNotFoundError(err) {
+				missing++
+				continue
+			}
+			if err != nil {
+				return false, err
+			}
+			if parentHeader.BlueScore() > cp.BlueScore {
+				queue = append(queue, parentHeader)
+			}
+		}
+	}
+	if missing > 0 {
+		log.Warnf("ArePruningPointsInValidChain: the checkpoint %s was not reached from pruning point %s, and %d "+
+			"headers on the way are missing, so the checkpoint cannot be checked", cp.Hash, pruningPoint, missing)
+		return true, nil
+	}
+	log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the past of pruning point %s",
+		cp.Hash, pruningPoint)
+	return false, nil
+}
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
 // the headers selected tip down to, not including, pruningPoint commit to, newest first. Commitments to blocks on that
