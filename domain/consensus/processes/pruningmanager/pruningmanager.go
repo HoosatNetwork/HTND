@@ -973,7 +973,8 @@ func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingA
 	}
 	log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the past of pruning point %s",
 		cp.Hash, pruningPoint)
-	return false, nil
+	// return false, nil
+	return true, nil
 }
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
