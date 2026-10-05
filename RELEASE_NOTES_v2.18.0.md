@@ -8,6 +8,16 @@ Release date:  TBD
   - Block headers are validated in full. A header's DAA score, blue work, blue score, pruning point, indirect parents and difficulty bits must match what this node computes. Parent and merge set structure is checked as well.
   - A block's coinbase must match exactly the amounts this node computes. v2.17.4 tolerated small differences.
   - A pruning point imported during IBD, and its UTXO set, are checked against the headers.
+- **Chain checkpoint** a community validated checkpoint has been added, which IBD is validated to be descendent from:
+   ```
+   // domain/dagconfig/params.go
+    var mainnetPruningPointCheckpoint = &Checkpoint{
+	Hash:           mustHash("27c1163f701f881ed90560e63031156c29d99100acc40ad019e0fadc61fb43b5"),
+	BlueScore:      221022005,
+	DAAScore:       233742961,
+	UTXOCommitment: mustHash("f5072e6ddf17067bb05a5a99ee095fac922d285c0d0318f42275989b55b9ffff"),
+    }
+    ```
 - **Mining pools must run this build before mining on it.** Blocks from an older build that break the new header or coinbase rules are rejected.
 - **Block Version 11** activates at DAAScore 245320163  
 - **ML-DSA-44 post-quantum signatures** are in consensus, the mempool and htnwallet. They are are dormant until block version 15 (placeholder) gets an activation DAA score, which is not set in this release.
