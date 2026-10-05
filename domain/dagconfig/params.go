@@ -190,6 +190,17 @@ type Params struct {
 	MergeDepth []uint64
 
 	POWScores []uint64
+	 
+	// PruningPointAnchor is a checkpoint: an imported pruning point list must contain it, and the list
+	// is checked back to it and no further. nil disables the check, falling back to the newest-end
+	// check. Setting it is a hard fork decision: it is trusted, not derived.
+	// Foztor 5 October 27
+	PruningPointAnchor *externalapi.DomainHash
+
+	// PruningPointAnchorBlueScore is the blue score of PruningPointAnchor, used to reject a pruning
+	// point that is older than the checkpoint.
+	// Foztor 5 October 27
+	PruningPointAnchorBlueScore uint64
 
 	// UnpricedTransactionFeeAllowance is how much, per merge-set transaction whose fee this node cannot
 	// compute (accepted with missing inputs, or not accepted here), a coinbase may exceed the expected
@@ -340,6 +351,15 @@ var mainnetHardForkGates = HardForkGates{
 	HeaderPruningPointVersion: 10,
 	IndirectParentsVersion:    10,
 }
+
+// Foztor October 2027.   Something to anchor onto in the absence of a sensible way to walk back to genesis
+var mainnetPruningPointAnchor = func() *externalapi.DomainHash {
+	hash, err := externalapi.NewDomainHashFromString("27c1163f701f881ed90560e63031156c29d99100acc40ad019e0fadc61fb43b5")
+	if err != nil {
+		panic(err)
+	}
+	return hash
+}()
 
 // testnetHardForkGates schedules the gated rules on testnet and the other test networks. It may run
 // ahead of mainnetHardForkGates to exercise a rule before it is scheduled on mainnet.
@@ -604,6 +624,8 @@ var MainnetParams = Params{
 		245320163,
 		^uint64(0),
 	},
+	PruningPointAnchor:          mainnetPruningPointAnchor,
+	PruningPointAnchorBlueScore: 221022005,
 
 	PruningMultiplier: []uint64{
 		0,

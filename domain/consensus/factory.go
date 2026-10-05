@@ -425,6 +425,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.IsArchival,
 		genesisHash,
 		config.POWScores,
+		config.PruningPointAnchor,
+		config.PruningPointAnchorBlueScore,
 		&hardForkGates,
 		config.FinalityDepthForBlockVersion,
 		config.PruningDepthForBlockVersion,

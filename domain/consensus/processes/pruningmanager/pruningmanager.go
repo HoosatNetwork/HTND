@@ -52,6 +52,8 @@ type pruningManager struct {
 	hardForkGates  *dagconfig.HardForkGates
 	// finalityDepthForBlockVersion and pruningDepthForBlockVersion are evaluated with the chain's current block
 	// version on every use (see currentDepths), never cached.
+	pruningPointAnchor          *externalapi.DomainHash
+	pruningPointAnchorBlueScore uint64
 	finalityDepthForBlockVersion    func(blockVersion uint16) uint64
 	pruningDepthForBlockVersion     func(blockVersion uint16) uint64
 	deletionDepth                   uint64
@@ -96,6 +98,8 @@ func New(
 	genesisHash *externalapi.DomainHash,
 	powScores []uint64,
 	hardForkGates *dagconfig.HardForkGates,
+	config.PruningPointAnchor,
+	config.PruningPointAnchorBlueScore,
 	finalityDepthForBlockVersion func(blockVersion uint16) uint64,
 	pruningDepthForBlockVersion func(blockVersion uint16) uint64,
 	deletionDepth uint64,
@@ -830,6 +834,10 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 	if err != nil {
 		return false, err
 	}
+	// Foztor - check our version 11 anchor/checkpoint is present.... 5 October 26
+	if pm.pruningPointAnchor != nil {
+		return pm.pruningPointListReachesAnchor(stagingArea, pruningPoint, pruningPointHeader, currentIndex)
+	}
 	pruningPointVersion, err := pm.pruningPointBlockVersion(stagingArea, pruningPoint, pruningPointHeader)
 	if err != nil {
 		return false, err
@@ -868,6 +876,73 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 	log.Warnf("ArePruningPointsInValidChain: the pruning point %s commits to %s, but no stored pruning point at index "+
 		"%d to %d is it", pruningPoint, previous, lowest, currentIndex-1)
 	return false, nil
+}
+
+// pruningPointListReachesAnchor replays the newest-end rule on every stored pruning point from the
+// current one down to pm.pruningPointAnchor, and requires the anchor to be among them. Nothing below
+// the anchor is read.
+func (pm *pruningManager) pruningPointListReachesAnchor(stagingArea *model.StagingArea,
+	current *externalapi.DomainHash, currentHeader externalapi.BlockHeader, currentIndex uint64,
+) (bool, error) {
+	if current.Equal(pm.pruningPointAnchor) {
+		return true, nil
+	}
+	if currentHeader.BlueScore() < pm.pruningPointAnchorBlueScore {
+		log.Warnf("ArePruningPointsInValidChain: pruning point %s has blue score %d, below the anchor's %d",
+			current, currentHeader.BlueScore(), pm.pruningPointAnchorBlueScore)
+		return false, nil
+	}
+
+	index := currentIndex
+	header := currentHeader
+	for {
+		version, err := pm.pruningPointBlockVersion(stagingArea, current, header)
+		if err != nil {
+			return false, err
+		}
+		previous := header.PruningPoint()
+		window := pm.pruningPointCommitmentWindow(version)
+		lowest := uint64(0)
+		if index > window {
+			lowest = index - window
+		}
+
+		// Find the stored entry the header commits to, within the window below this index.
+		foundIndex, found := uint64(0), false
+		for i := index; i > lowest; i-- {
+			stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, i-1)
+			if err != nil {
+				return false, err
+			}
+			if stored.Equal(previous) {
+				foundIndex, found = i-1, true
+				break
+			}
+		}
+		if !found {
+			log.Warnf("ArePruningPointsInValidChain: %s commits to %s, which is not stored within %d "+
+				"entries below index %d", current, previous, window, index)
+			return false, nil
+		}
+
+		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previous)
+		if err != nil {
+			return false, err
+		}
+		if previousHeader.BlueScore() >= header.BlueScore() {
+			log.Warnf("ArePruningPointsInValidChain: %s has blue score %d, not below %d", previous,
+				previousHeader.BlueScore(), header.BlueScore())
+			return false, nil
+		}
+		if previous.Equal(pm.pruningPointAnchor) {
+			return true, nil
+		}
+		if previousHeader.BlueScore() < pm.pruningPointAnchorBlueScore {
+			log.Warnf("ArePruningPointsInValidChain: the list passes the anchor without containing it")
+			return false, nil
+		}
+		current, header, index = previous, previousHeader, foundIndex
+	}
 }
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
