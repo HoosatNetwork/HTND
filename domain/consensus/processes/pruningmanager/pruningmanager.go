@@ -833,6 +833,7 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 	if err != nil {
 		return false, err
 	}
+
 	// Foztor - check our version 11 anchor/checkpoint is present.... 5 October 26
 	if ok, err := pm.pruningPointMeetsCheckpoint(stagingArea, pruningPoint, pruningPointHeader); err != nil || !ok {
 		return false, err
@@ -886,24 +887,28 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
 	cp := pm.pruningPointCheckpoint
+
+	log.Infof("PPMCP starts")
 	if cp == nil {
 		return true, nil
 	}
 	if pruningPointHeader.BlueScore() < cp.BlueScore {
-		log.Warnf("ArePruningPointsInValidChain: pruning point %s has blue score %d, below the checkpoint %s at %d",
+		log.Warnf("pruningPointMeetsCheckpoint: pruning point %s has blue score %d, below the checkpoint %s at %d",
 			pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
 		return false, nil
 	}
+	log.Infof("PPMCP 2")
 
 	hasCheckpoint, err := pm.blockHeaderStore.HasBlockHeader(pm.databaseContext, stagingArea, cp.Hash)
 	if err != nil {
 		return false, err
 	}
+	log.Infof("PPMCP 3")
 	if !hasCheckpoint {
 		if pruningPoint.Equal(cp.Hash) {
 			return false, errors.Errorf("checkpoint %s is the pruning point but its header is missing", cp.Hash)
 		}
-		log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not among the headers, so it cannot be checked",
+		log.Warnf("pruningPointMeetsCheckpoint: the checkpoint %s is not among the headers, so it cannot be checked",
 			cp.Hash)
 		return true, nil
 	}
@@ -913,7 +918,7 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 	}
 	if header.BlueScore() != cp.BlueScore || header.DAAScore() != cp.DAAScore ||
 		!header.UTXOCommitment().Equal(cp.UTXOCommitment) {
-		log.Warnf("ArePruningPointsInValidChain: the header stored as checkpoint %s does not carry the pinned "+
+			log.Warnf("pruningPointMeetsCheckpoint: the header stored as checkpoint %s does not carry the pinned "+
 			"blue score %d, DAA score %d and UTXO commitment %s", cp.Hash, cp.BlueScore, cp.DAAScore, cp.UTXOCommitment)
 		return false, nil
 	}

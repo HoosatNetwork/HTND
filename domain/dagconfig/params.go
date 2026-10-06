@@ -333,8 +333,8 @@ var mainnetHardForkGates = HardForkGates{
 	StrictCoinbaseVersion:          11, // Not seen in practice, activate and enforce at block version 11
 	RefuseMismatchedImportVersion:  10, // Similar, stop the rot at v10
 	ValidateHeaderBitsVersion:      10, // Stop the rot at v10
-	ValidateIBDPruningPointVersion: 11, // Not seen in practice, activate and enforce at block version 11
-	ValidateIBDPruningListVersion:  11, // Not seen in practice, activate and enforce at block version 11
+	ValidateIBDPruningPointVersion: 10, // We start this today to do the checkpoints during IBD
+	ValidateIBDPruningListVersion:  10, // We start this today to do the checkpoints during IBD
 	OffsetModeValueChecksVersion:   10, // Already implemented
 	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point.  Foztor. 5/Oct/27
 	ParentsIncestVersion:      10,
