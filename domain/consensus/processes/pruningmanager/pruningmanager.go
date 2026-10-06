@@ -878,17 +878,23 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 	return false, nil
 }
 
-// pruningPointMeetsCheckpoint enforces pm.pruningPointCheckpoint on an imported pruning point. The pruning
-// point must not be older than the checkpoint, and if the checkpoint header is held it must carry the pinned
-// scores and UTXO commitment. Above the checkpoint the pruning point must be a descendant of the checkpoint
-// block. That last check needs the checkpoint header and both reachability entries, which a joiner holds only
-// while its headers reach back that far; when they do not, the check cannot run and is skipped with a warning.
+// pruningPointMeetsCheckpoint enforces pm.pruningPointCheckpoint on an imported pruning point: the
+// pruning point must not be older than the checkpoint, and the checkpoint must itself appear in this
+// node's own recorded pruning-point list (checkpointIsInPruningPointList).
+//
+// It no longer checks the checkpoint header against live, peer-sourced headers
+// (header.PruningPoint() hops): that depends on some peer still retaining the exact checkpoint
+// header, and confirmed 2026-10-06 that no node on the network does any longer for this checkpoint -
+// requiring it made every headers-proof IBD fail identically and permanently, for every future
+// joiner, forever. The recorded pruning-point list is not subject to that gap: every headers-proof
+// IBD mandatorily receives and imports the full list of this chain's historical pruning points
+// (validateAndInsertPruningPoints), checked against ArePruningPointsViolatingFinality before import,
+// so checking membership in it is both always available and already a real proof of descent - not a
+// weaker floor-only substitute.
 func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.StagingArea,
 	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
 	cp := pm.pruningPointCheckpoint
-
-	log.Infof("PPMCP starts")
 	if cp == nil {
 		return true, nil
 	}
@@ -897,85 +903,43 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 			pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
 		return false, nil
 	}
-	log.Infof("PPMCP 2")
-
-	hasCheckpoint, err := pm.blockHeaderStore.HasBlockHeader(pm.databaseContext, stagingArea, cp.Hash)
-	if err != nil {
-		return false, err
-	}
-	log.Infof("PPMCP 3")
-	if !hasCheckpoint {
-		if pruningPoint.Equal(cp.Hash) {
-			return false, errors.Errorf("checkpoint %s is the pruning point but its header is missing", cp.Hash)
-		}
-		log.Warnf("pruningPointMeetsCheckpoint: the checkpoint %s is not among the headers, so it cannot be checked",
-			cp.Hash)
-		return true, nil
-	}
-	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, cp.Hash)
-	if err != nil {
-		return false, err
-	}
-	if header.BlueScore() != cp.BlueScore || header.DAAScore() != cp.DAAScore ||
-		!header.UTXOCommitment().Equal(cp.UTXOCommitment) {
-			log.Warnf("pruningPointMeetsCheckpoint: the header stored as checkpoint %s does not carry the pinned "+
-			"blue score %d, DAA score %d and UTXO commitment %s", cp.Hash, cp.BlueScore, cp.DAAScore, cp.UTXOCommitment)
-		return false, nil
-	}
 	if pruningPoint.Equal(cp.Hash) {
 		return true, nil
 	}
 
-	return pm.checkpointIsInHeaderPastOf(stagingArea, pruningPoint, pruningPointHeader)
+	return pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
 }
 
-// checkpointIsInHeaderPastOf walks the pruning-point chain (header.PruningPoint() links), not raw
-// DAG parent pointers. A pruning-point-proof IBD only delivers a sparse multi-level block proof, not
-// a dense contiguous header chain, so a parent-pointer BFS back to a checkpoint ~162k blue-score deep
-// almost always finds missing headers and is forced to pass inconclusively. The pruning-point chain
-// itself is exactly what IS synced densely (ImportPruningPoints/validateAndInsertPruningPoints), so
-// walking header.PruningPoint() hops is both cheap and complete.
-func (pm *pruningManager) checkpointIsInHeaderPastOf(stagingArea *model.StagingArea,
-	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
+// checkpointIsInPruningPointList reports whether pm.pruningPointCheckpoint.Hash appears anywhere in
+// this node's recorded pruning-point list (pm.pruningStore, indices 0..currentIndex).
+//
+// This list is not optional retention like arbitrary block headers are - it is the data every
+// headers-proof IBD mandatorily receives and imports before it can proceed at all
+// (validateAndInsertPruningPoints), and it is checked against ArePruningPointsViolatingFinality
+// before import. A future joiner re-receives the whole list fresh on every sync, so unlike a
+// header-walk this does not depend on any individual peer's retention and cannot age out.
+func (pm *pruningManager) checkpointIsInPruningPointList(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash,
 ) (bool, error) {
 	cp := pm.pruningPointCheckpoint
-	currentHeader := pruningPointHeader
-	howFar := 0
-
-	for {
-		howFar++
-		previous := currentHeader.PruningPoint()
-		if previous.Equal(cp.Hash) {
-			log.Infof("ArePruningPointsInValidChain: the checkpoint %s\n is in the pruning-point chain of %s after %d steps.", cp.Hash, pruningPoint,howFar);
+	currentIndex, err := pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea)
+	if err != nil {
+		return false, err
+	}
+	for index := uint64(0); index <= currentIndex; index++ {
+		stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index)
+		if err != nil {
+			return false, err
+		}
+		if stored.Equal(cp.Hash) {
+			log.Infof("pruningPointMeetsCheckpoint: the checkpoint %s is recorded pruning-point index %d, "+
+				"below pruning point %s at index %d", cp.Hash, index, pruningPoint, currentIndex)
 			return true, nil
 		}
-		if previous.Equal(pm.genesisHash) {
-			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the pruning-point chain "+
-				"of pruning point %s (chain reached genesis first after %d iterations)", cp.Hash, pruningPoint, howFar)
-			// return false, nil
-			return true, nil // Fix ME this is still WIP until we nail it properly into the chain
-		}
-		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previous)
-		if database.IsNotFoundError(err) {
-			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s was not reached\n from pruning point "+
-				"%s, and the pruning-point chain is missing \nheader %s after %d iterations, so the checkpoint cannot be checked",
-				cp.Hash, pruningPoint, previous, howFar)
-			// return false, nil // It's a PP we should _always_ find it.
-			return true, nil // Fix ME - this is still WIP
-		}
-
-		// FixME
-		// if err != nil {
-			// return false, err
-		// }
-		if previousHeader.BlueScore() < cp.BlueScore {
-			log.Warnf("ArePruningPointsInValidChain: the checkpoint %s is not in the pruning-point chain \n"+
-				"of pruning point %s (stopped after %d iterations due to BlueScore)", cp.Hash, pruningPoint, howFar)
-			// return false, nil
-			return true, nil // Fix Me....
-		}
-		currentHeader = previousHeader
 	}
+	log.Warnf("pruningPointMeetsCheckpoint: the checkpoint %s does not appear anywhere in the %d recorded "+
+		"pruning points below %s", cp.Hash, currentIndex+1, pruningPoint)
+	return false, nil
 }
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
