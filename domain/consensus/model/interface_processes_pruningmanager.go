@@ -14,6 +14,7 @@ type PruningManager interface {
 	PruneAllBlocksBelow(stagingArea *StagingArea, pruningPointHash *externalapi.DomainHash) error
 	PruningPointAndItsAnticone() ([]*externalapi.DomainHash, error)
 	ExpectedHeaderPruningPoint(stagingArea *StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error)
+	VerifyPruningPointCheckpointOnDisk() error
 	TrustedBlockAssociatedGHOSTDAGDataBlockHashes(stagingArea *StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	VerifyCurrentPruningPointUTXOSet()
 	FindAndReproduceRootDisqualification(stagingArea *StagingArea)

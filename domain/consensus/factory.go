@@ -676,9 +676,32 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
+	// Startup integrity check, independent of any in-flight IBD: this node's on-disk pruning-point
+	// list must contain the pinned checkpoint once its own pruning point has passed it. A node that
+	// isn't currently syncing could otherwise run indefinitely on silently corrupted or tampered data
+	// without this ever being caught - IBD-time enforcement (pruningPointMeetsCheckpoint) only runs
+	// during an active sync. See VerifyPruningPointCheckpointOnDisk's comment.
+	err = pruningManager.VerifyPruningPointCheckpointOnDisk()
+	if err != nil {
+		return nil, false, err
+	}
+
 	// If the virtual moved before shutdown but the pruning point hasn't, we
 	// move it if needed.
 	stagingArea := model.NewStagingArea()
+	err = pruningManager.UpdatePruningPointByVirtual(stagingArea)
+	if err != nil {
+		return nil, false, err
+	}
+
+	err = staging.CommitAllChanges(dbManager, stagingArea)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// If the virtual moved before shutdown but the pruning point hasn't, we
+	// move it if needed.
+	stagingArea = model.NewStagingArea()
 	err = pruningManager.UpdatePruningPointByVirtual(stagingArea)
 	if err != nil {
 		return nil, false, err

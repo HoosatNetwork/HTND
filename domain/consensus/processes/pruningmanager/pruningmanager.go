@@ -890,6 +890,14 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 	return pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
 }
 
+func shortStr(s string) string {
+	if len(s) <= 12 { // Return as-is if it's already short
+		return s
+	}
+	return s[:5] + "..." + s[len(s)-4:]
+}
+
+
 // checkpointIsInPruningPointList reports whether pm.pruningPointCheckpoint.Hash appears anywhere in
 // this node's recorded pruning-point list (pm.pruningStore, indices 0..currentIndex).
 //
@@ -912,14 +920,80 @@ func (pm *pruningManager) checkpointIsInPruningPointList(stagingArea *model.Stag
 			return false, err
 		}
 		if stored.Equal(cp.Hash) {
-			log.Infof("pruningPointMeetsCheckpoint: the checkpoint %s is recorded pruning-point index %d, "+
-				"below pruning point %s at index %d", cp.Hash, index, pruningPoint, currentIndex)
+			log.Infof("pruningPointMeetsCheckpoint: the checkpoint %s is recorded PP index %d "+
+				"below pruning point %s at index %d", shortStr(cp.Hash.String()), index, pruningPoint, currentIndex)
 			return true, nil
 		}
 	}
 	log.Warnf("pruningPointMeetsCheckpoint: the checkpoint %s does not appear anywhere in the %d recorded "+
 		"pruning points below %s", cp.Hash, currentIndex+1, pruningPoint)
 	return false, nil
+}
+
+// VerifyPruningPointCheckpointOnDisk checks this node's on-disk pruning-point list against
+// pm.pruningPointCheckpoint at startup, independent of any in-flight IBD. Unlike
+// pruningPointMeetsCheckpoint (which only runs as part of ArePruningPointsInValidChain, mid-IBD),
+// this runs every boot against whatever this node already has stored - catching disk corruption, a
+// bad --repair-* run, or manual tampering on a node that may not IBD again for a long time.
+//
+// A chain that has not yet reached the checkpoint's blue score is not a failure - a fresh node mid-
+// initial-sync, or one still below that depth, simply has not recorded it yet, and will be checked
+// properly by the existing IBD-time enforcement once it gets there. Only a chain that has already
+// passed the checkpoint's depth and does NOT have it recorded is treated as corrupt, since that
+// combination should be impossible on an honest chain.
+func (pm *pruningManager) VerifyPruningPointCheckpointOnDisk() error {
+	cp := pm.pruningPointCheckpoint
+	if cp == nil {
+		return nil
+	}
+
+	stagingArea := model.NewStagingArea()
+	hasPruningPoint, err := pm.pruningStore.HasPruningPoint(pm.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+	if !hasPruningPoint {
+		log.Debugf("VerifyPruningPointCheckpointOnDisk: no pruning point recorded yet - nothing to check")
+		return nil
+	}
+
+	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+	if pruningPoint.Equal(pm.genesisHash) {
+		log.Debugf("VerifyPruningPointCheckpointOnDisk: pruning point is still genesis - nothing to check")
+		return nil
+	}
+
+	pruningPointHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPoint)
+	if err != nil {
+		return err
+	}
+	if pruningPointHeader.BlueScore() < cp.BlueScore {
+		log.Debugf("VerifyPruningPointCheckpointOnDisk: pruning point %s (blue score %d) has not yet "+
+			"reached the checkpoint %s (blue score %d) - nothing to check yet", pruningPoint,
+			pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
+		return nil
+	}
+	if pruningPoint.Equal(cp.Hash) {
+		return nil
+	}
+
+	ok, err := pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.Errorf("startup integrity check failed: this node's current pruning point %s "+
+			"(blue score %d) is past the pinned checkpoint %s (blue score %d), but the checkpoint does "+
+			"not appear anywhere in this node's own recorded pruning-point list. This should be "+
+			"impossible on an honest chain - the on-disk data may be corrupted, incompletely repaired, "+
+			"or tampered with. Refusing to start. If this is expected (e.g. a deliberately pruned or "+
+			"rebuilt datadir), resync this node from a trusted peer rather than continuing to run "+
+			"against this data", pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
+	}
+	return nil
 }
 
 // headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
