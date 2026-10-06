@@ -897,11 +897,13 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 			pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
 		return false, nil
 	}
+	log.Infof("PPMCP 2")
 
 	hasCheckpoint, err := pm.blockHeaderStore.HasBlockHeader(pm.databaseContext, stagingArea, cp.Hash)
 	if err != nil {
 		return false, err
 	}
+	log.Infof("PPMCP 3")
 	if !hasCheckpoint {
 		if pruningPoint.Equal(cp.Hash) {
 			return false, errors.Errorf("checkpoint %s is the pruning point but its header is missing", cp.Hash)
