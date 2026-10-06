@@ -203,13 +203,13 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 // on broken chain data), and every subsequent time at debug (so a 200k-block re-sync does not emit
 // a warn line per block).
 func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *externalapi.DomainHash, err error) {
-	if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore(step, struct{}{}); alreadyLogged {
-		log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
-		return
-	}
+	// if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore(step, struct{}{}); alreadyLogged {
+		// log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
+		// return
+	// }
 	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The chain is built on an incomplete "+
 		"imported pruning-point UTXO set, so this cannot be verified locally and the block is not being "+
-		"fully validated. Further %s tolerations are logged at debug level.", blockHash, step, err, step)
+		"fully validated. Step is %s ", blockHash, step, err, step)
 }
 
 // logMinersViewTolerated is logToleratedIssue for a UTXO commitment or accepted-ID merkle root
@@ -217,14 +217,14 @@ func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *exte
 // which differs from this node's. It shares logToleratedIssue's once-per-step warn, under its own
 // keys, so the two reasons are each reported once.
 func (csm *consensusStateManager) logMinersViewTolerated(step string, blockHash *externalapi.DomainHash, err error) {
-	if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore("miners-view:"+step, struct{}{}); alreadyLogged {
-		log.Debugf("Block %s: tolerated %s mismatch from a miner on a different UTXO history: %s", blockHash, step, err)
-		return
-	}
+	// if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore("miners-view:"+step, struct{}{}); alreadyLogged {
+		// log.Debugf("Block %s: tolerated %s mismatch from a miner on a different UTXO history: %s", blockHash, step, err)
+		// return
+	// }
 	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The header reports its miner's UTXO "+
 		"history, which differs from this node's; mainnet mining nodes do not share one, so this field is "+
-		"not enforced until the strict UTXO commitment fork. This node's UTXO set is unaffected. Further %s "+
-		"tolerations of this kind are logged at debug level.", blockHash, step, err, step)
+		"not enforced until the strict UTXO commitment fork. Step is %s "+
+		"", blockHash, step, err, step)
 }
 
 // validateBlockTransactionsAgainstPastUTXO validates every non-coinbase transaction in the block
