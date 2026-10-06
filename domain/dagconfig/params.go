@@ -328,16 +328,15 @@ const unscheduledHardForkGate = ^uint16(0)
 // mainnetHardForkGates schedules the gated rules on mainnet. A change here is a mainnet hard fork:
 // it needs a coordinated activation with enough lead time for every node operator and miner.
 var mainnetHardForkGates = HardForkGates{
-	StrictUTXOCommitmentVersion:    10,
-	StrictMinersViewFieldsVersion:  10,
-	StrictCoinbaseVersion:          10,
-	RefuseMismatchedImportVersion:  10,
-	ValidateHeaderBitsVersion:      10,
-	ValidateIBDPruningPointVersion: 10,
-	ValidateIBDPruningListVersion:  10,
-	OffsetModeValueChecksVersion:   10,
+	StrictUTXOCommitmentVersion:    10, // Let's stop the rot now, and not wait for V11 HF
+	StrictMinersViewFieldsVersion:  12, // Foztor, we need to get comfortable this never happens before activating it.
+	StrictCoinbaseVersion:          11, // Not seen in practice, activate and enforce at block version 11
+	RefuseMismatchedImportVersion:  10, // Similar, stop the rot at v10
+	ValidateHeaderBitsVersion:      10, // Stop the rot at v10
+	ValidateIBDPruningPointVersion: 11, // Not seen in practice, activate and enforce at block version 11
+	ValidateIBDPruningListVersion:  11, // Not seen in practice, activate and enforce at block version 11
+	OffsetModeValueChecksVersion:   10, // Already implemented
 	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point.  Foztor. 5/Oct/27
-
 	ParentsIncestVersion:      10,
 	MergeSetSizeLimitVersion:  10,
 	HeaderDAAScoreVersion:     10,
@@ -635,7 +634,7 @@ var MainnetParams = Params{
 		217137983,
 		218735007,
 		227679830,
-		245320163,
+		236878000, // v11 activation - Foztor 6/Oct/26, retargeted for ~Mon 12 Oct 2026 08:00 GMT
 		^uint64(0),
 	},
 	PruningPointCheckpoint: mainnetPruningPointCheckpoint,
