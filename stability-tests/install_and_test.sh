@@ -7,7 +7,7 @@ go version
 export PATH="$(go env GOPATH)/bin:$PATH"
 
 go mod download
-go install $FLAGS honnef.co/go/tools/cmd/staticcheck@latest
+GOTOOLCHAIN=go1.27.1 go install $FLAGS honnef.co/go/tools/cmd/staticcheck@latest
 
 UNFORMATTED=$(find . -type f -name '*.go' -not -path './vendor/*' -exec gofmt -l {} +)
 test -z "${UNFORMATTED}"
