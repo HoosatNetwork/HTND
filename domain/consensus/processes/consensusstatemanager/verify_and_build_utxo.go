@@ -204,8 +204,8 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 // a warn line per block).
 func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *externalapi.DomainHash, err error) {
 	// if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore(step, struct{}{}); alreadyLogged {
-		// log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
-		// return
+	// log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
+	// return
 	// }
 	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The chain is built on an incomplete "+
 		"imported pruning-point UTXO set, so this cannot be verified locally and the block is not being "+
@@ -218,8 +218,8 @@ func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *exte
 // keys, so the two reasons are each reported once.
 func (csm *consensusStateManager) logMinersViewTolerated(step string, blockHash *externalapi.DomainHash, err error) {
 	// if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore("miners-view:"+step, struct{}{}); alreadyLogged {
-		// log.Debugf("Block %s: tolerated %s mismatch from a miner on a different UTXO history: %s", blockHash, step, err)
-		// return
+	// log.Debugf("Block %s: tolerated %s mismatch from a miner on a different UTXO history: %s", blockHash, step, err)
+	// return
 	// }
 	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The header reports its miner's UTXO "+
 		"history, which differs from this node's; mainnet mining nodes do not share one, so this field is "+

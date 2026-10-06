@@ -87,7 +87,7 @@ func (csm *consensusStateManager) importPruningPointUTXOSet(stagingArea *model.S
 
 	// The pruning point UTXO set is the pruning point's PAST state - the block's own transactions are
 	// No tolerate.  Foztor 5th Oct 27
-        err = csm.populateTransactionWithUTXOEntriesFromUTXOSet(newPruningPointBlock, importedPruningPointUTXOIterator)
+	err = csm.populateTransactionWithUTXOEntriesFromUTXOSet(newPruningPointBlock, importedPruningPointUTXOIterator)
 	if err != nil {
 		log.Warnf("Imported pruning point %s spends outputs that are not in its own UTXO set. THIS IS NOT ALLOWED",
 			newPruningPoint)
@@ -183,10 +183,10 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 		// Without the header there is nothing to check against; proceed with whatever the peer supplied.
 		// This is now uncessarily liberal
 		// log.Warnf("Could not fetch pruning point %s header to validate the imported UTXO set (%s) - "+
-			// "proceeding with the accumulated multiset", newPruningPoint, err)
+		// "proceeding with the accumulated multiset", newPruningPoint, err)
 		// return accumulatedMultiset, false, nil
 		return nil, false, errors.Wrapf(err,
-        		"pruning point %s header was not supplied and is REQUIRED to check the imported UTXO set", newPruningPoint)
+			"pruning point %s header was not supplied and is REQUIRED to check the imported UTXO set", newPruningPoint)
 	}
 	expectedCommitment := header.UTXOCommitment()
 
@@ -234,13 +234,12 @@ func (csm *consensusStateManager) verifyAndRepairImportedPruningPointUTXOSet(sta
 		"mismatch their own commitments until the upstream disqualifications are fixed.",
 		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 
-		return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
-    			"imported pruning point %s UTXO set DOES NOT MATCH ITS OWN HEADER COMMITMENT (header %s, "+
-        			"fresh multiset over %d stored entries %s); sync STOPS and another peer must supply a set "+
-        			"that reproduces the commitment",
-    			newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
+	return nil, false, errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		"imported pruning point %s UTXO set DOES NOT MATCH ITS OWN HEADER COMMITMENT (header %s, "+
+			"fresh multiset over %d stored entries %s); sync STOPS and another peer must supply a set "+
+			"that reproduces the commitment",
+		newPruningPoint, expectedCommitment, entryCount, recomputedMultiset.Hash())
 }
-
 
 // spendingTransactionsByOutpoint maps each outpoint the block spends to the transaction that spends
 // it, so a survey record can say which transaction went looking for a missing coin.
@@ -256,8 +255,6 @@ func spendingTransactionsByOutpoint(block *externalapi.DomainBlock) map[external
 	}
 	return spentBy
 }
-
-
 
 // recomputeImportedPruningPointMultisetFromBucket builds a fresh multiset by walking every entry
 // currently stored in the imported-pruning-point-utxos bucket. Because that bucket is keyed by

@@ -46,11 +46,11 @@ type pruningManager struct {
 	daaBlocksStore                      model.DAABlocksStore
 	reachabilityDataStore               model.ReachabilityDataStore
 
-	isArchivalNode bool
-	genesisHash    *externalapi.DomainHash
-	powScores      []uint64
-	hardForkGates  *dagconfig.HardForkGates
-	pruningPointCheckpoint      *dagconfig.Checkpoint
+	isArchivalNode         bool
+	genesisHash            *externalapi.DomainHash
+	powScores              []uint64
+	hardForkGates          *dagconfig.HardForkGates
+	pruningPointCheckpoint *dagconfig.Checkpoint
 	// finalityDepthForBlockVersion and pruningDepthForBlockVersion are evaluated with the chain's current block
 	// version on every use (see currentDepths), never cached.
 	finalityDepthForBlockVersion    func(blockVersion uint16) uint64
@@ -639,7 +639,7 @@ func (pm *pruningManager) validatePruningPointBeforeStaging(stagingArea *model.S
 	// Foztor 5th Oct 27 - We don't tolerate this stuff no more
 	// refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPointHash)
 	// if err != nil || !refuseMismatch {
-		// return err
+	// return err
 	// }
 	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
 	if err != nil {
@@ -897,7 +897,6 @@ func shortStr(s string) string {
 	return s[:5] + "..." + s[len(s)-4:]
 }
 
-
 // checkpointIsInPruningPointList reports whether pm.pruningPointCheckpoint.Hash appears anywhere in
 // this node's recorded pruning-point list (pm.pruningStore, indices 0..currentIndex).
 //
@@ -1132,8 +1131,6 @@ func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.Stagi
 
 	return utxoSetHash, stats, nil
 }
-
-
 
 // This function takes 2 points (currentPruningHash, previousPruningHash) and traverses the UTXO diff children DAG
 // until it finds a common descendant, at the worse case this descendant will be the current SelectedTip.
@@ -2472,7 +2469,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
 					methodUsed, utxoSetDiff)
 			}
-				return validationErr
+			return validationErr
 		} else {
 			log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
 				pruningPoint)

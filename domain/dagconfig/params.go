@@ -190,7 +190,7 @@ type Params struct {
 	MergeDepth []uint64
 
 	POWScores []uint64
-	 
+
 	// PruningPointCheckpoint is a permanent, release-pinned stamp: a block, with its blue score, DAA score
 	// and UTXO commitment, that every pruning point imported by IBD must be at or descended from. nil
 	// disables the check. It is trusted, not derived; once shipped it must never be moved or removed.
@@ -337,13 +337,13 @@ var mainnetHardForkGates = HardForkGates{
 	ValidateIBDPruningListVersion:  10, // We start this today to do the checkpoints during IBD
 	OffsetModeValueChecksVersion:   10, // Already implemented
 	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point.  Foztor. 5/Oct/27
-	ParentsIncestVersion:      10,
-	MergeSetSizeLimitVersion:  10,
-	HeaderDAAScoreVersion:     10,
-	HeaderBlueWorkVersion:     10,
-	HeaderBlueScoreVersion:    10,
-	HeaderPruningPointVersion: 10,
-	IndirectParentsVersion:    10,
+	ParentsIncestVersion:           10,
+	MergeSetSizeLimitVersion:       10,
+	HeaderDAAScoreVersion:          10,
+	HeaderBlueWorkVersion:          10,
+	HeaderBlueScoreVersion:         10,
+	HeaderPruningPointVersion:      10,
+	IndirectParentsVersion:         10,
 }
 
 // Foztor October 2027.   Something to anchor onto in the absence of a sensible way to walk back to genesis
@@ -357,10 +357,10 @@ type Checkpoint struct {
 
 func mustHash(hashString string) *externalapi.DomainHash {
 	hash, err := externalapi.NewDomainHashFromString(hashString)
- 	if err != nil {
- 		panic(err)
- 	}
- 	return hash
+	if err != nil {
+		panic(err)
+	}
+	return hash
 }
 
 // mainnetPruningPointCheckpoint is the stamp agreed by the node operators: a block on the mainnet selected
@@ -638,7 +638,6 @@ var MainnetParams = Params{
 		^uint64(0),
 	},
 	PruningPointCheckpoint: mainnetPruningPointCheckpoint,
-
 
 	PruningMultiplier: []uint64{
 		0,
