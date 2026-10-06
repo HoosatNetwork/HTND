@@ -781,27 +781,7 @@ func (pm *pruningManager) ArePruningPointsViolatingFinality(stagingArea *model.S
 }
 
 // ArePruningPointsInValidChain checks the newest end of the stored pruning point list against what block headers commit
-// to, using only data a node synced from a headers proof holds. It checks the current pruning point and one previous
-// pruning point, not the whole list:
-//
-//  1. The headers on the selected chain from the headers selected tip down to the current pruning point must commit to
-//     the current pruning point. One that no header above it commits to is too shallow, or not this chain's.
-//  2. The pruning point the current pruning point's own header commits to must be stored at most
-//     pruningPointCommitmentWindow indices below it, with a header blue score below the current pruning point's.
-//
-// A header usually commits to the stored pruning point ceil(pruningDepth/finalityDepth) indices back (3 on mainnet), and
-// sometimes to one further back, so the window is twice that distance (6 on mainnet).
-//
-// Nothing older is checked. Mainnet history has pruning points whose headers commit to pruning points this node never
-// stored, and pruning points stored out of line with their commitments, so a walk over the whole list rejects real
-// networks. Checking one previous pruning point still ties the list's newest end to the headers, which is what a peer
-// would have to fake to hand over a list for a different chain.
-//
-// The second step only runs when the current pruning point was mined at or above anchorBlockVersion, the version from
-// which a pruning point's header commitment is a consensus rule; below it the commitment vouches for nothing.
-//
-// It returns (false, nil) for a list that does not match the headers, and an error only when data it needs cannot be
-// read.
+// We have a checkedpointed pruning point.  We check that it is in the hisotirical list of pruning points.  Simples
 func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.StagingArea, anchorBlockVersion uint16,
 ) (bool, error) {
 	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
