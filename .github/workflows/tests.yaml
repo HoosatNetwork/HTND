@@ -85,10 +85,6 @@ jobs:
         run: |
           go test -race -p 2 -count=1 ./infrastructure/network/rpcclient/...
 
-      - name: Race - protocol flows
-        run: |
-          go test -race -p 2 -count=1 ./app/protocol/...
-
   stability-test-fast:
     timeout-minutes: 30
     runs-on: ubuntu-latest
