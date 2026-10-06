@@ -228,6 +228,21 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 		return err
 	}
 
+	// The sparse pruning-point proof only guarantees headers within its own proof window are
+	// present. pruningPointMeetsCheckpoint/checkpointIsInHeaderPastOf need a dense
+	// header.PruningPoint() link chain reaching all the way back to the pinned checkpoint -
+	// a "nailed up" anchor that is never expected to move - and that distance can be (and on
+	// mainnet today, is) far deeper than the proof window covers. Explicitly fetch the dense
+	// header range between the checkpoint and the proof pruning point here, using the ordinary
+	// RequestHeaders path, so the checkpoint is a guaranteed part of every headers-proof sync
+	// rather than an incidental one. If the peer itself does not hold the checkpoint, this fails
+	// loudly (a clean protocol error) rather than silently reporting ArePruningPointsInValidChain
+	// as false later with no indication why.
+	err = flow.syncCheckpointHeaders(proofPruningPoint)
+	if err != nil {
+		return err
+	}
+
 	// TODO: Remove this condition once there's more proper way to check finality violation
 	// in the headers proof.
 	if proofPruningPoint.Equal(flow.Config().NetParams().GenesisHash) {
@@ -291,6 +306,91 @@ func (flow *handleIBDFlow) downloadHeadersAndPruningUTXOSet(
 	}
 	log.Debugf("Finished syncing the current pruning point UTXO set")
 
+	return nil
+}
+
+
+// syncCheckpointHeaders fetches the dense header range from the pinned
+// dagconfig.PruningPointCheckpoint (if any) up to proofPruningPoint, so that the checkpoint and
+// the full header.PruningPoint() link chain connecting it to the new pruning point are present
+// locally before this node ever calls ArePruningPointsInValidChain against them.
+//
+// A headers-proof sync only delivers a sparse multi-level proof around the pruning point -
+// nowhere near guaranteed to reach as far back as a long-lived checkpoint. Fetching this range
+// explicitly, every time, turns "the checkpoint happened to be inside the sparse window" into
+// "the checkpoint is always present", which is what a hardcoded, never-moving anchor needs.
+//
+// A no-op when no checkpoint is configured for this network, when this node already holds the
+// checkpoint's header (e.g. a long-running node that synced it long ago), or when the checkpoint
+// is not an ancestor of the new pruning point on this node's own view (nothing to fetch).
+func (flow *handleIBDFlow) syncCheckpointHeaders(proofPruningPoint *externalapi.DomainHash) error {
+	checkpoint := flow.Config().NetParams().PruningPointCheckpoint
+	if checkpoint == nil {
+		return nil
+	}
+
+	stagingConsensus, err := flow.requireStagingConsensus()
+	if err != nil {
+		return err
+	}
+
+	checkpointInfo, err := stagingConsensus.GetBlockInfo(checkpoint.Hash)
+	if err != nil {
+		return err
+	}
+	if checkpointInfo.HasHeader() {
+		log.Debugf("syncCheckpointHeaders: checkpoint %s header already present, skipping", checkpoint.Hash)
+		return nil
+	}
+
+	log.Infof("Downloading headers for the pinned checkpoint %s from %s", checkpoint.Hash, flow.peer)
+	err = flow.sendRequestHeaders(checkpoint.Hash, proofPruningPoint)
+	if err != nil {
+		return err
+	}
+
+	for {
+		blockHeadersMessage, doneIBD, err := flow.receiveHeaders()
+		if err != nil {
+			return err
+		}
+		if doneIBD {
+			break
+		}
+		if len(blockHeadersMessage.BlockHeaders) == 0 {
+			return protocolerrors.Errorf(true,
+				"received an empty headers message from peer %s while syncing checkpoint headers", flow.peer)
+		}
+		for _, header := range blockHeadersMessage.BlockHeaders {
+			if err := flow.processHeader(stagingConsensus, header); err != nil {
+				return err
+			}
+		}
+		lastReceivedHeader := blockHeadersMessage.BlockHeaders[len(blockHeadersMessage.BlockHeaders)-1]
+		if lastReceivedHeader.BlockHash().Equal(proofPruningPoint) {
+			break
+		}
+		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestNextHeaders())
+		if err != nil {
+			return err
+		}
+	}
+
+	// The peer must actually have held the checkpoint - RequestHeaders with a low hash the peer
+	// doesn't have returns a protocol error at the handler (handle_request_headers.go), not a
+	// silent empty/short range, so reaching here without an error means the dense range,
+	// including the checkpoint itself, was received.
+	checkpointInfo, err = stagingConsensus.GetBlockInfo(checkpoint.Hash)
+	if err != nil {
+		return err
+	}
+	if !checkpointInfo.HasHeader() {
+		return protocolerrors.Errorf(true,
+			"peer %s did not provide the pinned checkpoint header %s while syncing checkpoint headers",
+			flow.peer, checkpoint.Hash)
+	}
+
+	log.Infof("Checkpoint %s header chain synced successfully from %s", checkpoint.Hash, flow.peer)
 	return nil
 }
 
