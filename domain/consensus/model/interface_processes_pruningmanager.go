@@ -7,13 +7,14 @@ type PruningManager interface {
 	UpdatePruningPointByVirtual(stagingArea *StagingArea) error
 	IsValidPruningPoint(stagingArea *StagingArea, blockHash *externalapi.DomainHash) (bool, error)
 	ArePruningPointsViolatingFinality(stagingArea *StagingArea, pruningPoints []externalapi.BlockHeader) (bool, error)
-	ArePruningPointsInValidChain(stagingArea *StagingArea) (bool, error)
+	ArePruningPointsInValidChain(stagingArea *StagingArea, anchorBlockVersion uint16) (bool, error)
 	ClearImportedPruningPointData() error
 	AppendImportedPruningPointUTXOs(outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair) error
 	UpdatePruningPointIfRequired() error
 	PruneAllBlocksBelow(stagingArea *StagingArea, pruningPointHash *externalapi.DomainHash) error
 	PruningPointAndItsAnticone() ([]*externalapi.DomainHash, error)
 	ExpectedHeaderPruningPoint(stagingArea *StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error)
+	VerifyPruningPointCheckpointOnDisk() error
 	TrustedBlockAssociatedGHOSTDAGDataBlockHashes(stagingArea *StagingArea, blockHash *externalapi.DomainHash) ([]*externalapi.DomainHash, error)
 	VerifyCurrentPruningPointUTXOSet()
 	FindAndReproduceRootDisqualification(stagingArea *StagingArea)

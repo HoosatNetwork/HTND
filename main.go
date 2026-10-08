@@ -115,9 +115,14 @@ func main() {
 		}
 	}()
 
+	// HTND_PROFILER turns on block and mutex profiling. It also serves pprof on 127.0.0.1:6060, unless
+	// --profile names the address, in which case the server --profile starts serves these profiles
+	// and a second node on the same machine is not left without a profiler by the fixed port.
 	if os.Getenv("HTND_PROFILER") != "" {
 		runtime.SetBlockProfileRate(1)
 		runtime.SetMutexProfileFraction(1)
+	}
+	if os.Getenv("HTND_PROFILER") != "" && cfg.Profile == "" {
 		go func() {
 			mux := http.NewServeMux()
 			mux.Handle("/", http.RedirectHandler("/debug/pprof", http.StatusSeeOther))

@@ -6,6 +6,8 @@ package htnwalletd;
 service htnwalletd {
   rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse) {}
   rpc GetExternalSpendableUTXOs (GetExternalSpendableUTXOsRequest) returns (GetExternalSpendableUTXOsResponse) {}
+  // GetUTXOs lists the coins on every address the daemon tracks, each with the path its address is derived at.
+  rpc GetUTXOs (GetUTXOsRequest) returns (GetUTXOsResponse) {}
   rpc CreateUnsignedTransactions (CreateUnsignedTransactionsRequest) returns (CreateUnsignedTransactionsResponse) {}
   rpc ShowAddresses (ShowAddressesRequest) returns (ShowAddressesResponse) {}
   rpc NewAddress (NewAddressRequest) returns (NewAddressResponse) {}
@@ -88,6 +90,13 @@ enum AddressType {
   ADDRESS_TYPE_P2PKH = 1;
   ADDRESS_TYPE_P2PK = 2;
   ADDRESS_TYPE_P2SH = 3;
+  // Post-quantum ML-DSA-44: P2PKH in a single-sig wallet, the multisig P2SH in a multisig wallet.
+  ADDRESS_TYPE_MLDSA44 = 4;
+  // 5 was ML-DSA-44 P2PK, removed before release: the 1312-byte key made every output that large.
+  reserved 5;
+  reserved "ADDRESS_TYPE_MLDSA44_P2PK";
+  // Post-quantum ML-DSA-44 P2SH of the P2PKH script; the multisig P2SH in a multisig wallet.
+  ADDRESS_TYPE_MLDSA44_P2SH = 6;
 }
 
 message BroadcastRequest {
@@ -116,6 +125,20 @@ message UtxosByAddressesEntry {
   string address = 1;
   Outpoint outpoint = 2;
   UtxoEntry utxoEntry = 3;
+}
+
+message GetUTXOsRequest {
+}
+
+message WalletUtxo {
+  string address = 1;
+  Outpoint outpoint = 2;
+  UtxoEntry utxoEntry = 3;
+  string derivationPath = 4;
+}
+
+message GetUTXOsResponse {
+  repeated WalletUtxo utxos = 1;
 }
 
 message ScriptPublicKey {

@@ -20,13 +20,13 @@ func (s *server) Sign(_ context.Context, request *pb.SignRequest) (*pb.SignRespo
 }
 
 func (s *server) signTransactions(unsignedTransactions [][]byte, password string) ([][]byte, error) {
-	mnemonics, err := s.keysFile.DecryptMnemonics(password)
+	mnemonics, importedKeys, err := s.keysFile.DecryptSigningKeys(s.params, password)
 	if err != nil {
 		return nil, err
 	}
 	signedTransactions := make([][]byte, len(unsignedTransactions))
 	for i, unsignedTransaction := range unsignedTransactions {
-		signedTransaction, err := libhtnwallet.Sign(s.params, mnemonics, unsignedTransaction, s.keysFile.ECDSA)
+		signedTransaction, err := libhtnwallet.SignWithImportedKeys(s.params, mnemonics, importedKeys, unsignedTransaction, s.keysFile.ECDSA)
 		if err != nil {
 			return nil, err
 		}

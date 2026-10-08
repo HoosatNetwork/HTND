@@ -138,10 +138,6 @@ func (pm *pruningManager) pastUTXOLookup(stagingArea *model.StagingArea, blockHa
 		if fromVirtual.ToRemove().Contains(outpoint) {
 			return nil, false, nil
 		}
-		has, err := pm.consensusStateStore.HasUTXOByOutpoint(pm.databaseContext, stagingArea, outpoint)
-		if err != nil || !has {
-			return nil, false, err
-		}
-		return pm.consensusStateStore.UTXOByOutpointWithoutPopulatingCache(pm.databaseContext, stagingArea, outpoint)
+		return pm.consensusStateStore.LookupUTXOByOutpointWithoutPopulatingCache(pm.databaseContext, stagingArea, outpoint)
 	}, nil
 }

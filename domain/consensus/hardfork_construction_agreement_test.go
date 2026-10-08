@@ -43,6 +43,7 @@ func TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated(t *testing
 	config.FinalityDuration = []time.Duration{
 		10 * targetTime, 10 * targetTime, 10 * targetTime, 10 * targetTime, 20 * targetTime,
 	}
+
 	config.K = []externalapi.KType{2}
 	config.MergeSetSizeLimit = 2
 	config.PruningMultiplier = []uint64{1}
@@ -177,14 +178,44 @@ func TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated(t *testing
 
 	// 6. And none of the gates may have been reachable during any of the above.
 	for name, gate := range map[string]uint16{
-		"StrictUTXOCommitmentVersion":   dagconfig.StrictUTXOCommitmentVersion,
-		"StrictMinersViewFieldsVersion": dagconfig.StrictMinersViewFieldsVersion,
-		"RefuseMismatchedImportVersion": dagconfig.RefuseMismatchedImportVersion,
-		"ValidateHeaderBitsVersion":     dagconfig.ValidateHeaderBitsVersion,
-		"ValidateIBDPruningListVersion": dagconfig.ValidateIBDPruningListVersion,
+		"StrictUTXOCommitmentVersion":    config.HardForkGates.StrictUTXOCommitmentVersion,
+		"StrictMinersViewFieldsVersion":  config.HardForkGates.StrictMinersViewFieldsVersion,
+		"StrictCoinbaseVersion":          config.HardForkGates.StrictCoinbaseVersion,
+		"RefuseMismatchedImportVersion":  config.HardForkGates.RefuseMismatchedImportVersion,
+		"ValidateHeaderBitsVersion":      config.HardForkGates.ValidateHeaderBitsVersion,
+		"ValidateIBDPruningPointVersion": config.HardForkGates.ValidateIBDPruningPointVersion,
+		"ValidateIBDPruningListVersion":  config.HardForkGates.ValidateIBDPruningListVersion,
 	} {
 		if dagconfig.HardForkActive(gate, 9) {
 			t.Errorf("%s was active at block version 9 during this run", name)
+		}
+	}
+}
+
+func TestUnscheduledHardForkGatesAreInertOnEveryNetwork(t *testing.T) {
+	params := []*dagconfig.Params{
+		&dagconfig.MainnetParams,
+		&dagconfig.TestnetParams,
+		&dagconfig.TestnetParamsB5,
+		&dagconfig.TestnetParamsB10,
+		&dagconfig.SimnetParams,
+		&dagconfig.DevnetParams,
+	}
+	for _, params := range params {
+		gates := map[string]uint16{
+			"StrictMinersViewFieldsVersion": params.HardForkGates.StrictMinersViewFieldsVersion,
+			"StrictCoinbaseVersion":         params.HardForkGates.StrictCoinbaseVersion,
+			"RefuseMismatchedImportVersion": params.HardForkGates.RefuseMismatchedImportVersion,
+		}
+		highestDefinedVersion := uint16(len(params.POWScores) + 1)
+		for name, gate := range gates {
+			if gate != ^uint16(0) {
+				t.Errorf("%s: %s is scheduled at block version %d", params.Name, name, gate)
+			}
+			if dagconfig.HardForkActive(gate, highestDefinedVersion) {
+				t.Errorf("%s: %s is active at highest defined block version %d",
+					params.Name, name, highestDefinedVersion)
+			}
 		}
 	}
 }

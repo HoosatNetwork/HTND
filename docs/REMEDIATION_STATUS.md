@@ -43,7 +43,7 @@ already warned that `ISSUES.md` status fields go stale, and this pass found **ei
 | HTN-002 | needs_human (deferred by user) | **Open by design** — `tolerate` swallows RuleError on 4 checks | `consensusstatemanager/verify_and_build_utxo.go:blockInheritsKnownUTXOCommitmentOffset`, `:stop` | Workstream C-1 (gated) |
 | HTN-004 | open | **Open** — per-tx rule errors degrade to a rejection record, not a block failure | `consensusstatemanager/calculate_past_utxo.go:394` | Workstream C-1 (gated) |
 | HTN-005 | needs_human | **Open** — `refuseMismatchedImportedPruningPointUTXOSet` exists but is wired only to the operator flag `--enable-sanity-check-pruning-utxo`, default off; no version gate | `consensusstatemanager/import_pruning_utxo_set.go:290`; `infrastructure/config/config.go:162` | Workstream C-2 (gated). **Must not** be enabled for existing versions (hard rule 1) |
-| HTN-006 | open | **Open** — `IsValidPruningPoint` / `ArePruningPointsInValidChain` commented out | `blockprocessor/validate_and_insert_imported_pruning_point.go:13-29` | Workstream C-4 (gated) |
+| HTN-006 | open | **Open** — `IsValidPruningPoint` / `ArePruningPointsInValidChain` restored behind `ValidateIBDPruningListVersion`; the list check was rewritten on 2026-10-03 to validate from an anchor (see "HTN-006: the pruning point list check"); header blue score/work still unvalidated | `blockprocessor/validate_and_insert_imported_pruning_point.go`; `pruningmanager/pruningmanager.go:ArePruningPointsInValidChain` | Workstream C-4 (gated) |
 | HTN-007 | open | **Open, confirmed** — `StageDAAData` stages but never compares to `header.Bits()`; the comment above it claims a check that does not exist; `ErrUnexpectedDifficulty` is declared and unused in production code | `blockvalidator/pruning_violation_proof_of_work_and_difficulty.go:78-83`; `ruleerrors/rule_error.go:45` | Workstream C-3 (gated) |
 | HTN-115 | needs_human | **Fixed** — capped at `4*495`, enforced both directions with tests | `app/appmessage/p2p_msgrequestibdblocks.go:16`; `protowire/p2p_request_ibd_blocks.go:19,31` | correct stale status |
 | HTN-146 | needs_human | **Fixed** — priority propagated into the promoted tx | `mempool/orphan_pool.go:242`; `unorphan_priority_test.go` | correct stale status |
@@ -160,9 +160,68 @@ now carries an explicit label:
 The "enable these on block v6" note on three of them is **stale**: version 6 activated long ago and
 they are still off, so reaching v6 resolved nothing.
 
+### HTN-006: the pruning point list check (2026-10-03)
+
+**The defect.** `ArePruningPointsInValidChain`, as restored behind the gate, could not pass. It
+walked the selected chain from the headers selected tip to genesis and collected each header's
+pruning point. Genesis' own header commits to the zero hash, so the expected list became
+`[genesis, 0000…, genesis, pp1, …]`, and it errored at index 1 on a pristine chain. On a syncee the
+walk reaches virtual genesis first and asks for a header that doesn't exist. `IsValidPruningPoint`
+also subtracted blue scores as uint64, so a pruning point scored above the tip passed. Testnet had
+the list gate at version 12, which activates at DAA 1,534,673. That would have broken every
+headers-proof IBD on testnet, so the gate is unscheduled on `quantum-safe-signatures` until the
+rewrite is in.
+
+**Mainnet measurement** (`utxoforensics -pplistcheck`, `c5-runs/pplistcheck-2026-10-03.txt`):
+
+| | stored pruning points |
+|---|---|
+| total (every header held) | 2,902 |
+| header commits to the stored point 3 indices back | 1,812 |
+| header commitment skips an index | 113 |
+| header commits to a pruning point this node never stored | **786 (27%)** |
+
+Indices 0–498 align perfectly. The first foreign commitment is index 499 at DAA 44,787,511, just
+after v5 activated at 43,334,184, and the rate stays between 20% and 45% per 250 indices to today.
+A correct check over all history would still reject mainnet.
+
+**The design.** The check now walks the pruning point headers and stops at an anchor:
+
+1. The headers above the current pruning point must commit to it. Commitments to blocks above it,
+   pruning points not yet adopted, are left out.
+2. Down the stored list, each entry matches a pending commitment or is a gap. A matched entry's
+   own commitment becomes pending, and its header blue score must be below the newer matched
+   entry's.
+3. A commitment must be found within `2·ceil(pruningDepth/finalityDepth)` indices below its
+   committer (6 on mainnet, the largest skip measured) or the list fails. Gaps are tolerated but
+   never followed.
+4. Commitments are followed only down to the **anchor**, the first matched entry whose block
+   version is below `anchorBlockVersion`. That version comes from the entry's DAA score: the
+   score this node computed, or the header's own DAA score on a syncee that holds only the header.
+   It never comes from the header's version field. The walk also ends at genesis.
+5. A wrong list is `(false, nil)`, and an error means a read fault.
+
+The caller passes `bp.pruningListAnchorVersion()`, which is `HeaderPruningPointVersion` on
+`quantum-safe-signatures`. `v2.17.4+` has no header pruning point gate, so there the anchor is
+`^uint16(0)` and only the current pruning point is checked against the headers above it.
+
+**Activation order.** `HeaderPruningPointVersion` must activate **no later than**
+`ValidateIBDPruningListVersion`. A pruning point's header commitment is trustworthy only from the
+version that enforces it. If the list gate ran first, the anchor would sit at or above the imported
+pruning point, and the list check would validate almost nothing.
+
+Tests: `TestArePruningPointsInValidChain`, `TestArePruningPointsInValidChainAnchor`,
+`TestIsValidPruningPointScoredAboveTheTip`, `TestImportedPruningPointListGateActive` and
+`TestPruningListCheck`. Each failed before the rewrite.
+
 ### Not done in Workstream C
 
-- A dedicated test for `ValidateIBDPruningListVersion`'s activated behaviour (see above).
+- ~~A dedicated test for `ValidateIBDPruningListVersion`'s activated behaviour.~~ Done 2026-10-03
+  for the accept path: `TestImportedPruningPointListGateActive` imports a headers-proof syncee's
+  pruning point with the gate moved to version 1. Still open: an import-level test that a wrong
+  list or pruning point is refused with `ErrInvalidPruningPointsChain` / `ErrUnexpectedPruningPoint`
+  (see "Corrected assumption" above). The pruning manager tests cover the `(false, nil)` verdicts
+  underneath.
 - The "offset-inherited commitments are rejected only when the gate says so" test for
   `StrictUTXOCommitmentVersion`. The gate is wired and inert-tested, but its *activated* path is not
   yet exercised end to end: reaching it needs a consensus actually running on an offset baseline,

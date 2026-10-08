@@ -14,8 +14,10 @@ var errInjectedDatabaseFailure = errors.New("injected database failure")
 
 type failingUTXOLookupStore struct{ model.ConsensusStateStore }
 
-func (failingUTXOLookupStore) HasUTXOByOutpoint(model.DBReader, *model.StagingArea, *externalapi.DomainOutpoint) (bool, error) {
-	return false, errInjectedDatabaseFailure
+func (failingUTXOLookupStore) LookupUTXOByOutpoint(model.DBReader, *model.StagingArea, *externalapi.DomainOutpoint) (
+	externalapi.UTXOEntry, bool, error,
+) {
+	return nil, false, errInjectedDatabaseFailure
 }
 
 type noPruningPointStore struct{ model.PruningStore }

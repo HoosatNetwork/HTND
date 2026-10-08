@@ -9,11 +9,14 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/multiset"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/virtual"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
@@ -43,9 +46,11 @@ type pruningManager struct {
 	daaBlocksStore                      model.DAABlocksStore
 	reachabilityDataStore               model.ReachabilityDataStore
 
-	isArchivalNode bool
-	genesisHash    *externalapi.DomainHash
-	powScores      []uint64
+	isArchivalNode         bool
+	genesisHash            *externalapi.DomainHash
+	powScores              []uint64
+	hardForkGates          *dagconfig.HardForkGates
+	pruningPointCheckpoint *dagconfig.Checkpoint
 	// finalityDepthForBlockVersion and pruningDepthForBlockVersion are evaluated with the chain's current block
 	// version on every use (see currentDepths), never cached.
 	finalityDepthForBlockVersion    func(blockVersion uint16) uint64
@@ -91,6 +96,8 @@ func New(
 	isArchivalNode bool,
 	genesisHash *externalapi.DomainHash,
 	powScores []uint64,
+	hardForkGates *dagconfig.HardForkGates,
+	pruningPointCheckpoint *dagconfig.Checkpoint,
 	finalityDepthForBlockVersion func(blockVersion uint16) uint64,
 	pruningDepthForBlockVersion func(blockVersion uint16) uint64,
 	deletionDepth uint64,
@@ -126,6 +133,8 @@ func New(
 		isArchivalNode:                  isArchivalNode,
 		genesisHash:                     genesisHash,
 		powScores:                       powScores,
+		hardForkGates:                   hardForkGates,
+		pruningPointCheckpoint:          pruningPointCheckpoint,
 		finalityDepthForBlockVersion:    finalityDepthForBlockVersion,
 		pruningDepthForBlockVersion:     pruningDepthForBlockVersion,
 		deletionDepth:                   deletionDepth,
@@ -605,6 +614,9 @@ func (pm *pruningManager) pruneTips(stagingArea *model.StagingArea, pruningPoint
 func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruningPointHash *externalapi.DomainHash) error {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.savePruningPoint")
 	defer onEnd()
+	if err := pm.validatePruningPointBeforeStaging(stagingArea, pruningPointHash); err != nil {
+		return err
+	}
 	err := pm.pruningStore.StagePruningPoint(pm.databaseContext, stagingArea, pruningPointHash)
 	if err != nil {
 		return err
@@ -619,6 +631,32 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 	}
 
 	return nil
+}
+
+func (pm *pruningManager) validatePruningPointBeforeStaging(stagingArea *model.StagingArea,
+	pruningPointHash *externalapi.DomainHash,
+) error {
+	// Foztor 5th Oct 27 - We don't tolerate this stuff no more
+	// refuseMismatch, err := pm.refuseMismatchedPruningPoint(stagingArea, pruningPointHash)
+	// if err != nil || !refuseMismatch {
+	// return err
+	// }
+	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return err
+	}
+	storedMultiset, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return err
+	}
+	storedCommitment := storedMultiset.Hash()
+	headerCommitment := header.UTXOCommitment()
+	if storedCommitment.Equal(headerCommitment) {
+		return nil
+	}
+	return errors.Wrapf(ruleerrors.ErrBadPruningPointUTXOSet,
+		"refusing to store pruning point advancement to %s: locally computed UTXO commitment %s "+
+			"does not match its header commitment %s", pruningPointHash, storedCommitment, headerCommitment)
 }
 
 func (pm *pruningManager) deleteBlock(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (
@@ -688,6 +726,10 @@ func (pm *pruningManager) IsValidPruningPoint(stagingArea *model.StagingArea, bl
 	if err != nil {
 		return false, err
 	}
+	// A pruning point scored above the tip is at no depth below it. Subtracting would wrap around and pass.
+	if ghostdagData.BlueScore() > headersSelectedTipGHOSTDAGData.BlueScore() {
+		return false, nil
+	}
 	// A pruning point has to be at depth of at least pruningDepth
 	// For imported pruning points, we allow the depth to be at least pruningDepth - 1
 	// to account for slight differences in chain structure during IBD
@@ -738,118 +780,293 @@ func (pm *pruningManager) ArePruningPointsViolatingFinality(stagingArea *model.S
 	return true, nil
 }
 
-func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.StagingArea) (bool, error) {
-	// Check that a pruning point exists (we may not use lastPruningPoint directly, but this validates the store)
-	_, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+// ArePruningPointsInValidChain checks the newest end of the stored pruning point list against what block headers commit
+// We have a checkedpointed pruning point.  We check that it is in the hisotirical list of pruning points.  Simples
+func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.StagingArea, anchorBlockVersion uint16,
+) (bool, error) {
+	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
 	if err != nil {
-		log.Errorf("pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea): %s", err)
 		return false, err
 	}
-
-	expectedPruningPoints := make([]*externalapi.DomainHash, 0)
-	headersSelectedTip, err := pm.headerSelectedTipStore.HeadersSelectedTip(pm.databaseContext, stagingArea)
+	currentIndex, err := pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea)
 	if err != nil {
-		log.Errorf("pm.headerSelectedTipStore.HeadersSelectedTip(pm.databaseContext, stagingArea): %s", err)
 		return false, err
 	}
-
-	// Build the list of expected pruning points from selected tip back through the chain
-	// We need to collect all distinct pruning points in the correct order to match against the stored list
-	// The expected list should be in the same order as the stored list (from oldest to newest)
-	// but we're walking backwards, so we'll reverse at the end
-	current := headersSelectedTip
-	reachedGenesis := false
-	for {
-		// Skip virtual blocks as they don't have headers
-		if current.Equal(model.VirtualBlockHash) {
-			break
-		}
-		header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current)
-		if err != nil {
-			log.Errorf("pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current): %s", err)
-			return false, err
-		}
-
-		// Collect pruning points - we'll reverse the list later
-		if len(expectedPruningPoints) == 0 || !expectedPruningPoints[len(expectedPruningPoints)-1].Equal(header.PruningPoint()) {
-			expectedPruningPoints = append(expectedPruningPoints, header.PruningPoint())
-		}
-
-		if current.Equal(pm.genesisHash) {
-			reachedGenesis = true
-			break
-		}
-
-		currentGHOSTDAGData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, current, false)
-		if database.IsNotFoundError(err) {
-			log.Infof("ArePruningPointsInValidChain failed to retrieve with %s\n", current)
-			return false, err
-		}
-		if err != nil {
-			log.Errorf("pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, current): %s", err)
-			return false, err
-		}
-
-		current = currentGHOSTDAGData.SelectedParent()
+	if currentIndex == 0 {
+		return pruningPoint.Equal(pm.genesisHash), nil
 	}
-
-	// If we reached genesis, ensure it's in the expected list
-	if reachedGenesis && (len(expectedPruningPoints) == 0 || !expectedPruningPoints[len(expectedPruningPoints)-1].Equal(pm.genesisHash)) {
-		expectedPruningPoints = append(expectedPruningPoints, pm.genesisHash)
-	} else if !reachedGenesis && len(expectedPruningPoints) == 0 {
-		// If we didn't reach genesis and have no expected pruning points,
-		// this is likely a pruned node - we can't validate the full chain
-		log.Warn("ArePruningPointsInValidChain: chain does not reach genesis, cannot fully validate")
+	if pruningPoint.Equal(pm.genesisHash) {
+		log.Warnf("ArePruningPointsInValidChain: genesis is stored at pruning point index %d", currentIndex)
 		return false, nil
 	}
 
-	// Reverse the expected list so it's in order from genesis to current
-	// (same order as stored pruning points)
-	for i, j := 0, len(expectedPruningPoints)-1; i < j; i, j = i+1, j-1 {
-		expectedPruningPoints[i], expectedPruningPoints[j] = expectedPruningPoints[j], expectedPruningPoints[i]
+	tipCommitments, ok, err := pm.headerCommitmentsAbovePruningPoint(stagingArea, pruningPoint)
+	if err != nil || !ok {
+		return false, err
+	}
+	if !slices.ContainsFunc(tipCommitments, pruningPoint.Equal) {
+		log.Warnf("ArePruningPointsInValidChain: no header above the pruning point %s commits to it", pruningPoint)
+		return false, nil
 	}
 
-	if len(expectedPruningPoints) == 0 {
-		log.Errorf("Expected pruning points list is empty, can't match against stored pruning points")
-		return false, errors.New("Expected pruning points list is empty, can't match against stored pruning points")
-	}
-
-	// Validate stored pruning points against expected pruning points
-	lastPruningPointIndex, err := pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea)
+	pruningPointHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPoint)
 	if err != nil {
-		log.Errorf("pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea): %s", err)
 		return false, err
 	}
 
-	// Now compare stored pruning points with expected pruning points
-	// Both lists should be in order from genesis (index 0) to current (index lastPruningPointIndex)
-	// Validate min of the two lengths to handle pruned nodes
-	numToValidate := int(lastPruningPointIndex) + 1
-	if len(expectedPruningPoints) < numToValidate {
-		numToValidate = len(expectedPruningPoints)
-		log.Warnf("ArePruningPointsInValidChain: chain only has %d pruning points but store has %d, validating %d", len(expectedPruningPoints), lastPruningPointIndex+1, numToValidate)
+	// Foztor - check our version 11 anchor/checkpoint is present.... 5 October 26
+	if ok, err := pm.pruningPointMeetsCheckpoint(stagingArea, pruningPoint, pruningPointHeader); err != nil || !ok {
+		return false, err
+	}
+	pruningPointVersion, err := pm.pruningPointBlockVersion(stagingArea, pruningPoint, pruningPointHeader)
+	if err != nil {
+		return false, err
+	}
+	if pruningPointVersion < anchorBlockVersion {
+		return true, nil
 	}
 
-	for i := uint64(0); i < uint64(numToValidate); i++ {
-		pruningPoint, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, i)
+	previous := pruningPointHeader.PruningPoint()
+	window := pm.pruningPointCommitmentWindow(pruningPointVersion)
+	lowest := uint64(0)
+	if currentIndex > window {
+		lowest = currentIndex - window
+	}
+	for index := currentIndex - 1; ; index-- {
+		stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index)
 		if err != nil {
-			log.Errorf("pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, %d): %s", i, err)
 			return false, err
 		}
-
-		if int(i) >= len(expectedPruningPoints) {
-			log.Warnf("ArePruningPointsInValidChain: no more expected pruning points at index %d", i)
+		if stored.Equal(previous) {
+			previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, stored)
+			if err != nil {
+				return false, err
+			}
+			if previousHeader.BlueScore() >= pruningPointHeader.BlueScore() {
+				log.Warnf("ArePruningPointsInValidChain: stored pruning point %d %s has blue score %d, not below the "+
+					"pruning point's %d", index, stored, previousHeader.BlueScore(), pruningPointHeader.BlueScore())
+				return false, nil
+			}
+			return true, nil
+		}
+		if index == lowest {
 			break
 		}
+	}
+	log.Warnf("ArePruningPointsInValidChain: the pruning point %s commits to %s, but no stored pruning point at index "+
+		"%d to %d is it", pruningPoint, previous, lowest, currentIndex-1)
+	return false, nil
+}
 
-		expectedPruningPoint := expectedPruningPoints[i]
-		if !pruningPoint.Equal(expectedPruningPoint) {
-			log.Errorf("Pruning point %s is not expected pruning point %s at index %d", pruningPoint.String(), expectedPruningPoint.String(), i)
-			return false, errors.New("Pruning point is not expected pruning point at index")
-		}
+// pruningPointMeetsCheckpoint enforces pm.pruningPointCheckpoint on an imported pruning point: the
+// pruning point must not be older than the checkpoint, and the checkpoint must itself appear in this
+// node's own recorded pruning-point list (checkpointIsInPruningPointList).
+//
+// It no longer checks the checkpoint header against live, peer-sourced headers
+// (header.PruningPoint() hops): that depends on some peer still retaining the exact checkpoint
+// header, and confirmed 2026-10-06 that no node on the network does any longer for this checkpoint -
+// requiring it made every headers-proof IBD fail identically and permanently, for every future
+// joiner, forever. The recorded pruning-point list is not subject to that gap: every headers-proof
+// IBD mandatorily receives and imports the full list of this chain's historical pruning points
+// (validateAndInsertPruningPoints), checked against ArePruningPointsViolatingFinality before import,
+// so checking membership in it is both always available and already a real proof of descent - not a
+// weaker floor-only substitute.
+func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
+) (bool, error) {
+	cp := pm.pruningPointCheckpoint
+	if cp == nil {
+		return true, nil
+	}
+	if pruningPointHeader.BlueScore() < cp.BlueScore {
+		log.Warnf("pruningPointMeetsCheckpoint: pruning point %s has blue score %d, below the checkpoint %s at %d",
+			pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
+		return false, nil
+	}
+	if pruningPoint.Equal(cp.Hash) {
+		return true, nil
 	}
 
-	return true, nil
+	return pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
+}
+
+func shortStr(s string) string {
+	if len(s) <= 12 { // Return as-is if it's already short
+		return s
+	}
+	return s[:5] + "..." + s[len(s)-4:]
+}
+
+// checkpointIsInPruningPointList reports whether pm.pruningPointCheckpoint.Hash appears anywhere in
+// this node's recorded pruning-point list (pm.pruningStore, indices 0..currentIndex).
+//
+// This list is not optional retention like arbitrary block headers are - it is the data every
+// headers-proof IBD mandatorily receives and imports before it can proceed at all
+// (validateAndInsertPruningPoints), and it is checked against ArePruningPointsViolatingFinality
+// before import. A future joiner re-receives the whole list fresh on every sync, so unlike a
+// header-walk this does not depend on any individual peer's retention and cannot age out.
+func (pm *pruningManager) checkpointIsInPruningPointList(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash,
+) (bool, error) {
+	cp := pm.pruningPointCheckpoint
+	currentIndex, err := pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea)
+	if err != nil {
+		return false, err
+	}
+	for index := uint64(0); index <= currentIndex; index++ {
+		stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index)
+		if err != nil {
+			return false, err
+		}
+		if stored.Equal(cp.Hash) {
+			log.Infof("pruningPointMeetsCheckpoint: the checkpoint %s is recorded PP index %d "+
+				"below pruning point %s at index %d", shortStr(cp.Hash.String()), index, pruningPoint, currentIndex)
+			return true, nil
+		}
+	}
+	log.Warnf("pruningPointMeetsCheckpoint: the checkpoint %s does not appear anywhere in the %d recorded "+
+		"pruning points below %s", cp.Hash, currentIndex+1, pruningPoint)
+	return false, nil
+}
+
+// VerifyPruningPointCheckpointOnDisk checks this node's on-disk pruning-point list against
+// pm.pruningPointCheckpoint at startup, independent of any in-flight IBD. Unlike
+// pruningPointMeetsCheckpoint (which only runs as part of ArePruningPointsInValidChain, mid-IBD),
+// this runs every boot against whatever this node already has stored - catching disk corruption, a
+// bad --repair-* run, or manual tampering on a node that may not IBD again for a long time.
+//
+// A chain that has not yet reached the checkpoint's blue score is not a failure - a fresh node mid-
+// initial-sync, or one still below that depth, simply has not recorded it yet, and will be checked
+// properly by the existing IBD-time enforcement once it gets there. Only a chain that has already
+// passed the checkpoint's depth and does NOT have it recorded is treated as corrupt, since that
+// combination should be impossible on an honest chain.
+func (pm *pruningManager) VerifyPruningPointCheckpointOnDisk() error {
+	cp := pm.pruningPointCheckpoint
+	if cp == nil {
+		return nil
+	}
+
+	stagingArea := model.NewStagingArea()
+	hasPruningPoint, err := pm.pruningStore.HasPruningPoint(pm.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+	if !hasPruningPoint {
+		log.Debugf("VerifyPruningPointCheckpointOnDisk: no pruning point recorded yet - nothing to check")
+		return nil
+	}
+
+	pruningPoint, err := pm.pruningStore.PruningPoint(pm.databaseContext, stagingArea)
+	if err != nil {
+		return err
+	}
+	if pruningPoint.Equal(pm.genesisHash) {
+		log.Debugf("VerifyPruningPointCheckpointOnDisk: pruning point is still genesis - nothing to check")
+		return nil
+	}
+
+	pruningPointHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPoint)
+	if err != nil {
+		return err
+	}
+	if pruningPointHeader.BlueScore() < cp.BlueScore {
+		log.Debugf("VerifyPruningPointCheckpointOnDisk: pruning point %s (blue score %d) has not yet "+
+			"reached the checkpoint %s (blue score %d) - nothing to check yet", pruningPoint,
+			pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
+		return nil
+	}
+	if pruningPoint.Equal(cp.Hash) {
+		return nil
+	}
+
+	ok, err := pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.Errorf("startup integrity check failed: this node's current pruning point %s "+
+			"(blue score %d) is past the pinned checkpoint %s (blue score %d), but the checkpoint does "+
+			"not appear anywhere in this node's own recorded pruning-point list. This should be "+
+			"impossible on an honest chain - the on-disk data may be corrupted, incompletely repaired, "+
+			"or tampered with. Refusing to start. If this is expected (e.g. a deliberately pruned or "+
+			"rebuilt datadir), resync this node from a trusted peer rather than continuing to run "+
+			"against this data", pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
+	}
+	return nil
+}
+
+// headerCommitmentsAbovePruningPoint returns the distinct pruning points that the headers on the selected chain from
+// the headers selected tip down to, not including, pruningPoint commit to, newest first. Commitments to blocks on that
+// stretch of chain are left out. ok is false when the chain ends without passing pruningPoint: at virtual genesis,
+// where this node's data ends, or at genesis.
+func (pm *pruningManager) headerCommitmentsAbovePruningPoint(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash,
+) (commitments []*externalapi.DomainHash, ok bool, err error) {
+	current, err := pm.headerSelectedTipStore.HeadersSelectedTip(pm.databaseContext, stagingArea)
+	if err != nil {
+		return nil, false, err
+	}
+
+	above := make(map[externalapi.DomainHash]struct{})
+	for !current.Equal(pruningPoint) {
+		if current.Equal(model.VirtualGenesisBlockHash) {
+			log.Warnf("ArePruningPointsInValidChain: the selected chain of the headers selected tip reaches virtual "+
+				"genesis without passing the pruning point %s", pruningPoint)
+			return nil, false, nil
+		}
+		header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, current)
+		if err != nil {
+			return nil, false, err
+		}
+		above[*current] = struct{}{}
+		if len(commitments) == 0 || !commitments[len(commitments)-1].Equal(header.PruningPoint()) {
+			commitments = append(commitments, header.PruningPoint())
+		}
+
+		ghostdagData, err := pm.ghostdagDataStore.Get(pm.databaseContext, stagingArea, current, false)
+		if err != nil {
+			return nil, false, err
+		}
+		if ghostdagData.SelectedParent() == nil {
+			log.Warnf("ArePruningPointsInValidChain: the selected chain of the headers selected tip ends at %s "+
+				"without passing the pruning point %s", current, pruningPoint)
+			return nil, false, nil
+		}
+		current = ghostdagData.SelectedParent()
+	}
+
+	adopted := commitments[:0]
+	for _, commitment := range commitments {
+		if _, isAbove := above[*commitment]; !isAbove {
+			adopted = append(adopted, commitment)
+		}
+	}
+	return adopted, true, nil
+}
+
+// pruningPointBlockVersion returns the block version of a stored pruning point, derived from its DAA score as this node
+// computed it. A node synced from a headers proof holds no DAA score for the pruning points below the one it imported,
+// only their headers, so for those the header's DAA score is used. ArePruningPointsInValidChain asks only for pruning
+// points a followed header committed to, so that header's hash is pinned; the header's version field is never used.
+func (pm *pruningManager) pruningPointBlockVersion(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash, header externalapi.BlockHeader,
+) (uint16, error) {
+	daaScore, err := pm.daaBlocksStore.DAAScore(pm.databaseContext, stagingArea, pruningPoint)
+	if database.IsNotFoundError(err) {
+		daaScore = header.DAAScore()
+	} else if err != nil {
+		return 0, err
+	}
+	return constants.BlockVersionForDAAScore(pm.powScores, daaScore), nil
+}
+
+// pruningPointCommitmentWindow returns how many stored indices below a pruning point of blockVersion its header's
+// commitment may name: twice ceil(pruningDepth/finalityDepth), the usual distance between a pruning point and the one
+// its header commits to.
+func (pm *pruningManager) pruningPointCommitmentWindow(blockVersion uint16) uint64 {
+	finalityDepth := max(pm.finalityDepthForBlockVersion(blockVersion), 1)
+	pruningDepth := pm.pruningDepthForBlockVersion(blockVersion)
+	return 2 * ((pruningDepth + finalityDepth - 1) / finalityDepth)
 }
 
 func (pm *pruningManager) pruningPointCandidate(stagingArea *model.StagingArea) (*externalapi.DomainHash, error) {
@@ -2252,14 +2469,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
 					methodUsed, utxoSetDiff)
 			}
-			if pm.shouldSanityCheckPruningUTXOSet {
-				return validationErr
-			}
-			log.Warnf("Pruning point %s: the UTXO set this node now serves does NOT match the chain's "+
-				"commitment for it. Every peer that syncs from this node inherits this set, gap included. "+
-				"Continuing because no node currently holds a matching set; run with "+
-				"--enable-sanity-check-pruning-utxo to refuse the advancement instead. Details: %s",
-				pruningPoint, validationErr)
+			return validationErr
 		} else {
 			log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
 				pruningPoint)

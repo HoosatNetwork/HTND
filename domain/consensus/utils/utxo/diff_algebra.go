@@ -313,6 +313,14 @@ func diffFrom(this, other *mutableUTXODiff) (*mutableUTXODiff, error) {
 // are handled the same way diffFrom handles its own conflict shapes - see resolveConflicts and
 // isTolerableConflict.
 func withDiffInPlace(this *mutableUTXODiff, other *mutableUTXODiff) error {
+	if this.changed != nil {
+		for outpoint := range other.toAdd {
+			this.recordChange(&outpoint)
+		}
+		for outpoint := range other.toRemove {
+			this.recordChange(&outpoint)
+		}
+	}
 	if err := resolveConflicts("withDiffInPlace", other.toRemove, this.toRemove,
 		func(outpoint *externalapi.DomainOutpoint, entryToAdd, _ externalapi.UTXOEntry) bool {
 			return !this.toAdd.containsWithDAAScore(outpoint, entryToAdd.BlockDAAScore())

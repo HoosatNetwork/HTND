@@ -118,6 +118,24 @@ func (bhs *blockHeaderStore) blockHeader(dbContext model.DBReader, stagingShard 
 	return headerDeserialized, nil
 }
 
+// BlockHeaderWithoutCaching reads a committed block header from the database alone, for callers that
+// do not hold the consensus lock. The header cache is an lrucache.LRUCache, which is not safe for
+// concurrent use - a Get reorders it - and block processing writes it under the lock, so a lock-free
+// reader must not touch it. Pebble serves concurrent reads and keeps recently read data blocks in
+// its own cache, so a header read this way costs a key lookup and a decode.
+func (bhs *blockHeaderStore) BlockHeaderWithoutCaching(dbContext model.DBReader, blockHash *externalapi.DomainHash) (
+	externalapi.BlockHeader, error,
+) {
+	headerBytes, err := dbContext.Get(bhs.hashAsKey(blockHash))
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, errors.Wrapf(err, "Header %s does not exist in db", blockHash)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return bhs.deserializeHeader(headerBytes)
+}
+
 // HasBlock returns whether a block header with a given hash exists in the store.
 func (bhs *blockHeaderStore) HasBlockHeader(dbContext model.DBReader, stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
 	stagingShard := bhs.stagingShard(stagingArea)

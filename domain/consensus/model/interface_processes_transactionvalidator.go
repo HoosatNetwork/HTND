@@ -17,4 +17,9 @@ type TransactionValidator interface {
 	ValidateTransactionWithMissingInputsAndPopulateFee(stagingArea *StagingArea,
 		tx *externalapi.DomainTransaction, povBlockHash *externalapi.DomainHash, povDAAScore uint64) error
 	PopulateMass(transaction *externalapi.DomainTransaction)
+	// PrewarmScriptCaches verifies the scripts of transactions, whose inputs are already populated,
+	// in parallel, only so that the signatures that verify are recorded in the signature caches. It
+	// decides nothing: a later ValidateTransactionInContextAndPopulateFee of the same transaction
+	// still runs every check, and only finds its valid signatures already verified.
+	PrewarmScriptCaches(transactions []*externalapi.DomainTransaction, povDAAScore uint64)
 }

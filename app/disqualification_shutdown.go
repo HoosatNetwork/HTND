@@ -1,6 +1,9 @@
 package app
 
 import (
+	"sync"
+
+	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 )
@@ -19,16 +22,81 @@ import (
 // UTXO-valid block in between resets it.
 const maxConsecutiveDisqualifiedBlocks = 15
 
-// stopNodeOnDisqualifiedBlockStreak requests a shutdown through the interrupt listener. It runs under
-// the consensus lock, so the request is sent from its own goroutine: the listener's channel is
-// unbuffered, and the shutdown it starts needs that lock.
-func stopNodeOnDisqualifiedBlockStreak(streak int, lastBlock *externalapi.DomainHash) {
-	log.Criticalf("Stopping the node: %d consecutive blocks were disqualified from the chain, the last "+
-		"one %s. This node is not following the network. Check the log for the first disqualification "+
-		"(\"NOT tolerating\" / \"UTXO verification for block\"), then resync from a fresh datadir.",
-		streak, lastBlock)
-	spawn("stopNodeOnDisqualifiedBlockStreak", func() {
-		signal.ShutdownRequestChannel <- struct{}{}
+var (
+	disqualifiedStreakMu     sync.Mutex
+	disqualifiedStreakDomain domain.Domain
+	shutdownOnDisqualified   bool
+	disqualifiedRecoveryBusy bool
+)
+
+func bindDisqualifiedStreakRecovery(d domain.Domain, shutdownInstead bool) {
+	disqualifiedStreakMu.Lock()
+	defer disqualifiedStreakMu.Unlock()
+	disqualifiedStreakDomain = d
+	shutdownOnDisqualified = shutdownInstead
+}
+
+type disqualifiedTipRepairer interface {
+	RepairDisqualifiedTipChains() (uint64, error)
+	ResolveVirtual(progressReportCallback func(uint64, uint64)) error
+}
+
+func recoverDisqualifiedTipChains(consensus disqualifiedTipRepairer) (uint64, error) {
+	resetCount, err := consensus.RepairDisqualifiedTipChains()
+	if err != nil || resetCount == 0 {
+		return resetCount, err
+	}
+	return resetCount, consensus.ResolveVirtual(nil)
+}
+
+// recoverFromDisqualifiedBlockStreak retries the disqualified tips while keeping the process and
+// peer connections alive. Operators can retain the old fail-stop behavior explicitly.
+func recoverFromDisqualifiedBlockStreak(streak int, lastBlock *externalapi.DomainHash) {
+	disqualifiedStreakMu.Lock()
+	shutdown := shutdownOnDisqualified
+	d := disqualifiedStreakDomain
+	disqualifiedStreakMu.Unlock()
+
+	if shutdown {
+		log.Criticalf("Stopping the node after %d consecutive disqualified blocks, the last %s", streak, lastBlock)
+		spawn("stopNodeOnDisqualifiedBlockStreak", func() {
+			signal.ShutdownRequestChannel <- struct{}{}
+		})
+		return
+	}
+
+	log.Criticalf("%d consecutive blocks were disqualified, the last %s. Repairing the disqualified "+
+		"tip chains and resolving virtual; peer connections stay up.", streak, lastBlock)
+	spawn("recoverFromDisqualifiedBlockStreak", func() {
+		disqualifiedStreakMu.Lock()
+		if disqualifiedRecoveryBusy {
+			disqualifiedStreakMu.Unlock()
+			return
+		}
+		if d == nil {
+			disqualifiedStreakMu.Unlock()
+			log.Errorf("Cannot repair disqualified tip chains before the domain is bound; stopping the node")
+			signal.ShutdownRequestChannel <- struct{}{}
+			return
+		}
+		disqualifiedRecoveryBusy = true
+		disqualifiedStreakMu.Unlock()
+		defer func() {
+			disqualifiedStreakMu.Lock()
+			disqualifiedRecoveryBusy = false
+			disqualifiedStreakMu.Unlock()
+		}()
+
+		resetCount, err := recoverDisqualifiedTipChains(d.Consensus())
+		if err != nil {
+			log.Errorf("Failed to recover disqualified tip chains: %s", err)
+			return
+		}
+		if resetCount == 0 {
+			log.Warnf("No disqualified tip blocks were available to repair")
+			return
+		}
+		log.Infof("Reset and attempted to re-resolve %d disqualified tip-chain blocks", resetCount)
 	})
 }
 
@@ -41,7 +109,7 @@ func stopNodeOnDisqualifiedBlockStreak(streak int, lastBlock *externalapi.Domain
 // restart. With the strict UTXO commitment gate active, a block from a miner on a different UTXO
 // history is disqualified in the ordinary course of things - rejecting it is the gate's job - so the
 // panic turned a rule working as intended into a crash loop. A node that has really fallen off the
-// network shows up as a streak, which stopNodeOnDisqualifiedBlockStreak still handles.
+// network shows up as a streak, which recoverFromDisqualifiedBlockStreak handles.
 func logDisqualification(blockHash *externalapi.DomainHash, reason string) {
 	log.Warnf("Block %s disqualified from chain: %s", blockHash, reason)
 }

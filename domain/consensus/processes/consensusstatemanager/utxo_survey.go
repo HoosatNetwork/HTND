@@ -549,18 +549,14 @@ func (csm *consensusStateManager) surveyMissingOutpoints(stagingArea *model.Stag
 // virtualUTXOEntry is a point lookup into virtual's materialised UTXO table, reporting absence
 // rather than an error so the survey can record "not here" as a finding.
 //
-// It asks Has first rather than treating UTXOByOutpoint's error as absence, because that call
-// returns an error for a genuine database fault as well as for a missing entry, and reporting a
+// It uses LookupUTXOByOutpoint rather than treating UTXOByOutpoint's error as absence, because that
+// call returns an error for a genuine database fault as well as for a missing entry, and reporting a
 // failed read as a missing coin would fabricate exactly the finding this survey exists to count.
 func (csm *consensusStateManager) virtualUTXOEntry(stagingArea *model.StagingArea,
 	outpoint *externalapi.DomainOutpoint,
 ) (externalapi.UTXOEntry, bool) {
-	hasEntry, err := csm.consensusStateStore.HasUTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
-	if err != nil || !hasEntry {
-		return nil, false
-	}
-	entry, _, err := csm.consensusStateStore.UTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
-	if err != nil {
+	entry, found, err := csm.consensusStateStore.LookupUTXOByOutpoint(csm.databaseContext, stagingArea, outpoint)
+	if err != nil || !found {
 		return nil, false
 	}
 	return entry, true

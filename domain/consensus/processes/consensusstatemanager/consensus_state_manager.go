@@ -3,6 +3,7 @@ package consensusstatemanager
 import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"sync"
 	"time"
 
@@ -57,7 +58,7 @@ type consensusStateManager struct {
 	stores []model.Store
 
 	// unpricedTransactionFeeAllowance is dagconfig.Params.UnpricedTransactionFeeAllowance, used from
-	// dagconfig.OffsetModeValueChecksVersion onward: see offset_value_checks.go.
+	// HardForkGates.OffsetModeValueChecksVersion onward: see offset_value_checks.go.
 	unpricedTransactionFeeAllowance uint64
 
 	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
@@ -142,6 +143,9 @@ type consensusStateManager struct {
 	// versionOfChildOf), which governs virtual's parents limit and tip ordering.
 	powScores []uint64
 
+	// hardForkGates is the network's activation version for each gated rule.
+	hardForkGates *dagconfig.HardForkGates
+
 	// knownFinalityViolatingTips memoises which tips isViolatingFinality has already confirmed violate
 	// finality, so findNextPendingTip - called on every single ResolveVirtual chunk while backlog
 	// remains, and re-checking every current DAG tip each time - does not repeat the same expensive
@@ -189,12 +193,14 @@ func New(
 	resolveBlockStatusCacheSize int,
 	refuseMismatchedImportedPruningPointUTXOSet bool,
 	powScores []uint64,
+	hardForkGates *dagconfig.HardForkGates,
 	onDisqualification func(blockHash *externalapi.DomainHash, reason string),
 	unpricedTransactionFeeAllowance uint64,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
 		unpricedTransactionFeeAllowance: unpricedTransactionFeeAllowance,
 		powScores:                       powScores,
+		hardForkGates:                   hardForkGates,
 		onDisqualification:              onDisqualification,
 		maxBlockParents:                 maxBlockParents,
 		mergeSetSizeLimit:               mergeSetSizeLimit,

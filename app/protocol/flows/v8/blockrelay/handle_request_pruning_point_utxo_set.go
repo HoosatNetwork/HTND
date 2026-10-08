@@ -84,6 +84,12 @@ func (flow *handleRequestPruningPointUTXOSetFlow) waitForRequestPruningPointUTXO
 func (flow *handleRequestPruningPointUTXOSetFlow) sendPruningPointUTXOSet(
 	msgRequestPruningPointUTXOSet *appmessage.MsgRequestPruningPointUTXOSet,
 ) error {
+	health, healthErr := flow.Domain().Consensus().UTXOSetHealth()
+	if healthErr != nil || health == nil || !health.BaselineVerified {
+		log.Warnf("Not serving pruning-point coin set: local floor is not clean. Sending UnexpectedPruningPoint without closing gossip.")
+		return flow.outgoingRoute.Enqueue(appmessage.NewMsgUnexpectedPruningPoint())
+	}
+
 	ibdBatchSize := getIBDBatchSize()
 	// Send the UTXO set in `step`-sized chunks
 	const step = 1000

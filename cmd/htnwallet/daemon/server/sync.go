@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
@@ -52,6 +53,7 @@ func (s *server) syncLoop() error {
 		if err != nil {
 			return err
 		}
+		s.checkPendingBroadcasts(time.Now())
 	}
 }
 
@@ -79,12 +81,43 @@ const (
 	numIndexesToQueryForRecentAddresses = 1000
 )
 
+// addressesToQueryCached is addressesToQuery, remembering the batches collectRecentAddresses scans. Every
+// sync rescans each of them, every two seconds, and deriving a batch of 1000 indexes takes most of a second
+// of CPU - a wallet with a few thousand used addresses kept a core busy deriving the same keys again. A
+// batch never changes while the daemon runs: the extended public keys, the ML-DSA-44 key pools and the
+// imported keys are all fixed once it has started.
+//
+// The far scan's ranges are not cached: they move forward by numIndexesToQueryForFarAddresses on every sync
+// and are not scanned again, so keeping them would only grow memory. The caller holds s.lock, and must not
+// modify the returned set.
+func (s *server) addressesToQueryCached(start, end uint32) (walletAddressSet, error) {
+	if end-start != numIndexesToQueryForRecentAddresses || start%numIndexesToQueryForRecentAddresses != 0 {
+		return s.addressesToQuery(start, end)
+	}
+	if addresses, ok := s.recentAddressBatches[start]; ok {
+		return addresses, nil
+	}
+	addresses, err := s.addressesToQuery(start, end)
+	if err != nil {
+		return nil, err
+	}
+	if s.recentAddressBatches == nil {
+		s.recentAddressBatches = make(map[uint32]walletAddressSet)
+	}
+	s.recentAddressBatches[start] = addresses
+	return addresses, nil
+}
+
 // addressesToQuery scans the addresses in the given range. Because
 // each cosigner in a multisig has its own unique path for generating
 // addresses it goes over all the cosigners and add their addresses
-// for each key chain.
+// for each key chain. The batch starting at index 0, which every sync rescans, also holds the
+// addresses of the imported keys.
 func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 	addresses := make(walletAddressSet)
+	if start == 0 {
+		maps.Copy(addresses, s.importedAddresses)
+	}
 	for index := start; index < end; index++ {
 		cosignerCount, err := checkedUint32FromInt(len(s.keysFile.ExtendedPublicKeys))
 		if err != nil {
@@ -103,6 +136,14 @@ func (s *server) addressesToQuery(start, end uint32) (walletAddressSet, error) {
 				}
 				for _, addressString := range addressStrings {
 					addresses[addressString] = address
+				}
+
+				for _, mldsa44Addr := range s.mldsa44WalletAddressesForScan(address) {
+					mldsa44Address, err := s.mldsa44Address(mldsa44Addr)
+					if err != nil {
+						return nil, err
+					}
+					addresses[mldsa44Address.String()] = mldsa44Addr
 				}
 			}
 		}
@@ -182,7 +223,7 @@ func (s *server) collectAddressesWithLock(start, end uint32) (scanned bool, err 
 // collectAddresses scans the given index range and reports whether it did. A closed RPC route (the client
 // is reconnecting) skips the scan without an error; callers must then not treat the range as scanned.
 func (s *server) collectAddresses(start, end uint32) (scanned bool, err error) {
-	addressSet, err := s.addressesToQuery(start, end)
+	addressSet, err := s.addressesToQueryCached(start, end)
 	if err != nil {
 		return false, err
 	}
@@ -221,6 +262,11 @@ func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAdd
 		}
 
 		s.addressSet[address] = walletAddress
+
+		// An imported key is not at an index of the wallet's key chains.
+		if walletAddress.imported != nil {
+			continue
+		}
 
 		if walletAddress.keyChain == libhtnwallet.ExternalKeychain {
 			if walletAddress.index > lastUsedExternalIndex {
@@ -279,7 +325,8 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 			return err
 		}
 
-		// No need to lock for reading since the only writer of this set is on `syncLoop` on the same goroutine.
+		// The caller holds s.lock, which every writer of addressSet takes. The one unlocked call is syncLoop's
+		// initial refresh, which runs before firstSyncDone lets any request reach a writer.
 		address, ok := s.addressSet[entry.Address]
 		if !ok {
 			return errors.Errorf("Got result from address %s even though it wasn't requested", entry.Address)
@@ -309,7 +356,8 @@ func (s *server) updateUTXOSet(entries []*appmessage.UTXOsByAddressesEntry, memp
 func (s *server) refreshUTXOs(limit uint32) error {
 	refreshStart := time.Now()
 
-	// No need to lock for reading since the only writer of this set is on `syncLoop` on the same goroutine.
+	// The caller holds s.lock, which every writer of addressSet takes. The one unlocked call is syncLoop's
+	// initial refresh, which runs before firstSyncDone lets any request reach a writer.
 	addresses := s.addressSet.strings()
 	// It's important to check the mempool before calling `GetUTXOsByAddresses`:
 	// If we would do it the other way around an output can be spent in the mempool
@@ -337,7 +385,13 @@ func (s *server) refreshUTXOs(limit uint32) error {
 	}
 	// log.Infof("Got %d UTXOs from node", len(getUTXOsByAddressesResponse.Entries))
 
-	return s.updateUTXOSet(getUTXOsByAddressesResponse.Entries, mempoolEntriesByAddresses.Entries, refreshStart)
+	err = s.updateUTXOSet(getUTXOsByAddressesResponse.Entries, mempoolEntriesByAddresses.Entries, refreshStart)
+	if err != nil {
+		return err
+	}
+	s.limitOfLastCompletedRefresh = limit
+	s.utxoSetIsStale = false
+	return nil
 }
 
 func (s *server) forceSync() {

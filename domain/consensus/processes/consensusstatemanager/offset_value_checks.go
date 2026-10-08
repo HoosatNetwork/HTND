@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Offset-mode value checks (dagconfig.OffsetModeValueChecksVersion, block version 11).
+// Offset-mode value checks (HardForkGates.OffsetModeValueChecksVersion, block version 11).
 //
 // A node whose UTXO baseline is offset tolerates what it cannot reproduce. Before activation that
 // toleration also covered two things that move value and that the node CAN check:
@@ -35,7 +35,7 @@ import (
 // while making subsidy over-pay impossible and fee over-pay small and bounded.
 //
 // The gate is the block version, activated through the network's POWScores like every earlier
-// hard fork: blocks of version >= dagconfig.OffsetModeValueChecksVersion (11) get the checks, blocks
+// hard fork: blocks of version >= HardForkGates.OffsetModeValueChecksVersion (11) get the checks, blocks
 // of version 10 and below keep the old behaviour exactly, so history accepted before activation
 // replays exactly as it was accepted during IBD, reorgs and virtual resolution.
 //
@@ -49,13 +49,13 @@ import (
 // offsetModeValueChecksActive reports whether the offset-mode value checks apply to a block (or
 // virtual) with the given DAA score on this network.
 func (csm *consensusStateManager) offsetModeValueChecksActive(blockDAAScore uint64) bool {
-	return offsetModeValueChecksActiveForVersion(constants.BlockVersionForDAAScore(csm.powScores, blockDAAScore))
+	return offsetModeValueChecksActiveForVersion(*csm.hardForkGates, constants.BlockVersionForDAAScore(csm.powScores, blockDAAScore))
 }
 
 // offsetModeValueChecksActiveForVersion reports whether the offset-mode value checks apply to a block
-// of the given version.
-func offsetModeValueChecksActiveForVersion(blockVersion uint16) bool {
-	return dagconfig.HardForkActive(dagconfig.OffsetModeValueChecksVersion, blockVersion)
+// of the given version under gates.
+func offsetModeValueChecksActiveForVersion(gates dagconfig.HardForkGates, blockVersion uint16) bool {
+	return dagconfig.HardForkActive(gates.OffsetModeValueChecksVersion, blockVersion)
 }
 
 // checkMissingInputAcceptance decides the fee and validity of a transaction on the missing-input
@@ -132,7 +132,9 @@ func unpricedTransactionCount(acceptanceData externalapi.AcceptanceData) uint64 
 // than expected (value not claimed destroys nothing), and the outputs may exceed the expected ones
 // by at most allowance in total. The payload is not compared, as validateCoinbaseTransaction does not
 // compare it either.
-func coinbaseWithinUnpricedAllowance(actual, expected *externalapi.DomainTransaction, allowance uint64) error {
+func coinbaseWithinUnpricedAllowance(actual, expected *externalapi.DomainTransaction, allowance uint64,
+	requireExact bool,
+) error {
 	if actual.Version != expected.Version || actual.LockTime != expected.LockTime ||
 		!actual.SubnetworkID.Equal(&expected.SubnetworkID) || actual.Gas != expected.Gas ||
 		len(actual.Inputs) != len(expected.Inputs) {
@@ -150,6 +152,10 @@ func coinbaseWithinUnpricedAllowance(actual, expected *externalapi.DomainTransac
 			!bytes.Equal(output.ScriptPublicKey.Script, expectedOutput.ScriptPublicKey.Script) {
 			return errors.Wrapf(ruleerrors.ErrBadCoinbaseTransaction,
 				"coinbase output %d pays a different script than expected", i)
+		}
+		if requireExact && output.Value != expectedOutput.Value {
+			return errors.Wrapf(ruleerrors.ErrBadCoinbaseTransaction,
+				"coinbase output %d pays %d, expected exactly %d", i, output.Value, expectedOutput.Value)
 		}
 		if output.Value <= expectedOutput.Value {
 			continue
@@ -183,13 +189,14 @@ func saturatingMul(a, b uint64) uint64 {
 func (csm *consensusStateManager) checkCoinbaseOnOffsetBaseline(stagingArea *model.StagingArea,
 	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash,
 	coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
+	requireExact bool,
 ) error {
 	expected, err := csm.expectedCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
 	if err != nil {
 		return err
 	}
 	allowance := saturatingMul(unpricedTransactionCount(acceptanceData), csm.unpricedTransactionFeeAllowance)
-	if err := coinbaseWithinUnpricedAllowance(coinbaseTransaction, expected, allowance); err != nil {
+	if err := coinbaseWithinUnpricedAllowance(coinbaseTransaction, expected, allowance, requireExact); err != nil {
 		return notTolerable{errors.Wrapf(err, "block %s", blockHash)}
 	}
 	return nil

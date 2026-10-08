@@ -78,11 +78,26 @@ func (extKey *ExtendedKey) DeriveFromPath(pathString string) (*ExtendedKey, erro
 	return extKey.path(path)
 }
 
+// DeriveFromPathXOnly is DeriveFromPath deriving every step with ChildXOnly, the HTN web wallet's
+// non-standard derivation.
+func (extKey *ExtendedKey) DeriveFromPathXOnly(pathString string) (*ExtendedKey, error) {
+	path, err := parsePath(pathString)
+	if err != nil {
+		return nil, err
+	}
+
+	return extKey.derivePath(path, true)
+}
+
 func (extKey *ExtendedKey) path(path *path) (*ExtendedKey, error) {
+	return extKey.derivePath(path, false)
+}
+
+func (extKey *ExtendedKey) derivePath(path *path, xOnly bool) (*ExtendedKey, error) {
 	descendantExtKey := extKey
 	for _, index := range path.indexes {
 		var err error
-		descendantExtKey, err = descendantExtKey.Child(index)
+		descendantExtKey, err = descendantExtKey.child(index, xOnly)
 		if err != nil {
 			return nil, err
 		}
