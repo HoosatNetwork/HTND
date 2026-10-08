@@ -329,7 +329,7 @@ const unscheduledHardForkGate = ^uint16(0)
 // it needs a coordinated activation with enough lead time for every node operator and miner.
 var mainnetHardForkGates = HardForkGates{
 	StrictUTXOCommitmentVersion:    10, // Let's stop the rot now, and not wait for V11 HF
-	StrictMinersViewFieldsVersion:  12, // Foztor, we need to get comfortable this never happens before activating it.
+	StrictMinersViewFieldsVersion:  11, // Foztor - Octover 8th, let's do this.
 	StrictCoinbaseVersion:          11, // Not seen in practice, activate and enforce at block version 11
 	RefuseMismatchedImportVersion:  10, // Similar, stop the rot at v10
 	ValidateHeaderBitsVersion:      10, // Stop the rot at v10
