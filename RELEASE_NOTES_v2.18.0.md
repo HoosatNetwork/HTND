@@ -3,7 +3,28 @@
 Release date:  TBD
 
 ## TL;DR
-- **Update your node. This release is a mainnet hard fork that takes effect as soon as you upgrade.** Its new rules activate at block version 11.
+- **Update your node. This release is a mainnet hard fork that takes effect as soon as you upgrade.** 
+  - IT Hard forks to block version 11 and protocol version 11 at DAASccore 236878000
+  - Gated controls:
+```
+var mainnetHardForkGates = HardForkGates{
+        StrictUTXOCommitmentVersion:    10, // Activate immediatley, current block vesrion
+        StrictMinersViewFieldsVersion:  11, // Foztor - No evidence of this on mainnet, but activate with HG
+        StrictCoinbaseVersion:          11, // Not seen in practice, activate and enforce at block version 11
+        RefuseMismatchedImportVersion:  10, // Similar, stop the rot at v10
+        ValidateHeaderBitsVersion:      10, // Stop the rot at v10
+        ValidateIBDPruningPointVersion: 10, // We start this today to do the checkpoints during IBD
+        ValidateIBDPruningListVersion:  10, // We start this today to do the checkpoints during IBD
+        OffsetModeValueChecksVersion:   10, // Already implemented
+        MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point.  Foztor. 5/Oct/27
+        ParentsIncestVersion:           10, // Historical onwards below
+        MergeSetSizeLimitVersion:       10,
+        HeaderDAAScoreVersion:          10,
+        HeaderBlueWorkVersion:          10,
+        HeaderBlueScoreVersion:         10,
+        HeaderPruningPointVersion:      10,
+        IndirectParentsVersion:         10,
+} ```
   - Nodes that do not upgrade will leave mainnet as block version 11 activates.
   - Block headers are validated in full. A header's DAA score, blue work, blue score, pruning point, indirect parents and difficulty bits must match what this node computes. Parent and merge set structure is checked as well.
   - A block's coinbase must match exactly the amounts this node computes. v2.17.4 tolerated small differences.
@@ -18,8 +39,9 @@ Release date:  TBD
 	UTXOCommitment: mustHash("f5072e6ddf17067bb05a5a99ee095fac922d285c0d0318f42275989b55b9ffff"),
     }
     ```
+- **The contents of this PP are not validated, however they are correctly emebbed.  The lineage of the current PP to this checkpoint is not currently validated.
 - **Mining pools must run this build before mining on it.** Blocks from an older build that break the new header or coinbase rules are rejected.
-- **Block Version 11** activates at DAAScore 245320163  
+- **Block Version 11** activates at DAAScore 236878000  alongside protocol version 11 this will help segement chain splits.
 - **ML-DSA-44 post-quantum signatures** are in consensus, the mempool and htnwallet. They are are dormant until block version 15 (placeholder) gets an activation DAA score, which is not set in this release.
 - **The node no longer stops after a streak of disqualified blocks.** It repairs the disqualified tip chains and resolves virtual again, with peers still connected.
 - **Payments carried by a disqualified block are no longer lost.** Their transactions stay in, or return to, the mempool.
@@ -28,27 +50,6 @@ Release date:  TBD
 - **New RPC `GetWalletUTXOs`**, and `GetUTXOsByAddresses` no longer builds responses too large to send.
 
 Covers everything since the v2.17.4 release. v2.17.5 was never released; its changes are included here.
-
-## Hard fork schedule
-
-Each rule applies to a block whose version, derived from its selected parent's DAA score as this node computed it, is at least the gate. The header's own version field is never trusted. Blocks with trusted data (pruning point anchors in IBD) are exempt from the header checks.
-
-| Rule | Mainnet | Testnet |
-|---|---|---|
-| Strict UTXO commitment (offset nodes) | 10 | 10 |
-| Strict coinbase | 10 | 10 |
-| Offset mode value checks | 10 | 10 |
-| Header checks: parents incest, merge set size limit, DAA score, blue work, blue score, pruning point, indirect parents | **10 (new)** | **10 (new)** |
-| Header difficulty bits | **10 (new)** | 12 |
-| Refuse a pruning point advancement with a mismatched UTXO commitment | **10 (new)** | 12 |
-| Imported pruning point must be valid (`IsValidPruningPoint`) | **10 (new)** | 12 |
-| Imported pruning point list check | **10 (new)** | unscheduled |
-| ML-DSA-44 signatures | 11 (not reached) | 11 |
-| Strict miner's-view fields (UTXO commitment, accepted-ID merkle root) | 11 (not reached) | 12 |
-
-Mainnet runs block version 10. Its version 11 has no activation DAA score yet, so the version 11 rules stay off on mainnet. Testnet reached version 11 at DAA score 450 and version 12 at DAA score 1,534,673.
-
-The gates are now per network. They moved into a `HardForkGates` struct on `dagconfig.Params`, so testnet can run a rule before mainnet does.
 
 ## Consensus
 
@@ -72,8 +73,8 @@ Seven checks inherited from upstream had been commented out with no gate. Until 
 - **The imported pruning point list is checked against the headers, newest end only.** The old check failed on every DAG: it took genesis's zero-hash commitment as a list entry, and on a syncee it asked for virtual genesis's header. The new check requires the headers above the current pruning point to commit to it. The pruning point its header commits to must then be stored within the commitment window below it (6 entries on mainnet) with a lower blue score. Older entries aren't checked, because 786 of the 2,902 pruning points stored on mainnet commit to a pruning point that was never stored.
 - `IsValidPruningPoint` and the list check have separate gates, `ValidateIBDPruningPointVersion` and `ValidateIBDPruningListVersion`.
 
-### ML-DSA-44 signatures
-- **New opcode `OP_CHECKSIGMLDSA44` (0xa6)** verifies ML-DSA-44 (FIPS 204) signatures, using Cloudflare CIRCL. It is active from block version 11.
+### ML-DSA-44 signatures - CODE PRESENT BUT NOT YET ACTIVE
+- **New opcode `OP_CHECKSIGMLDSA44` (0xa6)** verifies ML-DSA-44 (FIPS 204) signatures, using Cloudflare CIRCL. It is NOT YET SCHEDULED FOR ACTIVATION
 - **P2PKH form**: `OP_DUP OP_BLAKE2B <32-byte key hash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44`, spent with a 2421-byte signature plus sighash byte and a 1312-byte public key. Addresses use version byte 0x04. There is no pay-to-pubkey form, since it would make every output 1.3 KB.
 - **P2SH forms**: single-sig (the P2PKH script as redeem script) and m-of-n multisig built from existing opcodes. Existing script size limits cap multisig at 2-of-11.
 - The signed message is the Schnorr sighash under a separate domain, so a signature can't be replayed under another scheme.
@@ -142,6 +143,7 @@ Seven checks inherited from upstream had been commented out with no gate. Until 
 - **`utxoforensics -pplistcheck`** runs the imported pruning point checks offline against a datadir copy and prints every stored pruning point with the index its header commits to.
 
 ## Build and docs
+- Many of the test scripts have been temporarily disabled whilst they are repaired to a level that satisifies CI
 - `build_and_test.sh` rejects production writes to any hard-fork gate, except `MLDSA44SignaturesBlockVersion`, which a custom network's config may set.
 - `docs/script-engine.md` describes ML-DSA-44 signatures, its P2SH forms and multisig limits.
 - `ISSUES.md` and `docs/REMEDIATION_STATUS.md` record the HTN-006 pruning list defect and the mainnet measurements.

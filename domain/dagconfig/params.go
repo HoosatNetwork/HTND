@@ -634,7 +634,7 @@ var MainnetParams = Params{
 		217137983,
 		218735007,
 		227679830,
-		236878000, // v11 activation - Foztor 6/Oct/26, retargeted for ~Mon 12 Oct 2026 08:00 GMT
+		236878000, // v11 activation - Foztor 6/Oct/26, retargeted for ~Mon 12 Oct 2026 18:00 GMT
 		^uint64(0),
 	},
 	PruningPointCheckpoint: mainnetPruningPointCheckpoint,
