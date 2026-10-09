@@ -3,10 +3,10 @@ package pruningmanager
 import (
 	"fmt"
 	"math/big"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"time"
-	"runtime/debug"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
