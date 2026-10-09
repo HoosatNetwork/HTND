@@ -545,7 +545,7 @@ var MainnetParams = Params{
 	DefaultPort: "42421",
 	DNSSeeds: []string{
 		// This DNS seeder is run by Toni Lukkaroinen
-		"mainnet-dnsseed.hoosat.fi",
+		// "mainnet-dnsseed.hoosat.fi",
 		// These DNS seeders are run by Cryptonoob
 		"mainnet-node-1.hoosat.org",
 		"mainnet-node-2.hoosat.org",

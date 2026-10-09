@@ -930,35 +930,93 @@ func (pm *pruningManager) checkpointIsSelfConsistent(stagingArea *model.StagingA
 	return true, nil
 }
 
-// checkpointIsInPruningPointChain walks header.PruningPoint() hops from the pruning point down to the
-// checkpoint, then stops. It never reaches genesis: a hop that lands at or below the checkpoint's blue
-// score without being the checkpoint is a failure, as is a missing header or a non-decreasing blue score.
+// checkpointIsInPruningPointChain proves lineage using the pruning-point LIST this node holds
+// (pm.pruningStore, indices 0..currentIndex), not header.PruningPoint() hops through headers a peer
+// may no longer retain. The list is mandatorily received and imported on every headers-proof IBD
+// (validateAndInsertPruningPoints).
+//
+// It checks, in order:
+//  1. the list's top entry is the pruning point being validated;
+//  2. the checkpoint appears in the list, at an index consistent with its blue score;
+//  3. from the checkpoint up to the top, each entry's header commits to the previous entry
+//     (header(list[i]).PruningPoint() == list[i-1]) and blue scores strictly increase.
+//
+// Nothing below the checkpoint is examined.
 func (pm *pruningManager) checkpointIsInPruningPointChain(stagingArea *model.StagingArea,
 	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
 	cp := pm.pruningPointCheckpoint
-	current := pruningPointHeader
-	for hops := 1; ; hops++ {
-		previous := current.PruningPoint()
-		if previous.Equal(cp.Hash) {
-			log.Infof("checkpoint %s is in the pruning-point chain of %s after %d hops", cp.Hash, pruningPoint, hops)
-			return true, nil
+
+	currentIndex, err := pm.pruningStore.CurrentPruningPointIndex(pm.databaseContext, stagingArea)
+	if err != nil {
+		return false, err
+	}
+
+	// (1) The top of the list must be the pruning point we are validating.
+	top, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, currentIndex)
+	if err != nil {
+		return false, err
+	}
+	if !top.Equal(pruningPoint) {
+		log.Warnf("checkpoint %s: top of the pruning-point list (index %d) is %s, not the pruning point %s",
+			cp.Hash, currentIndex, top, pruningPoint)
+		return false, nil
+	}
+
+	// (2) Find the checkpoint in the list.
+	checkpointIndex := uint64(0)
+	found := false
+	for index := uint64(0); index <= currentIndex; index++ {
+		stored, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index)
+		if err != nil {
+			return false, err
 		}
-		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previous)
+		if stored.Equal(cp.Hash) {
+			checkpointIndex, found = index, true
+			break
+		}
+	}
+	if !found {
+		log.Warnf("checkpoint %s is not in the pruning-point list of %s (%d entries)",
+			cp.Hash, pruningPoint, currentIndex+1)
+		return false, nil
+	}
+
+	// (3) Every link from the checkpoint up to the top must hold. Walk downward from the top so
+	// the header we already have is reused and we stop exactly at the checkpoint.
+	currentHash := top
+	currentHeader := pruningPointHeader
+	for index := currentIndex; index > checkpointIndex; index-- {
+		previousHash, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index-1)
+		if err != nil {
+			return false, err
+		}
+		if !currentHeader.PruningPoint().Equal(previousHash) {
+			log.Warnf("checkpoint %s: list entry %d (%s) commits to pruning point %s, but entry %d is %s",
+				cp.Hash, index, currentHash, currentHeader.PruningPoint(), index-1, previousHash)
+			return false, nil
+		}
+
+		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previousHash)
 		if database.IsNotFoundError(err) {
-			log.Warnf("checkpoint %s not reached from %s: header %s missing after %d hops", cp.Hash, pruningPoint, previous, hops)
+			log.Warnf("checkpoint %s: header for list entry %d (%s) is missing", cp.Hash, index-1, previousHash)
 			return false, nil
 		}
 		if err != nil {
 			return false, err
 		}
-		if previousHeader.BlueScore() >= current.BlueScore() || previousHeader.BlueScore() <= cp.BlueScore {
-			log.Warnf("checkpoint %s not in the pruning-point chain of %s (stopped at %s, blue score %d, after %d hops)",
-				cp.Hash, pruningPoint, previous, previousHeader.BlueScore(), hops)
+		if previousHeader.BlueScore() >= currentHeader.BlueScore() {
+			log.Warnf("checkpoint %s: blue score does not decrease from list entry %d (%d) to %d (%d)",
+				cp.Hash, index, currentHeader.BlueScore(), index-1, previousHeader.BlueScore())
 			return false, nil
 		}
-		current = previousHeader
+
+		currentHash, currentHeader = previousHash, previousHeader
 	}
+
+	log.Infof("checkpoint %s is at pruning-point list index %d of %d, linked to %s",
+		cp.Hash, checkpointIndex, currentIndex, pruningPoint)
+	return true, nil
 }
 
 func shortStr(s string) string {
