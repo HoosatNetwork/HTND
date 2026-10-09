@@ -862,15 +862,7 @@ func (pm *pruningManager) ArePruningPointsInValidChain(stagingArea *model.Stagin
 // pruning point must not be older than the checkpoint, and the checkpoint must itself appear in this
 // node's own recorded pruning-point list (checkpointIsInPruningPointList).
 //
-// It no longer checks the checkpoint header against live, peer-sourced headers
-// (header.PruningPoint() hops): that depends on some peer still retaining the exact checkpoint
-// header, and confirmed 2026-10-06 that no node on the network does any longer for this checkpoint -
-// requiring it made every headers-proof IBD fail identically and permanently, for every future
-// joiner, forever. The recorded pruning-point list is not subject to that gap: every headers-proof
-// IBD mandatorily receives and imports the full list of this chain's historical pruning points
-// (validateAndInsertPruningPoints), checked against ArePruningPointsViolatingFinality before import,
-// so checking membership in it is both always available and already a real proof of descent - not a
-// weaker floor-only substitute.
+
 func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.StagingArea,
 	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
 ) (bool, error) {
@@ -883,11 +875,89 @@ func (pm *pruningManager) pruningPointMeetsCheckpoint(stagingArea *model.Staging
 			pruningPoint, pruningPointHeader.BlueScore(), cp.Hash, cp.BlueScore)
 		return false, nil
 	}
+
+	// (1) The checkpoint we hold must be the one that was pinned, and agree with itself.
+	if ok, err := pm.checkpointIsSelfConsistent(stagingArea, pruningPoint, pruningPointHeader); err != nil || !ok {
+		return false, err
+	}
 	if pruningPoint.Equal(cp.Hash) {
 		return true, nil
 	}
 
-	return pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
+	// (2) The pruning point must descend from the checkpoint. The walk stops at the checkpoint
+	// and never goes below it.
+	return pm.checkpointIsInPruningPointChain(stagingArea, pruningPoint, pruningPointHeader)
+}
+
+// checkpointIsSelfConsistent checks the checkpoint header we hold against the pinned values.
+// A missing header is not a failure here: the lineage walk will fail if it cannot reach it.
+func (pm *pruningManager) checkpointIsSelfConsistent(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
+) (bool, error) {
+	cp := pm.pruningPointCheckpoint
+
+	header := pruningPointHeader
+	if !pruningPoint.Equal(cp.Hash) {
+		has, err := pm.blockHeaderStore.HasBlockHeader(pm.databaseContext, stagingArea, cp.Hash)
+		if err != nil || !has {
+			return true, err
+		}
+		header, err = pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, cp.Hash)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if !consensushashing.HeaderHash(header).Equal(cp.Hash) ||
+		header.BlueScore() != cp.BlueScore ||
+		header.DAAScore() != cp.DAAScore ||
+		!header.UTXOCommitment().Equal(cp.UTXOCommitment) {
+		log.Warnf("checkpoint %s: the stored header does not hash to, or carry the pinned scores and UTXO "+
+			"commitment of, the checkpoint", cp.Hash)
+		return false, nil
+	}
+
+	// If we also hold the checkpoint's own multiset, it must reproduce the commitment.
+	if ms, err := pm.multiSetStore.Get(pm.databaseContext, stagingArea, cp.Hash); err == nil {
+		if !ms.Hash().Equal(cp.UTXOCommitment) {
+			log.Warnf("checkpoint %s: stored multiset %s != pinned commitment %s", cp.Hash, ms.Hash(), cp.UTXOCommitment)
+			return false, nil
+		}
+	} else if !database.IsNotFoundError(err) {
+		return false, err
+	}
+	return true, nil
+}
+
+// checkpointIsInPruningPointChain walks header.PruningPoint() hops from the pruning point down to the
+// checkpoint, then stops. It never reaches genesis: a hop that lands at or below the checkpoint's blue
+// score without being the checkpoint is a failure, as is a missing header or a non-decreasing blue score.
+func (pm *pruningManager) checkpointIsInPruningPointChain(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash, pruningPointHeader externalapi.BlockHeader,
+) (bool, error) {
+	cp := pm.pruningPointCheckpoint
+	current := pruningPointHeader
+	for hops := 1; ; hops++ {
+		previous := current.PruningPoint()
+		if previous.Equal(cp.Hash) {
+			log.Infof("checkpoint %s is in the pruning-point chain of %s after %d hops", cp.Hash, pruningPoint, hops)
+			return true, nil
+		}
+		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previous)
+		if database.IsNotFoundError(err) {
+			log.Warnf("checkpoint %s not reached from %s: header %s missing after %d hops", cp.Hash, pruningPoint, previous, hops)
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if previousHeader.BlueScore() >= current.BlueScore() || previousHeader.BlueScore() <= cp.BlueScore {
+			log.Warnf("checkpoint %s not in the pruning-point chain of %s (stopped at %s, blue score %d, after %d hops)",
+				cp.Hash, pruningPoint, previous, previousHeader.BlueScore(), hops)
+			return false, nil
+		}
+		current = previousHeader
+	}
 }
 
 func shortStr(s string) string {
@@ -979,7 +1049,7 @@ func (pm *pruningManager) VerifyPruningPointCheckpointOnDisk() error {
 		return nil
 	}
 
-	ok, err := pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
+	ok, err := pm.pruningPointMeetsCheckpoint(stagingArea, pruningPoint, pruningPointHeader)
 	if err != nil {
 		return err
 	}
