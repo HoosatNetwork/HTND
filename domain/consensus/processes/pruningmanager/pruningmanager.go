@@ -2512,48 +2512,31 @@ func (pm *pruningManager) updatePruningPoint() error {
 		return err
 	}
 
-        	log.Info("Updating the pruning point UTXO set")
+	log.Info("Updating the pruning point UTXO set")
 	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)
 	if err != nil {
 		return err
 	}
 
-	// The diff has been written. Keep only what the mismatch report prints (two counts), and let go of
-	// the diff itself so the GC can reclaim it before the full-set validation pass below.
-	diffToAdd, diffToRemove := utxoSetDiff.ToAdd().Len(), utxoSetDiff.ToRemove().Len()
-	utxoSetDiff = nil // nothing below may capture utxoSetDiff, or it stays alive
-	logger.LogMemoryStats(log, "updatePruningPoint: before releasing the diff")
-	debug.FreeOSMemory() // forces a GC and returns freed pages to the OS (import "runtime/debug")
-	logger.LogMemoryStats(log, "updatePruningPoint: after releasing the diff")
+	// The diff is written. Nothing below needs it, so release it before the full-set validation pass.
+	utxoSetDiff = nil
+	debug.FreeOSMemory() // import "runtime/debug"
+	logger.LogMemoryStats(log, "updatePruningPoint: diff released")
 
 	if !pruningPoint.Equal(pm.genesisHash) {
 		log.Info("Validating that the pruning point UTXO set this node will serve fits its commitment")
-		if bucketHash, bucketStats, validationErr := pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint); validationErr != nil {
+		bucketHash, bucketStats, validationErr := pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint)
+		if validationErr != nil {
+			// The error already carries the calculated hash, the commitment and the set stats.
+			log.Errorf("[PP-COMMITMENT] HALTING: the UTXO set for pruning point %s (diff method %s) does not "+
+				"match its header commitment: %s", pruningPoint, methodUsed, validationErr)
 			if bucketHash != nil {
-				// Re-derive the diff only if the report needs it, using the method already recorded
-				// for this pruning point. The closure captures only pruningPoint and methodUsed.
-				rederive := func() externalapi.UTXODiff {
-					var d externalapi.UTXODiff
-					var derr error
-					if methodUsed == "acceptance-data" {
-						d, derr = pm.calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData(stagingArea, pruningPoint)
-					} else {
-						d, derr = pm.calculateDiffBetweenPreviousAndCurrentPruningPoints(stagingArea, pruningPoint)
-					}
-					if derr != nil {
-						log.Warnf("[PP-COMMITMENT] could not re-derive the %s diff for the report: %s", methodUsed, derr)
-						return nil
-					}
-					return d
-				}
-				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
-					methodUsed, diffToAdd, diffToRemove, rederive)
+				log.Errorf("[PP-COMMITMENT] served bucket hashes to %s over %s", bucketHash, bucketStats)
 			}
 			return validationErr
-		} else {
-			log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
-				pruningPoint)
 		}
+		log.Infof("Pruning point %s: the UTXO set this node serves matches the chain's commitment for it",
+			pruningPoint)
 	}
 
 	var newPruningTime *time.Time
