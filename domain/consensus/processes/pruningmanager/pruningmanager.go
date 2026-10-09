@@ -984,37 +984,36 @@ func (pm *pruningManager) checkpointIsInPruningPointChain(stagingArea *model.Sta
 
 	// (3) Every link from the checkpoint up to the top must hold. Walk downward from the top so
 	// the header we already have is reused and we stop exactly at the checkpoint.
-	currentHash := top
-	currentHeader := pruningPointHeader
-	for index := currentIndex; index > checkpointIndex; index-- {
-		previousHash, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index-1)
+		// (3) The list must be ordered: blue score strictly increases from the checkpoint's entry up to
+	// the top. A header's PruningPoint() commits to an entry several indices back, not necessarily the
+	// previous one, so linkage is not checked per entry (ArePruningPointsInValidChain checks the top's
+	// commitment against the list).
+	previousBlueScore := cp.BlueScore
+	for index := checkpointIndex + 1; index <= currentIndex; index++ {
+		hash, err := pm.pruningStore.PruningPointByIndex(pm.databaseContext, stagingArea, index)
 		if err != nil {
 			return false, err
 		}
-		if !currentHeader.PruningPoint().Equal(previousHash) {
-			log.Warnf("checkpoint %s: list entry %d (%s) commits to pruning point %s, but entry %d is %s",
-				cp.Hash, index, currentHash, currentHeader.PruningPoint(), index-1, previousHash)
+		header := pruningPointHeader
+		if index != currentIndex {
+			header, err = pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, hash)
+			if database.IsNotFoundError(err) {
+				log.Warnf("checkpoint %s: header for list entry %d (%s) is missing", cp.Hash, index, hash)
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+		}
+		if header.BlueScore() <= previousBlueScore {
+			log.Warnf("checkpoint %s: list entry %d (%s) has blue score %d, not above the previous entry's %d",
+				cp.Hash, index, hash, header.BlueScore(), previousBlueScore)
 			return false, nil
 		}
-
-		previousHeader, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, previousHash)
-		if database.IsNotFoundError(err) {
-			log.Warnf("checkpoint %s: header for list entry %d (%s) is missing", cp.Hash, index-1, previousHash)
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if previousHeader.BlueScore() >= currentHeader.BlueScore() {
-			log.Warnf("checkpoint %s: blue score does not decrease from list entry %d (%d) to %d (%d)",
-				cp.Hash, index, currentHeader.BlueScore(), index-1, previousHeader.BlueScore())
-			return false, nil
-		}
-
-		currentHash, currentHeader = previousHash, previousHeader
+		previousBlueScore = header.BlueScore()
 	}
 
-	log.Infof("checkpoint %s is at pruning-point list index %d of %d, linked to %s",
+	log.Infof("checkpoint %s is at pruning-point list index %d of %d; list is ordered up to %s",
 		cp.Hash, checkpointIndex, currentIndex, pruningPoint)
 	return true, nil
 }
