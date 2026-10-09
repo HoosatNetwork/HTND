@@ -984,7 +984,7 @@ func (pm *pruningManager) checkpointIsInPruningPointChain(stagingArea *model.Sta
 
 	// (3) Every link from the checkpoint up to the top must hold. Walk downward from the top so
 	// the header we already have is reused and we stop exactly at the checkpoint.
-		// (3) The list must be ordered: blue score strictly increases from the checkpoint's entry up to
+	// (3) The list must be ordered: blue score strictly increases from the checkpoint's entry up to
 	// the top. A header's PruningPoint() commits to an entry several indices back, not necessarily the
 	// previous one, so linkage is not checked per entry (ArePruningPointsInValidChain checks the top's
 	// commitment against the list).
@@ -1107,7 +1107,7 @@ func (pm *pruningManager) VerifyPruningPointCheckpointOnDisk() error {
 		return nil
 	}
 
-	ok, err := pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
+	ok, err := pm.pruningPointMeetsCheckpoint(stagingArea, pruningPoint, pruningPointHeader)
 	if err != nil {
 		return err
 	}
