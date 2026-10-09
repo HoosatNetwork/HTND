@@ -1108,7 +1108,7 @@ func (pm *pruningManager) VerifyPruningPointCheckpointOnDisk() error {
 		return nil
 	}
 
-	ok, err := pm.pruningPointMeetsCheckpoint(stagingArea, pruningPoint, pruningPointHeader)
+	ok, err := pm.checkpointIsInPruningPointList(stagingArea, pruningPoint)
 	if err != nil {
 		return err
 	}
