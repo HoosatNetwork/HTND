@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"time"
+	"runtime/debug"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
@@ -1607,8 +1608,7 @@ func (pm *pruningManager) VerifyCurrentPruningPointUTXOSet() {
 	}
 	bucketHash := bucketMultiset.Hash()
 	if !bucketHash.Equal(expectedCommitment) {
-		// Before the switch below, because one of its branches repairs the bucket in place.
-		pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats, "", nil)
+		pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats, "", 0, 0, nil)
 	}
 
 	perBlockMultiset, perBlockErr := pm.multiSetStore.Get(pm.databaseContext, stagingArea, pruningPoint)
@@ -2512,32 +2512,42 @@ func (pm *pruningManager) updatePruningPoint() error {
 		return err
 	}
 
-	log.Info("Updating the pruning point UTXO set")
+        	log.Info("Updating the pruning point UTXO set")
 	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)
 	if err != nil {
 		return err
 	}
-	// Verify what this node is about to serve, and do it unconditionally rather than only under
-	// --enable-sanity-check-pruning-utxo. This bucket is handed verbatim to every peer that syncs
-	// from this node, and until now it could be written and served without ever being checked against
-	// the commitment the chain made for it: a node had no way to know whether it was propagating a
-	// gap, and no operator had a way to ask.
-	//
-	// Reported rather than enforced by default. On the current network no node holds a set that
-	// matches its own header, so failing the advancement here would stop every node advancing without
-	// stopping anything from spreading. --enable-sanity-check-pruning-utxo keeps the strict behaviour
-	// for a node that should refuse rather than serve an unverified set. Once a rebaseline has
-	// produced sets that do match, this is the check that says which nodes are clean - and the point
-	// at which enforcing by default becomes the right default.
-	//
-	// It costs one pass over the served set per pruning point advancement, which is infrequent. That
-	// is the price of a node knowing what it serves.
+
+	// The diff has been written. Keep only what the mismatch report prints (two counts), and let go of
+	// the diff itself so the GC can reclaim it before the full-set validation pass below.
+	diffToAdd, diffToRemove := utxoSetDiff.ToAdd().Len(), utxoSetDiff.ToRemove().Len()
+	utxoSetDiff = nil // nothing below may capture utxoSetDiff, or it stays alive
+	logger.LogMemoryStats(log, "updatePruningPoint: before releasing the diff")
+	debug.FreeOSMemory() // forces a GC and returns freed pages to the OS (import "runtime/debug")
+	logger.LogMemoryStats(log, "updatePruningPoint: after releasing the diff")
+
 	if !pruningPoint.Equal(pm.genesisHash) {
 		log.Info("Validating that the pruning point UTXO set this node will serve fits its commitment")
 		if bucketHash, bucketStats, validationErr := pm.validateUTXOSetFitsCommitment(stagingArea, pruningPoint); validationErr != nil {
 			if bucketHash != nil {
+				// Re-derive the diff only if the report needs it, using the method already recorded
+				// for this pruning point. The closure captures only pruningPoint and methodUsed.
+				rederive := func() externalapi.UTXODiff {
+					var d externalapi.UTXODiff
+					var derr error
+					if methodUsed == "acceptance-data" {
+						d, derr = pm.calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData(stagingArea, pruningPoint)
+					} else {
+						d, derr = pm.calculateDiffBetweenPreviousAndCurrentPruningPoints(stagingArea, pruningPoint)
+					}
+					if derr != nil {
+						log.Warnf("[PP-COMMITMENT] could not re-derive the %s diff for the report: %s", methodUsed, derr)
+						return nil
+					}
+					return d
+				}
 				pm.reportPruningPointCommitmentMismatch(stagingArea, pruningPoint, bucketHash, bucketStats,
-					methodUsed, utxoSetDiff)
+					methodUsed, diffToAdd, diffToRemove, rederive)
 			}
 			return validationErr
 		} else {
@@ -2545,6 +2555,7 @@ func (pm *pruningManager) updatePruningPoint() error {
 				pruningPoint)
 		}
 	}
+
 	var newPruningTime *time.Time
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
 		log.Infof("Pruning point advanced, but block deletion deferred (data retention/interval not met)")

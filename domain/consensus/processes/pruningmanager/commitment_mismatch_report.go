@@ -75,9 +75,14 @@ func (s *utxoSetStats) String() string {
 
 // reportPruningPointCommitmentMismatch logs everything above for pruningPoint. bucketHash and
 // bucketStats describe the served set as validateUTXOSetFitsCommitment just hashed it.
+//
+// The diff that advanced the bucket is not passed in, because holding it kept every entry of it alive
+// through the full-set validation pass. The caller passes its sizes (diffToAdd, diffToRemove) and
+// rederiveDiff, which rebuilds it on demand. Both are zero/nil when no diff is at hand (the startup
+// check), and rederiveDiff may return nil if the diff can no longer be derived.
 func (pm *pruningManager) reportPruningPointCommitmentMismatch(stagingArea *model.StagingArea,
 	pruningPoint *externalapi.DomainHash, bucketHash *externalapi.DomainHash, bucketStats *utxoSetStats,
-	diffMethod string, usedDiff externalapi.UTXODiff,
+	diffMethod string, diffToAdd, diffToRemove int, rederiveDiff func() externalapi.UTXODiff,
 ) {
 	start := time.Now()
 	defer func() {
@@ -108,9 +113,9 @@ func (pm *pruningManager) reportPruningPointCommitmentMismatch(stagingArea *mode
 		pruningPoint, currentPerBlock, currentPerBlock != nil && currentPerBlock.Equal(expected),
 		currentPerBlock != nil && currentPerBlock.Equal(bucketHash))
 
-	if usedDiff != nil {
+	if rederiveDiff != nil {
 		log.Warnf("[PP-COMMITMENT] pruning point %s: the bucket was advanced with the %s diff (%d to add, %d to remove)",
-			pruningPoint, diffMethod, usedDiff.ToAdd().Len(), usedDiff.ToRemove().Len())
+			pruningPoint, diffMethod, diffToAdd, diffToRemove)
 	}
 
 	if pruningPointIndex == 0 {
@@ -138,6 +143,14 @@ func (pm *pruningManager) reportPruningPointCommitmentMismatch(stagingArea *mode
 		classifyPruningPointMismatch(previousClean, currentPerBlock, expected, bucketHash))
 
 	pm.walkChainCommitments(stagingArea, previousPruningPoint, pruningPoint)
+
+	// Last, and only now: rebuilding the diff is the expensive step, and nothing above needed it. With no
+	// rederiveDiff (startup check) or a failed re-derivation, usedDiff stays nil and compareDiffDerivations
+	// derives the acceptance-data diff itself.
+	var usedDiff externalapi.UTXODiff
+	if rederiveDiff != nil {
+		usedDiff = rederiveDiff()
+	}
 	pm.compareDiffDerivations(stagingArea, pruningPoint, diffMethod, usedDiff)
 }
 
