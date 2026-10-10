@@ -558,27 +558,27 @@ func (flow *handleIBDFlow) fetchMissingUTXOSet(consensus externalapi.Consensus, 
 	err = flow.Domain().StagingConsensus().ValidateAndInsertImportedPruningPoint(pruningPointHash)
 	if err != nil {
 		// TODO: Find a better way to deal with finality conflicts.
+		// Banning is a slightly stronger possition
 		if errors.Is(err, ruleerrors.ErrSuggestedPruningViolatesFinality) {
-			return false, nil
+			return false, protocolerrors.ConvertToBanningProtocolErrorIfRuleError(err, "error with pruning point UTXO set")
+			// return false, nil
 		}
 		// For ErrBadPruningPointUTXOSet, this is likely due to missing UTXO diffs from disqualified blocks.
-		// This is a recoverable error - the node should try a different peer rather than banning.
+		// This DOES NOT happen post 2.18.0 - so ban
 		if errors.Is(err, ruleerrors.ErrBadPruningPointUTXOSet) {
-			log.Infof("Pruning point UTXO set hash mismatch. This is likely due to missing UTXO diffs from disqualified blocks. Will try another node.")
-			return false, protocolerrors.New(false, "pruning point UTXO set hash mismatch: "+err.Error())
+			log.Warnf("Pruning point UTXO set hash mismatch. This is likely due to missing UTXO diffs from disqualified blocks. Will try another node.")
+			return false, protocolerrors.ConvertToBanningProtocolErrorIfRuleError(err, "error with pruning point UTXO set")
 		}
 		// ErrMissingTxOut here means the served set does not hold an output that the pruning point block
-		// itself spends. That is a property of the chain's UTXO state, not of the peer: the peer served
-		// what its own pruning point UTXO set holds, and every other peer holds the same state. Banning
-		// for it worked through the peer list one expensive full-UTXO-set download at a time and never
-		// synced. The import tolerates this case now, so reaching here means it came from somewhere else
-		// in the import - still not the peer's fault, so disconnect without banning and try another node.
+		// itself spends.
+		// This used to happen when we had an invalid UTXO set, in the PP, but this is never the case now
+		// Post 2.18.0
+		// So we return false, and move on to the next peer with a ban error.
 		if errors.As(err, &ruleerrors.ErrMissingTxOut{}) {
-			log.Infof("The pruning point UTXO set from %s is missing outputs spent by the pruning point "+
-				"block itself. This is chain state rather than peer misbehaviour. Will try another node. (%s)",
+			log.Warnf("The pruning point UTXO set from %s is missing outputs spent by the pruning point "+
+				"block itself. This is not permitted. (%s)",
 				flow.peer, err)
-			return false, protocolerrors.New(false, "pruning point UTXO set is missing outputs spent by "+
-				"the pruning point block: "+err.Error())
+			return false, protocolerrors.ConvertToBanningProtocolErrorIfRuleError(err, "error with pruning point UTXO set")
 		}
 		return false, protocolerrors.ConvertToBanningProtocolErrorIfRuleError(err, "error with pruning point UTXO set")
 	}
