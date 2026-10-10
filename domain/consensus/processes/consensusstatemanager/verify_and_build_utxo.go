@@ -173,13 +173,16 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	if err != nil {
 		return err
 	}
-	// Once the offset-mode checks activate, a mismatch is bounded by the fees this node could not
-	// price. Once StrictCoinbaseVersion activates, even that allowance and underpayment end.
-	if coinbaseErr != nil && tolerate && errors.Is(coinbaseErr, ruleerrors.ErrBadCoinbaseTransaction) &&
-		(strictCoinbase || csm.offsetModeValueChecksActive(block.Header.DAAScore())) {
-		if boundedErr := csm.checkCoinbaseOnOffsetBaseline(stagingArea, block, blockHash, coinbaseTransaction,
-			acceptanceData, strictCoinbase); boundedErr != nil {
-			coinbaseErr = boundedErr
+	// From StrictCoinbaseVersion the coinbase must reproduce exactly: no offset toleration and no
+	// unpriced-fee allowance. Before it, a mismatch is bounded by the fees this node could not price.
+	if coinbaseErr != nil && errors.Is(coinbaseErr, ruleerrors.ErrBadCoinbaseTransaction) {
+		if strictCoinbase {
+			coinbaseErr = notTolerable{coinbaseErr}
+		} else if tolerate && csm.offsetModeValueChecksActive(block.Header.DAAScore()) {
+			if boundedErr := csm.checkCoinbaseOnOffsetBaseline(stagingArea, block, blockHash, coinbaseTransaction,
+				acceptanceData, false); boundedErr != nil {
+				coinbaseErr = boundedErr
+			}
 		}
 	}
 	if stop("coinbase-transaction", coinbaseErr) {

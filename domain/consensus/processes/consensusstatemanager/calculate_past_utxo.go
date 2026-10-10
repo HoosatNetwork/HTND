@@ -2,6 +2,8 @@ package consensusstatemanager
 
 import (
 	"fmt"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"slices"
 	"time"
 
@@ -473,7 +475,10 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 			}
 		}
 		inheritsOffset := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
-		if acceptDespiteMissingInputs(err, inheritsOffset, resolvedInputs) {
+		// From StrictCoinbaseVersion a missing input is an ordinary rejection: no offset baseline excuses it.
+		strictMissingInputs := csm.hardForkGates != nil && dagconfig.HardForkActive(
+			csm.hardForkGates.StrictCoinbaseVersion, constants.BlockVersionForDAAScore(csm.powScores, blockDAAScore))
+		if !strictMissingInputs && acceptDespiteMissingInputs(err, inheritsOffset, resolvedInputs) {
 			// Below block version 11 (HardForkGates.OffsetModeValueChecksVersion) this path takes the
 			// transaction on trust: fee 0, no checks, every output created. From it the found inputs must pass
 			// every check they can decide and the outputs may not exceed them - see
