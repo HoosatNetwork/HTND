@@ -200,7 +200,7 @@ const (
 	OpMin                 = 0xa3 // 163
 	OpMax                 = 0xa4 // 164
 	OpWithin              = 0xa5 // 165
-	OpCheckSigMLDSA44     = 0xa6 // 166 - OP_UNKNOWN166 below HardForkGates.MLDSA44SignaturesBlockVersion
+	OpUnknown166          = 0xa6 // 166
 	OpUnknown167          = 0xa7 // 167
 	OpSHA256              = 0xa8 // 168
 	OpCheckMultiSigECDSA  = 0xa9 // 169
@@ -492,9 +492,9 @@ var opcodeArray = [256]opcode{
 	OpCheckSigVerify:      {OpCheckSigVerify, "OP_CHECKSIGVERIFY", 1, opcodeCheckSigVerify},
 	OpCheckMultiSig:       {OpCheckMultiSig, "OP_CHECKMULTISIG", 1, opcodeCheckMultiSig},
 	OpCheckMultiSigVerify: {OpCheckMultiSigVerify, "OP_CHECKMULTISIGVERIFY", 1, opcodeCheckMultiSigVerify},
-	OpCheckSigMLDSA44:     {OpCheckSigMLDSA44, "OP_CHECKSIGMLDSA44", 1, opcodeCheckSigMLDSA44},
 
 	// Undefined opcodes.
+	OpUnknown166: {OpUnknown166, "OP_UNKNOWN166", 1, opcodeInvalid},
 	OpUnknown167: {OpUnknown167, "OP_UNKNOWN167", 1, opcodeInvalid},
 	OpUnknown178: {OpUnknown188, "OP_UNKNOWN178", 1, opcodeInvalid},
 	OpUnknown179: {OpUnknown189, "OP_UNKNOWN179", 1, opcodeInvalid},
@@ -2365,68 +2365,6 @@ func opcodeCheckSigECDSA(_ *parsedOpcode, vm *Engine) error {
 	}
 
 	vm.dstack.PushBool(valid)
-	return nil
-}
-
-// opcodeCheckSigMLDSA44 is opcodeCheckSig for ML-DSA-44 (FIPS 204) keys. It
-// signs over CalculateSignatureHashMLDSA44 with an empty ML-DSA context string.
-//
-// Until ScriptEnableMLDSA44 is set it is exactly opcodeInvalid, which is what
-// 0xa6 has always been, so enabling it is the hard fork and nothing else is.
-//
-// Stack transformation: [... signature pubkey] -> [... bool]
-func opcodeCheckSigMLDSA44(op *parsedOpcode, vm *Engine) error {
-	if vm.flags&ScriptEnableMLDSA44 == 0 {
-		str := fmt.Sprintf("attempt to execute invalid opcode OP_UNKNOWN%d", op.opcode.value)
-		return scriptError(ErrReservedOpcode, str)
-	}
-
-	pkBytes, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
-
-	fullSigBytes, err := vm.dstack.PopByteArray()
-	if err != nil {
-		return err
-	}
-
-	// At least 1 byte is needed for the hash type below.
-	if len(fullSigBytes) < 1 {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
-	hashType := consensushashing.SigHashType(fullSigBytes[len(fullSigBytes)-1])
-	sigBytes := fullSigBytes[:len(fullSigBytes)-1]
-	if !hashType.IsStandardSigHashType() {
-		return scriptError(ErrInvalidSigHashType, fmt.Sprintf("invalid hash type 0x%x", hashType))
-	}
-	if err := vm.checkSignatureLengthMLDSA44(sigBytes); err != nil {
-		return err
-	}
-	if err := vm.checkPubKeyEncodingMLDSA44(pkBytes); err != nil {
-		return err
-	}
-
-	// Generate the signature hash based on the signature hash type.
-	sigHash, err := consensushashing.CalculateSignatureHashMLDSA44(&vm.tx, vm.txIdx, hashType, vm.sigHashReusedValues)
-	if err != nil {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-
-	valid, parsed := vm.mldsa44Cache.verify(sigHash, pkBytes, sigBytes)
-	if !parsed {
-		vm.dstack.PushBool(false)
-		return nil
-	}
-	if !valid {
-		str := "signature not empty on failed checksig"
-		return scriptError(ErrNullFail, str)
-	}
-
-	vm.dstack.PushBool(true)
 	return nil
 }
 

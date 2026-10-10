@@ -33,8 +33,6 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(getPaginatedUTXOsByAddressesRequest.Addresses))
 
 	var reusableHexBuffer []byte
-	budget := newUTXOResponseBudget()
-	defer func() { logTruncatedUTXOResponse(budget, "GetPaginatedUTXOsByAddresses", len(allEntries)) }()
 	for _, addressString := range getPaginatedUTXOsByAddressesRequest.Addresses {
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
 		if err != nil {
@@ -48,15 +46,6 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			errorMessage.Error = appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 			return errorMessage, nil
 		}
-		var scriptHex string
-		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
-		if scriptHex == "" {
-			continue
-		}
-		limit, fits := budget.limitFor(addressString, scriptHex, getPaginatedUTXOsByAddressesRequest.Limit)
-		if !fits {
-			break
-		}
 		utxoOutpointEntryPairsBuffer := memory.Malloc[utxoindex.UTXOPair](1000)
 		if utxoOutpointEntryPairsBuffer == nil {
 			errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
@@ -64,7 +53,7 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -74,7 +63,6 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			}
 			return nil, err
 		}
-		read := len(utxoOutpointEntryPairs)
 		// The index says which outpoints belong to the address; consensus says which of them exist and
 		// what they are. Handing out a coin consensus does not hold gives the wallet a transaction every
 		// node will refuse.
@@ -85,8 +73,13 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			return nil, err
 		}
 		rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the response")
-		budget.spend(addressString, scriptHex, getPaginatedUTXOsByAddressesRequest.Limit, limit, read, len(utxoOutpointEntryPairs))
 		if len(utxoOutpointEntryPairs) == 0 {
+			memory.Free(utxoOutpointEntryPairsBuffer)
+			continue
+		}
+		var scriptHex string
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
+		if scriptHex == "" {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}

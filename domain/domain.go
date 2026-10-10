@@ -224,23 +224,6 @@ func New(consensusConfig *consensus.Config, mempoolConfig *mempool.Config, db in
 		}
 	}
 
-	// The mining manager has to hear about every block consensus disqualifies, to restore the transactions
-	// such a block took out of the mempool (see RestoreTransactionsOfDisqualifiedBlocks). It is built after
-	// consensus, so the hook finds it through a pointer set below. The config is copied so the caller's is
-	// not changed; the staging consensus is built from the copy and reports through the same hook.
-	var miningManagerForDisqualification atomic.Pointer[miningmanager.MiningManager]
-	wrappedConsensusConfig := *consensusConfig
-	onDisqualification := consensusConfig.OnDisqualification
-	wrappedConsensusConfig.OnDisqualification = func(blockHash *externalapi.DomainHash, reason string) {
-		if onDisqualification != nil {
-			onDisqualification(blockHash, reason)
-		}
-		if miningManager := miningManagerForDisqualification.Load(); miningManager != nil {
-			(*miningManager).NoteDisqualifiedBlock(blockHash)
-		}
-	}
-	consensusConfig = &wrappedConsensusConfig
-
 	consensusEventsChan := make(chan externalapi.ConsensusEvent, 100e3)
 	consensusFactory := consensus.NewFactory()
 	consensusInstance, shouldMigrate, err := consensusFactory.NewConsensus(consensusConfig, db, activePrefix, consensusEventsChan)
@@ -267,6 +250,5 @@ func New(consensusConfig *consensus.Config, mempoolConfig *mempool.Config, db in
 	// We create a consensus wrapper because the actual consensus might change
 	consensusReference := consensusreference.NewConsensusReference(&domainInstance.consensus)
 	domainInstance.miningManager = miningManagerFactory.NewMiningManager(consensusReference, &consensusConfig.Params, mempoolConfig)
-	miningManagerForDisqualification.Store(&domainInstance.miningManager)
 	return domainInstance, nil
 }

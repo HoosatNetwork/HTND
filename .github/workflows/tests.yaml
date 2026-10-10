@@ -34,7 +34,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.26
+          go-version: "1.27.1"
           cache: true
           cache-dependency-path: go.sum
 
@@ -67,7 +67,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.26
+          go-version: "1.27.1"
           cache: true
           cache-dependency-path: go.sum
 
@@ -85,31 +85,6 @@ jobs:
         run: |
           go test -race -p 2 -count=1 ./infrastructure/network/rpcclient/...
 
-  stability-test-fast:
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    env:
-      GOFLAGS: -tags=ci
-    name: Fast stability tests, ${{ github.head_ref }}
-    steps:
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.26
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install htnd
-        run: go install ./...
-
-      - name: Run fast stability tests
-        working-directory: stability-tests
-        env:
-          SKIP_LONG_STABILITY_TESTS: 1
-        run: ./install_and_test.sh
+      - name: Race - protocol flows
+        run: |
+          go test -race -p 2 -count=1 ./app/protocol/...

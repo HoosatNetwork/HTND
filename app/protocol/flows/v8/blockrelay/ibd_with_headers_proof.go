@@ -3,6 +3,7 @@ package blockrelay
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
@@ -10,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/pkg/errors"
 )
 
@@ -56,6 +58,7 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 
 		log.Infof("IBD with pruning proof from %s was unsuccessful. Deleting the staging consensus. (%s)", flow.peer, err)
 		deleteStagingConsensusErr := flow.Domain().DeleteStagingConsensus()
+		flow.UnsetIBDRunning()
 		if deleteStagingConsensusErr != nil {
 			return deleteStagingConsensusErr
 		}
@@ -81,11 +84,31 @@ func (flow *handleIBDFlow) ibdWithHeadersProof(
 func (flow *handleIBDFlow) requireStagingConsensus() (externalapi.Consensus, error) {
 	stagingConsensus := flow.Domain().StagingConsensus()
 	if stagingConsensus == nil {
-		flow.Domain().InitStagingConsensusWithoutGenesis()
+		if err := flow.Domain().InitStagingConsensusWithoutGenesis(); err != nil {
+			return nil, err
+		}
 		stagingConsensus = flow.Domain().StagingConsensus()
+	}
+	if stagingConsensus == nil {
+		return nil, protocolerrors.New(false, "staging consensus is not ready")
 	}
 
 	return stagingConsensus, nil
+}
+
+// banPeerNow bans this peer without --enablebanning. The rule already failed.
+// The console line is the notice. The address stays banned for BanDuration.
+func (flow *handleIBDFlow) banPeerNow(reason string) {
+	addr := flow.peer.Connection().NetAddress()
+	if addr == nil {
+		log.Warnf("could not ban %s (%s): no address", flow.peer, reason)
+		return
+	}
+	if err := flow.AddressManager().Ban(addr); err != nil {
+		log.Warnf("could not ban %s (%s): %s", flow.peer, reason, err)
+		return
+	}
+	log.Infof("banned %s for 120 minutes (%s)", addr, reason)
 }
 
 func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
@@ -129,6 +152,15 @@ func (flow *handleIBDFlow) shouldSyncAndShouldDownloadHeadersProof(
 		}
 
 		if hasMoreBlueWorkThanSelectedTipAndPruningDepthMoreBlueScore {
+			// Kaspa spam protector. Two conditions: the local chain is live,
+			// and this process has been up long enough that this is not a
+			// consensus that was just created. A fresh node still syncs.
+			if live, err := flow.localChainIsLive(); err != nil {
+				return false, false, err
+			} else if live && processIsMature() {
+				log.Infof("refusing headers-proof IBD from %s: local chain is live", flow.peer)
+				return false, false, nil
+			}
 			return true, true, nil
 		}
 
@@ -163,6 +195,55 @@ func (flow *handleIBDFlow) checkIfHighHashHasMoreBlueWorkThanSelectedTipAndPruni
 	return relayBlock.Header.BlueWork().Cmp(virtualSelectedTipInfo.BlueWork) > 0, nil
 }
 
+// localChainIsLive reports whether the virtual tip is recent enough that a
+// headers-proof IBD would replace a chain this node is already following.
+// Kaspa uses the finality point timestamp and a 3/2 finality window. The
+// public consensus API does not expose the finality point, so the tip
+// timestamp is the same signal: a live tip means the chain is current.
+func (flow *handleIBDFlow) localChainIsLive() (bool, error) {
+	tip, err := flow.Domain().Consensus().GetVirtualSelectedParent()
+	if err != nil {
+		return false, err
+	}
+	if tip.Equal(flow.Config().NetParams().GenesisHash) {
+		return false, nil
+	}
+	header, err := flow.Domain().Consensus().GetBlockHeader(tip)
+	if err != nil {
+		return false, err
+	}
+	params := flow.Config().NetParams()
+	version := constants.GetBlockVersion()
+	idx := int(version) - 1
+	if idx < 0 || idx >= len(params.FinalityDuration) {
+		idx = len(params.FinalityDuration) - 1
+	}
+	window := params.FinalityDuration[idx] * 3 / 2
+	tipTime := time.UnixMilli(header.TimeInMilliseconds())
+	return time.Since(tipTime) < window, nil
+}
+
+var processStartedAt = time.Now()
+
+// processIsMature is the second Kaspa condition. Kaspa waits one finality
+// window after the consensus object is created. That window is 24 hours, which
+// would leave a restarted node open to the blue-score flood. Ten minutes is
+// enough to tell a just-started process from one that is following the tip.
+func processIsMature() bool {
+	return time.Since(processStartedAt) > 10*time.Minute
+}
+
+const maxPruningPointProofBytes = 1024 * 1024 * 1024
+
+func pruningPointProofTooLarge(msg *appmessage.MsgPruningPointProof) bool {
+	var headers int
+	for _, level := range msg.Headers {
+		headers += len(level)
+	}
+	// A header on the wire is well under 1 KiB. 1 GiB of headers is not a proof.
+	return headers > maxPruningPointProofBytes/1024
+}
+
 func (flow *handleIBDFlow) syncAndValidatePruningPointProof() (*externalapi.DomainHash, error) {
 	log.Infof("Downloading the pruning point proof from %s", flow.peer)
 	err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestPruningPointProof())
@@ -178,6 +259,11 @@ func (flow *handleIBDFlow) syncAndValidatePruningPointProof() (*externalapi.Doma
 		return nil, protocolerrors.Errorf(true, "received unexpected message type. "+
 			"expected: %s, got: %s", appmessage.CmdPruningPointProof, message.Command())
 	}
+	if pruningPointProofTooLarge(pruningPointProofMessage) {
+		log.Infof("peer banned for 120 minutes, pruning-point proof exceeds 1 GiB: %s", flow.peer)
+		flow.banPeerNow("pruning-point proof exceeds 1 GiB")
+		return nil, protocolerrors.New(true, "pruning point proof exceeds 1 GiB")
+	}
 	pruningPointProof := appmessage.MsgPruningPointProofToDomainPruningPointProof(pruningPointProofMessage)
 	err = flow.Domain().Consensus().ValidatePruningPointProof(pruningPointProof)
 	if err != nil {
@@ -190,6 +276,9 @@ func (flow *handleIBDFlow) syncAndValidatePruningPointProof() (*externalapi.Doma
 	stagingConsensus, err := flow.requireStagingConsensus()
 	if err != nil {
 		return nil, err
+	}
+	if stagingConsensus == nil {
+		return nil, protocolerrors.New(false, "staging consensus is not ready")
 	}
 
 	err = stagingConsensus.ApplyPruningPointProof(pruningPointProof)
@@ -488,8 +577,11 @@ func (flow *handleIBDFlow) validateAndInsertPruningPoints(proofPruningPoint *ext
 	}
 
 	if arePruningPointsViolatingFinality {
-		// TODO: Find a better way to deal with finality conflicts.
-		return protocolerrors.Errorf(false, "pruning points are violating finality")
+		log.Infof("peer banned for 120 minutes, pruning points violate finality: %s", flow.peer)
+		log.Infof("looking for another peer now")
+		flow.banPeerNow("pruning points violate finality")
+		flow.UnsetIBDRunning()
+		return protocolerrors.Errorf(true, "pruning points are violating finality")
 	}
 
 	lastPruningPoint := consensushashing.HeaderHash(headers[len(headers)-1])
@@ -518,15 +610,26 @@ func (flow *handleIBDFlow) syncPruningPointUTXOSet(consensus externalapi.Consens
 	// 	return false, protocolerrors.Errorf(true, "invalid pruning point %s", pruningPoint)
 	// }
 
+	if !flow.peerMaySupplyCoinSet() {
+		log.Warnf("Not fetching pruning-point coin set from peer %s (utxobase=%s empty=%v forbidden=%v)",
+			flow.peer, flow.peer.UTXOBaselineAdvertised(), flow.localFloorIsGenesis(), flow.peer.IBDCoinSetForbidden())
+		return false, nil
+	}
 	log.Info("Fetching the pruning point UTXO set")
 	isSuccessful, err := flow.fetchMissingUTXOSet(consensus, pruningPoint)
 	if err != nil {
 		log.Infof("An error occurred while fetching the pruning point UTXO set. Stopping IBD. (%s)", err)
+		if !flow.localFloorIsGenesis() {
+			flow.peer.ForbidIBDCoinSet()
+		}
 		return false, err
 	}
 
 	if !isSuccessful {
 		log.Infof("Couldn't successfully fetch the pruning point UTXO set. Stopping IBD.")
+		if !flow.localFloorIsGenesis() {
+			flow.peer.ForbidIBDCoinSet()
+		}
 		return false, nil
 	}
 
@@ -564,8 +667,9 @@ func (flow *handleIBDFlow) fetchMissingUTXOSet(consensus externalapi.Consensus, 
 		// For ErrBadPruningPointUTXOSet, this is likely due to missing UTXO diffs from disqualified blocks.
 		// This is a recoverable error - the node should try a different peer rather than banning.
 		if errors.Is(err, ruleerrors.ErrBadPruningPointUTXOSet) {
-			log.Infof("Pruning point UTXO set hash mismatch. This is likely due to missing UTXO diffs from disqualified blocks. Will try another node.")
-			return false, protocolerrors.New(false, "pruning point UTXO set hash mismatch: "+err.Error())
+			log.Infof("peer banned for 120 minutes, pruning-point set does not match the header: %s", flow.peer)
+			flow.banPeerNow("pruning-point set does not match the header")
+			return false, protocolerrors.New(true, "pruning point UTXO set hash mismatch: "+err.Error())
 		}
 		// ErrMissingTxOut here means the served set does not hold an output that the pruning point block
 		// itself spends. That is a property of the chain's UTXO state, not of the peer: the peer served

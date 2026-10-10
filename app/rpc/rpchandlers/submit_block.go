@@ -112,22 +112,17 @@ func checkNodeSyncStatus(context *rpccontext.Context) error {
 	if context.Config.AllowSubmitBlockWhenNotSynced {
 		return nil
 	}
-
+	if context.ProtocolManager.Context().IsIBDRunning() {
+		return fmt.Errorf("node is not synced - IBD running")
+	}
 	if !context.ProtocolManager.Context().HasPeers() {
-		return fmt.Errorf("node is not synced - no peers connected")
+		return fmt.Errorf("node is not synced - no peers")
 	}
-
-	// It suffices to rely on IsNearlySynced()
-	// This logic is overly cautious and from a linear chain thought process
-	// if context.ProtocolManager.Context().IsIBDRunning() {
-	// return fmt.Errorf("node is not synced - IBD running")
-	// }
-
-	isSynced, err := context.ProtocolManager.Context().IsNearlySynced()
+	nearlySynced, err := context.ProtocolManager.Context().IsNearlySynced()
 	if err != nil {
-		return fmt.Errorf("failed to check sync status: %w", err)
+		return fmt.Errorf("node is not synced: %w", err)
 	}
-	if !isSynced {
+	if !nearlySynced {
 		return fmt.Errorf("node is not synced")
 	}
 	return nil

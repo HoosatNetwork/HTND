@@ -93,7 +93,7 @@ func IsPushOnlyScript(script []byte) (bool, error) {
 // template list for testing purposes. When there are parse errors, it returns
 // the list of parsed opcodes up to the point of failure along with the error.
 func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, error) {
-	retScript := make([]parsedOpcode, 0, countScriptOpcodes(script, opcodes))
+	retScript := make([]parsedOpcode, 0, len(script))
 	for i := 0; i < len(script); {
 		instr := script[i]
 		op := &opcodes[instr]
@@ -175,50 +175,6 @@ func parseScriptTemplate(script []byte, opcodes *[256]opcode) ([]parsedOpcode, e
 	}
 
 	return retScript, nil
-}
-
-// countScriptOpcodes returns how many opcodes parseScriptTemplate will parse out of script, so it can
-// allocate exactly that many. It steps over push data the way parseScriptTemplate does and stops at
-// the first malformed push, which parseScriptTemplate will reject, counting that one too.
-//
-// parseScriptTemplate used to reserve len(script) entries: one per byte, an upper bound reached only
-// by a script made entirely of one-byte opcodes. Real scripts are mostly push data. An ML-DSA-44
-// signature script is ~3.7 KB in two or three opcodes, so every parse reserved ~118 KB for them - over
-// a long virtual resolution that was half of everything the node allocated.
-func countScriptOpcodes(script []byte, opcodes *[256]opcode) int {
-	count := 0
-	for i := 0; i < len(script); count++ {
-		op := &opcodes[script[i]]
-		switch {
-		case op.length == 1:
-			i++
-		case op.length > 1:
-			i += op.length
-		default:
-			off := i + 1
-			if len(script[off:]) < -op.length {
-				return count + 1
-			}
-			var l uint
-			switch op.length {
-			case -1:
-				l = uint(script[off])
-			case -2:
-				l = uint(script[off+1])<<8 | uint(script[off])
-			case -4:
-				l = uint(script[off+3])<<24 | uint(script[off+2])<<16 | uint(script[off+1])<<8 | uint(script[off])
-			default:
-				return count + 1
-			}
-			off += -op.length
-			dataLen, ok := checkedUintToInt(l)
-			if !ok || dataLen > len(script[off:]) || dataLen < 0 {
-				return count + 1
-			}
-			i += 1 - op.length + dataLen
-		}
-	}
-	return count
 }
 
 // parseScript preparses the script in bytes into a list of parsedOpcodes while
@@ -308,22 +264,12 @@ func asSmallInt(op *opcode) int {
 // signature operations in the script provided by pops. If precise mode is
 // requested then we attempt to count the number of operations for a multisig
 // op. Otherwise we use the maximum.
-//
-// OP_CHECKSIGMLDSA44 counts only under ScriptEnableMLDSA44. Before that it is
-// an unknown opcode, which has always counted as 0, and a transaction's
-// declared SigOpCount is checked for equality against this function - so
-// counting it unconditionally would retroactively invalidate any historical
-// spend carrying 0xa6 in an unexecuted branch.
-func getSigOpCount(pops []parsedOpcode, precise bool, flags ScriptFlags) int {
+func getSigOpCount(pops []parsedOpcode, precise bool) int {
 	nSigs := 0
 	for i, pop := range pops {
 		switch pop.opcode.value {
 		case OpCheckSig, OpCheckSigVerify, OpCheckSigECDSA:
 			nSigs++
-		case OpCheckSigMLDSA44:
-			if flags&ScriptEnableMLDSA44 != 0 {
-				nSigs++
-			}
 		case OpCheckMultiSig, OpCheckMultiSigVerify, OpCheckMultiSigECDSA:
 			// If we are being precise then look for familiar
 			// patterns for multisig, for now all we recognize is
@@ -352,7 +298,7 @@ func GetSigOpCount(script []byte) int {
 	// Don't check error since parseScript returns the parsed-up-to-error
 	// list of pops.
 	pops, _ := ParseScript(script)
-	return getSigOpCount(pops, false, ScriptNoFlags)
+	return getSigOpCount(pops, false)
 }
 
 // GetPreciseSigOpCount returns the number of signature operations in
@@ -360,30 +306,17 @@ func GetSigOpCount(script []byte) int {
 // Pay-To-Script-Hash script in order to find the precise number of signature
 // operations in the transaction. If the script fails to parse, then the count
 // up to the point of failure is returned.
-//
-// It counts under ScriptNoFlags; use GetPreciseSigOpCountWithFlags where the
-// flags of the block being validated are known.
 func GetPreciseSigOpCount(scriptSig []byte, scriptPubKey *externalapi.ScriptPublicKey) int {
-	return GetPreciseSigOpCountWithFlags(scriptSig, scriptPubKey, ScriptNoFlags)
-}
-
-// GetPreciseSigOpCountWithFlags is GetPreciseSigOpCount under the given script
-// flags, which decide whether OP_CHECKSIGMLDSA44 is a signature operation.
-func GetPreciseSigOpCountWithFlags(scriptSig []byte, scriptPubKey *externalapi.ScriptPublicKey, flags ScriptFlags) int {
 	// Don't check error since parseScript returns the parsed-up-to-error
 	// list of pops.
 	pops, _ := ParseScript(scriptPubKey.Script)
-	return getPreciseSigOpCountFromParsedScript(scriptSig, pops, flags)
+	return GetPreciseSigOpCountFromParsedScript(scriptSig, pops)
 }
 
 func GetPreciseSigOpCountFromParsedScript(scriptSig []byte, pops []parsedOpcode) int {
-	return getPreciseSigOpCountFromParsedScript(scriptSig, pops, ScriptNoFlags)
-}
-
-func getPreciseSigOpCountFromParsedScript(scriptSig []byte, pops []parsedOpcode, flags ScriptFlags) int {
 	// Treat non P2SH transactions as normal.
 	if !isScriptHash(pops) {
-		return getSigOpCount(pops, true, flags)
+		return getSigOpCount(pops, true)
 	}
 	// The public key script is a pay-to-script-hash, so parse the signature
 	// script to get the final item. Scripts that fail to fully parse count
@@ -412,7 +345,7 @@ func getPreciseSigOpCountFromParsedScript(scriptSig []byte, pops []parsedOpcode,
 	// dictate signature operations are counted up to the first parse
 	// failure.
 	shPops, _ := ParseScript(shScript)
-	return getSigOpCount(shPops, true, flags)
+	return getSigOpCount(shPops, true)
 }
 
 // IsUnspendable returns whether the passed public key script is unspendable, or

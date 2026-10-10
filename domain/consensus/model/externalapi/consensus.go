@@ -73,10 +73,6 @@ type Consensus interface {
 	// commitment in the pruning point's own header - i.e. whether this node's UTXO set, and the
 	// balances and transaction verdicts derived from it, can be trusted to agree with the network.
 	UTXOSetHealth() (*UTXOSetHealth, error)
-	// CheckUTXOHealth reports whether the pruning point UTXO set this node would serve hashes to the
-	// UTXO commitment in pruningPointHash's header. It returns ruleerrors.ErrWrongPruningPointHash when
-	// pruningPointHash is not the current pruning point. See ServedUTXOSetHealth.
-	CheckUTXOHealth(pruningPointHash *DomainHash) (*ServedUTXOSetHealth, error)
 	ResolveBlockStatus(blockHash *DomainHash, useSeparateStagingAreaPerBlock bool) (BlockStatus, error)
 	RepairBlockStatuses() error
 	RepairDisqualifiedTipChains() (uint64, error)

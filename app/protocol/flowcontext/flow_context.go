@@ -103,6 +103,14 @@ func (f *FlowContext) IsNearlySynced() (bool, error) {
 	return f.Domain().Consensus().IsNearlySynced()
 }
 
+// NoteBlockReceived tells the connection manager a block arrived, so the
+// addpeer list is not retried while blocks keep coming.
+func (f *FlowContext) NoteBlockReceived() {
+	if f.connectionManager != nil {
+		f.connectionManager.NoteBlockReceived()
+	}
+}
+
 // SetOnNewBlockTemplateHandler sets the onNewBlockTemplateHandler handler
 func (f *FlowContext) SetOnNewBlockTemplateHandler(onNewBlockTemplateHandler OnNewBlockTemplateHandler) {
 	f.onNewBlockTemplateHandler = onNewBlockTemplateHandler

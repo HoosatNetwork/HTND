@@ -64,8 +64,6 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 	allEntries := make([]*appmessage.UTXOsByAddressesEntry, 0, len(getUTXOsByAddressesRequest.Addresses))
 
 	var reusableHexBuffer []byte
-	budget := newUTXOResponseBudget()
-	defer func() { logTruncatedUTXOResponse(budget, "GetUTXOsByAddresses", len(allEntries)) }()
 
 	for _, addressString := range getUTXOsByAddressesRequest.Addresses {
 		address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
@@ -80,15 +78,6 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			errorMessage.Error = appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
 			return errorMessage, nil
 		}
-		var scriptHex string
-		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
-		if scriptHex == "" {
-			continue
-		}
-		limit, fits := budget.limitFor(addressString, scriptHex, getUTXOsByAddressesRequest.Limit)
-		if !fits {
-			break
-		}
 
 		utxoOutpointEntryPairsBuffer := memory.Malloc[utxoindex.UTXOPair](1000)
 		if utxoOutpointEntryPairsBuffer == nil {
@@ -97,7 +86,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -107,7 +96,6 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			}
 			return nil, err
 		}
-		read := len(utxoOutpointEntryPairs)
 		// The index says which outpoints belong to the address; consensus says which of them exist and
 		// what they are. Handing out a coin consensus does not hold gives the wallet a transaction every
 		// node will refuse.
@@ -118,8 +106,13 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			return nil, err
 		}
 		rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the response")
-		budget.spend(addressString, scriptHex, getUTXOsByAddressesRequest.Limit, limit, read, len(utxoOutpointEntryPairs))
 		if len(utxoOutpointEntryPairs) == 0 {
+			memory.Free(utxoOutpointEntryPairsBuffer)
+			continue
+		}
+		var scriptHex string
+		reusableHexBuffer, scriptHex = encodeHexString(reusableHexBuffer, scriptPublicKey.Script)
+		if scriptHex == "" {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
 		}

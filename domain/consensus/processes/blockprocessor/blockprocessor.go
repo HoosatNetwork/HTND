@@ -1,7 +1,6 @@
 package blockprocessor
 
 import (
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
@@ -15,7 +14,6 @@ import (
 type blockProcessor struct {
 	genesisHash        *externalapi.DomainHash
 	powScores          []uint64
-	hardForkGates      *dagconfig.HardForkGates
 	targetTimePerBlock []time.Duration
 	maxBlockLevel      int
 	databaseContext    model.DBManager
@@ -56,7 +54,6 @@ type blockProcessor struct {
 func New(
 	genesisHash *externalapi.DomainHash,
 	powScores []uint64,
-	hardForkGates *dagconfig.HardForkGates,
 	targetTimePerBlock []time.Duration,
 	maxBlockLevel int,
 	databaseContext model.DBManager,
@@ -92,7 +89,6 @@ func New(
 	return &blockProcessor{
 		genesisHash:           genesisHash,
 		powScores:             powScores,
-		hardForkGates:         hardForkGates,
 		targetTimePerBlock:    targetTimePerBlock,
 		maxBlockLevel:         maxBlockLevel,
 		databaseContext:       databaseContext,

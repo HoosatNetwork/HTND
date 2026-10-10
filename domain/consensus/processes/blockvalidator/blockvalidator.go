@@ -1,7 +1,6 @@
 package blockvalidator
 
 import (
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"math/big"
 	"time"
 
@@ -26,7 +25,6 @@ type blockValidator struct {
 	timestampDeviationTolerance       int
 	targetTimePerBlock                []time.Duration
 	POWScores                         []uint64
-	hardForkGates                     *dagconfig.HardForkGates
 	maxBlockLevel                     int
 	pastMedianTimeValidationTolerance int
 
@@ -68,7 +66,6 @@ func New(powMax *big.Int,
 	timestampDeviationTolerance int,
 	targetTimePerBlock []time.Duration,
 	powScores []uint64,
-	hardForkGates *dagconfig.HardForkGates,
 	maxBlockLevel int,
 	pastMedianTimeValidationTolerance int,
 
@@ -109,7 +106,6 @@ func New(powMax *big.Int,
 		mergeSetSizeLimit:          mergeSetSizeLimit,
 		maxBlockParents:            maxBlockParents,
 		POWScores:                  powScores,
-		hardForkGates:              hardForkGates,
 		maxBlockLevel:              maxBlockLevel,
 
 		timestampDeviationTolerance:       timestampDeviationTolerance,

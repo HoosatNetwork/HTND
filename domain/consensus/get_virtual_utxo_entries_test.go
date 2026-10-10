@@ -90,25 +90,6 @@ func TestGetVirtualUTXOEntries(t *testing.T) {
 			}
 		}
 
-		// These coins are still in the virtual UTXO cache, because accepting the blocks put them
-		// there. Preferring must still describe them as virtual does. Reusing the caller's entry
-		// when the stored bytes match is pinned on a cleared cache in the consensus state store tests.
-		reused, _, ok, err := tc.(*testConsensus).GetVirtualUTXOEntriesPreferring(outpoints, want, time.Second)
-		if err != nil || !ok {
-			t.Fatalf("preferring lookup: ok=%t err=%+v", ok, err)
-		}
-		if len(reused) != len(outpoints) {
-			t.Fatalf("preferring lookup answered %d outpoints, %d were asked about", len(reused), len(outpoints))
-		}
-		for i := range reused {
-			switch {
-			case want[i] == nil && reused[i] != nil:
-				t.Fatalf("outpoint %d was never held by virtual but got an entry", i)
-			case want[i] != nil && (reused[i] == nil || !reused[i].Equal(want[i])):
-				t.Fatalf("outpoint %d is held by virtual; got %v, want %v", i, reused[i], want[i])
-			}
-		}
-
 		if entries, _, ok, err := tc.GetVirtualUTXOEntries(nil, time.Second); err != nil || !ok || len(entries) != 0 {
 			t.Fatalf("no outpoints must be answered with no entries: %v %t %+v", entries, ok, err)
 		}

@@ -45,6 +45,10 @@ type ConnectionManager struct {
 
 	resetLoopChan chan struct{}
 	loopTicker    *time.Ticker
+
+	addPeers    []string
+	lastBlockAt time.Time
+	lastBlockMu sync.Mutex
 }
 
 // New instantiates a new instance of a ConnectionManager
@@ -65,6 +69,8 @@ func New(cfg *config.Config, netAdapter *netadapter.NetAdapter, addressManager *
 	if len(cfg.ConnectPeers) > 0 {
 		connectPeers = cfg.ConnectPeers
 	}
+	c.addPeers = append([]string(nil), connectPeers...)
+	c.lastBlockAt = time.Now()
 
 	c.maxIncoming = cfg.MaxInboundPeers
 	c.targetOutgoing = cfg.TargetOutboundPeers
@@ -106,6 +112,58 @@ func (c *ConnectionManager) initiateConnection(address string) error {
 	return c.netAdapter.P2PConnect(address)
 }
 
+// NoteBlockReceived records that a block arrived. The addpeer list is left
+// alone while blocks keep coming.
+func (c *ConnectionManager) NoteBlockReceived() {
+	c.lastBlockMu.Lock()
+	c.lastBlockAt = time.Now()
+	c.lastBlockMu.Unlock()
+}
+
+// reconnectAddPeersIfStarved goes back to the addpeer list when nobody has
+// given a block for a minute. The list is not only for startup.
+func (c *ConnectionManager) reconnectAddPeersIfStarved() {
+	if len(c.addPeers) == 0 {
+		return
+	}
+	c.lastBlockMu.Lock()
+	last := c.lastBlockAt
+	c.lastBlockMu.Unlock()
+	if last.IsZero() || time.Since(last) < time.Minute {
+		return
+	}
+
+	log.Infof("no block for %s, reconnecting the addpeer list", time.Since(last).Round(time.Second))
+	c.lastBlockMu.Lock()
+	c.lastBlockAt = time.Now()
+	c.lastBlockMu.Unlock()
+
+	connected := map[string]struct{}{}
+	for _, conn := range c.netAdapter.P2PConnections() {
+		if conn.NetAddress() == nil {
+			continue
+		}
+		connected[conn.NetAddress().TCPAddress().String()] = struct{}{}
+	}
+
+	for _, address := range c.addPeers {
+		if _, ok := connected[address]; ok {
+			log.Infof("addpeer %s is already connected", address)
+			continue
+		}
+		c.connectionRequestsLock.Lock()
+		delete(c.activeRequested, address)
+		c.pendingRequested[address] = &connectionRequest{
+			address:     address,
+			isPermanent: true,
+		}
+		c.connectionRequestsLock.Unlock()
+		if err := c.initiateConnection(address); err != nil {
+			log.Infof("could not connect to addpeer %s: %s", address, err)
+		}
+	}
+}
+
 const connectionsLoopInterval = 30 * time.Second
 
 func (c *ConnectionManager) connectionsLoop() {
@@ -119,6 +177,8 @@ func (c *ConnectionManager) connectionsLoop() {
 		connSet := convertToSet(connections)
 
 		c.checkRequestedConnections(connSet)
+
+		c.reconnectAddPeersIfStarved()
 
 		c.checkOutgoingConnections(connSet)
 

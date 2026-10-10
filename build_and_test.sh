@@ -7,7 +7,7 @@ go version
 export PATH="$(go env GOPATH)/bin:$PATH"
 
 go mod download
-GOTOOLCHAIN=go1.27.1 go install $FLAGS honnef.co/go/tools/cmd/staticcheck@latest
+go install $FLAGS honnef.co/go/tools/cmd/staticcheck@latest
 
 UNFORMATTED=$(find . -type f -name '*.go' -not -path './vendor/*' -exec gofmt -l {} +)
 test -z "${UNFORMATTED}"
@@ -34,16 +34,18 @@ then
   exit 1
 fi
 
-# The hardfork activation gates in domain/dagconfig/params.go are vars only so that tests can
-# exercise a rule that is otherwise unreachable. Nothing in production may assign to one: a gate
-# flipped at runtime would activate a consensus rule that the network has not agreed to.
+# The hardfork activation gates are vars only so that tests can exercise a rule that is otherwise
+# unreachable. Nothing in production may assign to one or call the test-only setter: a gate flipped
+# at runtime would activate a consensus rule that the network has not agreed to, which is the exact
+# failure this whole mechanism exists to make impossible.
 HARDFORK_GATE_WRITES=$(find . -type f -name '*.go' -not -name '*_test.go' -not -path './vendor/*' \
-  -exec grep -Hn -E 'dagconfig\.(StrictUTXOCommitment|StrictMinersViewFields|RefuseMismatchedImport|ValidateHeaderBits|ValidateIBDPruningList|OffsetModeValueChecks)Version[[:space:]]*=[^=]' {} + \
+  -not -path './domain/consensus/utils/hardforks/*' \
+  -exec grep -Hn -E 'hardforks\.(SetForTest|[A-Za-z]+Version[[:space:]]*=[^=])' {} + \
   | grep -v -E '^[^:]*:[0-9]+:[[:space:]]*//' || true)
 if [ -n "${HARDFORK_GATE_WRITES}" ]
 then
-  echo "Production code assigns to a hardfork activation gate."
-  echo "Gates may only be changed by editing their declaration in domain/dagconfig/params.go:"
+  echo "Production code assigns to a hardfork activation gate, or calls hardforks.SetForTest."
+  echo "Gates may only be changed by editing their declaration in the hardforks package:"
   echo "${HARDFORK_GATE_WRITES}"
   exit 1
 fi
@@ -52,11 +54,10 @@ staticcheck -checks SA4006,SA4008,SA4009,SA4010,SA5003,SA1004,SA1014,SA1021,SA10
 
 go build $FLAGS -o htnd .
 
-# Foztor - it's going to take a while to fix the tests up...
-# if [ -n "${NO_PARALLEL}" ]
-# then
-  # go test -timeout 40m -p 1 -parallel=1 $FLAGS ./...
-# else
-  # # Cap package parallelism to keep memory under control on GHA runners
-  # go test -timeout 40m -p 4 $FLAGS ./...
-# fi
+if [ -n "${NO_PARALLEL}" ]
+then
+  go test -timeout 40m -p 1 -parallel=1 $FLAGS ./...
+else
+  # Cap package parallelism to keep memory under control on GHA runners
+  go test -timeout 40m -p 4 $FLAGS ./...
+fi

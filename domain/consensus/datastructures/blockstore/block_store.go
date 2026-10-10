@@ -8,7 +8,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/lrucache"
-	"github.com/HoosatNetwork/HTND/v2/util/memory"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
 )
@@ -17,39 +16,21 @@ var bucketName = []byte("blocks")
 
 // blockStore represents a store of blocks
 type blockStore struct {
-	shardID model.StagingShardID
-	lock    sync.Mutex
-	// cache holds blocks serialized, outside the Go heap, with each block's PoW hash as the entry's
-	// meta. It used to hold decoded blocks, bounded only by entry count; once ML-DSA-44 transactions
-	// arrived - ~3.7 KB of signature and public key per input - 10,000 cached testnet blocks were over
-	// 3 GB of decoded objects, the live heap sat at GOMEMLIMIT, and the garbage collector took ~60% of
-	// the CPU during virtual resolution. See lrucache.OffHeap.
-	//
-	// The PoW hash is not part of DbBlock, so it does not survive serialization, and the cache is the
-	// only place it outlives the block's arrival. It must come back with every cache hit: relay will
-	// not announce a block without one (relayBlock), and a peer that receives a relayed block without
-	// one bans the connection (handleRelayInvsFlow). A block read from the database has none, as
-	// before.
-	cache *lrucache.OffHeap[string]
-	// existsCache remembers blocks HasBlock found in the database, without their bodies. HasBlock
-	// asks about the key only, so answering it needs neither the block nor a slot in cache.
-	existsCache *lrucache.LRUCache[struct{}]
+	shardID     model.StagingShardID
+	lock        sync.Mutex
+	cache       *lrucache.LRUCache[*externalapi.DomainBlock]
 	countCached uint64
 	bucket      model.DBBucket
 	countKey    model.DBKey
 }
 
-// New instantiates a new BlockStore. Its block cache holds at most cacheSize blocks whose serialized
-// sizes add up to at most cacheByteBudget bytes.
-func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, cacheByteBudget int,
-	preallocate bool,
-) (model.BlockStore, error) {
+// New instantiates a new BlockStore
+func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, preallocate bool) (model.BlockStore, error) {
 	blockStore := &blockStore{
-		shardID:     staging.GenerateShardingID(),
-		cache:       lrucache.NewOffHeap[string](cacheSize, cacheByteBudget, preallocate),
-		existsCache: lrucache.New[struct{}](cacheSize, preallocate),
-		bucket:      prefixBucket.Bucket(bucketName),
-		countKey:    prefixBucket.Key([]byte("blocks-count")),
+		shardID:  staging.GenerateShardingID(),
+		cache:    lrucache.New[*externalapi.DomainBlock](cacheSize, preallocate),
+		bucket:   prefixBucket.Bucket(bucketName),
+		countKey: prefixBucket.Key([]byte("blocks-count")),
 	}
 
 	err := blockStore.initializeCount(dbContext)
@@ -116,40 +97,12 @@ func (bs *blockStore) block(dbContext model.DBReader, stagingShard *blockStaging
 		return block.Clone(), nil
 	}
 
-	return bs.committedBlock(dbContext, blockHash, true)
-}
-
-// BlockWithoutCaching gets a committed block without adding it to the block cache. It is the read
-// for callers that do not hold the consensus lock.
-//
-// Block puts a block it read from the database into the cache. Without the lock, a commit that
-// deletes the block (pruning) can land between that read and the Add: the commit removes the cache
-// entry, and the Add then puts the deleted block back. HasBlock answers from the cache first, so
-// consensus would see a pruned body as present until it was evicted. Not caching closes that
-// window, and keeps a scan over every stored block from evicting the blocks consensus is using.
-func (bs *blockStore) BlockWithoutCaching(dbContext model.DBReader, blockHash *externalapi.DomainHash) (
-	*externalapi.DomainBlock, error,
-) {
-	return bs.committedBlock(dbContext, blockHash, false)
-}
-
-// committedBlock reads a block from the cache, or from the database on a miss, adding it to the cache
-// when addToCache is set.
-func (bs *blockStore) committedBlock(dbContext model.DBReader, blockHash *externalapi.DomainHash, addToCache bool) (
-	*externalapi.DomainBlock, error,
-) {
-	var cachedBlock *externalapi.DomainBlock
-	hit, err := bs.cache.Decode(blockHash, func(blockBytes []byte, powHash string) error {
-		var err error
-		cachedBlock, err = bs.deserializeBlock(blockBytes)
-		if err != nil {
-			return err
-		}
-		cachedBlock.PoWHash = powHash
-		return nil
-	})
-	if hit {
-		return cachedBlock, err
+	bs.lock.Lock()
+	blockCached, ok := bs.cache.Get(blockHash)
+	bs.lock.Unlock()
+	if ok && blockCached != nil {
+		// log.Infof("Block found %s from cache", blockHash)
+		return blockCached.Clone(), nil
 	}
 
 	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
@@ -157,15 +110,15 @@ func (bs *blockStore) committedBlock(dbContext model.DBReader, blockHash *extern
 		return nil, err
 	}
 
-	// The decoded block is not cached, so the caller can own it without a clone.
+	// log.Infof("Block found %s from DB", blockHash)
 	blockDeserialized, err := bs.deserializeBlock(blockBytes)
 	if err != nil {
 		return nil, err
 	}
-	if addToCache {
-		bs.cache.Add(blockHash, blockBytes, blockDeserialized.PoWHash)
-	}
-	return blockDeserialized, nil
+	bs.lock.Lock()
+	bs.cache.Add(blockHash, blockDeserialized)
+	bs.lock.Unlock()
+	return blockDeserialized.Clone(), nil
 }
 
 // HasBlock returns whether a block with a given hash exists in the store.
@@ -176,54 +129,26 @@ func (bs *blockStore) HasBlock(dbContext model.DBReader, stagingArea *model.Stag
 		return true, nil
 	}
 
-	return bs.committedHasBlock(dbContext, blockHash, true)
-}
-
-// HasBlockWithoutCaching reports whether a committed block exists without remembering the answer in
-// existsCache, for callers that do not hold the consensus lock.
-//
-// A commit removes a deleted block from the caches before its database transaction is applied
-// (staging.CommitAllChanges commits every shard, then the transaction). A lock-free reader checking
-// the database in that gap still finds the key, and remembering it would leave the deleted block in
-// existsCache, reported present to consensus until evicted. Reading both caches is safe: the block
-// cache has its own lock, and existsCache is used only under the store's lock.
-func (bs *blockStore) HasBlockWithoutCaching(dbContext model.DBReader, blockHash *externalapi.DomainHash) (bool, error) {
-	return bs.committedHasBlock(dbContext, blockHash, false)
-}
-
-// committedHasBlock answers HasBlock from the caches, or from the database on a miss, remembering a
-// found block in existsCache when addToCache is set.
-func (bs *blockStore) committedHasBlock(dbContext model.DBReader, blockHash *externalapi.DomainHash, addToCache bool) (
-	bool, error,
-) {
+	bs.lock.Lock()
 	cachedHas := bs.cache.Has(blockHash)
-	if !cachedHas {
-		bs.lock.Lock()
-		_, cachedHas = bs.existsCache.Get(blockHash)
-		bs.lock.Unlock()
-	}
+	bs.lock.Unlock()
 	if cachedHas {
 		return true, nil
 	}
 
-	// A found block is remembered in existsCache, by callers holding the consensus lock, so consensus
-	// asking about the same block again is a hit. Only the key is remembered: no caller of HasBlock
-	// uses the block, so there is nothing to copy or deserialize, and no block cache slot to take from
-	// a block that is in use.
-	has, err := dbContext.Has(bs.hashAsKey(blockHash))
-	// A database fault is an error, not a missing block.
-	if err != nil {
-		return false, err
-	}
-	if !has {
+	blockBytes, err := dbContext.Get(bs.hashAsKey(blockHash))
+	if err != nil || blockBytes == nil {
 		return false, nil
 	}
 
-	if addToCache {
-		bs.lock.Lock()
-		bs.existsCache.Add(blockHash, struct{}{})
-		bs.lock.Unlock()
+	blockDeserialized, err := bs.deserializeBlock(blockBytes)
+	if err != nil {
+		return false, err
 	}
+
+	bs.lock.Lock()
+	bs.cache.Add(blockHash, blockDeserialized)
+	bs.lock.Unlock()
 	return true, nil
 }
 
@@ -245,9 +170,8 @@ func (bs *blockStore) Blocks(dbContext model.DBReader, stagingArea *model.Stagin
 // Delete deletes the block associated with the given blockHash
 func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) {
 	stagingShard := bs.stagingShard(stagingArea)
-	bs.cache.Remove(blockHash)
 	bs.lock.Lock()
-	bs.existsCache.Remove(blockHash)
+	bs.cache.Remove(blockHash)
 	bs.lock.Unlock()
 
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
@@ -257,11 +181,9 @@ func (bs *blockStore) Delete(stagingArea *model.StagingArea, blockHash *external
 	stagingShard.toDelete[*blockHash] = struct{}{}
 }
 
-// serializeBlockOffHeap serializes block into a buffer outside the Go heap, for the commit to write
-// to the database and then hand to the cache. With ML-DSA-44 inputs a testnet block is ~250 KB that
-// would otherwise be serialized onto the heap. See lrucache.MarshalOffHeap.
-func (bs *blockStore) serializeBlockOffHeap(block *externalapi.DomainBlock) (*memory.Block[byte], error) {
-	return lrucache.MarshalOffHeap(serialization.DomainBlockToDbBlock(block))
+func (bs *blockStore) serializeBlock(block *externalapi.DomainBlock) ([]byte, error) {
+	dbBlock := serialization.DomainBlockToDbBlock(block)
+	return dbBlock.MarshalVT()
 }
 
 func (bs *blockStore) deserializeBlock(blockBytes []byte) (*externalapi.DomainBlock, error) {
@@ -358,5 +280,7 @@ func (bs *blockStore) AllBlockHashesIterator(dbContext model.DBReader) (model.Bl
 }
 
 func (bs *blockStore) CacheLen() int {
+	bs.lock.Lock()
+	defer bs.lock.Unlock()
 	return bs.cache.Len()
 }

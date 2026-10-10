@@ -153,9 +153,6 @@ message HoosatdMessage {
 
     GetFeeEstimateRequestMessage getFeeEstimateRequest = 1106;
     GetFeeEstimateResponseMessage getFeeEstimateResponse = 1107;
-
-    GetWalletUtxosRequestMessage getWalletUtxosRequest = 1108;
-    GetWalletUtxosResponseMessage getWalletUtxosResponse = 1109;
   }
 }
 

@@ -132,11 +132,3 @@ func (tx *LevelDBTransaction) Cursor(bucket *database.Bucket) (database.Cursor, 
 
 	return tx.db.Cursor(bucket)
 }
-
-// CursorBounds begins a cursor over bucket limited to full keys in [lower, upper).
-func (tx *LevelDBTransaction) CursorBounds(bucket *database.Bucket, lower, upper []byte) (database.Cursor, error) {
-	if tx.isClosed {
-		return nil, errors.New("cannot open a cursor from a closed transaction")
-	}
-	return tx.db.CursorBounds(bucket, lower, upper)
-}

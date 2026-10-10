@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +21,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/HoosatNetwork/HTND/v2/util/network"
-	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/jessevdk/go-flags"
@@ -61,7 +61,7 @@ const (
 	defaultErrLogFilename      = "htnd_err.log"
 	defaultTargetOutboundPeers = 8
 	defaultMaxInboundPeers     = 500
-	defaultBanDuration         = time.Hour * 24
+	defaultBanDuration         = time.Minute * 120
 	defaultBanThreshold        = 100
 	// DefaultConnectTimeout is the default connection timeout when dialing
 	DefaultConnectTimeout = time.Second * 30
@@ -74,8 +74,6 @@ const (
 	blockMaxMassMax              = 10_000_000
 	defaultMinRelayTxFee         = 1e-5 // 1 sompi per byte
 	defaultMaxOrphanTransactions = 100
-	// defaultInputMinAgeDAA matches the mempool's and htnwallet's default.
-	defaultInputMinAgeDAA = 1000
 	// DefaultMaxOrphanTxSize is the default maximum size for an orphan transaction
 	DefaultMaxOrphanTxSize        = 100_000
 	defaultSigCacheMaxSize        = 100_000
@@ -141,7 +139,7 @@ type Flags struct {
 	ProxyUser                       string        `long:"proxyuser" description:"Username for proxy server"`
 	ProxyPass                       string        `long:"proxypass" default-mask:"-" description:"Password for proxy server"`
 	DbType                          string        `long:"dbtype" description:"Database backend to use for the Block DAG"`
-	Profile                         string        `long:"profile" description:"Enable HTTP profiling on the given port (all interfaces) or host:port, e.g. 127.0.0.1:6061 -- NOTE port must be between 1024 and 65535"`
+	Profile                         string        `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
 	LogLevel                        string        `short:"d" long:"loglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                            bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
 	MinRelayTxFee                   float64       `long:"minrelaytxfee" description:"The minimum transaction fee in HTN/kB to be considered a non-zero fee."`
@@ -163,22 +161,18 @@ type Flags struct {
 	AllowSubmitBlockWhenNotSynced   bool          `long:"allow-submit-block-when-not-synced" hidden:"true" description:"Allow the node to accept blocks from RPC while not synced (this flag is mainly used for testing)"`
 	EnableSanityCheckPruningUTXOSet bool          `long:"enable-sanity-check-pruning-utxo" hidden:"true" description:"When moving the pruning point - check that the utxo set matches the utxo commitment"`
 	EnableUTXODebugDiagnostics      bool          `long:"enable-utxo-debug-diagnostics" hidden:"true" description:"At startup, run the expensive [UTXO-DEBUG] pruning-point/virtual-UTXO-set self-consistency checks and root-disqualification bisection (each pass can take 15-20+ minutes on a mature chain). Off by default - only for actively investigating a UTXO commitment mismatch."`
-	MuHashJournal                   string        `long:"muhash-journal" hidden:"true" description:"Append a JSONL record of every element added to or removed from each block's UTXO multiset (MuHash) to this file, for analyzing UTXO commitment mismatches with cmd/muhashjournal. Also records block templates, so run it on the miner too. Off by default."`
 	RepairBlockStatuses             bool          `long:"repair-block-statuses" hidden:"true" description:"At startup, re-mark every block that is neither invalid nor header-only as UTXO-valid, to recover a node that has disqualified its whole chain. Walks every block in the store before the node starts serving RPC, so on a mature or archival node it delays startup by a long time. Off by default - ask for it when recovering."`
 	RepairMissingMultisets          bool          `long:"repair-missing-multisets" hidden:"true" description:"At startup, re-mark for verification any UTXO-valid block reachable from a virtual tip that has no stored multiset (a state --repair-block-statuses, or a similar incident, can leave behind), so the normal resolve path re-derives it. Fixes a node stuck unable to build any further block template with 'Multiset <hash> does not exist in db'. Off by default - ask for it when recovering, do not leave it on every boot."`
-	EnableAutoExodusExportOnPruning bool          `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
-	AutoExodusExportDir             string        `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
 	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
-	ShutdownOnDisqualifiedStreak    bool          `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified tip chains after a consecutive streak"`
+	ShutdownOnDisqualifiedStreak    bool          `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified chains."`
+	AllowMismatchedPruningUTXO      bool          `long:"allow-mismatched-pruning-utxo" description:"Allow importing and serving a pruning-point coin set that does not match the block header."`
+	AllowIBDFromUnverifiedPeer      bool          `long:"allow-ibd-from-unverified-peer" description:"Allow coin-set download from a peer that did not advertise a clean floor."`
+	CoreNode                        bool          `long:"core-node" description:"Kept for old scripts. Does not isolate the node."`
 
 	// Compound transaction rate limiting flags
 	MaxCompoundTxPerMinute    uint64 `long:"max-compound-tx-per-minute" description:"Maximum compound transactions per address per minute" default:"10"`
 	CompoundTxRateLimitWindow uint64 `long:"compound-tx-ratelimit-window" description:"Rate limit window in minutes" default:"1"`
 	CompoundTxInputsThreshold uint64 `long:"compound-tx-inputs-threshold" description:"Minimum inputs to consider transaction as compound" default:"21"`
-
-	// Mempool policy: see mempool.checkInputMinAge.
-	InputMinAgeDAA            uint64  `long:"input-min-age-daa" description:"Refuse to accept or relay transactions with an input younger than this many DAA score units (counted after coinbase maturity for coinbase outputs), or spending outputs of unconfirmed transactions (0 = consensus rules only)" default:"1000"`
-	CoinbaseReorgSafetyMargin *uint64 `long:"coinbase-reorg-safety-margin" hidden:"true" description:"Deprecated alias of --input-min-age-daa; when given, it overrides it"`
 
 	// Wallet freezing flags
 	FrozenAddresses []string `long:"freeze-address" description:"Address to freeze (can be specified multiple times)"`
@@ -280,7 +274,6 @@ func defaultFlags() *Flags {
 		MaxOrphanTxs:                      defaultMaxOrphanTransactions,
 		SigCacheMaxSize:                   defaultSigCacheMaxSize,
 		MinRelayTxFee:                     defaultMinRelayTxFee,
-		InputMinAgeDAA:                    defaultInputMinAgeDAA,
 		ServiceOptions:                    &ServiceOptions{},
 		ProtocolVersion:                   defaultProtocolVersion,
 		DisableIBDTimeout:                 defaultDisableIBDTimeout,
@@ -462,10 +455,6 @@ func LoadConfig() (*Config, error) {
 	// means each individual piece of serialized data does not have to
 	// worry about changing names per network and such.
 	cfg.AppDir = filepath.Join(cfg.AppDir, cfg.NetParams().Name)
-	if cfg.AutoExodusExportDir == "" {
-		cfg.AutoExodusExportDir = filepath.Join(cfg.AppDir, "exodus-auto-export")
-	}
-	cfg.AutoExodusExportDir = cleanAndExpandPath(cfg.AutoExodusExportDir)
 
 	// Logs directory is usually under the home directory, unless otherwise specified
 	if cfg.LogDir == "" {
@@ -491,10 +480,12 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Validate the profile port or address
+	// Validate profile port number
 	if cfg.Profile != "" {
-		if _, err := profiling.ListenAddress(cfg.Profile); err != nil {
-			err := errors.Errorf("%s: %s", funcName, err)
+		profilePort, err := strconv.Atoi(cfg.Profile)
+		if err != nil || profilePort < 1024 || profilePort > 65535 {
+			str := "%s: The profile port must be between 1024 and 65535"
+			err := errors.Errorf(str, funcName)
 			fmt.Fprintln(os.Stderr, err)
 			fmt.Fprintln(os.Stderr, usageMessage)
 			return nil, err
@@ -594,8 +585,6 @@ func LoadConfig() (*Config, error) {
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, err
 	}
-
-	applyDeprecatedFlagAliases(cfg.Flags)
 
 	// Validate the the minrelaytxfee.
 	cfg.MinRelayTxFee, err = util.NewAmount(cfg.Flags.MinRelayTxFee)
@@ -733,13 +722,4 @@ func createDefaultConfigFile(destinationPath string) error {
 	_, err = dest.WriteString(sampleConfig)
 
 	return err
-}
-
-// applyDeprecatedFlagAliases copies flags given under a former name onto their current one.
-func applyDeprecatedFlagAliases(cfgFlags *Flags) {
-	// --coinbase-reorg-safety-margin was the name of --input-min-age-daa while it covered coinbase
-	// inputs only.
-	if cfgFlags.CoinbaseReorgSafetyMargin != nil {
-		cfgFlags.InputMinAgeDAA = *cfgFlags.CoinbaseReorgSafetyMargin
-	}
 }

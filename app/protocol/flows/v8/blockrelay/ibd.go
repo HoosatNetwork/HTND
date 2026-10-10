@@ -44,6 +44,7 @@ type IBDContext interface {
 	UnsetIBDRunning()
 	IsRecoverableError(err error) bool
 	AddressManager() *addressmanager.AddressManager
+	NoteBlockReceived()
 }
 
 type handleIBDFlow struct {
@@ -230,17 +231,12 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 		// 	}
 		// }
 
-		if flow.Config().NetParams().DisallowDirectBlocksOnTopOfGenesis && !flow.Config().AllowSubmitBlockWhenNotSynced {
-			isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
-			if err != nil {
-				return err
-			}
-
-			if isGenesisVirtualSelectedParent {
-				log.Infof("Cannot IBD to %s because it won't change the pruning point. The node needs to IBD "+
-					"to the recent pruning point before normal operation can resume.", relayBlockHash)
-				return nil
-			}
+		isGenesisVirtualSelectedParent, err := flow.isGenesisVirtualSelectedParent()
+		if err != nil {
+			return err
+		}
+		if isGenesisVirtualSelectedParent {
+			log.Infof("Virtual selected parent is genesis; continuing header/body catch-up to %s", relayBlockHash)
 		}
 
 		err = flow.syncPruningPointFutureHeaders(
@@ -273,6 +269,7 @@ func (flow *handleIBDFlow) runIBD(block *externalapi.DomainBlock) error {
 		}
 	}
 
+	log.Infof("sync finished; node is following the tip")
 	log.Infof("Finished syncing blocks up to %s", relayBlockHash)
 
 	return nil
@@ -1008,16 +1005,48 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 		return err
 	}
 
-	err = flow.fetchIBDBlockBatches(hashes, getIBDBatchSize(), func(batch []*externalapi.DomainHash,
-		receivedBlocks map[externalapi.DomainHash]*externalapi.DomainBlock,
-	) error {
-		// [UTXO-DEBUG] Times local validation+insertion separately from the network wait, which
-		// fetchIBDBlockBatches reports.
+	ibdBatchSize := getIBDBatchSize()
+	// Allocate the map once with the maximum capacity needed.
+	// This prevents the map from having to dynamically grow and wait for the damn GC to arrive
+	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, ibdBatchSize)
+	for offset := 0; offset < len(hashes); offset += ibdBatchSize {
+		// Re-check if we're nearly synced at the start of each batch to update the updateVirtual flag
+		// This allows the node to transition from non-nearly-synced to nearly-synced during IBD
+
+		var hashesToRequest []*externalapi.DomainHash
+		if offset+ibdBatchSize < len(hashes) {
+			hashesToRequest = hashes[offset : offset+ibdBatchSize]
+		} else {
+			hashesToRequest = hashes[offset:]
+		}
+
+		// Cache to store received blocks for this batch only
+		clear(receivedBlocks) // Re-use is better than re-allocation :)
+
+		// [UTXO-DEBUG] Times the network request+wait phase separately from local processing below,
+		// so a slow IBD run shows directly whether the bottleneck is waiting on the peer (this
+		// timer) or validating/inserting blocks locally (the processing timer further down).
+		networkPhaseStart := time.Now()
+
+		// Request blocks
+		err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(hashesToRequest))
+		if err != nil {
+			return err
+		}
+		// Dequeue all messages for the requested hashes
+		retryCount, err := flow.receiveRequestedIBDBlocks(hashesToRequest, receivedBlocks, networkPhaseStart)
+		if err != nil {
+			return err
+		}
+
+		networkPhaseElapsed := time.Since(networkPhaseStart)
+
+		// [UTXO-DEBUG] Times local validation+insertion separately from the network phase above.
 		processingPhaseStart := time.Now()
 		processedInBatch := 0
 
 		// Process blocks in the order of expected hashes
-		for _, expectedHash := range batch {
+		for _, expectedHash := range hashesToRequest {
 			updateVirtual, err := flow.Domain().Consensus().IsNearlySynced()
 			if err != nil {
 				return err
@@ -1038,6 +1067,7 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			if err != nil {
 				return err
 			}
+			flow.NoteBlockReceived()
 
 			highestProcessedDAAScore = block.Header.DAAScore()
 			flow.blocksProcessedSinceLast++
@@ -1050,16 +1080,17 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 			}
 		}
 
-		if processingPhaseElapsed := time.Since(processingPhaseStart); processingPhaseElapsed > 2*time.Second {
-			log.Debugf("[UTXO-DEBUG] IBD batch of %d blocks: local processing=%s (%d blocks processed)",
-				len(batch), processingPhaseElapsed, processedInBatch)
+		// [UTXO-DEBUG] Only logged when a batch is slow enough to matter, so this stays quiet
+		// during normal operation - directly answers "is IBD slow because of network wait or
+		// local processing" instead of continuing to guess between the two.
+		if processingPhaseElapsed := time.Since(processingPhaseStart); networkPhaseElapsed > 2*time.Second ||
+			processingPhaseElapsed > 2*time.Second {
+			log.Debugf("[UTXO-DEBUG] IBD batch of %d blocks (%d retries): network wait=%s, local "+
+				"processing=%s (%d blocks processed)", len(hashesToRequest), retryCount,
+				networkPhaseElapsed, processingPhaseElapsed, processedInBatch)
 		}
 
-		progressReporter.reportProgress(len(batch), highestProcessedDAAScore)
-		return nil
-	})
-	if err != nil {
-		return err
+		progressReporter.reportProgress(len(hashesToRequest), highestProcessedDAAScore)
 	}
 
 	log.Infof("Start resolving virtual")
@@ -1071,65 +1102,6 @@ func (flow *handleIBDFlow) syncMissingBlockBodies(highHash *externalapi.DomainHa
 	}
 
 	return flow.OnNewBlockTemplate()
-}
-
-// fetchIBDBlockBatches downloads hashes from the peer in batches of batchSize and hands each batch,
-// in order, to process. The next batch is requested as soon as the current one has fully arrived and
-// before process runs, so the peer serves and sends it while this node validates the current one.
-// Requesting only after processing left the two sides taking turns: the IBD log alternated ~3s of
-// insertion with 2-6s of nothing while the syncer fetched the next batch under its consensus lock.
-//
-// At most two batches are outstanding, which the incoming route's capacity holds with room to spare.
-// Waiting for the current batch to complete before asking for the next keeps every block that arrives
-// during a receive belonging to that receive's batch, so receiveRequestedIBDBlocks' retry and
-// filtering logic is unchanged. A batch left in flight when process fails is harmless: the error
-// ends the flow, which closes the connection and the route with it.
-func (flow *handleIBDFlow) fetchIBDBlockBatches(hashes []*externalapi.DomainHash, batchSize int,
-	process func(batch []*externalapi.DomainHash, receivedBlocks map[externalapi.DomainHash]*externalapi.DomainBlock) error,
-) error {
-	if len(hashes) == 0 {
-		return nil
-	}
-	batchAt := func(offset int) []*externalapi.DomainHash {
-		return hashes[offset:min(offset+batchSize, len(hashes))]
-	}
-
-	// Allocate the map once with the maximum capacity needed.
-	receivedBlocks := make(map[externalapi.DomainHash]*externalapi.DomainBlock, batchSize)
-	err := flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(batchAt(0)))
-	if err != nil {
-		return err
-	}
-	for offset := 0; offset < len(hashes); offset += batchSize {
-		batch := batchAt(offset)
-		clear(receivedBlocks)
-
-		// [UTXO-DEBUG] With the next batch requested ahead, this is only the wait the processing of the
-		// previous batch did not cover, so a large value here means the peer, not this node, is the
-		// bottleneck.
-		networkPhaseStart := time.Now()
-		retryCount, err := flow.receiveRequestedIBDBlocks(batch, receivedBlocks, networkPhaseStart)
-		if err != nil {
-			return err
-		}
-		if networkPhaseElapsed := time.Since(networkPhaseStart); networkPhaseElapsed > 2*time.Second {
-			log.Debugf("[UTXO-DEBUG] IBD batch of %d blocks (%d retries): network wait=%s",
-				len(batch), retryCount, networkPhaseElapsed)
-		}
-
-		if nextOffset := offset + batchSize; nextOffset < len(hashes) {
-			err = flow.outgoingRoute.Enqueue(appmessage.NewMsgRequestIBDBlocks(batchAt(nextOffset)))
-			if err != nil {
-				return err
-			}
-		}
-
-		err = process(batch, receivedBlocks)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // maxIBDBlockRequestRetries bounds how many times one IBD body batch is re-requested from a peer that
@@ -1336,4 +1308,27 @@ func (flow *handleIBDFlow) disconnectPeerDueToLowRate() error {
 	}
 	flow.peer.Connection().Disconnect()
 	return protocolerrors.Errorf(true, "Peer disconnected due to consistently low IBD rate")
+}
+
+func (flow *handleIBDFlow) localFloorIsGenesis() bool {
+	pp, err := flow.Domain().Consensus().PruningPoint()
+	if err != nil || pp == nil {
+		return true
+	}
+	if flow.Config() != nil && flow.Config().ActiveNetParams != nil &&
+		pp.Equal(flow.Config().ActiveNetParams.GenesisHash) {
+		return true
+	}
+	return false
+}
+
+func (flow *handleIBDFlow) peerMaySupplyCoinSet() bool {
+	// An empty node must keep retrying the coin set. Forbidding the only
+	// --connect peer after UnexpectedPruningPoint left fresh IBD dead.
+	if flow.peer.IBDCoinSetForbidden() && !flow.localFloorIsGenesis() {
+		return false
+	}
+	// Advertised /utxobase:ok/ is not a permission. Import still has to
+	// reproduce the header commitment.
+	return true
 }

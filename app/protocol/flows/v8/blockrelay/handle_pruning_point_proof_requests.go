@@ -3,6 +3,7 @@ package blockrelay
 import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
@@ -35,6 +36,10 @@ func HandlePruningPointProofRequests(context PruningPointProofRequestsContext, i
 			return err
 		}
 		pruningPointProofMessage := appmessage.DomainPruningPointProofToMsgPruningPointProof(pruningPointProof)
+		if pruningPointProofTooLarge(pruningPointProofMessage) {
+			log.Warnf("not sending pruning point proof to %s: it exceeds 1 GiB", peer)
+			return protocolerrors.New(false, "pruning point proof exceeds 1 GiB")
+		}
 		err = outgoingRoute.Enqueue(pruningPointProofMessage)
 		if err != nil {
 			return err

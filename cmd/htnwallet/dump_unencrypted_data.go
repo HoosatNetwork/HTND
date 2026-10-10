@@ -28,10 +28,6 @@ func dumpUnencryptedData(conf *dumpUnencryptedDataConfig) error {
 	if len(conf.Password) == 0 {
 		conf.Password = keys.GetPassword("Password:")
 	}
-	if keysFile.IsImported() {
-		return dumpImportedWallet(keysFile, conf.Password)
-	}
-
 	mnemonics, err := keysFile.DecryptMnemonics(conf.Password)
 	if err != nil {
 		return err
@@ -59,23 +55,6 @@ func dumpUnencryptedData(conf *dumpUnencryptedDataConfig) error {
 	}
 
 	fmt.Printf("Minimum number of signatures: %d\n", keysFile.MinimumSignatures)
-	return nil
-}
-
-func dumpImportedWallet(keysFile *keys.File, password string) error {
-	secret, err := keysFile.DecryptImportedSecret(password)
-	if err != nil {
-		return err
-	}
-
-	switch keysFile.Imported.Type {
-	case libhtnwallet.ImportedKeyTypePrivateKey:
-		fmt.Printf("Private key:\n%s\n\n", secret)
-	case libhtnwallet.ImportedKeyTypeHTNWebWallet:
-		fmt.Printf("Web wallet secret (%d imported keys):\n%s\n\n", len(keysFile.Imported.Keys), secret)
-	default:
-		fmt.Printf("Imported %s secret:\n%s\n\n", keysFile.Imported.Type, secret)
-	}
 	return nil
 }
 

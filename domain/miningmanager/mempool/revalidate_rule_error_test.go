@@ -40,7 +40,7 @@ func TestRevalidateRemovesTransactionFailingWithRuleError(t *testing.T) {
 
 		setUp := func() (*mempool, *externalapi.DomainTransactionID) {
 			tcAsConsensus = tc
-			mp := New(configWithoutInputMinAge(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
+			mp := New(DefaultConfig(tc.DAGParams()), consensusreference.NewConsensusReference(&tcAsConsensusPointer)).(*mempool)
 			funding := testutils.CreateTransactionWithOutput(100_000)
 			if err := testutils.StageTransactionOutputsToVirtual(tc, funding, 0); err != nil {
 				t.Fatalf("StageTransactionOutputsToVirtual: %+v", err)

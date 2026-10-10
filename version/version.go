@@ -11,7 +11,7 @@ const validCharacters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
 
 const (
 	appMajor uint = 2
-	appMinor uint = 18
+	appMinor uint = 19
 	appPatch uint = 0
 )
 
@@ -28,7 +28,9 @@ const shortCommitLength = 9
 // toolchain stamps into the binary at build time. The commit must be resolved at
 // build time: a running node generally has neither the source repository nor a
 // git binary available, so it cannot be looked up on startup.
-var appBuild = ""
+var appBuild = "cryptonoob-rc"
+
+const stampedVersion = "2.19-cryptonoob-rc"
 
 var version = "" // string used for memoization of version
 
@@ -90,6 +92,9 @@ func buildCommit() string {
 
 // Version returns the application version as a properly formed string
 func Version() string {
+	if stampedVersion != "" {
+		return stampedVersion
+	}
 	return version
 }
 

@@ -75,7 +75,8 @@ type Config struct {
 	// IsArchival tells the consensus if it should not prune old blocks
 	IsArchival bool
 	// EnableSanityCheckPruningUTXOSet checks the full pruning point utxo set against the commitment at every pruning movement
-	EnableSanityCheckPruningUTXOSet bool
+	EnableSanityCheckPruningUTXOSet             bool
+	RefuseMismatchedImportedPruningPointUTXOSet bool
 	// EnableUTXODebugDiagnostics runs the expensive [UTXO-DEBUG] startup self-consistency checks
 	// (VerifyCurrentPruningPointUTXOSet, FindAndReproduceRootDisqualification) - each pass can take
 	// 15-20+ minutes on a mature chain. Off by default; only for actively investigating a UTXO
@@ -96,10 +97,6 @@ type Config struct {
 	// of these blocks. A recovery step to ask for, like RepairBlockStatuses, not something to run on
 	// every boot.
 	RepairMissingMultisets bool
-	// EnableAutoExodusExportOnPruning exports an acceptance-data Exodus bundle after a pruning point moves.
-	// AutoExodusExportDir is the parent directory for those best-effort diagnostic bundles.
-	EnableAutoExodusExportOnPruning bool
-	AutoExodusExportDir             string
 
 	SkipAddingGenesis bool
 
@@ -127,10 +124,6 @@ type Config struct {
 	// OnDisqualifiedBlockStreak is called once, under the consensus lock, when the streak reaches
 	// MaxConsecutiveDisqualifiedBlocks. It must not block or call back into consensus.
 	OnDisqualifiedBlockStreak func(streak int, lastBlock *externalapi.DomainHash)
-	// OnDisqualification is called, under the consensus lock and before the status is committed,
-	// every time a block is disqualified from the chain - by failing UTXO verification itself or by
-	// inheriting its selected parent's disqualification - with a human-readable reason. Nil disables it.
-	OnDisqualification func(blockHash *externalapi.DomainHash, reason string)
 }
 
 // Factory instantiates new Consensuses
@@ -175,13 +168,18 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	// Set the global flag for using hoohash C library
 	pow.SetUseHoohashCLibrary(config.UseHoohashCLibrary)
 
-	// Each consensus owns a copy of the gates, shared by every process that reads one, so a
-	// consensus built for this network cannot have its rules changed through the caller's Config.
-	hardForkGates := config.HardForkGates
 	dbManager := consensusdatabase.New(db)
 	prefixBucket := consensusdatabase.MakeBucket(dbPrefix.Serialize())
 
-	largeCacheDivisor := parseLargeCacheDivisor(os.Getenv("HTND_LARGE_CACHE_DIVISOR"))
+	largeCacheDivisor := 1
+	if v := os.Getenv("HTND_LARGE_CACHE_DIVISOR"); v != "" {
+		if divisor, err := strconv.Atoi(v); err == nil && divisor > 0 {
+			if divisor > 50 {
+				divisor = 50
+			}
+			largeCacheDivisor = divisor << 20
+		}
+	}
 
 	pruningDepth := config.PruningDepth()
 	if pruningDepth > uint64(math.MaxInt) {
@@ -209,9 +207,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	// Data Structures
 	mergeDepthRootStore := mergedepthrootstore.New(prefixBucket, 1000, preallocateCaches)
 	daaWindowStore := daawindowstore.New(prefixBucket, 50_000, preallocateCaches)
-	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, acceptanceDataCacheBytes, preallocateCaches)
-	blockCacheBytes := parseBlockCacheBytes(os.Getenv("HTND_BLOCK_CACHE_MB"))
-	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, blockCacheBytes, preallocateCaches)
+	acceptanceDataStore := acceptancedatastore.New(prefixBucket, 1000, preallocateCaches)
+	blockStore, err := blockstore.New(dbManager, prefixBucket, 10_000, preallocateCaches)
 	if err != nil {
 		return nil, false, err
 	}
@@ -287,8 +284,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		pastMedianTimeManager,
 		ghostdagDataStore,
 		daaBlocksStore,
-		txMassCalculator,
-		&config.Params)
+		txMassCalculator)
 	difficultyManager := f.difficultyConstructor(
 		dbManager,
 		ghostdagManager,
@@ -384,22 +380,13 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		mergeDepthRootStore,
 		windowHeapSliceStore,
 		5000,
-		config.EnableSanityCheckPruningUTXOSet,
-		config.POWScores,
-		&hardForkGates,
-		config.OnDisqualification,
-		config.UnpricedTransactionFeeAllowance)
+		config.RefuseMismatchedImportedPruningPointUTXOSet,
+		config.POWScores)
 	if err != nil {
 		return nil, false, err
 	}
 
 	var c *consensus
-	var autoExodusExport func(*externalapi.DomainHash)
-	if config.EnableAutoExodusExportOnPruning {
-		autoExodusExport = func(pruningPoint *externalapi.DomainHash) {
-			go c.exportPruningPointExodusBundle(pruningPoint, config.AutoExodusExportDir, config.Name)
-		}
-	}
 
 	pruningManager := pruningmanager.New(
 		dbManager,
@@ -425,15 +412,13 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.IsArchival,
 		genesisHash,
 		config.POWScores,
-		&hardForkGates,
-		config.PruningPointCheckpoint,
 		config.FinalityDepthForBlockVersion,
 		config.PruningDepthForBlockVersion,
 		config.DeletionDepth,
 		config.DataRetentionDuration,
 		config.PruningInterval,
 		config.EnableSanityCheckPruningUTXOSet,
-		autoExodusExport,
+		nil,
 		config.K,
 		config.DifficultyAdjustmentWindowSize,
 		config.TargetTimePerBlock,
@@ -464,7 +449,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.TimestampDeviationTolerance,
 		config.TargetTimePerBlock,
 		config.POWScores,
-		&hardForkGates,
 		config.MaxBlockLevel,
 		config.PastMedianTimeValidationTolerance,
 
@@ -536,7 +520,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	blockProcessor := blockprocessor.New(
 		genesisHash,
 		config.POWScores,
-		&hardForkGates,
 		config.TargetTimePerBlock,
 		config.MaxBlockLevel,
 		dbManager,
@@ -606,7 +589,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		targetTimePerBlock:             config.TargetTimePerBlock,
 		difficultyAdjustmentWindowSize: config.DifficultyAdjustmentWindowSize,
 		powScores:                      config.POWScores,
-		hardForkGates:                  &hardForkGates,
 
 		blockProcessor:        blockProcessor,
 		blockBuilder:          blockBuilder,
@@ -676,32 +658,9 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
-	// Startup integrity check, independent of any in-flight IBD: this node's on-disk pruning-point
-	// list must contain the pinned checkpoint once its own pruning point has passed it. A node that
-	// isn't currently syncing could otherwise run indefinitely on silently corrupted or tampered data
-	// without this ever being caught - IBD-time enforcement (pruningPointMeetsCheckpoint) only runs
-	// during an active sync. See VerifyPruningPointCheckpointOnDisk's comment.
-	err = pruningManager.VerifyPruningPointCheckpointOnDisk()
-	if err != nil {
-		return nil, false, err
-	}
-
 	// If the virtual moved before shutdown but the pruning point hasn't, we
 	// move it if needed.
 	stagingArea := model.NewStagingArea()
-	err = pruningManager.UpdatePruningPointByVirtual(stagingArea)
-	if err != nil {
-		return nil, false, err
-	}
-
-	err = staging.CommitAllChanges(dbManager, stagingArea)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// If the virtual moved before shutdown but the pruning point hasn't, we
-	// move it if needed.
-	stagingArea = model.NewStagingArea()
 	err = pruningManager.UpdatePruningPointByVirtual(stagingArea)
 	if err != nil {
 		return nil, false, err
@@ -740,6 +699,20 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		return nil, false, err
 	}
 
+	health, err := c.UTXOSetHealth()
+	if err != nil {
+		return nil, false, err
+	}
+	if health != nil && health.Checked && !health.BaselineVerified {
+		log.Errorf("refusing to start: stored pruning-point set does not match the header. "+
+			"pruning point %s, stored multiset %s, header commitment %s. "+
+			"This datadir is not a consistent ledger. Remove it and sync from a peer whose set hashes to the commitment.",
+			health.PruningPoint, health.StoredMultiset, health.HeaderCommitment)
+		return nil, false, errors.Errorf("stored pruning-point set does not match the header commitment "+
+			"(pruning point %s, stored %s, header %s)",
+			health.PruningPoint, health.StoredMultiset, health.HeaderCommitment)
+	}
+
 	// [UTXO-DEBUG] Gated behind --enable-utxo-debug-diagnostics: each of these can take 15-20+
 	// minutes on a mature chain (multiple full UTXO-set scans), and produce the same result on every
 	// boot until the underlying data actually changes - not something to run unconditionally on
@@ -758,46 +731,6 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	}
 
 	return c, false, nil
-}
-
-// maxLargeCacheDivisor caps HTND_LARGE_CACHE_DIVISOR so a typo can't shrink the large caches to nothing.
-const maxLargeCacheDivisor = 50
-
-// parseLargeCacheDivisor returns the factor HTND_LARGE_CACHE_DIVISOR divides the pruning- and
-// finality-window cache sizes by: 1 when unset or invalid, otherwise the value capped at
-// maxLargeCacheDivisor. The value is used as-is - it once went through a leftover `<< 20` from when
-// the variable was a size in MiB, which made any setting divide the caches by over a million.
-func parseLargeCacheDivisor(value string) int {
-	if value == "" {
-		return 1
-	}
-	divisor, err := strconv.Atoi(value)
-	if err != nil || divisor <= 0 {
-		return 1
-	}
-	return min(divisor, maxLargeCacheDivisor)
-}
-
-// defaultBlockCacheMB is the default budget of the block store's cache, in MiB of serialized blocks.
-// The cache keeps them outside the Go heap (see blockstore), so this memory is not counted toward
-// GOMEMLIMIT and costs the garbage collector nothing, but it is still part of the process's resident
-// memory. Before ML-DSA-44 the cache's 10,000-block count limit alone kept it near 100 MB; with
-// ML-DSA inputs the same count held over 3 GB of decoded blocks on the heap.
-const defaultBlockCacheMB = 256
-
-// acceptanceDataCacheBytes is the budget of the acceptance data store's cache, in bytes of serialized
-// acceptance data kept outside the Go heap. Its 1,000-entry count limit was the only bound when the
-// cache held decoded values, and that alone came to ~300 MB on an ML-DSA testnet.
-const acceptanceDataCacheBytes = 128 << 20
-
-// parseBlockCacheBytes returns the block cache budget in bytes from HTND_BLOCK_CACHE_MB: the default
-// when unset or invalid, otherwise the value in MiB.
-func parseBlockCacheBytes(value string) int {
-	megabytes, err := strconv.Atoi(value)
-	if value == "" || err != nil || megabytes <= 0 {
-		megabytes = defaultBlockCacheMB
-	}
-	return megabytes << 20
 }
 
 func (f *factory) NewTestConsensus(config *Config, testName string) (

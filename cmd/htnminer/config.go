@@ -39,7 +39,7 @@ type configFlags struct {
 	Threads               *int     `short:"t" long:"threads" description:"Number of threads to use for CPU miner."`
 	MineWhenNotSynced     bool     `long:"mine-when-not-synced" description:"Mine even if the node is not synced with the rest of the network."`
 	Profile               string   `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
-	TargetBlocksPerSecond *float64 `long:"target-blocks-per-second" description:"Sets a maximum rate of mined blocks, spread evenly over time. 0 means no limit (default: 100)"`
+	TargetBlocksPerSecond *float64 `long:"target-blocks-per-second" description:"Sets a maximum block rate. 0 means no limit (The default one is 2 * target network block rate)"`
 	config.NetworkFlags
 }
 

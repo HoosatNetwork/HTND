@@ -52,7 +52,6 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 		return err
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 1")
 	// Checked before the status, because StatusInvalid is BlockStatus' zero value: GetBlockInfo
 	// returns a zero-valued BlockInfo for a block it does not have, so a block that is merely absent
 	// is indistinguishable here from one that was actually found to be invalid. Every other
@@ -64,7 +63,6 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 			"a block that is not in the consensus")
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 2")
 	if blockInfo.BlockStatus == externalapi.StatusInvalid {
 		return errors.Wrap(ErrBuildBlockVerboseDataInvalidBlock, "cannot build verbose data for "+
 			"invalid block")
@@ -80,7 +78,6 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 		return err
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 3")
 	block.VerboseData = &appmessage.RPCBlockVerboseData{
 		Hash:                blockHash.String(),
 		Difficulty:          ctx.GetDifficultyRatio(domainBlockHeader.Bits(), ctx.Config.ActiveNetParams),
@@ -97,7 +94,6 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 		block.VerboseData.SelectedParentHash = blockInfo.SelectedParent.String()
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 4")
 	// Get the block if we didn't receive it previously
 	if domainBlock == nil {
 		domainBlock, err = ctx.Domain.Consensus().GetBlockEvenIfHeaderOnly(blockHash)
@@ -106,12 +102,10 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 		}
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 5")
 	if domainBlock == nil && blockInfo.BlockStatus == externalapi.StatusHeaderOnly {
 		return nil
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 6")
 	transactionIDs := make([]string, len(domainBlock.Transactions))
 	for i, transaction := range domainBlock.Transactions {
 		transactionIDs[i] = consensushashing.TransactionID(transaction).String()
@@ -132,7 +126,6 @@ func (ctx *Context) PopulateRPCBlockWithVerboseData(block *appmessage.RPCBlock, 
 		}
 	}
 
-	// log.Debugf("PopulateRPCBlockWithVerboseData 7")
 	return nil
 }
 

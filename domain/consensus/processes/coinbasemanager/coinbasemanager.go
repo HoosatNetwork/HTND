@@ -584,6 +584,12 @@ func acceptanceDataFromArrayToMap(acceptanceData externalapi.AcceptanceData) map
 // should have. This is mainly used for determining how much the coinbase for
 // newly generated blocks awards as well as validating the coinbase for blocks
 // has the expected value.
+const emissionDAAOffset uint64 = 0
+
+func applyEmissionDAAOffset(blockDaaScore uint64) uint64 {
+	return blockDaaScore + emissionDAAOffset
+}
+
 func (c *coinbaseManager) CalcBlockSubsidy(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash, blockVersion uint16) (uint64, error) {
 	if blockHash.Equal(c.genesisHash) {
 		return c.subsidyGenesisReward, nil
@@ -592,6 +598,7 @@ func (c *coinbaseManager) CalcBlockSubsidy(stagingArea *model.StagingArea, block
 	if err != nil {
 		return 0, err
 	}
+	blockDaaScore = applyEmissionDAAOffset(blockDaaScore)
 	if blockDaaScore < c.deflationaryPhaseDaaScore {
 		return c.preDeflationaryPhaseBaseSubsidy, nil
 	}
@@ -609,6 +616,7 @@ func (c *coinbaseManager) CalcBlockSubsidy(stagingArea *model.StagingArea, block
 // are scaled by that version's target time per block. A version targeting 200ms therefore pays a
 // fifth of what a version targeting one second pays, for the same emission rate.
 func BlockSubsidy(params *dagconfig.Params, blockDAAScore uint64, blockVersion uint16) uint64 {
+	blockDAAScore = applyEmissionDAAOffset(blockDAAScore)
 	if blockDAAScore < params.DeflationaryPhaseDaaScore {
 		return params.PreDeflationaryPhaseBaseSubsidy
 	}

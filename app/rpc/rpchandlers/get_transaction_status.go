@@ -49,13 +49,6 @@ func HandleGetTransactionStatus(context *rpccontext.Context, _ *router.Router, r
 		return appmessage.NewGetTransactionStatusResponseMessage(appmessage.TransactionStatusPending, emptyHash, 0), nil
 	}
 
-	// A transaction accepted by a recent chain block is found from its acceptance data, without scanning
-	// every block this node holds. That is the transaction a wallet asks about: one it sent a minute
-	// ago, which left the mempool because a block carrying it was merged.
-	if acceptance := findRecentlyAcceptedTransaction(context, transactionID); acceptance != nil {
-		return transactionStatusResponse(context, acceptance)
-	}
-
 	emptyHash, _ := externalapi.NewDomainHashFromString("")
 	// Try to find block
 	block, err := context.Domain.Consensus().GetBlockByTransactionID(transactionID)

@@ -12,7 +12,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 )
 
 // ScriptFlags is a bitmask defining additional operations or tests that will be
@@ -29,14 +28,6 @@ const (
 	// NOTE: This flag is intentionally opt-in so that consensus validation can
 	// keep using ScriptNoFlags and preserve the current behavior.
 	ScriptEnableDisabledOpcodes ScriptFlags = 1 << 0
-
-	// ScriptEnableMLDSA44 activates OP_CHECKSIGMLDSA44 and lets its public key and
-	// signature pushes exceed MaxScriptElementSize (see isMLDSA44ElementSize).
-	// Without it, opcode 0xa6 fails as an unknown opcode exactly as it always has.
-	//
-	// Consensus sets it from dagconfig.HardForkGates.MLDSA44SignaturesBlockVersion only; see
-	// transactionValidator.scriptFlagsForDAAScore.
-	ScriptEnableMLDSA44 ScriptFlags = 1 << 1
 )
 
 const (
@@ -63,7 +54,6 @@ type Engine struct {
 	flags               ScriptFlags
 	sigCache            *SigCache
 	sigCacheECDSA       *SigCacheECDSA
-	mldsa44Cache        *MLDSA44Cache
 	sigHashReusedValues *consensushashing.SighashReusedValues
 	isP2SH              bool     // treat execution as pay-to-script-hash
 	savedFirstStack     [][]byte // stack from first script for ps2h scripts
@@ -124,8 +114,7 @@ func (vm *Engine) executeOpcode(pop *parsedOpcode) error {
 			return scriptError(ErrTooManyOperations, str)
 		}
 
-	} else if len(pop.data) > MaxScriptElementSize &&
-		!(vm.flags&ScriptEnableMLDSA44 != 0 && isMLDSA44ElementSize(len(pop.data))) {
+	} else if len(pop.data) > MaxScriptElementSize {
 		str := fmt.Sprintf("element size %d exceeds max allowed size %d",
 			len(pop.data), MaxScriptElementSize)
 		return scriptError(ErrElementTooBig, str)
@@ -416,33 +405,6 @@ func (vm *Engine) checkSignatureLengthECDSA(sig []byte) error {
 	return nil
 }
 
-func (vm *Engine) checkPubKeyEncodingMLDSA44(pubKey []byte) error {
-	if len(pubKey) == mldsa44.PublicKeySize {
-		return nil
-	}
-
-	return scriptError(ErrPubKeyFormat, "unsupported public key type")
-}
-
-func (vm *Engine) checkSignatureLengthMLDSA44(sig []byte) error {
-	if len(sig) != mldsa44.SignatureSize {
-		message := fmt.Sprintf("invalid signature length %d", len(sig))
-		return scriptError(ErrSigLength, message)
-	}
-	return nil
-}
-
-// isMLDSA44ElementSize reports whether a push of size bytes is one of the two
-// ML-DSA-44 elements that ScriptEnableMLDSA44 exempts from MaxScriptElementSize:
-// a public key, or a signature with its trailing sighash type byte.
-//
-// The exemption is by exact size rather than a raised limit so that the fork
-// admits these two elements and nothing else: every other push stays capped
-// at MaxScriptElementSize.
-func isMLDSA44ElementSize(size int) bool {
-	return size == mldsa44.PublicKeySize || size == mldsa44.SignatureSize+1
-}
-
 // getStack returns the contents of stack as a byte array bottom up
 func getStack(stack *stack) [][]byte {
 	array := make([][]byte, stack.Depth())
@@ -497,11 +459,10 @@ func (vm *Engine) SetAltStack(data [][]byte) {
 // transaction, and input index. The flags modify the behavior of the script
 // engine according to the description provided by each flag.
 func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, mldsa44Cache *MLDSA44Cache,
-	sighashReusedValues *consensushashing.SighashReusedValues,
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues,
 ) (*Engine, error) {
 	vm := &Engine{}
-	err := vm.Init(scriptPubKey, tx, txIdx, flags, sigCache, sigCacheECDSA, mldsa44Cache, sighashReusedValues)
+	err := vm.Init(scriptPubKey, tx, txIdx, flags, sigCache, sigCacheECDSA, sighashReusedValues)
 	if err != nil {
 		return nil, err
 	}
@@ -510,8 +471,7 @@ func NewEngine(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.Domain
 
 // init initializes the Engine with the provided parameters.
 func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalapi.DomainTransaction, txIdx int, flags ScriptFlags,
-	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, mldsa44Cache *MLDSA44Cache,
-	sighashReusedValues *consensushashing.SighashReusedValues,
+	sigCache *SigCache, sigCacheECDSA *SigCacheECDSA, sighashReusedValues *consensushashing.SighashReusedValues,
 ) error {
 	// The provided transaction input index must refer to a valid input.
 	if txIdx < 0 || txIdx >= len(tx.Inputs) {
@@ -533,7 +493,6 @@ func (vm *Engine) Init(scriptPubKey *externalapi.ScriptPublicKey, tx *externalap
 	vm.flags = flags
 	vm.sigCache = sigCache
 	vm.sigCacheECDSA = sigCacheECDSA
-	vm.mldsa44Cache = mldsa44Cache
 
 	if vm.scriptVersion > constants.MaxScriptPublicKeyVersion {
 		str := fmt.Sprintf("unsupported script public key version %d (max: %d)",

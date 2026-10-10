@@ -4,10 +4,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/pkg/errors"
@@ -47,20 +44,15 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
-	// Off for every block version before HardForkGates.MergeSetSizeLimitVersion: it had been
-	// disabled with no gate long enough that the existing chain may violate it.
-	if !isBlockWithTrustedData {
-		active, err := v.hardForkActiveFor(stagingArea, blockHash, v.hardForkGates.MergeSetSizeLimitVersion)
-		if err != nil {
-			return err
-		}
-		if active {
-			err = v.checkMergeSizeLimit(stagingArea, ghostdagData)
-			if err != nil {
-				return err
-			}
-		}
-	}
+	// DISABLED, not gated: no ticket, no recorded reason, and no activation version. It has been off
+	// long enough that the live chain may well contain blocks that violate it, so it cannot simply be
+	// switched on - it needs the same treatment as the four rules in the hardforks package: measure
+	// how much of the existing chain would fail, then gate it. Left as-is here rather than deleted so
+	// the check itself is not lost.
+	// err = v.checkMergeSizeLimit(stagingArea, ghostdagData)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// If needed - calculate reachability data right before calling CheckBoundedMergeDepth,
 	// since it's used to find a block's finality point.
@@ -77,21 +69,17 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		}
 	}
 
-	// Off before HardForkGates.IndirectParentsVersion. It was disabled over a performance concern
-	// ("think if there is a better way than the whole reachability") that was never measured, so
-	// the version it activates at is also where its cost first shows up.
-	if !isBlockWithTrustedData {
-		active, err := v.hardForkActiveFor(stagingArea, blockHash, v.hardForkGates.IndirectParentsVersion)
-		if err != nil {
-			return err
-		}
-		if active {
-			err = v.checkIndirectParents(stagingArea, blockHash, header)
-			if err != nil {
-				return err
-			}
-		}
-	}
+	// DISABLED, not gated. The original note is a performance concern ("think if there is a better
+	// way than the whole reachability"), not a correctness one, so unlike the checks below this may
+	// be a cost question rather than a compatibility question - but it has never been measured, and
+	// an unmeasured disabled consensus check is indistinguishable from a compatibility one.
+	// TODO: Think if there is better way to check for indirect parents than the whole reachability.
+	// if !isBlockWithTrustedData {
+	// 	err = v.checkIndirectParents(stagingArea, header)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	err = v.mergeDepthManager.CheckBoundedMergeDepth(stagingArea, blockHash, ghostdagData, header, isBlockWithTrustedData)
 	if err != nil {
@@ -104,67 +92,54 @@ func (v *blockValidator) ValidateHeaderInContext(stagingArea *model.StagingArea,
 		return err
 	}
 
-	// The four header-field checks below are each off before their own gate. Before it, a header's
-	// DAA score, blue work, blue score and pruning point are adopted as the peer claims them
-	// (HTN-006, HTN-001), and HTN-006 measured a 62.5% blue-score mismatch on the existing mainnet
-	// chain, so enabling any of them for existing versions would reject history. Blocks with trusted
-	// data are exempt: their GHOSTDAG and DAA data came with them rather than being computed here.
-	if !isBlockWithTrustedData {
-		err = v.checkGatedHeaderFields(stagingArea, blockHash, header, ghostdagData)
-		if err != nil {
-			return err
-		}
-	}
+	// The four checks below are DISABLED and NOT gated. Each is a real consensus check that this
+	// node does not perform, so each is a way two nodes can disagree, and none of them is safe to
+	// simply re-enable.
+	//
+	// The "enable these on block v6" note is stale: version 6 activated long ago (mainnet POWScores)
+	// and these are still off, so nothing about reaching v6 resolved the underlying problem. They
+	// are left here, labelled, rather than deleted - deleting them would lose the checks, and
+	// enabling them would reject history.
+	//
+	// The next step for any of them is the one the hardforks package exists for: measure how much of
+	// the existing chain fails the check, then gate it at a new block version. See HTN-006 for the
+	// blue-score/blue-work half, which measured a 62.5% mismatch rate - i.e. re-enabling those two
+	// today would reject the majority of the chain.
+	//
+	// if !isBlockWithTrustedData {
+
+	// DISABLED, not gated. Relates to HTN-006: a header's claimed DAA score is adopted unchecked.
+	// err = v.checkDAAScore(stagingArea, blockHash, header)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// DISABLED, not gated. HTN-006: IBD adopts the peer's header-claimed blue work without
+	// validation.
+	// err = v.checkBlueWork(stagingArea, ghostdagData, header)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// DISABLED, not gated. HTN-006: same for blue score; this is where the measured 62.5% mismatch
+	// rate would bite.
+	// err = v.checkHeaderBlueScore(stagingArea, ghostdagData, header)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// DISABLED, not gated. HTN-001 cites this exact line: nothing cross-checks a node's chosen
+	// pruning point, which is half of why two nodes with identical blocks could pick different ones.
+	// The original note reads "probably can never again be enabled" - if that is true it should be
+	// deleted with a recorded decision rather than left looking like a TODO. The import-time half of
+	// this question is gated at hardforks.ValidateIBDPruningListVersion.
+	// err = v.validateHeaderPruningPoint(stagingArea, blockHash)
+	// if err != nil {
+	// 	return err
+	// }
+	// }
 
 	return nil
-}
-
-// checkGatedHeaderFields runs each of the header-field checks whose HardForkGates version blockHash
-// has reached.
-func (v *blockValidator) checkGatedHeaderFields(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	header externalapi.BlockHeader, ghostdagData *externalapi.BlockGHOSTDAGData,
-) error {
-	checks := []struct {
-		activationVersion uint16
-		check             func() error
-	}{
-		{v.hardForkGates.HeaderDAAScoreVersion, func() error { return v.checkDAAScore(stagingArea, blockHash, header) }},
-		{v.hardForkGates.HeaderBlueWorkVersion, func() error { return v.checkBlueWork(ghostdagData, header) }},
-		{v.hardForkGates.HeaderBlueScoreVersion, func() error { return v.checkHeaderBlueScore(ghostdagData, header) }},
-		{v.hardForkGates.HeaderPruningPointVersion, func() error { return v.validateHeaderPruningPoint(stagingArea, blockHash, header) }},
-	}
-	for _, c := range checks {
-		active, err := v.hardForkActiveFor(stagingArea, blockHash, c.activationVersion)
-		if err != nil {
-			return err
-		}
-		if !active {
-			continue
-		}
-		err = c.check()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// hardForkActiveFor reports whether the rule gated at activationVersion applies to blockHash. The
-// version is derived from blockHash's selected parent's DAA score as this node computed it, never from
-// the header's version field, for the reason given on checkHeaderBits. A gate no network schedules is
-// answered without reading the DAG.
-func (v *blockValidator) hardForkActiveFor(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	activationVersion uint16,
-) (bool, error) {
-	if activationVersion == ^uint16(0) || blockHash.Equal(v.genesisHash) {
-		return false, nil
-	}
-	blockVersion, err := blockversion.OfSelectedParent(v.databaseContext, stagingArea,
-		v.ghostdagDataStores[0], v.daaBlocksStore, v.POWScores, blockHash)
-	if err != nil {
-		return false, err
-	}
-	return dagconfig.HardForkActive(activationVersion, blockVersion), nil
 }
 
 func (v *blockValidator) hasValidatedHeader(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
@@ -287,18 +262,22 @@ func (v *blockValidator) checkMergeSizeLimit(_ *model.StagingArea, ghostdagData 
 	return nil
 }
 
-// checkIndirectParents checks that the header's parents at every level are the ones this node builds
-// from its direct parents. The DAA score both inputs are keyed on is the one this node computed for
-// the block, the same one the block builder passes when it builds a template, never the header's.
-func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
-	header externalapi.BlockHeader,
-) error {
-	daaScore, err := v.daaBlocksStore.DAAScore(v.databaseContext, stagingArea, blockHash)
-	if err != nil {
-		return err
+func (v *blockValidator) blockVersionForDAAScore(daaScore uint64) uint16 {
+	var blockVersion uint16 = 1
+	for _, powScore := range v.POWScores {
+		if daaScore >= powScore {
+			blockVersion++
+		}
 	}
-	newBlockParents := constants.BlockVersionForDAAScore(v.POWScores, daaScore) >= 7
-	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, daaScore, header.DirectParents(), newBlockParents)
+	return blockVersion
+}
+
+func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, header externalapi.BlockHeader) error {
+	newBlockParents := false
+	if v.blockVersionForDAAScore(header.DAAScore()) >= 7 {
+		newBlockParents = true
+	}
+	expectedParents, err := v.blockParentBuilder.BuildParents(stagingArea, header.DAAScore(), header.DirectParents(), newBlockParents)
 	if err != nil {
 		return err
 	}
@@ -310,9 +289,7 @@ func (v *blockValidator) checkIndirectParents(stagingArea *model.StagingArea, bl
 	return nil
 }
 
-// checkDAAScore checks that the header's DAA score is the one this node computed from the block's
-// DAA window. It is exact: the slack of 10 the previously disabled version allowed was one-sided and
-// let a header claim any score above the real one.
+//lint:ignore U1000 check is intentionally disabled for now (see ValidateHeaderInContext).
 func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash,
 	header externalapi.BlockHeader,
 ) error {
@@ -320,28 +297,37 @@ func (v *blockValidator) checkDAAScore(stagingArea *model.StagingArea, blockHash
 	if err != nil {
 		return err
 	}
-	if header.DAAScore() != expectedDAAScore {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedDAAScore, "block DAA score of %d is not the expected value of %d",
-			header.DAAScore(), expectedDAAScore)
+	var threshold uint64 = 10
+	if header.DAAScore()+threshold < expectedDAAScore {
+		return errors.Wrapf(ruleerrors.ErrUnexpectedDAAScore, "block DAA score of %d is not the expected value of %d", header.DAAScore(), expectedDAAScore)
 	}
 	return nil
 }
 
-// checkBlueWork checks that the header's blue work is the blue work GHOSTDAG computed for the block.
-func (v *blockValidator) checkBlueWork(ghostdagData *externalapi.BlockGHOSTDAGData, header externalapi.BlockHeader) error {
-	if header.BlueWork().Cmp(ghostdagData.BlueWork()) != 0 {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueWork,
-			"block blue work of %d is not the expected value of %d", header.BlueWork(), ghostdagData.BlueWork())
-	}
-	return nil
-}
+// func (v *blockValidator) checkBlueWork(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
+// 	header externalapi.BlockHeader,
+// ) error {
+// 	expectedBlueWork := ghostdagData.BlueWork()
+// 	headerBlueWork := header.BlueWork()
 
-// checkHeaderBlueScore checks that the header's blue score is the blue score GHOSTDAG computed for
-// the block.
-func (v *blockValidator) checkHeaderBlueScore(ghostdagData *externalapi.BlockGHOSTDAGData, header externalapi.BlockHeader) error {
-	if header.BlueScore() != ghostdagData.BlueScore() {
-		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueScore,
-			"block blue score of %d is not the expected value of %d", header.BlueScore(), ghostdagData.BlueScore())
-	}
-	return nil
-}
+// 	if headerBlueWork.Cmp(expectedBlueWork) > 0 {
+// 		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueWork,
+// 			"block blue work %d is ahead of the expected blue work of %d",
+// 			headerBlueWork, expectedBlueWork)
+// 	}
+// 	return nil
+// }
+
+// func (v *blockValidator) checkHeaderBlueScore(_ *model.StagingArea, ghostdagData *externalapi.BlockGHOSTDAGData,
+// 	header externalapi.BlockHeader,
+// ) error {
+// 	expectedBlueScore := ghostdagData.BlueScore()
+// 	headerBlueScore := header.BlueScore()
+
+// 	if headerBlueScore > expectedBlueScore {
+// 		return errors.Wrapf(ruleerrors.ErrUnexpectedBlueScore,
+// 			"block blue score of %d is ahead of the expected blue score of %d",
+// 			headerBlueScore, expectedBlueScore)
+// 	}
+// 	return nil
+// }

@@ -114,6 +114,9 @@ func (s *gRPCServer) listenOn(listenAddr string) error {
 	})
 
 	log.Infof("%s Server listening on %s", s.name, listener.Addr())
+	if s.name == "P2P" {
+		log.Infof("node is up; asking peers for blocks, sync not finished")
+	}
 	return nil
 }
 

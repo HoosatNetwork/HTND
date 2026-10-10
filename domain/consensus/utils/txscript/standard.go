@@ -21,44 +21,41 @@ type ScriptClass byte
 
 // Classes of script payment known about in the blockDAG.
 const (
-	NonStandardTy       ScriptClass = iota // None of the recognized forms.
-	PubKeyTy                               // Pay to pubkey.
-	PubKeyECDSATy                          // Pay to pubkey ECDSA.
-	PubKeyHashTy                           // Pay to pubkey hash.
-	PubKeyHashECDSATy                      // Pay to pubkey hash ECDSA.
-	ScriptHashTy                           // Pay to script hash.
-	MultiSigTy                             // Pay to multisig (direct OP_CHECKMULTISIG script).
-	MultiSigECDSATy                        // Pay to multisig ECDSA (direct OP_CHECKMULTISIGECDSA script).
-	MultiSigPKHTy                          // Pay to P2PKH-style multisig (hash of multisig script).
-	MultiSigPKHECDSATy                     // Pay to P2PKH-style multisig ECDSA.
-	PubKeyHashMLDSA44Ty                    // Pay to pubkey hash ML-DSA-44.
+	NonStandardTy      ScriptClass = iota // None of the recognized forms.
+	PubKeyTy                              // Pay to pubkey.
+	PubKeyECDSATy                         // Pay to pubkey ECDSA.
+	PubKeyHashTy                          // Pay to pubkey hash.
+	PubKeyHashECDSATy                     // Pay to pubkey hash ECDSA.
+	ScriptHashTy                          // Pay to script hash.
+	MultiSigTy                            // Pay to multisig (direct OP_CHECKMULTISIG script).
+	MultiSigECDSATy                       // Pay to multisig ECDSA (direct OP_CHECKMULTISIGECDSA script).
+	MultiSigPKHTy                         // Pay to P2PKH-style multisig (hash of multisig script).
+	MultiSigPKHECDSATy                    // Pay to P2PKH-style multisig ECDSA.
 )
 
 // Script public key versions for address types.
 const (
-	addressPublicKeyScriptPublicKeyVersion            = 0
-	addressPublicKeyECDSAScriptPublicKeyVersion       = 0
-	addressPublicKeyHashScriptPublicKeyVersion        = 0
-	addressPublicKeyHashECDSAScriptPublicKeyVersion   = 0
-	addressPublicKeyHashMLDSA44ScriptPublicKeyVersion = 0
-	addressScriptHashScriptPublicKeyVersion           = 0
-	addressMultiSigScriptPublicKeyVersion             = 0
+	addressPublicKeyScriptPublicKeyVersion          = 0
+	addressPublicKeyECDSAScriptPublicKeyVersion     = 0
+	addressPublicKeyHashScriptPublicKeyVersion      = 0
+	addressPublicKeyHashECDSAScriptPublicKeyVersion = 0
+	addressScriptHashScriptPublicKeyVersion         = 0
+	addressMultiSigScriptPublicKeyVersion           = 0
 )
 
 // scriptClassToName houses the human-readable strings which describe each
 // script class.
 var scriptClassToName = []string{
-	NonStandardTy:       "nonstandard",
-	PubKeyTy:            "pubkey",
-	PubKeyECDSATy:       "pubkeyecdsa",
-	PubKeyHashTy:        "pubkeyhash",
-	PubKeyHashECDSATy:   "pubkeyhashecdsa",
-	ScriptHashTy:        "scripthash",
-	MultiSigTy:          "multisig",
-	MultiSigECDSATy:     "multisigecdsa",
-	MultiSigPKHTy:       "multisigpkh",
-	MultiSigPKHECDSATy:  "multisigpkhecdsa",
-	PubKeyHashMLDSA44Ty: "pubkeyhashmldsa44",
+	NonStandardTy:      "nonstandard",
+	PubKeyTy:           "pubkey",
+	PubKeyECDSATy:      "pubkeyecdsa",
+	PubKeyHashTy:       "pubkeyhash",
+	PubKeyHashECDSATy:  "pubkeyhashecdsa",
+	ScriptHashTy:       "scripthash",
+	MultiSigTy:         "multisig",
+	MultiSigECDSATy:    "multisigecdsa",
+	MultiSigPKHTy:      "multisigpkh",
+	MultiSigPKHECDSATy: "multisigpkhecdsa",
 }
 
 // String implements the Stringer interface by returning the name of
@@ -113,20 +110,6 @@ func isPayToPubkeyHashECDSA(pops []parsedOpcode) bool {
 		pops[2].opcode.value == OpData32 &&
 		pops[3].opcode.value == OpEqualVerify &&
 		pops[4].opcode.value == OpCheckSigECDSA
-}
-
-// isPayToPubkeyHashMLDSA44 returns true if the script passed is an ML-DSA-44
-// pay-to-pubkey-hash transaction, false otherwise.
-//
-// Hoosat P2PKH (ML-DSA-44) template:
-// OP_DUP OP_BLAKE2B <32-byte hash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44
-func isPayToPubkeyHashMLDSA44(pops []parsedOpcode) bool {
-	return len(pops) == 5 &&
-		pops[0].opcode.value == OpDup &&
-		pops[1].opcode.value == OpBlake2b &&
-		pops[2].opcode.value == OpData32 &&
-		pops[3].opcode.value == OpEqualVerify &&
-		pops[4].opcode.value == OpCheckSigMLDSA44
 }
 
 // isMultiSig returns true if the script passed is a direct multisig transaction,
@@ -301,8 +284,6 @@ func typeOfScript(pops []parsedOpcode) ScriptClass {
 		return PubKeyHashTy
 	case isPayToPubkeyHashECDSA(pops):
 		return PubKeyHashECDSATy
-	case isPayToPubkeyHashMLDSA44(pops):
-		return PubKeyHashMLDSA44Ty
 	case isScriptHash(pops):
 		return ScriptHashTy
 	case isMultiSig(pops):
@@ -348,10 +329,6 @@ func expectedInputs(pops []parsedOpcode, class ScriptClass) int {
 		return 2
 
 	case PubKeyHashECDSATy:
-		// P2PKH requires <sig> <pubkey> on the stack.
-		return 2
-
-	case PubKeyHashMLDSA44Ty:
 		// P2PKH requires <sig> <pubkey> on the stack.
 		return 2
 
@@ -456,9 +433,9 @@ func CalcScriptInfo(sigScript, scriptPubKey []byte, isP2SH bool) (*ScriptInfo, e
 		} else {
 			si.ExpectedInputs += shInputs
 		}
-		si.SigOps = getSigOpCount(shPops, true, ScriptNoFlags)
+		si.SigOps = getSigOpCount(shPops, true)
 	} else {
-		si.SigOps = getSigOpCount(scriptPubKeyPops, true, ScriptNoFlags)
+		si.SigOps = getSigOpCount(scriptPubKeyPops, true)
 	}
 
 	return si, nil
@@ -503,18 +480,6 @@ func payToPubKeyHashScriptECDSA(pubKeyHash []byte) ([]byte, error) {
 		AddData(pubKeyHash).
 		AddOp(OpEqualVerify).
 		AddOp(OpCheckSigECDSA).
-		Script()
-}
-
-// payToPubKeyHashScriptMLDSA44 creates a new script to pay a transaction output to a
-// 32-byte pubkey hash, spending via ML-DSA-44.
-func payToPubKeyHashScriptMLDSA44(pubKeyHash []byte) ([]byte, error) {
-	return NewScriptBuilder().
-		AddOp(OpDup).
-		AddOp(OpBlake2b).
-		AddData(pubKeyHash).
-		AddOp(OpEqualVerify).
-		AddOp(OpCheckSigMLDSA44).
 		Script()
 }
 
@@ -575,17 +540,6 @@ func PayToAddrScript(addr util.Address) (*externalapi.ScriptPublicKey, error) {
 			return nil, err
 		}
 		return &externalapi.ScriptPublicKey{Script: script, Version: addressPublicKeyHashECDSAScriptPublicKeyVersion}, err
-
-	case *util.AddressPublicKeyHashMLDSA44:
-		if addr == nil {
-			return nil, scriptError(ErrUnsupportedAddress,
-				nilAddrErrStr)
-		}
-		script, err := payToPubKeyHashScriptMLDSA44(addr.ScriptAddress())
-		if err != nil {
-			return nil, err
-		}
-		return &externalapi.ScriptPublicKey{Script: script, Version: addressPublicKeyHashMLDSA44ScriptPublicKeyVersion}, err
 
 	case *util.AddressScriptHash:
 		if addr == nil {
@@ -827,16 +781,6 @@ func ExtractScriptPubKeyAddress(scriptPubKey *externalapi.ScriptPublicKey, dagPa
 		// OP_DUP OP_BLAKE2B <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIGECDSA
 		// Therefore the pubkey hash is the 3rd item.
 		addr, err := util.NewAddressPublicKeyHashECDSAFromHash(pops[2].data, dagParams.Prefix)
-		if err != nil {
-			return scriptClass, nil, nil
-		}
-		return scriptClass, addr, nil
-
-	case PubKeyHashMLDSA44Ty:
-		// A pay-to-pubkey-hash ML-DSA-44 script is of the form:
-		// OP_DUP OP_BLAKE2B <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44
-		// Therefore the pubkey hash is the 3rd item.
-		addr, err := util.NewAddressPublicKeyHashMLDSA44FromHash(pops[2].data, dagParams.Prefix)
 		if err != nil {
 			return scriptClass, nil, nil
 		}

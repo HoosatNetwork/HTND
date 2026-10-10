@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 
@@ -37,7 +38,25 @@ func NewManager(cfg *config.Config, domain domain.Domain, netAdapter *netadapter
 	}
 
 	netAdapter.SetP2PRouterInitializer(manager.routerInitializer)
+	spawn("protocol-status", manager.statusLoop)
 	return &manager, nil
+}
+
+func (m *Manager) statusLoop() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		if m.isClosed.Load() == 1 {
+			return
+		}
+		knocks := bannedKnockCount.Swap(0)
+		peers := len(m.Peers())
+		if m.IsIBDRunning() {
+			log.Infof("node is syncing; %d peers connected; %d banned knocks in the last minute", peers, knocks)
+			continue
+		}
+		log.Infof("node is at the tip; %d peers connected; relaying; %d banned knocks in the last minute", peers, knocks)
+	}
 }
 
 // Close closes the protocol manager and waits until all p2p flows

@@ -15,39 +15,32 @@ import (
 )
 
 // CreateMnemonics generates `numKeys` number of mnemonics.
-//
-// mldsa44KeyPools holds an ML-DSA-44 key pool for each generated mnemonic, keyed by its extended public
-// key: its single-sig keys for a single-sig wallet, its multisig cosigner keys for a multisig one.
-func CreateMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword string, isMultisig bool) (
-	encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, mldsa44KeyPools map[string]*MLDSA44KeyPool, err error,
-) {
+func CreateMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword string, isMultisig bool) (encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error) {
 	mnemonics := make([]string, numKeys)
 	for i := range numKeys {
 		var err error
 		mnemonics[i], err = libhtnwallet.CreateMnemonic()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	}
 
 	return encryptedMnemonicExtendedPublicKeyPairs(params, mnemonics, cmdLinePassword, isMultisig)
 }
 
-// ImportMnemonics imports a `numKeys` of mnemonics. See CreateMnemonics for mldsa44KeyPools.
-func ImportMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword string, isMultisig bool) (
-	encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, mldsa44KeyPools map[string]*MLDSA44KeyPool, err error,
-) {
+// ImportMnemonics imports a `numKeys` of mnemonics.
+func ImportMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword string, isMultisig bool) (encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error) {
 	mnemonics := make([]string, numKeys)
 	for i := range numKeys {
 		fmt.Printf("Enter mnemonic #%d here:\n", i+1)
 		reader := bufio.NewReader(os.Stdin)
 		mnemonic, err := utils.ReadLine(reader)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		if !bip39.IsMnemonicValid(string(mnemonic)) {
-			return nil, nil, nil, errors.Errorf("mnemonic is invalid")
+			return nil, nil, errors.Errorf("mnemonic is invalid")
 		}
 
 		mnemonics[i] = string(mnemonic)
@@ -56,7 +49,7 @@ func ImportMnemonics(params *dagconfig.Params, numKeys uint32, cmdLinePassword s
 }
 
 func encryptedMnemonicExtendedPublicKeyPairs(params *dagconfig.Params, mnemonics []string, cmdLinePassword string, isMultisig bool) (
-	encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, mldsa44KeyPools map[string]*MLDSA44KeyPool, err error,
+	encryptedPrivateKeys []*EncryptedMnemonic, extendedPublicKeys []string, err error,
 ) {
 	password := []byte(cmdLinePassword)
 	if len(password) == 0 {
@@ -65,7 +58,7 @@ func encryptedMnemonicExtendedPublicKeyPairs(params *dagconfig.Params, mnemonics
 		confirmPassword := []byte(GetPassword("Confirm password:"))
 
 		if subtle.ConstantTimeCompare(password, confirmPassword) != 1 {
-			return nil, nil, nil, errors.New("Passwords are not identical")
+			return nil, nil, errors.New("Passwords are not identical")
 		}
 	}
 
@@ -75,27 +68,19 @@ func encryptedMnemonicExtendedPublicKeyPairs(params *dagconfig.Params, mnemonics
 	for _, mnemonic := range mnemonics {
 		extendedPublicKey, err := libhtnwallet.MasterPublicKeyFromMnemonic(params, mnemonic, isMultisig)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		extendedPublicKeys = append(extendedPublicKeys, extendedPublicKey)
 
 		encryptedPrivateKey, err := encryptMnemonic(mnemonic, password)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		encryptedPrivateKeys = append(encryptedPrivateKeys, encryptedPrivateKey)
 	}
 
-	mldsa44KeyPools = make(map[string]*MLDSA44KeyPool, len(mnemonics))
-	for i, mnemonic := range mnemonics {
-		mldsa44KeyPools[extendedPublicKeys[i]], err = NewMLDSA44KeyPool(mnemonic, libhtnwallet.DefaultMLDSA44KeyPoolSize, isMultisig)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
-
-	return encryptedPrivateKeys, extendedPublicKeys, mldsa44KeyPools, nil
+	return encryptedPrivateKeys, extendedPublicKeys, nil
 }
 
 func generateSalt() ([]byte, error) {

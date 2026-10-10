@@ -1,11 +1,9 @@
 package consensus
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -19,12 +17,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/v2/domain/exodus"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
-	"github.com/HoosatNetwork/HTND/v2/version"
 	"github.com/pkg/errors"
 )
 
@@ -42,11 +38,8 @@ type consensus struct {
 	difficultyAdjustmentWindowSize []int
 
 	// powScores is the network's activation table, kept so that a block version can be derived from
-	// a DAA score without going through the process-global (see dagconfig.HardForkActive).
+	// a DAA score without going through the process-global (see the hardforks package).
 	powScores []uint64
-	// hardForkGates is the activation version of each gated rule, copied from Config when this
-	// consensus was built and shared with every process that reads one.
-	hardForkGates *dagconfig.HardForkGates
 
 	blockProcessor        model.BlockProcessor
 	blockBuilder          model.BlockBuilder
@@ -92,62 +85,6 @@ type consensus struct {
 	virtualChangeSetDropped bool
 	// disqualificationStreak watches for a node that disqualifies every block it adds. Guarded by lock.
 	disqualificationStreak disqualificationStreak
-	// servedUTXOSetCheck memoises CheckUTXOHealth. It has its own lock.
-	servedUTXOSetCheck servedUTXOSetCheck
-}
-
-func (s *consensus) exportPruningPointExodusBundle(pruningPoint *externalapi.DomainHash, exportRoot, network string) {
-	onEnd := logger.LogAndMeasureExecutionTime(log, "[AUTO-EXODUS] exportPruningPointExodusBundle")
-	defer onEnd()
-
-	header, err := s.GetBlockHeader(pruningPoint)
-	if err != nil {
-		log.Errorf("[AUTO-EXODUS] FAILED: could not fetch header for pruning point %s: %s", pruningPoint, err)
-		return
-	}
-	daaScore := header.DAAScore()
-	bundleDir := filepath.Join(exportRoot, "pruning-point-"+fmt.Sprintf("%d-%s", daaScore, pruningPoint))
-	log.Infof("[AUTO-EXODUS] exporting pruning point %s (DAA score %d) from acceptance data to %s",
-		pruningPoint, daaScore, bundleDir)
-
-	writer, err := exodus.NewWriter(bundleDir, exodus.BundleTarget{
-		BlockHash: pruningPoint,
-		DAAScore:  daaScore,
-	}, exodus.DefaultChunkEntryCount)
-	if err != nil {
-		log.Errorf("[AUTO-EXODUS] FAILED: could not create bundle at %s: %s", bundleDir, err)
-		return
-	}
-
-	err = s.IterateUTXOSetAtBlockFromAcceptanceData(pruningPoint,
-		func(outpoint *externalapi.DomainOutpoint, entry externalapi.UTXOEntry) error {
-			return writer.AddEntry(outpoint, entry)
-		})
-	if err != nil {
-		log.Errorf("[AUTO-EXODUS] FAILED: acceptance-data UTXO walk for pruning point %s failed: %s (partial bundle: %s)",
-			pruningPoint, err, bundleDir)
-		return
-	}
-
-	commitment, err := writer.Finalize(exodus.BundleMeta{
-		ToolVersion: version.Version(),
-		NodeVersion: version.Version(),
-		Network:     network,
-	})
-	if err != nil {
-		log.Errorf("[AUTO-EXODUS] FAILED: could not finalize bundle for pruning point %s at %s: %s",
-			pruningPoint, bundleDir, err)
-		return
-	}
-
-	headerCommitment := header.UTXOCommitment()
-	if commitment.Equal(headerCommitment) {
-		log.Infof("[AUTO-EXODUS] PASS: pruning point %s (DAA score %d) exported %d UTXOs; computed commitment %s matches header commitment %s; bundle=%s",
-			pruningPoint, daaScore, writer.EntryCount(), commitment, headerCommitment, bundleDir)
-		return
-	}
-	log.Errorf("[AUTO-EXODUS] FAIL: pruning point %s (DAA score %d) exported %d UTXOs; computed commitment %s does not match header commitment %s; bundle=%s",
-		pruningPoint, daaScore, writer.EntryCount(), commitment, headerCommitment, bundleDir)
 }
 
 // In order to prevent a situation that the consensus lock is held for too much time, we
@@ -436,7 +373,7 @@ func (s *consensus) BuildBlockTemplate(coinbaseData *externalapi.DomainCoinbaseD
 		return nil, err
 	}
 
-	isNearlySynced, err := s.isNearlySynced()
+	isNearlySynced, err := s.isNearlySyncedNoLock()
 	if err != nil {
 		return nil, err
 	}
@@ -455,8 +392,6 @@ func (s *consensus) ValidateAndInsertBlock(block *externalapi.DomainBlock, updat
 	if updateVirtual {
 		s.lock.Lock()
 		if s.virtualNotUpdated {
-			startDAAScore, _ := s.virtualDrainDAAScoresNoLock()
-			progress := newVirtualDrainProgress("before inserting a block", startDAAScore)
 			// We enter the loop in locked state
 			for {
 				_, isCompletelyResolved, err := s.resolveVirtualChunkNoLock(virtualResolveChunk)
@@ -464,10 +399,7 @@ func (s *consensus) ValidateAndInsertBlock(block *externalapi.DomainBlock, updat
 					s.lock.Unlock()
 					return err
 				}
-				daaScore, targetDAAScore := s.virtualDrainDAAScoresNoLock()
-				progress.chunkResolved(daaScore, targetDAAScore)
 				if isCompletelyResolved {
-					progress.finished(daaScore)
 					// Make sure we enter the block insertion function w/o releasing the lock.
 					// Otherwise, we might actually enter it in `s.virtualNotUpdated == true` state
 					_, err = s.validateAndInsertBlockNoLock(block, updateVirtual, powSkip)
@@ -605,73 +537,44 @@ func (s *consensus) sendVirtualChangedEvent(virtualChangeSet *externalapi.Virtua
 // ValidateTransactionAndPopulateWithConsensusData validates the given transaction
 // and populates it with any missing consensus data
 func (s *consensus) ValidateTransactionAndPopulateWithConsensusData(transaction *externalapi.DomainTransaction) error {
-	// Read the consensus state this transaction is validated against (DAA score, UTXO entries, past
-	// median time) and run the checks that depend on that state, all under the consensus lock so the
-	// snapshot is consistent. The lock is released before the expensive context checks below.
-	stagingArea, daaScore, err := s.populateTransactionWithConsensusData(transaction)
-	if err != nil {
-		return err
-	}
-
-	// Verify the transaction against the populated data WITHOUT holding the consensus lock. Every check
-	// here - input/output amounts, sequence locks, coinbase maturity, sig-op counts and, above all,
-	// script/signature verification - reads only the transaction itself (its now-populated UTXO entries)
-	// and daaScore; none re-read consensus stores, so the result is identical to running them under the
-	// lock. Script verification is the slow part, and ML-DSA-44 signatures make it dramatically slower:
-	// holding s.lock across it serialized every RPC submission behind the one lock that block processing
-	// and virtual resolution also need, so a burst of submissions (as little as a few threads) starved
-	// consensus and stalled the node. The sig caches and script-engine pool are already concurrency-safe,
-	// so these checks run safely alongside block processing.
-	return s.transactionValidator.ValidateTransactionInContextAndPopulateFee(
-		stagingArea, transaction, model.VirtualBlockHash, daaScore)
-}
-
-// populateTransactionWithConsensusData fills the transaction's inputs with their UTXO entries from
-// virtual and runs the validation steps that read consensus state, under the consensus lock. It
-// returns the staging area and DAA score so the caller can finish validation lock-free.
-func (s *consensus) populateTransactionWithConsensusData(transaction *externalapi.DomainTransaction) (
-	*model.StagingArea, uint64, error,
-) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	stagingArea := model.NewStagingArea()
 
 	daaScore, err := s.daaBlocksStore.DAAScore(s.databaseContext, stagingArea, model.VirtualBlockHash)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
 	err = s.transactionValidator.ValidateTransactionInIsolation(transaction, daaScore)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
 	err = s.consensusStateManager.PopulateTransactionWithUTXOEntries(stagingArea, transaction)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
 	virtualPastMedianTime, err := s.pastMedianTimeManager.PastMedianTime(stagingArea, model.VirtualBlockHash)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
 	err = s.transactionValidator.ValidateTransactionInContextIgnoringUTXO(stagingArea, transaction, model.VirtualBlockHash, virtualPastMedianTime, daaScore)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
-	return stagingArea, daaScore, nil
+	return s.transactionValidator.ValidateTransactionInContextAndPopulateFee(
+		stagingArea, transaction, model.VirtualBlockHash, daaScore)
 }
 
-// GetBlock does not take the consensus lock. A block's content never changes for its hash, a read of
-// one key from the database or the block cache is atomic, and both are safe for concurrent use, so
-// the lock bought nothing but waiting: every P2P block request and RPC GetBlock queued behind block
-// processing and virtual resolution, and they behind it. A block deleted concurrently by pruning
-// reads as either present or not found, as it would just before or after that commit.
-// BlockWithoutCaching keeps a read racing that commit from putting the deleted block back in the
-// cache.
 func (s *consensus) GetBlock(blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, bool, error) {
-	block, err := s.blockStore.BlockWithoutCaching(s.databaseContext, blockHash)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	stagingArea := model.NewStagingArea()
+
+	block, err := s.blockStore.Block(s.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, false, nil
@@ -681,10 +584,12 @@ func (s *consensus) GetBlock(blockHash *externalapi.DomainHash) (*externalapi.Do
 	return block, true, nil
 }
 
-// HasBlock does not take the consensus lock, for the reasons GetBlock does not.
-// HasBlockWithoutCaching keeps a check racing a pruning commit from remembering the deleted block.
 func (s *consensus) HasBlock(blockHash *externalapi.DomainHash) (bool, error) {
-	exists, err := s.blockStore.HasBlockWithoutCaching(s.databaseContext, blockHash)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	stagingArea := model.NewStagingArea()
+
+	exists, err := s.blockStore.HasBlock(s.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return false, nil
@@ -694,9 +599,12 @@ func (s *consensus) HasBlock(blockHash *externalapi.DomainHash) (bool, error) {
 	return exists, nil
 }
 
-// GetBlockEvenIfHeaderOnly does not take the consensus lock, as GetBlock and GetBlockHeader do not.
 func (s *consensus) GetBlockEvenIfHeaderOnly(blockHash *externalapi.DomainHash) (*externalapi.DomainBlock, error) {
-	block, err := s.blockStore.BlockWithoutCaching(s.databaseContext, blockHash)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	stagingArea := model.NewStagingArea()
+
+	block, err := s.blockStore.Block(s.databaseContext, stagingArea, blockHash)
 	if err == nil {
 		return block, nil
 	}
@@ -704,7 +612,7 @@ func (s *consensus) GetBlockEvenIfHeaderOnly(blockHash *externalapi.DomainHash) 
 		return nil, err
 	}
 
-	header, err := s.blockHeaderStore.BlockHeaderWithoutCaching(s.databaseContext, blockHash)
+	header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, errors.Wrapf(err, "block %s does not exist", blockHash)
@@ -715,11 +623,13 @@ func (s *consensus) GetBlockEvenIfHeaderOnly(blockHash *externalapi.DomainHash) 
 	return &externalapi.DomainBlock{Header: header}, nil
 }
 
-// GetBlockHeader does not take the consensus lock. A header never changes for its hash and a read of
-// one key is atomic. BlockHeaderWithoutCaching reads the database alone, because the header cache is
-// not safe for concurrent use.
 func (s *consensus) GetBlockHeader(blockHash *externalapi.DomainHash) (externalapi.BlockHeader, error) {
-	blockHeader, err := s.blockHeaderStore.BlockHeaderWithoutCaching(s.databaseContext, blockHash)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+
+	blockHeader, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) {
 			return nil, errors.Wrapf(err, "block header %s does not exist", blockHash)
@@ -729,37 +639,43 @@ func (s *consensus) GetBlockHeader(blockHash *externalapi.DomainHash) (externala
 	return blockHeader, nil
 }
 
-// GetBlockHeaders does not take the consensus lock, as GetBlockHeader does not. Peers request headers
-// in batches of thousands during IBD, and reading them under the lock made block processing wait
-// for the whole batch.
+// GetBlockHeaders returns headers for the given hashes using a single staging area to minimize overhead.
 func (s *consensus) GetBlockHeaders(blockHashes []*externalapi.DomainHash) ([]externalapi.BlockHeader, error) {
-	headers := make([]externalapi.BlockHeader, len(blockHashes))
-	for i, blockHash := range blockHashes {
-		header, err := s.blockHeaderStore.BlockHeaderWithoutCaching(s.databaseContext, blockHash)
-		if err != nil {
-			return nil, err
-		}
-		headers[i] = header
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	stagingArea := model.NewStagingArea()
+
+	headers, err := s.blockHeaderStore.BlockHeaders(s.databaseContext, stagingArea, blockHashes)
+	if err != nil {
+		return nil, err
 	}
 	return headers, nil
 }
 
-// GetBlockInfo does not take the consensus lock. Block relay calls it for every announced block it
-// does not have, after inserting one, and for orphan parents, and each call queued behind block
-// processing. It reads the database alone, because the status and GHOSTDAG caches are not safe for
-// concurrent use. A block's GHOSTDAG data never changes once written. Its status does, as the block
-// is verified, and this returns the status in the last committed transaction, which is what a caller
-// holding the lock would have seen just before or after that commit.
 func (s *consensus) GetBlockInfo(blockHash *externalapi.DomainHash) (*externalapi.BlockInfo, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	stagingArea := model.NewStagingArea()
+
 	blockInfo := &externalapi.BlockInfo{}
 
-	blockStatus, exists, err := s.blockStatusStore.GetWithoutCaching(s.databaseContext, blockHash)
+	exists, err := s.blockStatusStore.Exists(s.databaseContext, stagingArea, blockHash)
 	if err != nil {
 		return nil, err
 	}
 	blockInfo.Exists = exists
 	if !exists {
 		return blockInfo, nil
+	}
+
+	blockStatus, err := s.blockStatusStore.Get(s.databaseContext, stagingArea, blockHash)
+	if database.IsNotFoundError(err) {
+		log.Infof("GetBlockInfo failed to retrieve with %s\n", blockHash)
+		return nil, err
+	}
+	if err != nil {
+		return nil, err
 	}
 	blockInfo.BlockStatus = blockStatus
 
@@ -768,7 +684,7 @@ func (s *consensus) GetBlockInfo(blockHash *externalapi.DomainHash) (*externalap
 		return blockInfo, nil
 	}
 
-	ghostdagData, err := s.ghostdagDataStores[0].GetWithoutCaching(s.databaseContext, blockHash, false)
+	ghostdagData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, blockHash, false)
 	if database.IsNotFoundError(err) {
 		log.Infof("GetBlockInfo failed to retrieve with %s\n", blockHash)
 		return nil, err
@@ -916,7 +832,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 			pruningPointHash)
 	}
 
-	// HTN-005's serve half, gated at HardForkGates.RefuseMismatchedImportVersion: once the pruning
+	// HTN-005's serve half, gated at hardforks.RefuseMismatchedImportVersion: once the pruning
 	// point's commitment is treated as law, a node whose own set does not hash to it must not hand
 	// that set to anyone else.
 	//
@@ -926,7 +842,9 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	// shrinks. GetInfo already advertises the same fact through UTXOSetHealth, so a peer can see it
 	// before asking; this is what stops the answer being given anyway.
 	//
-	// Unconditional: a node whose own set does not hash to the pruning point's commitment refuses to serve it.
+	// The gate is unscheduled, so this is inert today, and it must stay that way until a coordinated
+	// rebaseline: essentially every node currently serves a set that fails this check, so refusing
+	// now would simply stop IBD working for everyone.
 	if err := s.refuseToServeUnverifiableUTXOSet(stagingArea, pruningPointHash); err != nil {
 		return nil, err
 	}
@@ -938,7 +856,7 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 	return pruningPointUTXOs, nil
 }
 
-// refuseToServeUnverifiableUTXOSet returns a rule error when HardForkGates.RefuseMismatchedImportVersion
+// refuseToServeUnverifiableUTXOSet returns a rule error when hardforks.RefuseMismatchedImportVersion
 // has activated for pruningPointHash and this node's own UTXO baseline does not hash to that point's
 // header commitment.
 //
@@ -951,6 +869,21 @@ func (s *consensus) GetPruningPointUTXOs(expectedPruningPointHash *externalapi.D
 func (s *consensus) refuseToServeUnverifiableUTXOSet(stagingArea *model.StagingArea,
 	pruningPointHash *externalapi.DomainHash,
 ) error {
+	if !hardforks.IsScheduled(hardforks.RefuseMismatchedImportVersion) {
+		return nil
+	}
+	if len(s.powScores) == 0 {
+		return nil
+	}
+
+	header, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, pruningPointHash)
+	if err != nil {
+		return err
+	}
+	blockVersion := constants.BlockVersionForDAAScore(s.powScores, header.DAAScore())
+	if !hardforks.Active(hardforks.RefuseMismatchedImportVersion, blockVersion) {
+		return nil
+	}
 
 	health := s.consensusStateManager.UTXOSetHealth(stagingArea)
 	if health == nil || !health.Checked || health.BaselineVerified {
@@ -986,10 +919,6 @@ const virtualUTXOEntriesChunkSize = 1024
 // against virtual as it stands when that chunk runs, so a block accepted between chunks can show in
 // later chunks and not earlier ones - but every answer is one virtual actually gave.
 //
-// The outpoints are encoded and sorted by database key before the lock is taken. Encoding does not
-// read the database, and sorting first makes each chunk one contiguous key range, which is the range
-// its cursor walks. Answers are still written back in request order.
-//
 // It also returns virtual's parents as they stood during the lookup, or nil if they changed between
 // chunks. A caller comparing the answers with a secondary index can tell from them whether the index
 // described the same virtual state: an index that has not yet applied virtual's latest change still
@@ -997,37 +926,14 @@ const virtualUTXOEntriesChunkSize = 1024
 func (s *consensus) GetVirtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, maxWait time.Duration) (
 	[]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error,
 ) {
-	return s.virtualUTXOEntries(outpoints, nil, maxWait)
-}
-
-// GetVirtualUTXOEntriesPreferring is GetVirtualUTXOEntries. Where preferred[i] serializes to the
-// same bytes virtual stored for outpoints[i], entries[i] is that same preferred value rather than a
-// newly decoded copy. The UTXO index already holds those entries; the RPC check was allocating a
-// second copy of every coin only to throw the index's copy away.
-func (s *consensus) GetVirtualUTXOEntriesPreferring(outpoints []*externalapi.DomainOutpoint,
-	preferred []externalapi.UTXOEntry, maxWait time.Duration,
-) ([]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error) {
-	if preferred != nil && len(preferred) != len(outpoints) {
-		return nil, nil, false, errors.Errorf("%d preferred entries given for %d outpoints", len(preferred), len(outpoints))
-	}
-	return s.virtualUTXOEntries(outpoints, preferred, maxWait)
-}
-
-func (s *consensus) virtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, preferred []externalapi.UTXOEntry,
-	maxWait time.Duration,
-) ([]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error) {
-	ordered, err := s.consensusStateStore.PrepareOrderedVirtualUTXOKeys(outpoints)
-	if err != nil {
-		return nil, nil, false, err
-	}
 	entries := make([]externalapi.UTXOEntry, len(outpoints))
 	var virtualParents []*externalapi.DomainHash
-	for start := 0; start < len(ordered); start += virtualUTXOEntriesChunkSize {
-		end := min(start+virtualUTXOEntriesChunkSize, len(ordered))
+	for start := 0; start < len(outpoints); start += virtualUTXOEntriesChunkSize {
+		end := min(start+virtualUTXOEntriesChunkSize, len(outpoints))
 		if !tryLockFor(s.lock, maxWait) {
 			return nil, nil, false, nil
 		}
-		chunkVirtualParents, err := s.virtualUTXOEntriesNoLock(outpoints, ordered[start:end], entries, preferred)
+		chunkVirtualParents, err := s.virtualUTXOEntriesNoLock(outpoints[start:end], entries[start:end])
 		s.lock.Unlock()
 		if err != nil {
 			return nil, nil, false, err
@@ -1042,25 +948,32 @@ func (s *consensus) virtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, 
 	return entries, virtualParents, true, nil
 }
 
-// virtualUTXOEntriesNoLock fills entries for one key-sorted chunk and returns virtual's parents.
-//
-// It does not populate the cache on a miss: an address with more coins than the cache holds would
-// otherwise scan through it evicting everything block validation put there, going cold for the path
-// that actually needs it, for no benefit to itself - see HTN-207. Without the cache, every refresh of
-// a wallet reads all its coins from the database, so the misses are read in key order through one
-// cursor rather than one Get each.
-func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, ordered []model.OrderedVirtualUTXOKey,
-	entries []externalapi.UTXOEntry, preferred []externalapi.UTXOEntry,
-) ([]*externalapi.DomainHash, error) {
+// virtualUTXOEntriesNoLock fills entries with virtual's entry for each outpoint and returns virtual's
+// parents. One lookup answers both "is it there" and "what is it": asking HasUTXOByOutpoint first
+// doubled the database reads - Has never consults the UTXO cache - for a question the lookup's
+// not-found already answers.
+func (s *consensus) virtualUTXOEntriesNoLock(outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) (
+	[]*externalapi.DomainHash, error,
+) {
 	stagingArea := model.NewStagingArea()
 	virtualParents, err := s.dagTopologyManagers[0].Parents(stagingArea, model.VirtualBlockHash)
 	if err != nil {
 		return nil, err
 	}
-	err = s.consensusStateStore.UTXOsByOrderedKeysWithoutPopulatingCache(
-		s.databaseContext, stagingArea, outpoints, ordered, entries, preferred)
-	if err != nil {
-		return nil, err
+	for i, outpoint := range outpoints {
+		// Does not populate the cache on a miss: an address with more coins than the cache holds
+		// would otherwise scan through it evicting everything block validation put there, going cold
+		// for the path that actually needs it, for no benefit to itself - see HTN-207.
+		entry, found, err := s.consensusStateStore.UTXOByOutpointWithoutPopulatingCache(s.databaseContext, stagingArea, outpoint)
+		if database.IsNotFoundError(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			entries[i] = entry
+		}
 	}
 	return externalapi.CloneHashes(virtualParents), nil
 }
@@ -1600,20 +1513,12 @@ func (s *consensus) resolveVirtualChunkWithLock(maxBlocksToResolve uint64) (virt
 // score/parents off an intermediate virtual snapshot that's about to be superseded, rather
 // than the state real validation will eventually judge the mined block against.
 func (s *consensus) ensureVirtualUpdatedNoLock() error {
-	if !s.virtualNotUpdated {
-		return nil
-	}
-	startDAAScore, _ := s.virtualDrainDAAScoresNoLock()
-	progress := newVirtualDrainProgress("before building a block", startDAAScore)
 	for s.virtualNotUpdated {
 		_, isCompletelyResolved, err := s.resolveVirtualChunkNoLock(virtualResolveChunk)
 		if err != nil {
 			return err
 		}
-		daaScore, targetDAAScore := s.virtualDrainDAAScoresNoLock()
-		progress.chunkResolved(daaScore, targetDAAScore)
 		if isCompletelyResolved {
-			progress.finished(daaScore)
 			return nil
 		}
 		// Unlock to allow other threads to enter consensus, then relock for the next chunk.
@@ -1878,10 +1783,11 @@ func (s *consensus) VirtualMergeDepthRoot() (*externalapi.DomainHash, error) {
 
 // IsNearlySynced returns whether this consensus is considered synced or close to being synced. This info
 // is used to determine if it's ok to use a block template from this node for mining purposes.
-// IsNearlySynced does not take the consensus lock. While IBD runs, block relay asks it for every
-// block announced by every peer, and each call queued behind the IBD's block processing.
 func (s *consensus) IsNearlySynced() (bool, error) {
-	return s.isNearlySynced()
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.isNearlySyncedNoLock()
 }
 
 // UTXOSetHealth reports whether this node's UTXO baseline hashes to the commitment it is supposed
@@ -1933,12 +1839,9 @@ func (s *consensus) expectedDAAWindowDurationInMilliseconds() int64 {
 	return s.targetTimePerBlock[index].Milliseconds() * int64(s.difficultyAdjustmentWindowSize[windowIndex])
 }
 
-// isNearlySynced reads the database alone and needs no lock. Virtual's GHOSTDAG data is one key, so
-// the read returns the virtual of the last committed transaction whole, and its selected parent's
-// header never changes. Caching the answer instead would go stale on its own - it depends on the
-// current time - and caching its input would need refreshing at every place virtual moves.
-func (s *consensus) isNearlySynced() (bool, error) {
-	virtualGHOSTDAGData, err := s.ghostdagDataStores[0].GetWithoutCaching(s.databaseContext, model.VirtualBlockHash, false)
+func (s *consensus) isNearlySyncedNoLock() (bool, error) {
+	stagingArea := model.NewStagingArea()
+	virtualGHOSTDAGData, err := s.ghostdagDataStores[0].Get(s.databaseContext, stagingArea, model.VirtualBlockHash, false)
 	if err != nil {
 		return false, err
 	}
@@ -1947,7 +1850,7 @@ func (s *consensus) isNearlySynced() (bool, error) {
 		return false, nil
 	}
 
-	virtualSelectedParentHeader, err := s.blockHeaderStore.BlockHeaderWithoutCaching(s.databaseContext, virtualGHOSTDAGData.SelectedParent())
+	virtualSelectedParentHeader, err := s.blockHeaderStore.BlockHeader(s.databaseContext, stagingArea, virtualGHOSTDAGData.SelectedParent())
 	if err != nil {
 		return false, err
 	}
@@ -2376,10 +2279,13 @@ func (s *consensus) GetBlockByTransactionID(transactionID *externalapi.DomainTra
 				return nil, err
 			}
 
-			// Without the consensus lock and without caching, as in GetBlock. Taking the lock for each
-			// of the store's blocks queued block processing behind a scan of all of them, and caching
-			// what the scan read evicted the blocks consensus was using.
-			block, err := s.blockStore.BlockWithoutCaching(s.databaseContext, blockHash)
+			// Use a separate staging area for each block to avoid memory accumulation
+			stagingArea := model.NewStagingArea()
+
+			// Hold lock briefly for block retrieval
+			s.lock.Lock()
+			block, err := s.blockStore.Block(s.databaseContext, stagingArea, blockHash)
+			s.lock.Unlock()
 			if err != nil {
 				// Skip blocks that can't be retrieved (might be pruned)
 				if !iterator.Next() {

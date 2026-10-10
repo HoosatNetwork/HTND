@@ -61,15 +61,9 @@ func (x *GetTransactionStatusResponseMessage) toAppMessage() (appmessage.Message
 	if err != nil && !errors.Is(err, errorNil) {
 		return nil, err
 	}
-	// Every status without an accepting block - pending, not found, orphan, unknown - is sent with an
-	// empty hash, which fromAppMessage writes for a nil one. Parsing it as a hash failed, so a client
-	// could only ever decode answers that named an accepting block, and the failure broke its stream.
-	var acceptingBlockHash *externalapi.DomainHash
-	if x.AcceptingBlockHash != "" {
-		acceptingBlockHash, err = externalapi.NewDomainHashFromString(x.AcceptingBlockHash)
-		if err != nil {
-			return nil, err
-		}
+	acceptingBlockHash, err := externalapi.NewDomainHashFromString(x.AcceptingBlockHash)
+	if err != nil {
+		return nil, err
 	}
 	return &appmessage.GetTransactionStatusResponseMessage{
 		Status:             fromWireTransactionStatus(x.Status),

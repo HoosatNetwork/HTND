@@ -3,6 +3,7 @@ package protocol
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/ready"
@@ -18,6 +19,27 @@ import (
 	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
 )
+
+var (
+	bannedKnockMu    sync.Mutex
+	bannedKnockLast  = map[string]time.Time{}
+	bannedKnockCount atomic.Uint64
+)
+
+// noteBannedKnock counts a reconnect from an already-banned address and
+// reports whether this one should be logged. The first knock and one per ten
+// minutes are logged. The rest are counted for the status line.
+func noteBannedKnock(ip string) bool {
+	bannedKnockCount.Add(1)
+	bannedKnockMu.Lock()
+	defer bannedKnockMu.Unlock()
+	now := time.Now()
+	if last, ok := bannedKnockLast[ip]; ok && now.Sub(last) < 10*time.Minute {
+		return false
+	}
+	bannedKnockLast[ip] = now
+	return true
+}
 
 func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *netadapter.NetConnection) {
 	// isStopping flag is raised the moment that the connection associated with this router is disconnected
@@ -44,7 +66,13 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 			return
 		}
 		if isBanned {
-			log.Infof("Peer %s is banned. Disconnecting...", netConnection)
+			ip := ""
+			if addr := netConnection.NetAddress(); addr != nil && addr.IP != nil {
+				ip = addr.IP.String()
+			}
+			if noteBannedKnock(ip) {
+				log.Infof("banned peer %s knocked, disconnecting (further knocks from this address logged once per 10 minutes)", netConnection)
+			}
 			netConnection.Disconnect()
 			return
 		}
@@ -76,9 +104,11 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 
 		var flows []*common.Flow
 		log.Debugf("Registering p2p flows for peer %s for protocol version %d", peer, peer.ProtocolVersion())
-		flows, err = registerFlowsForProtocol(m, netConnection, router, errChan, &isStopping, peer.ProtocolVersion())
-		if err != nil {
-			log.Warnf("Disconnecting peer %s with unsupported protocol version %d", peer, peer.ProtocolVersion())
+		switch peer.ProtocolVersion() {
+		case 11:
+			flows = v8.Register(m, netConnection, router, errChan, &isStopping)
+		default:
+			err = protocolerrors.Errorf(false, "peer protocol version %d is not accepted", peer.ProtocolVersion())
 			m.handleError(err, netConnection, router.OutgoingRoute())
 			return
 		}
@@ -107,17 +137,6 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 		router.Close()
 		flowsWaitGroup.Wait()
 	})
-}
-
-func registerFlowsForProtocol(m *Manager, netConnection *netadapter.NetConnection, router *routerpkg.Router,
-	errChan chan error, isStopping *uint32, protocolVersion uint32,
-) ([]*common.Flow, error) {
-	switch protocolVersion {
-	case 8, 11: // Foztor 5th Oct 2027 - really they are the same thing, just a HF enforcement
-		return v8.Register(m, netConnection, router, errChan, isStopping), nil
-	default:
-		return nil, protocolerrors.Errorf(false, "peer protocol version %d is not accepted", protocolVersion)
-	}
 }
 
 func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection, outgoingRoute *routerpkg.Route) {

@@ -7,9 +7,6 @@ type GHOSTDAGDataStore interface {
 	Stage(stagingArea *StagingArea, blockHash *externalapi.DomainHash, blockGHOSTDAGData *externalapi.BlockGHOSTDAGData, isTrustedData bool)
 	IsStaged(stagingArea *StagingArea) bool
 	Get(dbContext DBReader, stagingArea *StagingArea, blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, error)
-	// GetWithoutCaching reads GHOSTDAG data from the database, bypassing the cache, for callers that
-	// do not hold the consensus lock.
-	GetWithoutCaching(dbContext DBReader, blockHash *externalapi.DomainHash, isTrustedData bool) (*externalapi.BlockGHOSTDAGData, error)
 	UnstageAll(stagingArea *StagingArea)
 	CacheLen() int
 }

@@ -75,7 +75,7 @@ func (c *ConnectionManager) checkRequestedConnections(connSet connectionSet) {
 		}
 
 		// try to initiate connection
-		log.Debugf("Connecting to connection request %s", connReq.address)
+		log.Infof("connecting to addpeer %s", connReq.address)
 		err = c.initiateConnection(connReq.address)
 		if err != nil {
 			log.Debugf("Couldn't connect to requested connection %s: %s", address, err)

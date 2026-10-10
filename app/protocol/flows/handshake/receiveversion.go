@@ -7,7 +7,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
@@ -21,12 +20,10 @@ var (
 
 	// minAcceptableProtocolVersion is the lowest protocol version that a
 	// connected peer may support.
-	minAcceptableProtocolVersion = uint32(8)
+	minAcceptableProtocolVersion = uint32(11)
 
 	maxAcceptableProtocolVersion = uint32(11)
 )
-
-const protocolVersionHardFork11BlockVersion = uint16(11)
 
 type receiveVersionFlow struct {
 	HandleHandshakeContext
@@ -83,17 +80,18 @@ func (flow *receiveVersionFlow) start() (*appmessage.NetAddress, error) {
 	// NOTE: If minAcceptableProtocolVersion is raised to be higher than
 	// appmessage.RejectVersion, this should send a reject packet before
 	// disconnecting.
-	minVersion := minAcceptableProtocolVersion
-	virtualDAAScore, err := flow.Domain().Consensus().GetVirtualDAAScore()
-	if err != nil {
-		return nil, err
-	}
-	if constants.BlockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, virtualDAAScore) >=
-		protocolVersionHardFork11BlockVersion {
-		minVersion = maxAcceptableProtocolVersion
-	}
-	if msgVersion.ProtocolVersion < minVersion {
-		return nil, protocolerrors.Errorf(false, "protocol version must be %d or greater", minVersion)
+	if msgVersion.ProtocolVersion < minAcceptableProtocolVersion ||
+		msgVersion.ProtocolVersion > maxAcceptableProtocolVersion {
+		log.Infof("rejecting %s: protocol version %d is not accepted, only %d speaks here",
+			flow.peer.Address(), msgVersion.ProtocolVersion, minAcceptableProtocolVersion)
+		if addr := flow.peer.Connection().NetAddress(); addr != nil {
+			if err := flow.AddressManager().Ban(addr); err != nil {
+				log.Warnf("could not ban %s for protocol version %d: %s", flow.peer.Address(), msgVersion.ProtocolVersion, err)
+			} else {
+				log.Infof("banned %s for 120 minutes (protocol version %d)", addr, msgVersion.ProtocolVersion)
+			}
+		}
+		return nil, protocolerrors.Errorf(true, "protocol version %d is not accepted", msgVersion.ProtocolVersion)
 	}
 
 	err = validatePeerVersion(flow.Config().ForceSameVersion, msgVersion.UserAgent)

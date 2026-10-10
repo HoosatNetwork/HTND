@@ -94,23 +94,6 @@ func (gds *ghostdagDataStore) UnstageAll(stagingArea *model.StagingArea) {
 	stagingShard.toAdd = make(map[key]*externalapi.BlockGHOSTDAGData)
 }
 
-// GetWithoutCaching reads a block's GHOSTDAG data from the database alone, for callers that do not
-// hold the consensus lock. The cache is not safe for concurrent use, and block processing writes it
-// under the lock, so a lock-free reader must not touch it. A block's GHOSTDAG data is written once;
-// virtual's is rewritten as virtual moves, and this returns the last committed one.
-func (gds *ghostdagDataStore) GetWithoutCaching(dbContext model.DBReader, blockHash *externalapi.DomainHash,
-	isTrustedData bool,
-) (*externalapi.BlockGHOSTDAGData, error) {
-	if blockHash == nil {
-		return nil, errors.New("blockHash is nil")
-	}
-	blockGHOSTDAGDataBytes, err := dbContext.Get(gds.serializeKey(newKey(blockHash, isTrustedData)))
-	if err != nil {
-		return nil, err
-	}
-	return gds.deserializeBlockGHOSTDAGData(blockGHOSTDAGDataBytes)
-}
-
 func (gds *ghostdagDataStore) serializeKey(k key) model.DBKey {
 	if k.isTrustedData {
 		return gds.trustedDataBucket.Key(k.hash.ByteSlice())

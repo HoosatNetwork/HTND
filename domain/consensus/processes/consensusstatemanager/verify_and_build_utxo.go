@@ -14,7 +14,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hardforks"
 	"github.com/pkg/errors"
 )
 
@@ -38,14 +38,14 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// RuleError from these checks is downgraded to a logged issue so virtual resolution can advance.
 	// The block is then NOT fully UTXO-validated - the node is trusting the network's acceptance of
 	// it - and this only ever engages on a chain already known to be offset from the true UTXO set.
-	tolerate := csm.blockInheritsKnownUTXOCommitmentOffset(stagingArea, blockHash)
+	tolerate := false
 
-	// HTN-002/HTN-004, gated at HardForkGates.StrictUTXOCommitmentVersion: from that block version
-	// onward the toleration above - and the miner's-view toleration below - stop applying, and these
-	// four checks fail closed as they were always meant to.
+	// HTN-002/HTN-004, gated at hardforks.StrictUTXOCommitmentVersion: from that block version
+	// onward the toleration above stops applying, and these four checks fail closed as they were
+	// always meant to.
 	//
-	// The gate is block version 11, so this is inert for every block version any network can produce
-	// today - see dagconfig/params.go. It must stay that way until a coordinated rebaseline:
+	// The gate is unscheduled, so this is inert for every block version any network can produce
+	// today - see the hardforks package. It must stay that way until a coordinated rebaseline:
 	// essentially every mainnet node currently runs on an offset baseline, so a node that stopped
 	// tolerating would disqualify the live chain and fall off the network alone.
 	//
@@ -53,44 +53,14 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	// the block's own header version field, which is peer-supplied: this gate adds strictness, so
 	// keying it on a field the miner chooses would let any miner opt out by claiming an older
 	// version.
-	strict, err := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
-	if err != nil {
-		return err
-	}
-	if strict {
-		tolerate = false
-	}
-	// The miner's-view toleration below has its own gate. Ending it together with the baseline
-	// toleration disqualified the live chain: at block version 10, 93b08180 (templated by a mining
-	// node on another UTXO history) failed only its commitment - its transactions, coinbase and
-	// accepted-ID merkle root all passed - and the network built on it while this node disqualified
-	// it and every block above it.
-	minersViewStrict, err := csm.minersViewFieldsAreStrictFor(stagingArea, blockHash)
-	if err != nil {
-		return err
-	}
-
-	// The UTXO commitment and the accepted-ID merkle root are tolerated on every node until the strict
-	// gate, not only on one whose baseline is offset. Mainnet mining nodes do not share one UTXO
-	// history: each commits the multiset of its own, and every node accepts that because the offset
-	// toleration above is on. Measured on a 93k-block retained chain, every block templated by some
-	// mining nodes carries a commitment that differs from what the rest compute, while the very next
-	// block, templated elsewhere, reproduces its header from the rest's value - so the network builds
-	// on one history and simply ignores these two fields.
-	//
-	// Keying their enforcement on the baseline check made it depend on which node happened to mine the
-	// pruning point: that check compares the pruning point's stored multiset against the pruning
-	// point's own header. When a pruning point templated by a node of this node's history came
-	// around, the baseline read as verified, enforcement switched on, and the next block from any
-	// other history was disqualified - a split on this node's side, triggered by nothing it did.
-	//
-	// These two fields only report the miner's view. This node's UTXO set comes from its own
-	// acceptance data either way, so tolerating them moves no value. The coinbase amount and the
-	// block's transactions do move value; they stay on the baseline toleration above, as does the
-	// missing-input acceptance in calculatePastUTXOAndAcceptanceData, which would change this node's
-	// own history if widened.
-	isMinersViewField := func(step string) bool {
-		return step == "utxo-commitment" || step == "accepted-id-merkle-root"
+	if tolerate {
+		strict, err := csm.utxoCommitmentIsStrictFor(stagingArea, blockHash)
+		if err != nil {
+			return err
+		}
+		if strict {
+			tolerate = false
+		}
 	}
 
 	// firstError is what the caller sees: the first failure that was not tolerated, exactly as
@@ -120,8 +90,8 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 				return csm.virtualUTXOEntry(stagingArea, outpoint)
 			})
 		if !carriesOffsetOnly {
-			log.Warnf("Block %s: NOT tolerating its failures - %s. An incomplete pruning-point UTXO set, "+
-				"or a miner on a different UTXO history, explains a commitment that cannot be reproduced; "+
+			log.Warnf("Block %s: NOT tolerating its failures despite this node's offset baseline - %s. "+
+				"An incomplete pruning-point UTXO set explains a commitment that cannot be reproduced; "+
 				"it does not explain a block whose own acceptance data and UTXO diff disagree.",
 				blockHash, arithmeticProblem)
 		}
@@ -134,20 +104,12 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 			return false
 		}
 		survey.noteFailure(step, err)
-		if errors.As(err, &ruleerrors.RuleError{}) && !isNotTolerable(err) {
-			if tolerate && blockCarriesOffsetOnly() {
-				csm.logToleratedIssue(step, blockHash, err)
-				return false
-			}
-			if !minersViewStrict && isMinersViewField(step) && blockCarriesOffsetOnly() {
-				csm.logMinersViewTolerated(step, blockHash, err)
-				return false
-			}
+		if tolerate && errors.As(err, &ruleerrors.RuleError{}) && blockCarriesOffsetOnly() {
+			csm.logToleratedIssue(step, blockHash, err)
+			return false
 		}
 		if firstError == nil {
-			// Named after the check, because the underlying errors don't all say which one they
-			// came from, and this is what the disqualification warning prints as the reason.
-			firstError = errors.Wrapf(err, "%s check failed", step)
+			firstError = err
 		}
 		// The survey runs the remaining checks so that one record describes the whole block. That is
 		// only worth doing for consensus failures: a non-RuleError is a database or programming fault,
@@ -168,21 +130,8 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 	log.Debugf("AcceptedIDMerkleRoot validation passed for block %s", blockHash)
 
 	coinbaseTransaction := block.Transactions[0]
-	coinbaseErr := csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)
-	strictCoinbase, err := csm.hardForkActiveFor(stagingArea, blockHash, csm.hardForkGates.StrictCoinbaseVersion)
-	if err != nil {
-		return err
-	}
-	// Once the offset-mode checks activate, a mismatch is bounded by the fees this node could not
-	// price. Once StrictCoinbaseVersion activates, even that allowance and underpayment end.
-	if coinbaseErr != nil && tolerate && errors.Is(coinbaseErr, ruleerrors.ErrBadCoinbaseTransaction) &&
-		(strictCoinbase || csm.offsetModeValueChecksActive(block.Header.DAAScore())) {
-		if boundedErr := csm.checkCoinbaseOnOffsetBaseline(stagingArea, block, blockHash, coinbaseTransaction,
-			acceptanceData, strictCoinbase); boundedErr != nil {
-			coinbaseErr = boundedErr
-		}
-	}
-	if stop("coinbase-transaction", coinbaseErr) {
+	if stop("coinbase-transaction",
+		csm.validateCoinbaseTransaction(stagingArea, block, blockHash, coinbaseTransaction, acceptanceData)) {
 		return firstError
 	}
 	log.Debugf("Coinbase transaction validation passed for block %s", blockHash)
@@ -203,28 +152,13 @@ func (csm *consensusStateManager) verifyUTXO(stagingArea *model.StagingArea, blo
 // on broken chain data), and every subsequent time at debug (so a 200k-block re-sync does not emit
 // a warn line per block).
 func (csm *consensusStateManager) logToleratedIssue(step string, blockHash *externalapi.DomainHash, err error) {
-	// if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore(step, struct{}{}); alreadyLogged {
-	// log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
-	// return
-	// }
+	if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore(step, struct{}{}); alreadyLogged {
+		log.Debugf("Block %s: tolerated %s issue on inherited pruning-point offset: %s", blockHash, step, err)
+		return
+	}
 	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The chain is built on an incomplete "+
 		"imported pruning-point UTXO set, so this cannot be verified locally and the block is not being "+
-		"fully validated. Step is %s ", blockHash, step, err, step)
-}
-
-// logMinersViewTolerated is logToleratedIssue for a UTXO commitment or accepted-ID merkle root
-// tolerated on a node whose baseline is not offset: the header reports the miner's UTXO history,
-// which differs from this node's. It shares logToleratedIssue's once-per-step warn, under its own
-// keys, so the two reasons are each reported once.
-func (csm *consensusStateManager) logMinersViewTolerated(step string, blockHash *externalapi.DomainHash, err error) {
-	// if _, alreadyLogged := csm.toleratedIssuesLogged.LoadOrStore("miners-view:"+step, struct{}{}); alreadyLogged {
-	// log.Debugf("Block %s: tolerated %s mismatch from a miner on a different UTXO history: %s", blockHash, step, err)
-	// return
-	// }
-	log.Warnf("Block %s: %s check failed and is being TOLERATED (%s). The header reports its miner's UTXO "+
-		"history, which differs from this node's; mainnet mining nodes do not share one, so this field is "+
-		"not enforced until the strict UTXO commitment fork. Step is %s "+
-		"", blockHash, step, err, step)
+		"fully validated. Further %s tolerations are logged at debug level.", blockHash, step, err, step)
 }
 
 // validateBlockTransactionsAgainstPastUTXO validates every non-coinbase transaction in the block
@@ -259,11 +193,12 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 	//
 	// It deliberately does NOT consult ErrMissingTxOut.HasDoubleSpend here, though it used to.
 	//
-	// That flag means an earlier transaction in the same acceptance pass already spent the outpoint.
-	// This function validates each of the block's own transactions against the past diff on its own
-	// and passes no such set. A hit in toRemove is reported as a plain missing coin: on this diff
-	// toRemove means virtual holds the coin and the block's past does not, which covers coins created
-	// after the block as much as coins spent before it.
+	// That flag means "the outpoint was in the diff's toRemove", which is a statement about double
+	// spending only when the diff is the accumulated one being built during acceptance - there
+	// toRemove records spends this very pass made. The diff handed to THIS function is different: it
+	// is the block's past relative to virtual, where toRemove means "virtual holds this coin and this
+	// block's past does not". That covers coins created after the block as much as coins spent before
+	// it, so reading it as a double spend convicts blocks that never spent anything twice.
 	//
 	// The cost was not theoretical. A node syncing mainnet refused 150 blocks this way, started block
 	// body sync eight times, and accepted zero blocks - IBD reached 99% of headers and then made no
@@ -336,7 +271,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 
 			// Populate UTXO entries
 			stagingMu.Lock()
-			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff, nil)
+			err := csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, tx, pastUTXODiff)
 			stagingMu.Unlock()
 			if err != nil {
 				isMissingTxOut := errors.As(err, &ruleerrors.ErrMissingTxOut{})
@@ -356,7 +291,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 				// stored as UTXO-valid, and a transient local fault became a durable status difference.
 				mu.Lock()
 				if firstErr == nil {
-					firstErr = errors.Wrapf(err, "transaction %s", transactionID)
+					firstErr = err
 					close(done) // Signal others to stop
 				}
 				mu.Unlock()
@@ -379,7 +314,7 @@ func (csm *consensusStateManager) validateBlockTransactionsAgainstPastUTXO(stagi
 				}
 				mu.Lock()
 				if firstErr == nil {
-					firstErr = errors.Wrapf(err, "transaction %s", transactionID)
+					firstErr = err
 					close(done)
 				}
 				mu.Unlock()
@@ -404,7 +339,7 @@ func (csm *consensusStateManager) validateAcceptedIDMerkleRoot(block *externalap
 	if !block.Header.AcceptedIDMerkleRoot().Equal(calculatedAcceptedIDMerkleRoot) {
 		return errors.Wrapf(ruleerrors.ErrBadMerkleRoot, "block %s accepted ID merkle root is invalid - block "+
 			"header indicates %s, but calculated value is %s",
-			blockHash, block.Header.AcceptedIDMerkleRoot(), calculatedAcceptedIDMerkleRoot)
+			blockHash, block.Header.UTXOCommitment(), calculatedAcceptedIDMerkleRoot)
 	}
 
 	return nil
@@ -507,35 +442,23 @@ func (csm *consensusStateManager) validateUTXOCommitment(stagingArea *model.Stag
 //
 // Needs no persisted marker; works on an already-synced database.
 // utxoCommitmentIsStrictFor reports whether blockHash is at or past
-// HardForkGates.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
+// hardforks.StrictUTXOCommitmentVersion, and so may not have its UTXO checks tolerated.
 //
 // The version comes from the block's selected parent's DAA score, as this node computed it - the
 // same anchoring HTN-001/003 established for every other version-dependent rule. A block's own
-// header version is not used: it is peer-supplied, and every rule gated in dagconfig/params.go
+// header version is not used: it is peer-supplied, and every rule gated in the hardforks package
 // adds strictness, so a miner could otherwise opt out of this one by claiming an older version.
 //
 // A block whose selected parent has no DAA score yet (genesis, trusted-data bootstrap) falls back
-// to the process-global version, exactly as versionOfChildOf does. While no network can reach block
-// version 11 that fallback cannot matter, because no version it yields satisfies the gate.
+// to the process-global version, exactly as versionOfChildOf does. While the gate is unscheduled
+// that fallback cannot matter, because no version at all satisfies an unscheduled gate.
 func (csm *consensusStateManager) utxoCommitmentIsStrictFor(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) (bool, error) {
-	return csm.hardForkActiveFor(stagingArea, blockHash, csm.hardForkGates.StrictUTXOCommitmentVersion)
-}
+	if !hardforks.IsScheduled(hardforks.StrictUTXOCommitmentVersion) {
+		return false, nil
+	}
 
-// minersViewFieldsAreStrictFor reports whether blockHash is at or past
-// HardForkGates.StrictMinersViewFieldsVersion, and so may not have a failing UTXO commitment or
-// accepted-ID merkle root tolerated as the miner's view. The version is derived as in
-// utxoCommitmentIsStrictFor.
-func (csm *consensusStateManager) minersViewFieldsAreStrictFor(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash,
-) (bool, error) {
-	return csm.hardForkActiveFor(stagingArea, blockHash, csm.hardForkGates.StrictMinersViewFieldsVersion)
-}
-
-func (csm *consensusStateManager) hardForkActiveFor(stagingArea *model.StagingArea,
-	blockHash *externalapi.DomainHash, activationVersion uint16,
-) (bool, error) {
 	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
 	if err != nil {
 		return false, err
@@ -544,43 +467,15 @@ func (csm *consensusStateManager) hardForkActiveFor(stagingArea *model.StagingAr
 	if err != nil {
 		return false, err
 	}
-	return dagconfig.HardForkActive(activationVersion, blockVersion), nil
+	return hardforks.Active(hardforks.StrictUTXOCommitmentVersion, blockVersion), nil
 }
 
 func (csm *consensusStateManager) blockInheritsKnownUTXOCommitmentOffset(stagingArea *model.StagingArea,
 	blockHash *externalapi.DomainHash,
 ) bool {
-	if csm.pruningPointBaselineIsOffset(stagingArea) {
-		return true
-	}
-
-	ghostdagData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, blockHash, false)
-	if err != nil {
-		return false
-	}
-	selectedParent := ghostdagData.SelectedParent()
-	if selectedParent == nil || selectedParent.Equal(csm.genesisHash) ||
-		selectedParent.Equal(model.VirtualGenesisBlockHash) {
-		return false
-	}
-
-	if pruningPoint := csm.currentPruningPoint(stagingArea); pruningPoint != nil && selectedParent.Equal(pruningPoint) {
-		return true
-	}
-
-	selectedParentMultiset, err := csm.multisetStore.Get(csm.databaseContext, stagingArea, selectedParent)
-	if err != nil {
-		return false
-	}
-	selectedParentHeader, err := csm.blockHeaderStore.BlockHeader(csm.databaseContext, stagingArea, selectedParent)
-	if err != nil {
-		return false
-	}
-	return !selectedParentMultiset.Hash().Equal(selectedParentHeader.UTXOCommitment())
+	return false
 }
 
-// currentPruningPoint returns the node's current pruning point, or nil if there isn't one readable
-// yet (still on genesis, or the store lookup failed). Shared by every signal above that needs it.
 func (csm *consensusStateManager) currentPruningPoint(stagingArea *model.StagingArea) *externalapi.DomainHash {
 	hasPruningPoint, err := csm.pruningStore.HasPruningPoint(csm.databaseContext, stagingArea)
 	if err != nil || !hasPruningPoint {
@@ -727,17 +622,17 @@ func calculateAcceptedIDMerkleRoot(multiblockAcceptanceData externalapi.Acceptan
 	return merkle.CalculateIDMerkleRoot(acceptedTransactions)
 }
 
-// expectedCoinbaseTransaction is the coinbase this node expects block to carry, with the payload
-// copied from the block's own coinbase, which is not validated.
-func (csm *consensusStateManager) expectedCoinbaseTransaction(stagingArea *model.StagingArea,
-	block *externalapi.DomainBlock, blockHash *externalapi.DomainHash,
-	coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
-) (*externalapi.DomainTransaction, error) {
+func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
+	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
+) error {
+	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
+	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
+
 	log.Tracef("Extracting coinbase data for coinbase transaction %s in block %s",
 		consensushashing.TransactionID(coinbaseTransaction), blockHash)
 	_, coinbaseData, _, err := csm.coinbaseManager.ExtractCoinbaseDataBlueScoreAndSubsidyForVersion(coinbaseTransaction, block.Header.Version())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	log.Tracef("Calculating the expected coinbase transaction for the given coinbase data and block %s", blockHash)
@@ -745,24 +640,10 @@ func (csm *consensusStateManager) expectedCoinbaseTransaction(stagingArea *model
 	// using its own GHOSTDAG data to ensure it only processes merge set blocks
 	expectedCoinbaseTransaction, _, err := csm.coinbaseManager.ExpectedCoinbaseTransactionWithAcceptanceData(stagingArea, blockHash, coinbaseData, acceptanceData)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// Lets skip validation of the payload, because daascore or other data may change on expected payload.
 	expectedCoinbaseTransaction.Payload = coinbaseTransaction.Payload
-	return expectedCoinbaseTransaction, nil
-}
-
-func (csm *consensusStateManager) validateCoinbaseTransaction(stagingArea *model.StagingArea, block *externalapi.DomainBlock,
-	blockHash *externalapi.DomainHash, coinbaseTransaction *externalapi.DomainTransaction, acceptanceData externalapi.AcceptanceData,
-) error {
-	log.Tracef("validateCoinbaseTransaction start for block %s", blockHash)
-	defer log.Tracef("validateCoinbaseTransaction end for block %s", blockHash)
-
-	expectedCoinbaseTransaction, err := csm.expectedCoinbaseTransaction(stagingArea, block, blockHash,
-		coinbaseTransaction, acceptanceData)
-	if err != nil {
-		return err
-	}
 
 	coinbaseTransactionHash := consensushashing.TransactionHash(coinbaseTransaction)
 	expectedCoinbaseTransactionHash := consensushashing.TransactionHash(expectedCoinbaseTransaction)

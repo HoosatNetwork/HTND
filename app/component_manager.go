@@ -11,10 +11,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/utxobaseline"
 	"github.com/HoosatNetwork/HTND/v2/app/rpc"
 	"github.com/HoosatNetwork/HTND/v2/domain"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/muhashjournal"
 	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/autoupdate"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
@@ -169,33 +169,26 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		return nil, err
 	}
 	warnAboutPersistentRepairFlags(cfg)
-	// Process-global, like the journal itself: set before consensus is built so the first block
-	// resolved is already recorded.
-	muhashjournal.SetPath(cfg.MuHashJournal)
 
 	consensusConfig := consensus.Config{
-		Params:                            *cfg.ActiveNetParams,
-		IsArchival:                        cfg.IsArchivalNode,
-		DeletionDepth:                     cfg.DeletionDepth,
-		DataRetentionDuration:             dataRetentionDuration,
-		PruningInterval:                   pruningInterval,
-		EnableSanityCheckPruningUTXOSet:   cfg.EnableSanityCheckPruningUTXOSet,
-		EnableUTXODebugDiagnostics:        cfg.EnableUTXODebugDiagnostics,
-		RepairBlockStatuses:               cfg.RepairBlockStatuses,
-		RepairMissingMultisets:            cfg.RepairMissingMultisets,
-		EnableAutoExodusExportOnPruning:   cfg.EnableAutoExodusExportOnPruning,
-		AutoExodusExportDir:               cfg.AutoExodusExportDir,
-		UseHoohashCLibrary:                cfg.UseHoohashCLibrary,
-		PastMedianTimeValidationTolerance: cfg.PastMedianTimeValidationTolerance,
-		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
-		OnDisqualifiedBlockStreak:         recoverFromDisqualifiedBlockStreak,
-		OnDisqualification:                logDisqualification,
+		Params:                          *cfg.ActiveNetParams,
+		IsArchival:                      cfg.IsArchivalNode,
+		DeletionDepth:                   cfg.DeletionDepth,
+		DataRetentionDuration:           dataRetentionDuration,
+		PruningInterval:                 pruningInterval,
+		EnableSanityCheckPruningUTXOSet: cfg.EnableSanityCheckPruningUTXOSet,
+		RefuseMismatchedImportedPruningPointUTXOSet: !cfg.AllowMismatchedPruningUTXO,
+		EnableUTXODebugDiagnostics:                  cfg.EnableUTXODebugDiagnostics,
+		RepairBlockStatuses:                         cfg.RepairBlockStatuses,
+		RepairMissingMultisets:                      cfg.RepairMissingMultisets,
+		UseHoohashCLibrary:                          cfg.UseHoohashCLibrary,
+		PastMedianTimeValidationTolerance:           cfg.PastMedianTimeValidationTolerance,
+		MaxConsecutiveDisqualifiedBlocks:            maxConsecutiveDisqualifiedBlocks,
+		OnDisqualifiedBlockStreak:                   recoverFromDisqualifiedBlockStreak,
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
 	mempoolConfig.MinimumRelayTransactionFee = cfg.MinRelayTxFee
-
-	mempoolConfig.InputMinAgeDAAScore = cfg.InputMinAgeDAA
 
 	// Configure compound transaction rate limiting (always enabled)
 	mempoolConfig.CompoundTxRateLimitEnabled = true
@@ -222,6 +215,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		return nil, err
 	}
 	bindDisqualifiedStreakRecovery(domain, cfg.ShutdownOnDisqualifiedStreak)
+	utxobaseline.Refresh(domain)
 
 	netAdapter, err := netadapter.NewNetAdapter(cfg)
 	if err != nil {

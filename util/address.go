@@ -30,9 +30,6 @@ const (
 	// PubKeyHash ECDSA addresses always have the version byte set to 3.
 	pubKeyHashECDSAAddrID = 0x03
 
-	// PubKeyHash ML-DSA-44 addresses always have the version byte set to 4.
-	pubKeyHashMLDSA44AddrID = 0x04
-
 	// ScriptHash addresses always have the version byte set to 8.
 	scriptHashAddrID = 0x08
 )
@@ -158,8 +155,6 @@ func DecodeAddress(addr string, expectedPrefix Bech32Prefix) (Address, error) {
 		return newAddressPubKeyHashFromHash(prefix, decoded)
 	case pubKeyHashECDSAAddrID:
 		return newAddressPubKeyHashECDSAFromHash(prefix, decoded)
-	case pubKeyHashMLDSA44AddrID:
-		return newAddressPubKeyHashMLDSA44FromHash(prefix, decoded)
 	case scriptHashAddrID:
 		return newAddressScriptHashFromHash(prefix, decoded)
 	case multiSigAddrID:
@@ -419,73 +414,6 @@ func (a *AddressPublicKeyHashECDSA) String() string {
 
 // HashBlake2b returns the underlying array of the pubkey hash.
 func (a *AddressPublicKeyHashECDSA) HashBlake2b() *[blake2b.Size256]byte {
-	return &a.hash
-}
-
-// PublicKeySizeMLDSA44 is the public key size for an ML-DSA-44 (FIPS 204) public key
-const PublicKeySizeMLDSA44 = 1312
-
-// AddressPublicKeyHashMLDSA44 is an Address for a pay-to-pubkey-hash (P2PKH)
-// ML-DSA-44 transaction.
-//
-// There is deliberately no pay-to-pubkey form: a 1312-byte key would make every
-// output that large, while the hash form keeps outputs at the size of any other
-// P2PKH and only the spending input carries the key.
-//
-// On Hoosat, P2PKH ML-DSA-44 corresponds to the script template:
-// OP_DUP OP_BLAKE2B <32-byte hash> OP_EQUALVERIFY OP_CHECKSIGMLDSA44
-type AddressPublicKeyHashMLDSA44 struct {
-	prefix Bech32Prefix
-	hash   [blake2b.Size256]byte
-}
-
-// NewAddressPublicKeyHashMLDSA44 returns a new AddressPublicKeyHashMLDSA44 derived
-// from the given ML-DSA-44 public key (1312 bytes).
-func NewAddressPublicKeyHashMLDSA44(publicKey []byte, prefix Bech32Prefix) (*AddressPublicKeyHashMLDSA44, error) {
-	if len(publicKey) != PublicKeySizeMLDSA44 {
-		return nil, errors.Errorf("publicKey must be %d bytes", PublicKeySizeMLDSA44)
-	}
-	return newAddressPubKeyHashMLDSA44FromHash(prefix, HashBlake2b(publicKey))
-}
-
-// NewAddressPublicKeyHashMLDSA44FromHash returns a new AddressPublicKeyHashMLDSA44.
-// pubKeyHash must be 32 bytes.
-func NewAddressPublicKeyHashMLDSA44FromHash(pubKeyHash []byte, prefix Bech32Prefix) (*AddressPublicKeyHashMLDSA44, error) {
-	return newAddressPubKeyHashMLDSA44FromHash(prefix, pubKeyHash)
-}
-
-func newAddressPubKeyHashMLDSA44FromHash(prefix Bech32Prefix, pubKeyHash []byte) (*AddressPublicKeyHashMLDSA44, error) {
-	if len(pubKeyHash) != blake2b.Size256 {
-		return nil, errors.Errorf("pubKeyHash must be %d bytes", blake2b.Size256)
-	}
-
-	addr := &AddressPublicKeyHashMLDSA44{prefix: prefix}
-	copy(addr.hash[:], pubKeyHash)
-	return addr, nil
-}
-
-func (a *AddressPublicKeyHashMLDSA44) EncodeAddress() string {
-	return encodeAddress(a.prefix, a.hash[:], pubKeyHashMLDSA44AddrID)
-}
-
-func (a *AddressPublicKeyHashMLDSA44) ScriptAddress() []byte {
-	return a.hash[:]
-}
-
-func (a *AddressPublicKeyHashMLDSA44) IsForPrefix(prefix Bech32Prefix) bool {
-	return a.prefix == prefix
-}
-
-func (a *AddressPublicKeyHashMLDSA44) Prefix() Bech32Prefix {
-	return a.prefix
-}
-
-func (a *AddressPublicKeyHashMLDSA44) String() string {
-	return a.EncodeAddress()
-}
-
-// HashBlake2b returns the underlying array of the pubkey hash.
-func (a *AddressPublicKeyHashMLDSA44) HashBlake2b() *[blake2b.Size256]byte {
 	return &a.hash
 }
 

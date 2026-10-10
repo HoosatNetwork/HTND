@@ -62,7 +62,7 @@ func TestFeaturesSmoke(t *testing.T) {
 			t.Fatalf("build conditional script: %v", err)
 		}
 		scriptPubKey := &externalapi.ScriptPublicKey{Script: conditionalScript, Version: 0}
-		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Fatalf("NewEngine: %v", err)
 		}
@@ -77,7 +77,7 @@ func TestFeaturesSmoke(t *testing.T) {
 		// CLTV fails if the input is finalized, so use a non-max sequence.
 		tx := newMinimalTestTxWith(nil, 10, 0)
 		scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("5 CHECKLOCKTIMEVERIFY 1", 0), Version: 0}
-		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Fatalf("NewEngine: %v", err)
 		}
@@ -91,7 +91,7 @@ func TestFeaturesSmoke(t *testing.T) {
 
 		tx := newMinimalTestTxWith(nil, 10, 0)
 		scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("50 CHECKLOCKTIMEVERIFY 1", 0), Version: 0}
-		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Fatalf("NewEngine: %v", err)
 		}
@@ -106,7 +106,7 @@ func TestFeaturesSmoke(t *testing.T) {
 
 		tx := newMinimalTestTxWith(nil, 0, 10)
 		scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("5 CHECKSEQUENCEVERIFY 1", 0), Version: 0}
-		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Fatalf("NewEngine: %v", err)
 		}
@@ -129,7 +129,7 @@ func TestFeaturesSmoke(t *testing.T) {
 		scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("SHA256 DATA_32 0x"+byteArrayToHex(h[:])+" EQUAL", 0), Version: 0}
 		tx := newMinimalTestTxWith(sigScript, 0, constants.MaxTxInSequenceNum)
 
-		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Fatalf("NewEngine: %v", err)
 		}
@@ -151,7 +151,7 @@ func TestFeaturesSmoke(t *testing.T) {
 		scriptPubKey := &externalapi.ScriptPublicKey{Script: mustParseShortForm("BLAKE2B DATA_32 0x"+byteArrayToHex(redeemHash[:])+" EQUAL", 0), Version: 0}
 		tx := newMinimalTestTxWith(sigScript, 0, constants.MaxTxInSequenceNum)
 
-		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, nil, &consensushashing.SighashReusedValues{})
+		vm, err := NewEngine(scriptPubKey, tx, 0, ScriptNoFlags, nil, nil, &consensushashing.SighashReusedValues{})
 		if err != nil {
 			t.Fatalf("NewEngine: %v", err)
 		}

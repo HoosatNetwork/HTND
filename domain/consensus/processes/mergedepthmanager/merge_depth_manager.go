@@ -177,7 +177,12 @@ func (mdm *mergeDepthManager) CheckBoundedMergeDepth(stagingArea *model.StagingA
 		if err != nil {
 			return err
 		}
-		if !isRedInPastOfAnyNonMergeDepthViolatingBlue && header.DAAScore() >= 43334184+1000000 {
+		// Official mainnet gated this extra reject at header DAA 44334184.
+		// That number is a leftover fork height. On a chain that counts DAA
+		// from zero it would flip rules months later. Keep today's behaviour
+		// (no extra reject) for the life of this network.
+		_ = header
+		if false && !isRedInPastOfAnyNonMergeDepthViolatingBlue {
 			mdm.logBoundedMergeDepthViolation(stagingArea, blockHash, ghostdagData, header, mergeDepthRoot, red,
 				nonBoundedMergeDepthViolatingBlues)
 			return errors.Wrapf(ruleerrors.ErrViolatingBoundedMergeDepth, "block is violating bounded merge depth")

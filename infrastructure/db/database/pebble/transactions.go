@@ -193,16 +193,3 @@ func (tx *DBTransaction) Cursor(bucket *database.Bucket) (database.Cursor, error
 	tx.cursors = append(tx.cursors, cursor)
 	return cursor, nil
 }
-
-// CursorBounds begins a cursor over bucket limited to full keys in [lower, upper).
-func (tx *DBTransaction) CursorBounds(bucket *database.Bucket, lower, upper []byte) (database.Cursor, error) {
-	if tx.isClosed {
-		return nil, errors.New("cannot open a cursor from a closed transaction")
-	}
-	cursor, err := tx.db.CursorBounds(bucket, lower, upper)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	tx.cursors = append(tx.cursors, cursor)
-	return cursor, nil
-}

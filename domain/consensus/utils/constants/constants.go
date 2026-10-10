@@ -62,7 +62,7 @@ func SetBlockVersion(v uint16) {
 		}
 		if atomic.CompareAndSwapUint32(&blockVersion, current, uint32(v)) {
 			BlockVersionProgressed(current, v)
-			log.Infof("Set block version to %d", v)
+			log.Infof("block version is now %d, taken from a relayed block; this is not sync finished", v)
 			return
 		}
 		// blockVersion changed concurrently since the load above; retry against its new value.

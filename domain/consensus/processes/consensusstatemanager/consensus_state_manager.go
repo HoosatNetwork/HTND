@@ -3,7 +3,6 @@ package consensusstatemanager
 import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
-	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"sync"
 	"time"
 
@@ -57,10 +56,6 @@ type consensusStateManager struct {
 
 	stores []model.Store
 
-	// unpricedTransactionFeeAllowance is dagconfig.Params.UnpricedTransactionFeeAllowance, used from
-	// HardForkGates.OffsetModeValueChecksVersion onward: see offset_value_checks.go.
-	unpricedTransactionFeeAllowance uint64
-
 	// resolveBlockStatusCache caches the results of ResolveBlockStatus calls
 	resolveBlockStatusCache *lrucache.LRUCache[resolveBlockStatusCacheEntry]
 	lastValidBlock          *externalapi.DomainHash
@@ -72,19 +67,6 @@ type consensusStateManager struct {
 	// underlying drift causes routine failures on live blocks, this prevents each one from adding a
 	// multi-minute full-scan on top of the failure itself.
 	expensiveDiagnosticRunsRemaining int
-
-	// lastInheritedDisqualification remembers the last block logged as inheriting a disqualification
-	// and the root it traced back to, so a block relayed on top of it finds the root in one step
-	// instead of re-walking the whole disqualified selected chain.
-	lastInheritedDisqualification struct {
-		block, root *externalapi.DomainHash
-	}
-
-	// onDisqualification, when set, is called with the reason every time ResolveBlockStatus
-	// disqualifies a block from the chain, whether by a failed verifyUTXO or by inheritance. It runs
-	// on the resolving goroutine under the consensus lock, before the status is committed. Nil in
-	// tests, which disqualify blocks on purpose.
-	onDisqualification func(blockHash *externalapi.DomainHash, reason string)
 
 	// toleratedIssuesLogged tracks which inherited-offset toleration points (keyed by a short step
 	// label) have already emitted their one warn line, so a full re-sync on top of an incomplete
@@ -143,9 +125,6 @@ type consensusStateManager struct {
 	// versionOfChildOf), which governs virtual's parents limit and tip ordering.
 	powScores []uint64
 
-	// hardForkGates is the network's activation version for each gated rule.
-	hardForkGates *dagconfig.HardForkGates
-
 	// knownFinalityViolatingTips memoises which tips isViolatingFinality has already confirmed violate
 	// finality, so findNextPendingTip - called on every single ResolveVirtual chunk while backlog
 	// remains, and re-checking every current DAG tip each time - does not repeat the same expensive
@@ -193,18 +172,12 @@ func New(
 	resolveBlockStatusCacheSize int,
 	refuseMismatchedImportedPruningPointUTXOSet bool,
 	powScores []uint64,
-	hardForkGates *dagconfig.HardForkGates,
-	onDisqualification func(blockHash *externalapi.DomainHash, reason string),
-	unpricedTransactionFeeAllowance uint64,
 ) (model.ConsensusStateManager, error) {
 	csm := &consensusStateManager{
-		unpricedTransactionFeeAllowance: unpricedTransactionFeeAllowance,
-		powScores:                       powScores,
-		hardForkGates:                   hardForkGates,
-		onDisqualification:              onDisqualification,
-		maxBlockParents:                 maxBlockParents,
-		mergeSetSizeLimit:               mergeSetSizeLimit,
-		genesisHash:                     genesisHash,
+		powScores:         powScores,
+		maxBlockParents:   maxBlockParents,
+		mergeSetSizeLimit: mergeSetSizeLimit,
+		genesisHash:       genesisHash,
 
 		databaseContext: databaseContext,
 
