@@ -5,6 +5,13 @@
 
 Hoosat Network Daemon is the reference full node implementation for Hoosat Network, written in Go (Golang).
 
+## CONTRIBUTING
+
+- All contributes via well formed Pull Requests against the master branch are welcome.  Please ensure that each PR only deals with a single issue.
+- No other submission mechanism will be considered.
+- If you identify an issue, but are not a developer, then please raise it as an issue here on GitHub.
+- Continued reference to perceived issues without code submissions/opened issues will gain zero attention. 
+
 ## What is Hoosat Network?
 
 Hoosat Network is an advanced cryptocurrency built with an ASIC-resistant proof-of-work (PoW) algorithm. It offers instant confirmations and sub-second block times, designed for both security and performance. Hoosat Network is a fork of Kaspa and utilizes the [DAGKnight protocol](https://eprint.iacr.org/2022/1494.pdf), an evoluation of GhostDAG and generalization of the Nakamoto consensus.
