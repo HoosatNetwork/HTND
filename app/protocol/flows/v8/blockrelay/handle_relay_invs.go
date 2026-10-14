@@ -208,6 +208,14 @@ func (flow *handleRelayInvsFlow) banConnection(offenseTimesOverrule bool) {
 	offenseTrackerLock.Unlock()
 
 	if len(recentOffenses) >= maxOffenses || offenseTimesOverrule {
+		// Like protocol errors (protocol.go), a ban needs --enablebanning. These offences
+		// depend on this node's own view of validity, so without the flag a node that
+		// disagrees with its peers must not ban them for the ban duration; it only disconnects.
+		if !flow.Config().EnableBanning {
+			log.Infof("Disconnecting %s due to exceeding offense threshold (not banning: --enablebanning is off)", address)
+			flow.netConnection.Disconnect()
+			return
+		}
 		log.Infof("Banning connection: %s due to exceeding offense threshold", address)
 		_ = flow.connectionManager.Ban(flow.netConnection)
 		isBanned, _ := flow.connectionManager.IsBanned(flow.netConnection)
