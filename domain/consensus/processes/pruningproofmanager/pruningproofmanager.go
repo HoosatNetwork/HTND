@@ -452,6 +452,13 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 		var selectedTip *externalapi.DomainHash
 		for i, header := range headers {
 			blockHash := consensushashing.HeaderHash(header)
+			// BlockLevel gives a parentless header the maximal level without computing its proof of
+			// work, because only genesis is parentless. Any other parentless header would pass the
+			// level check below at every level for free.
+			if len(header.DirectParents()) == 0 && !blockHash.Equal(ppm.genesisHash) {
+				return errors.Wrapf(ruleerrors.ErrPruningProofParentlessHeader, "the proof header %s at "+
+					"level %d has no parents and is not genesis", blockHash, blockLevel)
+			}
 			if header.BlockLevel(ppm.maxBlockLevel) < blockLevel {
 				return errors.Wrapf(ruleerrors.ErrPruningProofWrongBlockLevel, "block %s level is %d when it's "+
 					"expected to be at least %d", blockHash, header.BlockLevel(ppm.maxBlockLevel), blockLevel)
