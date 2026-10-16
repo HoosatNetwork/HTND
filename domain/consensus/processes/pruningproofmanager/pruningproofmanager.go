@@ -712,7 +712,23 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 		}
 	}
 
+	// The proof shares no blocks with the current DAG. It is better only on a level where it has 2m
+	// blue blocks and the current DAG does not, as in rusty-kaspa. Without the proof-side check this
+	// loop looked at the current DAG alone, and its first level (maxLevel, where the current pruning
+	// point is normally absent) accepted any proof, including one with no proof of work at all.
 	for blockLevel := maxLevel; blockLevel >= 0; blockLevel-- {
+		proofSelectedTip := selectedTipByLevel[blockLevel]
+		if proofSelectedTip.Equal(model.VirtualGenesisBlockHash) {
+			continue
+		}
+		proofSelectedTipGHOSTDAGData, err := ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, proofSelectedTip, false)
+		if err != nil {
+			return err
+		}
+		if proofSelectedTipGHOSTDAGData.BlueScore() < 2*ppm.pruningProofM {
+			continue
+		}
+
 		currentDAGPruningPointParents, err := ppm.dagTopologyManagers[blockLevel].Parents(model.NewStagingArea(), currentDAGPruningPoint)
 		// If the current pruning point doesn't have a parent at this level, we consider the proof state to be better.
 		if database.IsNotFoundError(err) {
