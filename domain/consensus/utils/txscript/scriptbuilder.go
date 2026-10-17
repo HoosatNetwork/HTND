@@ -106,7 +106,7 @@ func canonicalDataSize(data []byte) int {
 	switch {
 	case dataLen == 0:
 		return 1
-	case dataLen == 1 && data[0] <= 16:
+	case dataLen == 1 && data[0] >= 1 && data[0] <= 16:
 		return 1
 	case dataLen == 1 && data[0] == 0x81:
 		return 1
@@ -135,10 +135,10 @@ func (b *ScriptBuilder) addData(data []byte) *ScriptBuilder {
 	// by one of the "small integer" opcodes, use that opcode instead of
 	// a data push opcode followed by the number.
 	switch {
-	case dataLen == 0 || dataLen == 1 && data[0] == 0:
+	case dataLen == 0:
 		b.script = append(b.script, Op0)
 		return b
-	case dataLen == 1 && data[0] <= 16:
+	case dataLen == 1 && data[0] >= 1 && data[0] <= 16:
 		b.script = append(b.script, (Op1-1)+data[0])
 		return b
 	case dataLen == 1 && data[0] == 0x81:
