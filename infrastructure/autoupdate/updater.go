@@ -331,12 +331,25 @@ func (u *Updater) downloadUpdate(release *GitHubRelease) {
 
 	// If auto-install is enabled, install the update after random delay
 	if u.config.AutoInstall {
-		// Generate random delay between InstallDelayMin and InstallDelayMax
-		delay := u.config.InstallDelayMin +
-			time.Duration(rand.Int63n(int64(u.config.InstallDelayMax-u.config.InstallDelayMin)))
+		// Generate random delay between InstallDelayMin and InstallDelayMax. rand.Int63n panics on an empty range,
+		// which is what the node's own config (no delays set) gives.
+		delay := u.config.InstallDelayMin
+		if spread := u.config.InstallDelayMax - u.config.InstallDelayMin; spread > 0 {
+			delay += time.Duration(rand.Int63n(int64(spread)))
+		}
 
 		log.Infof("Waiting %v before auto-installing update %s", delay, release.TagName)
-		time.Sleep(delay)
+		// Stop waits for this goroutine, so the wait must end when Stop is called. select picks either case when both
+		// are ready, as with a zero delay, so the context is checked again: a Stop seen here prevents the install, and
+		// an install that has started is waited for by Stop.
+		select {
+		case <-time.After(delay):
+		case <-u.ctx.Done():
+		}
+		if u.ctx.Err() != nil {
+			log.Infof("Not installing update %s: the auto-updater is stopping", release.TagName)
+			return
+		}
 		u.installUpdate(release.TagName)
 	}
 }
