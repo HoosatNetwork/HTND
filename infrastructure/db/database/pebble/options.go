@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/limits"
+
 	"github.com/cockroachdb/pebble/v2"
 	"github.com/cockroachdb/pebble/v2/bloom"
 	"github.com/cockroachdb/pebble/v2/sstable"
@@ -21,6 +23,10 @@ import (
 // - Value separation → enabled by default (values ≥256 bytes stored in separate blob files) → major write-amp reduction
 // - No need to set ValueSeparationPolicy unless customizing threshold
 func Options(cacheSizeMiB int) *pebble.Options {
+	return optionsWithFileLimit(cacheSizeMiB, limits.FileLimit)
+}
+
+func optionsWithFileLimit(cacheSizeMiB int, fileLimit func() (uint64, error)) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Bloom filter configuration
 	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
@@ -115,7 +121,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 		TargetFileSizes: cappedTargetFileSizes(baseFileSize, maxTargetFileSize(baseFileSize)),
 
 		MaxManifestFileSize: 128 << 20,
-		MaxOpenFiles:        getEnvInt("HTND_PEBBLE_MAX_OPEN_FILES", 40860),
+		MaxOpenFiles:        maxOpenFiles(fileLimit),
 
 		// WAL is not needed for integration tests and disabling it avoids WAL
 		// rotation paths that can be problematic under constrained CI environments.

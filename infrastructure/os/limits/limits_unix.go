@@ -42,3 +42,12 @@ func SetLimits(desiredLimits *DesiredLimits) error {
 
 	return nil
 }
+
+// FileLimit returns the effective process open-file soft limit without changing it.
+func FileLimit() (uint64, error) {
+	var limit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err != nil {
+		return 0, err
+	}
+	return uint64(limit.Cur), nil
+}
