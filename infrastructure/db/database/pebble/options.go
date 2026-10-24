@@ -17,7 +17,7 @@ import (
 //   - Assumes NVMe SSD + 16–64 GiB RAM class hardware in 2026
 //
 // Key modern features (as of 2026 Pebble):
-// - FormatMajorVersion: pebble.FormatNewest → enables columnar blocks (colblk) by default for faster point/range reads
+// - FormatMajorVersion: pinned to format 24 (columnar blocks are supported)
 // - Value separation → enabled by default (values ≥256 bytes stored in separate blob files) → major write-amp reduction
 // - No need to set ValueSeparationPolicy unless customizing threshold
 func Options(cacheSizeMiB int) *pebble.Options {
@@ -99,7 +99,9 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Core Pebble options
 	// ────────────────────────────────────────────────
 	opts := &pebble.Options{
-		FormatMajorVersion: pebble.FormatNewest, // Enables columnar blocks + value separation by default
+		// Keep format upgrades deliberate: a library upgrade must not silently ratchet
+		// the on-disk format and prevent older HTND binaries from opening the datadir.
+		FormatMajorVersion: pebble.FormatValueSeparation, // 24
 
 		Cache: pebble.NewCache(cacheBytes),
 
