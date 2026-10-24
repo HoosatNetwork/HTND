@@ -18,12 +18,11 @@ import (
 //
 // Key modern features (as of 2026 Pebble):
 // - FormatMajorVersion: pebble.FormatNewest → enables columnar blocks (colblk) by default for faster point/range reads
-// - Value separation → enabled by default (values ≥256 bytes stored in separate blob files) → major write-amp reduction
-// - No need to set ValueSeparationPolicy unless customizing threshold
+// - Value separation is supported by the format but explicitly disabled below.
 func Options(cacheSizeMiB int) *pebble.Options {
 	// ────────────────────────────────────────────────
 	// Bloom filter configuration
-	// 15 bits/key → good balance: low false positives (~0.06%) for point lookups
+	// 10 bits/key by default; HTND_BLOOM_FILTER_LEVEL can override this (8–20).
 	// ────────────────────────────────────────────────
 	bloomBitsPerKey := 10
 	if v := os.Getenv("HTND_BLOOM_FILTER_LEVEL"); v != "" {
@@ -99,7 +98,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Core Pebble options
 	// ────────────────────────────────────────────────
 	opts := &pebble.Options{
-		FormatMajorVersion: pebble.FormatNewest, // Enables columnar blocks + value separation by default
+		FormatMajorVersion: pebble.FormatNewest, // Supports columnar blocks and value separation; the latter is disabled below
 
 		Cache: pebble.NewCache(cacheBytes),
 
@@ -186,8 +185,8 @@ func Options(cacheSizeMiB int) *pebble.Options {
 	// Trigger extra compaction workers when debt (pending bytes) is high
 	// opts.Experimental.CompactionDebtConcurrency = uint64(getEnvInt("HTND_COMPACTION_DEBT_CONCURRENCY_GB", 8)) << 30
 
-	// Read-triggered compactions: compact hot-read data more aggressively
-	// Helpful during long IBD phases with repeated ancestor / window lookups
+	// Read-triggered compactions are enabled: EnsureDefaults replaces rate 0 with 16,000.
+	// Sampling multiplier 2 samples more frequently than Pebble's default of 16.
 	opts.Experimental.ReadCompactionRate = 0
 	opts.Experimental.ReadSamplingMultiplier = 2
 

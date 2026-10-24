@@ -16,6 +16,7 @@ import (
 // DB defines a thin wrapper around Pebble.
 type DB struct {
 	db          *pebble.DB
+	metrics     *metricsLogger
 	cursors     []*DBCursor // Track all cursors
 	mu          sync.Mutex  // Protect cursors slice
 	walDisabled bool
@@ -28,6 +29,7 @@ type DB struct {
 // suspect, and NewPebbleDB's recovery would silently wipe the very copy being investigated.
 func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	options := Options(cacheSizeMiB)
+	metrics := newMetricsLogger(options)
 	// pebble.Open takes its own reference to the block cache; drop the creator's so Close frees it.
 	defer options.Cache.Unref()
 
@@ -35,7 +37,7 @@ func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return &DB{db: db, walDisabled: options.DisableWAL}, nil
+	return observedDB(db, options, metrics), nil
 }
 
 // NewPebbleDB opens a Pebble instance defined by the given path. It is meant for the node's own
@@ -43,6 +45,7 @@ func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 // pebble has no repair API. Offline tools must use OpenPebbleDB instead.
 func NewPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	options := Options(cacheSizeMiB)
+	metrics := newMetricsLogger(options)
 	// pebble.Open takes its own reference to the block cache; drop the creator's so Close frees it.
 	// Deferred so the cache stays valid for the second Open below.
 	defer options.Cache.Unref()
@@ -71,11 +74,7 @@ func NewPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 		}
 	}
 
-	dbInstance := &DB{
-		db:          db,
-		walDisabled: options.DisableWAL,
-	}
-	return dbInstance, nil
+	return observedDB(db, options, metrics), nil
 }
 
 // Compact compacts the Pebble instance (full range).
@@ -87,6 +86,11 @@ func (db *DB) Compact() error {
 
 // Close closes the Pebble instance and all associated cursors.
 func (db *DB) Close() error {
+	// Metrics reads must finish before Pebble is closed.
+	if db.metrics != nil {
+		db.metrics.close()
+	}
+
 	// Close all tracked cursors. Iterate over a snapshot: each cursor's Close deregisters it from
 	// db.cursors, and ranging over the live slice while it shrank skipped every other cursor.
 	db.mu.Lock()
