@@ -6,40 +6,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
 	"github.com/pkg/errors"
 )
-
-// tipsInDecreasingDAGKnightOrder returns the current DAG tips in decreasing DAGKnight ordering.
-// This means that the first tip in the resulting list would be the DAGKnight selected tip, and if removed from the list,
-// the second tip would be the next in the ordering, and so on.
-func (csm *consensusStateManager) tipsInDecreasingDAGKnightOrder(stagingArea *model.StagingArea) ([]*externalapi.DomainHash, error) {
-	tips, err := csm.consensusStateStore.Tips(stagingArea, csm.databaseContext)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use DAGKnight OrderDAG to get the ordering of the tips
-	_, ordering, err := csm.ghostdagManager.OrderDAG(stagingArea, tips)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a map from hash to its position in the ordering (lower index = higher priority)
-	orderMap := make(map[externalapi.DomainHash]int)
-	for i, hash := range ordering {
-		orderMap[*hash] = i
-	}
-
-	// Sort tips by their position in the ordering (ascending order index)
-	sort.Slice(tips, func(i, j int) bool {
-		return orderMap[*tips[i]] < orderMap[*tips[j]]
-	})
-
-	return tips, nil
-}
 
 func (csm *consensusStateManager) tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea *model.StagingArea) ([]*externalapi.DomainHash, error) {
 	tips, err := csm.consensusStateStore.Tips(stagingArea, csm.databaseContext)
@@ -64,27 +34,14 @@ func (csm *consensusStateManager) tipsInDecreasingGHOSTDAGParentSelectionOrder(s
 }
 
 func (csm *consensusStateManager) findNextPendingTip(stagingArea *model.StagingArea) (*externalapi.DomainHash, externalapi.BlockStatus, error) {
-	var orderedTips []*externalapi.DomainHash
-	var err error
-	// DAGKnight TODO: decide DAA Score for hard fork
-	// The ordering of the version virtual is at - the child of its current selected parent - rather than the
-	// process-global version, which depends on the node's uptime and IBD.
-	virtualVersion := constants.GetBlockVersion()
-	virtualGHOSTDAGData, err := csm.ghostdagDataStore.Get(csm.databaseContext, stagingArea, model.VirtualBlockHash, false)
-	if err != nil && !database.IsNotFoundError(err) {
-		return nil, externalapi.StatusInvalid, err
-	}
-	if err == nil {
-		virtualVersion, err = csm.versionOfChildOf(stagingArea, virtualGHOSTDAGData.SelectedParent())
-		if err != nil {
-			return nil, externalapi.StatusInvalid, err
-		}
-	}
-	if virtualVersion >= 6 {
-		orderedTips, err = csm.tipsInDecreasingDAGKnightOrder(stagingArea)
-	} else {
-		orderedTips, err = csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
-	}
+	// Pending tips are resolved in GHOSTDAG parent-selection order (blue work, hash tie-break) for every block
+	// version, as kaspad does. DAGKnight's OrderDAG on a set of tips puts its own pick first and the other tips in
+	// hash order, not by blue work, so a lighter tip - one that is already UTXO-valid, or one that cannot overcome
+	// virtual's selected parent - could come first, and ResolveVirtual stopped there while a heavier pending chain
+	// waited. The processing point has to win virtual's selected parent by blue work anyway (isNewSelectedTip),
+	// so the heaviest tip first is the order that lets ResolveVirtual make progress, and the one
+	// pickVirtualParents uses.
+	orderedTips, err := csm.tipsInDecreasingGHOSTDAGParentSelectionOrder(stagingArea)
 	// log.Infof("Number of tips %d", len(orderedTips))
 	if err != nil {
 		return nil, externalapi.StatusInvalid, err
@@ -324,8 +281,8 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		}
 		if previousVirtualSelectedParentStatus == externalapi.StatusUTXOValid {
 			// Routine, not exceptional: any block that loses the local tip race to an already-valid
-			// selected parent takes this path - normal DAGKnight ordering on a DAG with more than one
-			// tip, not a sign of anything wrong. Debug, not Warn.
+			// selected parent takes this path - a pending tip on a DAG with more than one tip, not a
+			// sign of anything wrong. Debug, not Warn.
 			log.Debugf("Pending tip %s does not overcome previous selected parent %s, which is UTXO-valid. "+
 				"Keeping it as virtual's selected parent.", pendingTip, previousVirtualSelectedParent)
 			return nil, true, nil
@@ -346,8 +303,7 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 		// Otherwise, internal UTXO diff logic gets all messed up
 		for !isNewVirtualSelectedParent {
 			if processingPointIndex == 0 {
-				// No block of the pending chain wins the previous virtual selected parent. From block version 6 the
-				// pending tip is picked in DAGKnight order, whose tie-break is by hash, so this is a lighter chain.
+				// No block of the pending chain wins the previous virtual selected parent, so this is a lighter chain.
 				// When the selected parent is UTXO-valid, virtual keeps it: resolving the lighter chain here and making
 				// its tip virtual's only parent moved virtual off the heavier valid chain. The lighter chain stays
 				// pending until one of its blocks overcomes the selected parent.
@@ -404,14 +360,6 @@ func (csm *consensusStateManager) ResolveVirtual(maxBlocksToResolve uint64) (*ex
 	isCompletelyResolved := isActualTip && processingPointStatus == externalapi.StatusUTXOValid
 
 	updateVirtualStagingArea := model.NewStagingArea()
-
-	if processingPointStatus == externalapi.StatusDisqualifiedFromChain {
-		err = csm.stageDisqualifiedProcessingPointAsSelectedTip(updateVirtualStagingArea, processingPoint,
-			previousVirtualSelectedParent)
-		if err != nil {
-			return nil, false, err
-		}
-	}
 
 	virtualParents := []*externalapi.DomainHash{processingPoint}
 	// If `isCompletelyResolved`, set virtual correctly with all tips which have less blue work than pending

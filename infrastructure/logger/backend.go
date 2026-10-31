@@ -59,6 +59,12 @@ type Backend struct {
 	writers   []logWriter
 	writeChan chan logEntry
 	syncClose sync.Mutex // used to sync that the logger finished writing everything
+
+	// closeLock orders writes against Close: write holds it for reading while it checks closed and sends to
+	// writeChan, and Close holds it while it sets closed and closes writeChan.
+	closeLock sync.RWMutex
+	closed    bool
+	closeOnce sync.Once
 }
 
 // NewBackendWithFlags configures a Backend to use the specified flags rather than using
@@ -173,20 +179,44 @@ func (b *Backend) IsRunning() bool {
 	return b.isRunning.Load() != 0
 }
 
-// Close finalizes all log rotators for this backend
+// Close finalizes all log rotators for this backend. A concurrent or later call waits until the first one has
+// finished, and does nothing else.
 func (b *Backend) Close() {
-	close(b.writeChan)
-	// Wait for it to finish writing using the syncClose mutex.
-	b.syncClose.Lock()
-	defer b.syncClose.Unlock()
-	for _, writer := range b.writers {
-		_ = writer.Close()
+	b.closeOnce.Do(func() {
+		b.closeLock.Lock()
+		b.closed = true
+		close(b.writeChan)
+		b.closeLock.Unlock()
+
+		// Wait for it to finish writing using the syncClose mutex.
+		b.syncClose.Lock()
+		defer b.syncClose.Unlock()
+		for _, writer := range b.writers {
+			_ = writer.Close()
+		}
+	})
+}
+
+// write passes a log entry to the backend's writer goroutine. Once the backend is closed there is no writer goroutine,
+// and the entry goes to stderr: goroutines that are still running while the process exits, as after a shutdown that
+// timed out, can still log, and that must not panic.
+func (b *Backend) write(entry logEntry) {
+	b.closeLock.RLock()
+	defer b.closeLock.RUnlock()
+	if b.closed {
+		_, _ = os.Stderr.Write(entry.log)
+		return
 	}
+	if !b.IsRunning() {
+		_, _ = os.Stderr.Write(entry.log)
+		panic("Writing to the logger when it's not running")
+	}
+	b.writeChan <- entry
 }
 
 // Logger returns a new logger for a particular subsystem that writes to the
 // Backend b. A tag describes the subsystem and is included in all log
 // messages. The logger uses the info verbosity level by default.
 func (b *Backend) Logger(subsystemTag string) *Logger {
-	return &Logger{LevelOff, subsystemTag, b, b.writeChan}
+	return &Logger{LevelOff, subsystemTag, b}
 }

@@ -97,7 +97,7 @@ func blockWithTrustedDataFrom(t *testing.T, syncer testapi.TestConsensus, blockH
 // accepted: apply the proof, import the pruning points, insert the pruning point and then its
 // anticone in anticoneOrder, and insert every header up to the syncer's headers selected tip.
 func stageHeadersProofSync(t *testing.T, factory consensus.Factory, cfg *consensus.Config, syncer testapi.TestConsensus,
-	name string, anticoneOrder func([]*externalapi.DomainHash) []*externalapi.DomainHash,
+	name string, anticoneOrder func([]*externalapi.DomainHash) []*externalapi.DomainHash, legacyMiscoloring bool,
 ) (testapi.TestConsensus, func(bool)) {
 	proof, err := syncer.BuildPruningPointProof()
 	if err != nil {
@@ -108,6 +108,17 @@ func stageHeadersProofSync(t *testing.T, factory consensus.Factory, cfg *consens
 	syncee, teardown, err := factory.NewTestConsensus(&stagingConfig, name)
 	if err != nil {
 		t.Fatalf("NewTestConsensus: %+v", err)
+	}
+	if legacyMiscoloring {
+		// Reproduce the legacy broken reconstruction far enough to exercise the chain
+		// guard. Modern validation rejects these miscolored headers before that guard.
+		gates := syncee.HardForkGates()
+		gates.MergeSetSizeLimitVersion = ^uint16(0)
+		gates.IndirectParentsVersion = ^uint16(0)
+		gates.HeaderDAAScoreVersion = ^uint16(0)
+		gates.HeaderBlueWorkVersion = ^uint16(0)
+		gates.HeaderBlueScoreVersion = ^uint16(0)
+		gates.HeaderPruningPointVersion = ^uint16(0)
 	}
 	constants.ForceSetBlockVersion(10)
 	if err := syncee.ApplyPruningPointProof(proof); err != nil {
@@ -213,7 +224,7 @@ func TestPruningPointThatMissesTheChainIsRefused(t *testing.T) {
 
 			// Out of order: the broken state must actually be there, or this test proves nothing.
 			broken, teardownBroken := stageHeadersProofSync(t, factory, cfg, syncer,
-				fmt.Sprintf("RefusePruningPointBroken%d", seed), childrenFirst)
+				fmt.Sprintf("RefusePruningPointBroken%d", seed), childrenFirst, true)
 			isOnChain, err := broken.IsInSelectedParentChainOf(pruningPoint, syncerTip)
 			if err != nil {
 				t.Fatalf("IsInSelectedParentChainOf: %+v", err)
@@ -251,7 +262,7 @@ func TestPruningPointThatMissesTheChainIsRefused(t *testing.T) {
 				return ordered
 			}
 			fixed, teardownFixed := stageHeadersProofSync(t, factory, cfg, syncer,
-				fmt.Sprintf("RefusePruningPointFixed%d", seed), parentsFirst)
+				fmt.Sprintf("RefusePruningPointFixed%d", seed), parentsFirst, false)
 			synceeTip, err := fixed.GetHeadersSelectedTip()
 			if err != nil {
 				t.Fatalf("GetHeadersSelectedTip: %+v", err)

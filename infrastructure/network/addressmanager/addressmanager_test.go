@@ -124,6 +124,42 @@ func TestBestLocalAddress(t *testing.T) {
 	}
 }
 
+// assertBannedAddresses checks permanent startup bans plus the exact temporary bans
+// expected by the test. BannedAddresses has no ordering guarantee.
+func assertBannedAddresses(t *testing.T, addressManager *AddressManager, temporary ...*appmessage.NetAddress) {
+	t.Helper()
+	bannedAddresses := addressManager.BannedAddresses()
+	wantCount := len(hardcodedBannedIPs) + len(temporary)
+	if len(bannedAddresses) != wantCount {
+		t.Fatalf("Unexpected amount of addresses returned from BannedAddresses(). Want: %d, got: %d",
+			wantCount, len(bannedAddresses))
+	}
+	for _, ip := range hardcodedBannedIPs {
+		found := false
+		for _, address := range bannedAddresses {
+			if address.IP.Equal(net.ParseIP(ip)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Permanent ban %s not returned from BannedAddresses()", ip)
+		}
+	}
+	for _, expected := range temporary {
+		found := false
+		for _, address := range bannedAddresses {
+			if reflect.DeepEqual(expected, address) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Banned address %s not returned from BannedAddresses()", expected.IP)
+		}
+	}
+}
+
 func TestAddressManager(t *testing.T) {
 	addressManager, teardown := newAddressManagerForTest(t, "TestAddressManager")
 	defer teardown()
@@ -212,14 +248,7 @@ func TestAddressManager(t *testing.T) {
 	}
 
 	// Check that BannedAddresses() returns the banned address
-	bannedAddresses := addressManager.BannedAddresses()
-	if len(bannedAddresses) != 1 {
-		t.Fatalf("Unexpected amount of addresses returned from BannedAddresses(). "+
-			"Want: %d, got: %d", 1, len(bannedAddresses))
-	}
-	if !reflect.DeepEqual(addressToBan, bannedAddresses[0]) {
-		t.Fatalf("Banned address %s not returned from BannedAddresses()", addressToBan.IP)
-	}
+	assertBannedAddresses(t, addressManager, addressToBan)
 
 	// Unban the address
 	err = addressManager.Unban(addressToBan)
@@ -227,12 +256,8 @@ func TestAddressManager(t *testing.T) {
 		t.Fatalf("Unban() failed: %s", err)
 	}
 
-	// Check that BannedAddresses() not longer returns the banned address
-	bannedAddresses = addressManager.BannedAddresses()
-	if len(bannedAddresses) != 0 {
-		t.Fatalf("Unexpected amount of addresses returned from BannedAddresses(). "+
-			"Want: %d, got: %d", 0, len(bannedAddresses))
-	}
+	// Only permanent startup bans remain after unbanning the temporary address.
+	assertBannedAddresses(t, addressManager)
 }
 
 func TestRestoreAddressManager(t *testing.T) {
@@ -302,14 +327,7 @@ func TestRestoreAddressManager(t *testing.T) {
 	}
 
 	// Make sure that BannedAddresses() returns the correct addresses
-	bannedAddresses := addressManager.BannedAddresses()
-	if len(bannedAddresses) != 1 {
-		t.Fatalf("Unexpected amount of addresses returned from BannedAddresses(). "+
-			"Want: %d, got: %d", 1, len(bannedAddresses))
-	}
-	if !reflect.DeepEqual(addressToBan, bannedAddresses[0]) {
-		t.Fatalf("Banned address %s not returned from BannedAddresses()", addressToBan.IP)
-	}
+	assertBannedAddresses(t, addressManager, addressToBan)
 }
 
 func TestOverfillAddressManager(t *testing.T) {

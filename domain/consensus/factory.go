@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"context"
 	"math"
 	"os"
 	"path/filepath"
@@ -71,6 +72,7 @@ const (
 
 // Config is the full config required to run consensus
 type Config struct {
+	pruningJournalTestConfig
 	dagconfig.Params
 	// IsArchival tells the consensus if it should not prune old blocks
 	IsArchival bool
@@ -106,6 +108,19 @@ type Config struct {
 	// AutoExodusExportDir is the parent directory for those best-effort diagnostic bundles.
 	EnableAutoExodusExportOnPruning bool
 	AutoExodusExportDir             string
+	// OnPruningPointUTXOSetMismatch is called, with DeferPruningPointUTXOSetUpdate, when the pruning point UTXO set
+	// does not match the commitment in the pruning point's header, after the diagnostic is logged. It must stop the
+	// node. Without it the check panics instead.
+	OnPruningPointUTXOSetMismatch func(err error)
+	// PruningJournalDiskFloorBytes and PruningJournalDiskMargin declare the free space
+	// the pruning point UTXO journal requires before each write: floor + margin x the
+	// estimated remaining job bytes. PruningJournalSealedDiskFloorBytes alone applies once
+	// a job is sealed. Zero selects the defaults in pruningstore.JournalDiskPolicy.
+	PruningJournalDiskFloorBytes       uint64
+	PruningJournalDiskMargin           uint64
+	PruningJournalSealedDiskFloorBytes uint64
+	// PruningDiagnostics logs owner lock holds and journal/deletion phase durations.
+	PruningDiagnostics bool
 
 	SkipAddingGenesis bool
 
@@ -406,6 +421,10 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 			go c.exportPruningPointExodusBundle(pruningPoint, config.AutoExodusExportDir, config.Name)
 		}
 	}
+	var requestPruningPointUTXOSetScan func()
+	if config.DeferPruningPointUTXOSetUpdate {
+		requestPruningPointUTXOSetScan = func() { c.requestPruningPointUTXOSetScan() }
+	}
 
 	pruningManager := pruningmanager.New(
 		dbManager,
@@ -440,6 +459,7 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		config.PruningInterval,
 		config.EnableSanityCheckPruningUTXOSet,
 		autoExodusExport,
+		requestPruningPointUTXOSetScan,
 		config.K,
 		config.DifficultyAdjustmentWindowSize,
 		config.TargetTimePerBlock,
@@ -660,6 +680,11 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		},
 
 		deferPruningPointUTXOSetUpdate: config.DeferPruningPointUTXOSetUpdate,
+		pruningPointUTXOSetScanner: pruningPointUTXOSetScanner{
+			requests:   make(chan struct{}, 1),
+			onMismatch: config.OnPruningPointUTXOSetMismatch,
+		},
+		historyDeletionOwner: historyDeletionOwner{requests: make(chan struct{}, 1)},
 	}
 
 	if isOldReachabilityInitialized {
@@ -674,6 +699,32 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	err = consensusStateManager.RecoverUTXOIfRequired()
 	if err != nil {
 		return nil, false, err
+	}
+	pruningmanager.ConfigurePruningDiagnostics(pruningManager, config.PruningDiagnostics)
+	// Install/recover the journal before legacy update, diagnostics or scratch cleanup.
+	// Existing legacy pending work is recovered before journal initialization.
+	pruningmanager.ConfigurePruningTestHook(pruningManager, config.pruningJournalHook())
+	if !config.legacyPruningFixture() {
+		err = pruningmanager.ConfigureJournalWorker(pruningManager, prefixBucket, config.pruningJournalHook(),
+			pruningstore.JournalDiskPolicy{Floor: config.PruningJournalDiskFloorBytes, Margin: config.PruningJournalDiskMargin,
+				SealedFloor: config.PruningJournalSealedDiskFloorBytes})
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	c.servedUTXOSetCheck.trackGeneration = pruningmanager.JournalActive(pruningManager)
+	// Before any update can finish: a finish hands its history deletion job to the owner.
+	historyDeletionOwner := false
+	historyJobs, err := pruningmanager.ConfigureHistoryJobs(pruningManager)
+	if err != nil {
+		return nil, false, err
+	}
+	if historyJobs && config.DeferPruningPointUTXOSetUpdate {
+		historyDeletionOwner, err = pruningmanager.ConfigureHistoryDeletionOwner(pruningManager, prefixBucket,
+			c.requestHistoryDeletion)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 	err = pruningManager.ClearImportedPruningPointData()
 	if err != nil {
@@ -753,6 +804,13 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 	// boot until the underlying data actually changes - not something to run unconditionally on
 	// every startup. Only for actively investigating a UTXO commitment mismatch.
 	if config.EnableUTXODebugDiagnostics {
+		// Startup may have selected another point after initial recovery. Diagnostics
+		// must read a fully materialized current set, never the queued predecessor.
+		if pruningmanager.JournalActive(pruningManager) {
+			if err = pruningManager.ScanPruningPointUTXOSet(context.Background(), c.lock); err != nil {
+				return nil, false, err
+			}
+		}
 		// Checks this node's CURRENT pruningPointUTXOSetBucket - what it serves to any syncing peer
 		// right now - against its own pruning point's header commitment. See
 		// VerifyCurrentPruningPointUTXOSet's comment.
@@ -765,6 +823,23 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		pruningManager.FindAndReproduceRootDisqualification(model.NewStagingArea())
 	}
 
+	// History deletion jobs a previous run left: handed to the owner started below, or run here without one, before
+	// any background goroutine can take the consensus lock.
+	pruningmanager.ResumeHistoryDeletion(pruningManager)
+
+	// Last: the scan reads the pruning point UTXO set without the lock, and nothing above may write it meanwhile. It
+	// checks a set the updates above wrote.
+	if config.DeferPruningPointUTXOSetUpdate {
+		c.startPruningPointUTXOSetScanner()
+		// An unfinished journal job is resumed by its owner, never run here: node start
+		// does not wait for a derivation, apply or full-set check.
+		if pruningmanager.JournalActive(pruningManager) {
+			c.requestPruningPointUTXOSetScan()
+		}
+	}
+	if historyDeletionOwner {
+		c.startHistoryDeletionOwner()
+	}
 	return c, false, nil
 }
 
@@ -868,6 +943,7 @@ func (f *factory) NewTestConsensus(config *Config, testName string) (
 	}
 	tstConsensus.testBlockBuilder = blockbuilder.NewTestBlockBuilder(consensusAsImplementation.blockBuilder, tstConsensus)
 	teardown = func(keepDataDir bool) {
+		consensusAsInterface.Close()
 		db.Close()
 		if !keepDataDir {
 			err := os.RemoveAll(datadir)

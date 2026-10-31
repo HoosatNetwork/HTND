@@ -460,6 +460,12 @@ func (csm *consensusStateManager) maybeAcceptTransaction(
 	log.Tracef("Populating transaction %s with UTXO entries", transactionID)
 	err = csm.populateTransactionWithUTXOEntriesFromVirtualOrDiff(stagingArea, transaction, accumulatedUTXODiff.ToImmutable(), spentInPass)
 	if err != nil {
+		// Only a rule error (a missing or already-spent input) is a verdict on the transaction. Any
+		// other error, such as a storage fault, says nothing about it and must not be recorded as a
+		// rejection. Same predicate as the validation branch below.
+		if !errors.As(err, &(ruleerrors.RuleError{})) {
+			return false, 0, nil, err
+		}
 		csm.noteAcceptanceRejection(blockHash, transactionIDPtr, len(transaction.Inputs), err)
 		// An input this view has already spent is a double spend and stays rejected. An input that is
 		// simply not in the set, on a chain whose pruning-point UTXO set is already missing coins, is

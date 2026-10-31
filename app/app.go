@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus"
+	"github.com/HoosatNetwork/HTND/v2/domain/prefixmanager"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database/ldb"
@@ -84,7 +88,7 @@ func StartAppWithConfig(cfg *config.Config) error {
 	return app.main(nil)
 }
 
-func (app *htndApp) main(startedChan chan<- struct{}) error {
+func (app *htndApp) main(startedChan chan<- struct{}) (resultErr error) {
 	// Get a channel that will be closed when a shutdown signal has been
 	// triggered either from an OS signal such as SIGINT (Ctrl+C) or from
 	// another subsystem such as the RPC server.
@@ -95,13 +99,16 @@ func (app *htndApp) main(startedChan chan<- struct{}) error {
 	log.Infof("Version %s", version.Version())
 
 	// Enable http profiling server if requested.
-	if app.cfg.Profile != "" {
+	if !app.cfg.PrepareDowngrade && app.cfg.Profile != "" {
 		profiling.Start(app.cfg.Profile, log)
 	}
 	profiling.TrackHeap(app.cfg.AppDir, log)
 
 	// Return now if an interrupt signal was triggered.
 	if signal.InterruptRequested(interrupt) {
+		if app.cfg.PrepareDowngrade {
+			return context.Canceled
+		}
 		return nil
 	}
 
@@ -125,12 +132,22 @@ func (app *htndApp) main(startedChan chan<- struct{}) error {
 		err := databaseContext.Close()
 		if err != nil {
 			log.Errorf("Failed to close the database: %s", err)
+			if app.cfg.PrepareDowngrade {
+				resultErr = errors.Join(resultErr, err)
+			}
 		}
 	}()
 
 	// Return now if an interrupt signal was triggered.
 	if signal.InterruptRequested(interrupt) {
+		if app.cfg.PrepareDowngrade {
+			return context.Canceled
+		}
 		return nil
+	}
+
+	if app.cfg.PrepareDowngrade {
+		return prepareDowngrade(app.cfg, databaseContext, interrupt)
 	}
 
 	// Create componentManager and start it.
@@ -153,6 +170,40 @@ func (app *htndApp) main(startedChan chan<- struct{}) error {
 	// shutdown is requested through one of the subsystems such as the RPC
 	// server.
 	<-interrupt
+	return nil
+}
+
+// prepareDowngrade runs --prepare-downgrade: consensus.PrepareDowngrade on the active
+// consensus with the node's own configuration, and nothing else. An interrupt stops it
+// resumably; running the flag again continues.
+func prepareDowngrade(cfg *config.Config, db database.Database, interrupt <-chan struct{}) error {
+	consensusConfig, err := newConsensusConfig(cfg)
+	if err != nil {
+		return err
+	}
+	activePrefix, exists, err := prefixmanager.ActivePrefix(db)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		log.Infof("Downgrade preparation: the database has no consensus data; nothing to do")
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-interrupt:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	report, err := consensus.PrepareDowngrade(ctx, consensusConfig, db, activePrefix)
+	if err != nil {
+		log.Errorf("Downgrade preparation failed; run --prepare-downgrade again with this release: %+v", err)
+		return err
+	}
+	log.Infof("Downgrade preparation done: %s", report)
 	return nil
 }
 

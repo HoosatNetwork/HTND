@@ -103,4 +103,7 @@ type Consensus interface {
 	// callback must not call back into this Consensus instance.
 	IterateUTXOSetAtBlockFromAcceptanceData(blockHash *DomainHash,
 		callback func(outpoint *DomainOutpoint, entry UTXOEntry) error) error
+
+	// Close stops the pruning point UTXO set scanner, and must be called before its database is closed.
+	Close()
 }

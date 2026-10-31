@@ -8,6 +8,8 @@ import (
 	"sort"
 	"time"
 
+	consensusdatabase "github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/datastructures/pruningstore"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
@@ -26,6 +28,8 @@ import (
 
 // pruningManager resolves and manages the current pruning point
 type pruningManager struct {
+	pruningDiagnostics bool
+	pruningJournalHooks
 	databaseContext model.DBManager
 
 	dagTraversalManager   model.DAGTraversalManager
@@ -69,6 +73,29 @@ type pruningManager struct {
 	lastPruningTime            time.Time
 	cachedPruningPoint         *externalapi.DomainHash
 	cachedPruningPointAnticone []*externalapi.DomainHash
+
+	// requestUTXOSetScan is set with Config.DeferPruningPointUTXOSetUpdate: UpdatePruningPointIfRequired then only
+	// writes the diff and calls it. ScanPruningPointUTXOSet hashes without the consensus lock, then reacquires it
+	// to compare the commitment and finish the update.
+	// appliedUTXOSetDiff records the diff written, and is guarded by the consensus lock.
+	// Journal ownership is installed before the worker starts and removed only by
+	// terminal downgrade after joining it. Requested configuration survives an empty
+	// staging instance until its synchronous import has established a complete base.
+	journal            *pruningstore.Journal
+	journalPrefix      model.DBBucket
+	journalRequested   bool
+	journalPolicy      pruningstore.JournalDiskPolicy
+	requestUTXOSetScan func()
+	appliedUTXOSetDiff *appliedUTXOSetDiff
+
+	// requestHistoryDeletion hands recorded history deletion jobs to their owner. Nil
+	// without one: a job then runs right after the finish that records it.
+	requestHistoryDeletion func()
+	historyPrefix          model.DBBucket
+	// historyMask is the logical delete of the running history deletion job, shared with the
+	// stores it deletes from. Installed with the owner; nil without one.
+	historyMask        *consensusdatabase.HistoryMask
+	historyJobsEnabled bool
 }
 
 // New instantiates a new PruningManager
@@ -106,6 +133,7 @@ func New(
 	pruningInterval time.Duration,
 	shouldSanityCheckPruningUTXOSet bool,
 	autoExodusExport func(*externalapi.DomainHash),
+	requestUTXOSetScan func(),
 	k []externalapi.KType,
 	difficultyAdjustmentWindowSize []int,
 	targetTimePerBlock []time.Duration,
@@ -143,6 +171,7 @@ func New(
 		pruningInterval:                 pruningInterval,
 		shouldSanityCheckPruningUTXOSet: shouldSanityCheckPruningUTXOSet,
 		autoExodusExport:                autoExodusExport,
+		requestUTXOSetScan:              requestUTXOSetScan,
 		k:                               k,
 		difficultyAdjustmentWindowSize:  difficultyAdjustmentWindowSize,
 		targetTimePerBlock:              targetTimePerBlock,
@@ -624,8 +653,15 @@ func (pm *pruningManager) savePruningPoint(stagingArea *model.StagingArea, pruni
 	}
 	pm.pruningStore.StageStartUpdatingPruningPointUTXOSet(stagingArea)
 
-	// Call UpdatePruningPointIfRequired immediately after setting the flag
-	// Rather than after every single validate_and_insert_block
+	// With the journal owner selection only schedules work; each historical target
+	// remains retained and is materialized in index order before any deletion.
+	if pm.journal != nil {
+		pm.requestUTXOSetScan()
+		return nil
+	}
+
+	// Reads the committed flag, not the one staged above: this finishes writing the previous pruning point's pending
+	// diff, if any, so the update for this one starts from its predecessor's complete set.
 	err = pm.UpdatePruningPointIfRequired()
 	if err != nil {
 		return err
@@ -1227,21 +1263,10 @@ func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.Stagi
 	}
 	defer utxoSetIterator.Close()
 
-	utxoSetMultiset := multiset.New()
-	stats := &utxoSetStats{}
-	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
-		outpoint, entry, err := utxoSetIterator.Get()
-		if err != nil {
-			return nil, nil, err
-		}
-		serializedUTXO, err := utxo.SerializeUTXO(entry, outpoint)
-		if err != nil {
-			return nil, nil, err
-		}
-		utxoSetMultiset.Add(serializedUTXO)
-		stats.add(entry)
+	utxoSetHash, stats, err := hashUTXOSet(utxoSetIterator, nil)
+	if err != nil {
+		return nil, nil, err
 	}
-	utxoSetHash := utxoSetMultiset.Hash()
 
 	header, err := pm.blockHeaderStore.BlockHeader(pm.databaseContext, stagingArea, pruningPointHash)
 	if err != nil {
@@ -1260,12 +1285,46 @@ func (pm *pruningManager) validateUTXOSetFitsCommitment(stagingArea *model.Stagi
 	return utxoSetHash, stats, nil
 }
 
+// errUTXOSetScanStopped is returned by hashUTXOSet when its stop function ended the walk.
+var errUTXOSetScanStopped = errors.New("the UTXO set scan was stopped")
+
+// utxoSetScanStopCheckInterval is how many entries hashUTXOSet hashes between calls to its stop function: about
+// 50ms of hashing.
+const utxoSetScanStopCheckInterval = 4096
+
+// hashUTXOSet returns the multiset hash of the UTXO set utxoSetIterator walks, and its stats. If stop is not nil, it
+// is called before the first entry and then every utxoSetScanStopCheckInterval entries, and ends the walk with
+// errUTXOSetScanStopped when it returns true. The stats returned with that error cover the entries hashed so far.
+func hashUTXOSet(utxoSetIterator externalapi.ReadOnlyUTXOSetIterator, stop func() bool) (
+	*externalapi.DomainHash, *utxoSetStats, error,
+) {
+	utxoSetMultiset := multiset.New()
+	stats := &utxoSetStats{}
+	for ok := utxoSetIterator.First(); ok; ok = utxoSetIterator.Next() {
+		if stop != nil && stats.entries%utxoSetScanStopCheckInterval == 0 && stop() {
+			return nil, stats, errUTXOSetScanStopped
+		}
+		outpoint, entry, err := utxoSetIterator.Get()
+		if err != nil {
+			return nil, nil, err
+		}
+		serializedUTXO, err := utxo.SerializeUTXO(entry, outpoint)
+		if err != nil {
+			return nil, nil, err
+		}
+		utxoSetMultiset.Add(serializedUTXO)
+		stats.add(entry)
+	}
+	return utxoSetMultiset.Hash(), stats, nil
+}
+
 // This function takes 2 points (currentPruningHash, previousPruningHash) and traverses the UTXO diff children DAG
 // until it finds a common descendant, at the worse case this descendant will be the current SelectedTip.
 // it then creates 2 diffs, one from that descendant to previousPruningHash and another from that descendant to currentPruningHash
 // then using `DiffFrom` it converts these 2 diffs to a single diff from previousPruningHash to currentPruningHash.
 // this way should be the fastest way to get the difference between the 2 points, and should perform much better than restoring the full UTXO set.
 func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPoints(stagingArea *model.StagingArea, currentPruningHash *externalapi.DomainHash) (externalapi.UTXODiff, error) {
+	pm.derivationHook("derive-diff-chain")
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.calculateDiffBetweenPreviousAndCurrentPruningPoints")
 	defer onEnd()
 	if currentPruningHash.Equal(pm.genesisHash) {
@@ -1391,6 +1450,7 @@ diffTraversalLoop:
 // It must produce the same diff as calculateDiffBetweenPreviousAndCurrentPruningPoints: the replay
 // is reconciled against the previous pruning point's UTXO set, see reconcileReplayWithPreviousSet.
 func (pm *pruningManager) calculateDiffBetweenPreviousAndCurrentPruningPointsUsingAcceptanceData(stagingArea *model.StagingArea, currentPruningHash *externalapi.DomainHash) (externalapi.UTXODiff, error) {
+	pm.derivationHook("derive-acceptance")
 	onEnd := logger.LogAndMeasureExecutionTime(log, "pruningManager.calculateDiffBetweenPreviousAndCurrentPruningPoints__UsingAcceptanceData")
 	defer onEnd()
 	if currentPruningHash.Equal(pm.genesisHash) {
@@ -2046,6 +2106,12 @@ func (pm *pruningManager) repairPruningPointUTXOSet(stagingArea *model.StagingAr
 	pruningPoint *externalapi.DomainHash, oldBucketEntries map[externalapi.DomainOutpoint]externalapi.UTXOEntry,
 	expectedCommitment *externalapi.DomainHash,
 ) {
+	// A repair cannot bypass journal ownership, even during exclusive startup: a
+	// process kill during its legacy per-key writes would have no redo manifest.
+	if pm.journal != nil {
+		log.Errorf("[pruning journal] diagnostic repair refused while journal owns the pruning set")
+		return
+	}
 	correctIterator, err := pm.consensusStateManager.RestorePastUTXOSetIterator(stagingArea, pruningPoint)
 	if err != nil {
 		log.Errorf("[UTXO-DEBUG] repairPruningPointUTXOSet: could not get restorePastUTXO iterator for %s: %s", pruningPoint, err)
@@ -2200,6 +2266,14 @@ func (pm *pruningManager) UpdatePruningPointIfRequired() error {
 	}
 	if !hadStartedUpdatingPruningPointUTXOSet {
 		return nil
+	}
+
+	if pm.journal != nil {
+		pm.requestUTXOSetScan()
+		return nil
+	}
+	if pm.requestUTXOSetScan != nil {
+		return pm.applyPruningPointUTXOSetDiffAndRequestScan()
 	}
 
 	log.Infof("Pruning point UTXO set update is required")
@@ -2378,6 +2452,7 @@ func (pm *pruningManager) verifyPruningPointDiffAgainstCommitment(stagingArea *m
 // pruningPointBucketMultiset hashes the entire served pruning-point UTXO set bucket into a multiset.
 // O(bucket size) - only called when a cheaper check has already failed.
 func (pm *pruningManager) pruningPointBucketMultiset() (model.Multiset, int, error) {
+	pm.derivationHook("derive-bucket")
 	iterator, err := pm.pruningStore.PruningPointUTXOIterator(pm.databaseContext)
 	if err != nil {
 		return nil, 0, err
@@ -2557,28 +2632,11 @@ func (pm *pruningManager) updatePruningPoint() error {
 		return err
 	}
 
-	utxoSetDiff, methodUsed, err := pm.pruningPointUTXOSetDiff(stagingArea, pruningPoint)
+	applied, err := pm.applyPruningPointUTXOSetDiff(stagingArea, pruningPoint)
 	if err != nil {
 		return err
 	}
-	log.Infof("Restored the pruning point UTXO set (diff method: %s)", methodUsed)
-
-	// Recorded before the set is written, so an interruption from here on resumes with this method.
-	err = pm.pruningStore.StorePruningPointUTXOSetUpdateMethod(pm.databaseContext, pruningPoint, methodUsed)
-	if err != nil {
-		return err
-	}
-
-	log.Info("Updating the pruning point UTXO set")
-	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)
-	if err != nil {
-		return err
-	}
-
-	// The diff is written. Nothing below needs it, so release it before the full-set validation pass.
-	utxoSetDiff = nil
-	debug.FreeOSMemory() // import "runtime/debug"
-	logger.LogMemoryStats(log, "updatePruningPoint: diff released")
+	methodUsed := applied.method
 
 	if !pruningPoint.Equal(pm.genesisHash) {
 		log.Info("Validating that the pruning point UTXO set this node will serve fits its commitment")
@@ -2596,17 +2654,74 @@ func (pm *pruningManager) updatePruningPoint() error {
 			pruningPoint)
 	}
 
+	return pm.finishPruningPointUTXOSetUpdate(stagingArea, pruningPoint)
+}
+
+// appliedUTXOSetDiff describes the diff applyPruningPointUTXOSetDiff wrote into the pruning point UTXO set.
+type appliedUTXOSetDiff struct {
+	pruningPoint    *externalapi.DomainHash
+	method          string
+	toAdd, toRemove int
+}
+
+// applyPruningPointUTXOSetDiff writes the diff from the previous pruning point's UTXO set to pruningPoint's into the
+// pruning point UTXO set.
+func (pm *pruningManager) applyPruningPointUTXOSetDiff(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash,
+) (*appliedUTXOSetDiff, error) {
+	utxoSetDiff, methodUsed, err := pm.pruningPointUTXOSetDiff(stagingArea, pruningPoint)
+	if err != nil {
+		return nil, err
+	}
+	log.Infof("Restored the pruning point UTXO set (diff method: %s)", methodUsed)
+
+	// Recorded before the set is written, so an interruption from here on resumes with this method.
+	err = pm.pruningStore.StorePruningPointUTXOSetUpdateMethod(pm.databaseContext, pruningPoint, methodUsed)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Updating the pruning point UTXO set")
+	err = pm.pruningStore.UpdatePruningPointUTXOSet(pm.databaseContext, utxoSetDiff)
+	if err != nil {
+		return nil, err
+	}
+	applied := &appliedUTXOSetDiff{pruningPoint: pruningPoint, method: methodUsed,
+		toAdd: utxoSetDiff.ToAdd().Len(), toRemove: utxoSetDiff.ToRemove().Len()}
+
+	// The diff is written. Nothing below needs it, so release it before the full-set validation pass.
+	utxoSetDiff = nil
+	debug.FreeOSMemory() // import "runtime/debug"
+	logger.LogMemoryStats(log, "updatePruningPoint: diff released")
+	return applied, nil
+}
+
+// finishPruningPointUTXOSetUpdate records the deletion of the past blocks below the pruning point, if due, and clears
+// the pending update flag in the same commit, then hands the deletion to its job. The pruning point UTXO set must
+// already have passed its commitment check.
+func (pm *pruningManager) finishPruningPointUTXOSetUpdate(stagingArea *model.StagingArea,
+	pruningPoint *externalapi.DomainHash,
+) error {
+	start := time.Now()
 	var newPruningTime *time.Time
+
 	if pm.shouldDeferDeletion(stagingArea, pruningPoint) {
 		log.Infof("Pruning point advanced, but block deletion deferred (data retention/interval not met)")
+
 	} else if shouldDelete, deletionPoint := pm.CheckIfShouldDeletePastBlocks(stagingArea, pruningPoint); !shouldDelete {
 		// --deletion-depth keeps the blocks of the most recent pruning points: deletion runs below the pruning point
 		// that many advancements back, once that point is at least a pruning depth below the new one. With the
 		// default of 0 the deletion point is the new pruning point itself.
 		log.Infof("Pruning point advanced, but block deletion waits for --deletion-depth=%d", pm.deletionDepth)
+
 	} else {
 		log.Infof("Deletion of past blocks below %s", deletionPoint)
-		err = pm.deletePastBlocks(stagingArea, deletionPoint)
+		var err error
+		if pm.historyJobsEnabled {
+			err = pm.recordHistoryDeletion(stagingArea, deletionPoint)
+		} else {
+			err = pm.deletePastBlocks(stagingArea, deletionPoint)
+		}
 		if err != nil {
 			return err
 		}
@@ -2617,14 +2732,27 @@ func (pm *pruningManager) updatePruningPoint() error {
 		pm.pruningStore.StageLastPruningTime(stagingArea, *newPruningTime)
 	}
 
-	// Finished in the same commit as the deletion above: an update left pending after it could not resume, since
-	// the blocks and UTXO diffs it re-derives the diff from would be gone.
+	// Finished in the same commit that records the deletion job above. The job deletes the past blocks only after
+	// this commit, so an update is never left pending without the blocks and UTXO diffs it re-derives its diff from.
 	pm.pruningStore.StageFinishUpdatingPruningPointUTXOSet(stagingArea)
 
 	log.Info("Commit all changes")
-	err = staging.CommitAllChanges(pm.databaseContext, stagingArea)
+
+	if pm.journal != nil {
+		pm.journalHook("before-finish")
+	}
+	err := staging.CommitAllChanges(pm.databaseContext, stagingArea)
+
 	if err != nil {
 		return err
+	}
+	if pm.historyJobsEnabled {
+		if pm.journal != nil {
+			pm.journalHook("finish")
+		}
+		log.Infof("Pruning point %s: update finished in %s (commit; the past blocks are deleted by their job)", pruningPoint, time.Since(start))
+	} else {
+		log.Infof("Pruning point %s: update finished in %s (past-block deletion and commit)", pruningPoint, time.Since(start))
 	}
 
 	if newPruningTime != nil {
@@ -2636,6 +2764,9 @@ func (pm *pruningManager) updatePruningPoint() error {
 	pm.cachedPruningPointAnticone = nil
 
 	pm.triggerAutoExodusExport(pruningPoint)
+	if newPruningTime != nil && pm.historyJobsEnabled {
+		pm.scheduleHistoryDeletion()
+	}
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package blockrelay
 
 import (
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
@@ -142,7 +143,7 @@ func (flow *handleRequestHeadersFlow) start() error {
 				flow.lastServedActualHighHash = actualHighHash
 				flow.lastServedHeadersMessage = blockHeadersMessage
 			}
-			err = flow.outgoingRoute.Enqueue(blockHeadersMessage)
+			err = flow.outgoingRoute.EnqueueWithTimeout(blockHeadersMessage, common.DefaultTimeout)
 			if err != nil {
 				return err
 			}
@@ -161,7 +162,7 @@ func (flow *handleRequestHeadersFlow) start() error {
 			log.Debugf("New lowhash %s", lowHash)
 		}
 		log.Debugf("Sending IBD done")
-		err = flow.outgoingRoute.Enqueue(appmessage.NewMsgDoneHeaders())
+		err = flow.outgoingRoute.EnqueueWithTimeout(appmessage.NewMsgDoneHeaders(), common.DefaultTimeout)
 		if err != nil {
 			return err
 		}

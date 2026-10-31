@@ -20,6 +20,8 @@ import (
 func pruningListTestChain(t *testing.T, name string, powScores []uint64,
 ) (tc testapi.TestConsensus, chain []*externalapi.DomainHash, teardown func(bool)) {
 	config := &consensus.Config{Params: dagconfig.MainnetParams}
+	// This synthetic chain does not contain the release-pinned mainnet checkpoint.
+	config.PruningPointCheckpoint = nil
 	config.SkipProofOfWork = true
 	config.DisableDifficultyAdjustment = true
 	config.POWScores = powScores

@@ -171,10 +171,13 @@ func (d *domain) CommitStagingConsensus() error {
 	// from here on. The swap used to come after deleting the old prefix's data, so a failure there
 	// returned with the node still running on the old consensus instance, whose prefix the database
 	// had just marked inactive, while the committed instance was still held as staging.
+	previousConsensus := d.Consensus()
 	tempConsensusPointer := unsafe.Pointer(d.stagingConsensus)
 	consensusPointer := (*unsafe.Pointer)(unsafe.Pointer(&d.consensus))
 	atomic.StorePointer(consensusPointer, tempConsensusPointer)
 	d.stagingConsensus = nil
+	// Its data is deleted below, and its background work must not write there afterwards.
+	previousConsensus.Close()
 
 	// We delete anything associated with the old prefix outside
 	// of the transaction in order to save memory.
@@ -195,6 +198,9 @@ func (d *domain) DeleteStagingConsensus() error {
 	d.stagingConsensusLock.Lock()
 	defer d.stagingConsensusLock.Unlock()
 
+	if d.stagingConsensus != nil {
+		(*d.stagingConsensus).Close()
+	}
 	err := prefixmanager.DeleteInactivePrefix(d.db)
 	if err != nil {
 		return err
@@ -255,6 +261,15 @@ func New(consensusConfig *consensus.Config, mempoolConfig *mempool.Config, db in
 		consensusEventsChannel: consensusEventsChan,
 	}
 
+	constructionOK := false
+	defer func() {
+		if !constructionOK {
+			if staging := domainInstance.StagingConsensus(); staging != nil {
+				staging.Close()
+			}
+			domainInstance.Consensus().Close()
+		}
+	}()
 	if shouldMigrate {
 		err := domainInstance.migrate()
 		if err != nil {
@@ -268,5 +283,6 @@ func New(consensusConfig *consensus.Config, mempoolConfig *mempool.Config, db in
 	consensusReference := consensusreference.NewConsensusReference(&domainInstance.consensus)
 	domainInstance.miningManager = miningManagerFactory.NewMiningManager(consensusReference, &consensusConfig.Params, mempoolConfig)
 	miningManagerForDisqualification.Store(&domainInstance.miningManager)
+	constructionOK = true
 	return domainInstance, nil
 }

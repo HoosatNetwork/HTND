@@ -192,29 +192,26 @@ func TestTwoConsensusesBuiltAtDifferentVersionsAgreeOnEverythingGated(t *testing
 	}
 }
 
-func TestUnscheduledHardForkGatesAreInertOnEveryNetwork(t *testing.T) {
-	params := []*dagconfig.Params{
-		&dagconfig.MainnetParams,
-		&dagconfig.TestnetParams,
-		&dagconfig.TestnetParamsB5,
-		&dagconfig.TestnetParamsB10,
-		&dagconfig.SimnetParams,
-		&dagconfig.DevnetParams,
-	}
-	for _, params := range params {
-		gates := map[string]uint16{
-			"StrictMinersViewFieldsVersion": params.HardForkGates.StrictMinersViewFieldsVersion,
-			"StrictCoinbaseVersion":         params.HardForkGates.StrictCoinbaseVersion,
-			"RefuseMismatchedImportVersion": params.HardForkGates.RefuseMismatchedImportVersion,
+// TestHardForkGatesPreservePreActivationHistory retains the old unscheduled
+// test's protection against accidental early activation. The rules were deliberately
+// scheduled in 2.18.3: mainnet miners-view/coinbase at v11, test networks at v10.
+// Mismatched imports are now rejected unconditionally and are tested at the import
+// boundary, so their old inactive-gate promise no longer describes that behavior.
+func TestHardForkGatesPreservePreActivationHistory(t *testing.T) {
+	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams,
+		&dagconfig.TestnetParamsB5, &dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
+		firstScheduledVersion := uint16(10)
+		if params == &dagconfig.MainnetParams {
+			firstScheduledVersion = 11
 		}
-		highestDefinedVersion := uint16(len(params.POWScores) + 1)
-		for name, gate := range gates {
-			if gate != ^uint16(0) {
-				t.Errorf("%s: %s is scheduled at block version %d", params.Name, name, gate)
-			}
-			if dagconfig.HardForkActive(gate, highestDefinedVersion) {
-				t.Errorf("%s: %s is active at highest defined block version %d",
-					params.Name, name, highestDefinedVersion)
+		for name, gate := range map[string]uint16{
+			"miners view": params.HardForkGates.StrictMinersViewFieldsVersion,
+			"coinbase":    params.HardForkGates.StrictCoinbaseVersion,
+		} {
+			for version := uint16(1); version < firstScheduledVersion; version++ {
+				if dagconfig.HardForkActive(gate, version) {
+					t.Errorf("%s: %s activates in pre-fork history at version %d", params.Name, name, version)
+				}
 			}
 		}
 	}

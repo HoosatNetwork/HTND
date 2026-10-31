@@ -23,6 +23,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/connmanager"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/id"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/HoosatNetwork/HTND/v2/util/panics"
 	"github.com/pkg/errors"
@@ -174,14 +175,34 @@ func (a *ComponentManager) Stop() bool {
 		log.Criticalf("The consensus events handler did not finish within %s", consensusEventsDrainTimeout)
 		return false
 	}
+
+	// The pruning point UTXO set check walks the database in the background; stopped before the database is closed.
+	domainInstance := a.protocolManager.Context().Domain()
+	if stagingConsensus := domainInstance.StagingConsensus(); stagingConsensus != nil {
+		stagingConsensus.Close()
+	}
+	domainInstance.Consensus().Close()
+
+	// The connection manager's loop and its DNS seeding goroutines are not waited for, and can still record addresses
+	// after the database is closed.
+	a.addressManager.Stop()
 	return true
 }
 
-// NewComponentManager returns a new ComponentManager instance.
-// Use Start() to begin all services within this ComponentManager
-func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database, interrupt chan<- struct{}) (
-	*ComponentManager, error,
-) {
+// stopOnPruningPointUTXOSetMismatch stops the node when the pruning point UTXO set it computed does not match the
+// commitment in the pruning point's header. Consensus has logged the diagnostic. The set was not served and no blocks
+// were deleted; a restart checks the set again.
+func stopOnPruningPointUTXOSetMismatch(error) {
+	log.Criticalf("Stopping the node: its pruning point UTXO set does not match the chain")
+	spawn("stopOnPruningPointUTXOSetMismatch", func() {
+		signal.ShutdownRequestChannel <- struct{}{}
+	})
+}
+
+// newConsensusConfig is the node's consensus configuration. --prepare-downgrade uses
+// the same one, so its history deletion follows the node's retention settings.
+func newConsensusConfig(cfg *config.Config) (*consensus.Config, error) {
+
 	dataRetentionDuration, err := checkedDurationFromHours(cfg.DataRetentionHours)
 	if err != nil {
 		return nil, err
@@ -190,13 +211,9 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 	if err != nil {
 		return nil, err
 	}
-	warnAboutPersistentRepairFlags(cfg)
-	// Process-global, like the journal itself: set before consensus is built so the first block
-	// resolved is already recorded.
-	muhashjournal.SetPath(cfg.MuHashJournal)
-
-	consensusConfig := consensus.Config{
+	return &consensus.Config{
 		Params:                            *cfg.ActiveNetParams,
+		PruningDiagnostics:                cfg.PruningDiagnostics,
 		IsArchival:                        cfg.IsArchivalNode,
 		DeletionDepth:                     cfg.DeletionDepth,
 		DataRetentionDuration:             dataRetentionDuration,
@@ -213,6 +230,23 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		MaxConsecutiveDisqualifiedBlocks:  maxConsecutiveDisqualifiedBlocks,
 		OnDisqualifiedBlockStreak:         recoverFromDisqualifiedBlockStreak,
 		OnDisqualification:                logDisqualification,
+		OnPruningPointUTXOSetMismatch:     stopOnPruningPointUTXOSetMismatch,
+	}, nil
+}
+
+// NewComponentManager returns a new ComponentManager instance.
+// Use Start() to begin all services within this ComponentManager
+func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database, interrupt chan<- struct{}) (
+	*ComponentManager, error,
+) {
+	warnAboutPersistentRepairFlags(cfg)
+	// Process-global, like the journal itself: set before consensus is built so the first block
+	// resolved is already recorded.
+	muhashjournal.SetPath(cfg.MuHashJournal)
+
+	consensusConfig, err := newConsensusConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
 	mempoolConfig := mempool.DefaultConfig(&consensusConfig.Params)
 	mempoolConfig.MaximumOrphanTransactionCount = cfg.MaxOrphanTxs
@@ -240,10 +274,19 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		return nil, err
 	}
 
-	domain, err := domain.New(&consensusConfig, mempoolConfig, db)
+	domain, err := domain.New(consensusConfig, mempoolConfig, db)
 	if err != nil {
 		return nil, err
 	}
+	constructionOK := false
+	defer func() {
+		if !constructionOK {
+			if staging := domain.StagingConsensus(); staging != nil {
+				staging.Close()
+			}
+			domain.Consensus().Close()
+		}
+	}()
 	bindDisqualifiedStreakRecovery(domain, cfg.ShutdownOnDisqualifiedStreak)
 
 	netAdapter, err := netadapter.NewNetAdapter(cfg)
@@ -297,6 +340,7 @@ func NewComponentManager(cfg *config.Config, db infrastructuredatabase.Database,
 		log.Infof("Auto-updater initialized (channel: %s, interval: %v, autoreport: %v)", updaterConfig.UpdateChannel, updaterConfig.CheckInterval, updaterConfig.AutoReportIssues)
 	}
 
+	constructionOK = true
 	return &ComponentManager{
 		cfg:               cfg,
 		protocolManager:   protocolManager,

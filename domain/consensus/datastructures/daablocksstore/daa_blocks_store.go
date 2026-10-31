@@ -18,18 +18,22 @@ var (
 // daaBlocksStore represents a store of DAABlocksStore
 type daaBlocksStore struct {
 	shardID                model.StagingShardID
-	daaScoreLRUCache       *lrucache.LRUCache[uint64]
-	daaAddedBlocksLRUCache *lrucache.LRUCache[[]*externalapi.DomainHash]
+	daaScoreLRUCache       *lrucache.ConcurrentLRUCache[uint64]
+	daaAddedBlocksLRUCache *lrucache.ConcurrentLRUCache[[]*externalapi.DomainHash]
 	daaScoreBucket         model.DBBucket
 	daaAddedBlocksBucket   model.DBBucket
+	// historyMask makes the DAA added blocks a running history deletion job deletes read as
+	// not found; the DAA score, which it keeps, is not masked (see database.HistoryMask).
+	// Set once, before any reader runs.
+	historyMask *database.HistoryMask
 }
 
 // New instantiates a new DAABlocksStore
 func New(prefixBucket model.DBBucket, daaScoreCacheSize int, daaAddedBlocksCacheSize int, preallocate bool) model.DAABlocksStore {
 	return &daaBlocksStore{
 		shardID:                staging.GenerateShardingID(),
-		daaScoreLRUCache:       lrucache.New[uint64](daaScoreCacheSize, preallocate),
-		daaAddedBlocksLRUCache: lrucache.New[[]*externalapi.DomainHash](daaAddedBlocksCacheSize, preallocate),
+		daaScoreLRUCache:       lrucache.NewConcurrent[uint64](daaScoreCacheSize, preallocate),
+		daaAddedBlocksLRUCache: lrucache.NewConcurrent[[]*externalapi.DomainHash](daaAddedBlocksCacheSize, preallocate),
 		daaScoreBucket:         prefixBucket.Bucket(daaScoreBucketName),
 		daaAddedBlocksBucket:   prefixBucket.Bucket(daaAddedBlocksBucketName),
 	}
@@ -91,6 +95,9 @@ func (daas *daaBlocksStore) DAAAddedBlocks(dbContext model.DBReader, stagingArea
 	addedBlocks, ok := stagingShard.daaAddedBlocksToAdd[*blockHash]
 	if ok && addedBlocks != nil {
 		return externalapi.CloneHashes(addedBlocks), nil
+	}
+	if daas.historyMask.Masks(database.HistoryMaskDAAAddedBlocks, blockHash) {
+		return nil, database.MaskedDataNotFound("DAA added blocks", blockHash)
 	}
 	addedBlocksCached, ok := daas.daaAddedBlocksLRUCache.Get(blockHash)
 	if ok && addedBlocksCached != nil {

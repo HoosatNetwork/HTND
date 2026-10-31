@@ -42,6 +42,7 @@ type gRPCServer struct {
 	// whether its one stream outside the limit is taken. Both are guarded by inboundConnectionCountLock.
 	refuseAllInbound   bool
 	requestedPeerSlots map[string]bool
+	rpcAllowIPNets     []*net.IPNet
 
 	// compressionFallback is a pointer, like inboundConnectionCountLock, because NewP2PServer embeds
 	// gRPCServer by value and every connection refers back to that copy.
@@ -108,7 +109,18 @@ func (s *gRPCServer) Start() error {
 }
 
 func (s *gRPCServer) listenOn(listenAddr string) error {
-	listener, err := net.Listen("tcp", listenAddr)
+	listenNetwork := "tcp"
+	host, _, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return errors.Wrapf(err, "invalid %s listen address %s", s.name, listenAddr)
+	}
+	switch host {
+	case "0.0.0.0":
+		listenNetwork = "tcp4"
+	case "::":
+		listenNetwork = "tcp6"
+	}
+	listener, err := net.Listen(listenNetwork, listenAddr)
 	if err != nil {
 		return errors.Wrapf(err, "%s error listening on %s", s.name, listenAddr)
 	}
@@ -156,6 +168,10 @@ func (s *gRPCServer) handleInboundConnection(ctx context.Context, stream grpcStr
 	tcpAddress, ok := peerInfo.Addr.(*net.TCPAddr)
 	if !ok {
 		return errors.Errorf("non-tcp connections are not supported")
+	}
+
+	if s.rpcAllowIPNets != nil && !isRPCIPAllowed(tcpAddress.IP, s.rpcAllowIPNets) {
+		return status.Errorf(codes.PermissionDenied, "RPC connection from %s is not allowed", tcpAddress.IP)
 	}
 
 	release, err := s.admitInbound(tcpAddress)

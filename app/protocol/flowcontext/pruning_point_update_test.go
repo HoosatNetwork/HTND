@@ -3,6 +3,7 @@ package flowcontext
 import (
 	"bytes"
 	"math"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,7 +32,8 @@ type failingUpdateDB struct {
 	failMethod   bool
 	failSetWrite bool
 	setWrites    int
-	failDeletion bool
+	// failDeletion is used from the background check of the pruning point UTXO set, which makes the deletion commit.
+	failDeletion atomic.Bool
 }
 
 func (db *failingUpdateDB) Put(key *database.Key, value []byte) error {
@@ -65,13 +67,13 @@ type failingUpdateTransaction struct {
 }
 
 func (tx *failingUpdateTransaction) Commit() error {
-	if tx.db.failDeletion {
+	if tx.db.failDeletion.Load() {
 		updating, err := tx.db.Database.Has(tx.db.updatingKey)
 		if err != nil {
 			return err
 		}
 		if updating {
-			tx.db.failDeletion = false
+			tx.db.failDeletion.Store(false)
 			_ = tx.Transaction.Rollback()
 			return errInjected
 		}
@@ -82,7 +84,8 @@ func (tx *failingUpdateTransaction) Commit() error {
 // TestAddBlockKeepsAFailedPruningPointUpdatePending pins how a block submitted through AddBlock treats the pruning
 // point UTXO set update it leaves pending, with DeferPruningPointUTXOSetUpdate on as the node's app sets it. If the
 // update fails before its last commit, AddBlock still reports the block as added - it is committed - and the update
-// stays pending. The next AddBlock runs it again and finishes it.
+// stays pending. The next AddBlock runs it again and finishes it. The last commit is made by the update's check of the
+// set against its commitment, which runs in the background.
 func TestAddBlockKeepsAFailedPruningPointUpdatePending(t *testing.T) {
 	for _, failure := range []string{"diff method record", "pruning point UTXO set write", "past block deletion commit"} {
 		t.Run(failure, func(t *testing.T) {
@@ -118,6 +121,7 @@ func testAddBlockKeepsAFailedPruningPointUpdatePending(t *testing.T, consensusCo
 	if err != nil {
 		t.Fatalf("domain.New: %+v", err)
 	}
+	defer domainInstance.Consensus().Close()
 	flowContext := New(nil, domainInstance, nil, &netadapter.NetAdapter{}, nil)
 	flowContext.lastRebroadcastTime = time.Now()
 	updating := func() bool {
@@ -146,7 +150,7 @@ func testAddBlockKeepsAFailedPruningPointUpdatePending(t *testing.T, consensusCo
 	case "pruning point UTXO set write":
 		failingDB.failSetWrite = true
 	case "past block deletion commit":
-		failingDB.failDeletion = true
+		failingDB.failDeletion.Store(true)
 	}
 	var pruningPoint *externalapi.DomainHash
 	for i := 0; i < 300; i++ {
@@ -162,7 +166,15 @@ func testAddBlockKeepsAFailedPruningPointUpdatePending(t *testing.T, consensusCo
 	if pruningPoint.Equal(consensusConfig.GenesisHash) {
 		t.Fatalf("setup: the pruning point never moved")
 	}
-	if failingDB.failMethod || failingDB.failSetWrite || failingDB.failDeletion {
+	waitFor := func(what string, condition func() bool) {
+		for deadline := time.Now().Add(30 * time.Second); !condition(); time.Sleep(time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting until %s", what)
+			}
+		}
+	}
+	waitFor("the injected failure happened", func() bool { return !failingDB.failDeletion.Load() })
+	if failingDB.failMethod || failingDB.failSetWrite {
 		t.Fatalf("setup: the injected failure never happened")
 	}
 	if !updating() {
@@ -170,9 +182,7 @@ func testAddBlockKeepsAFailedPruningPointUpdatePending(t *testing.T, consensusCo
 	}
 
 	addBlock()
-	if updating() {
-		t.Fatalf("the next AddBlock did not finish the pending pruning point UTXO set update")
-	}
+	waitFor("the next AddBlock finished the pending pruning point UTXO set update", func() bool { return !updating() })
 	health, err := domainInstance.Consensus().CheckUTXOHealth(pruningPoint)
 	if err != nil {
 		t.Fatalf("CheckUTXOHealth: %+v", err)

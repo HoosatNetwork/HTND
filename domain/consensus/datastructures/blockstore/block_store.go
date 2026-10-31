@@ -34,9 +34,25 @@ type blockStore struct {
 	// existsCache remembers blocks HasBlock found in the database, without their bodies. HasBlock
 	// asks about the key only, so answering it needs neither the block nor a slot in cache.
 	existsCache *lrucache.LRUCache[struct{}]
+	// historyMask makes the bodies a running history deletion job deletes read as not
+	// found (see database.HistoryMask). Set once, before any reader runs.
+	historyMask *database.HistoryMask
 	countCached uint64
-	bucket      model.DBBucket
-	countKey    model.DBKey
+	// deletedCount is the number of block bodies history deletion jobs deleted, as stored
+	// under deletedKey, and taken off countCached. Each count key has one writer and is
+	// written with what it counts: the foreground's block commits write blocks-count and,
+	// in blocks-count-deleted, the deletedCount that count already reflects; history
+	// deletion batches write blocks-deleted with their deletes, without the consensus lock.
+	// The count is blocks-count minus (blocks-deleted minus blocks-count-deleted): the
+	// bodies deleted since the last block commit. Guarded by lock, like countCached.
+	deletedCount uint64
+	// legacyCountStale is set when startup found the stored blocks-count behind deletions,
+	// for RewriteStaleLegacyCountDirect.
+	legacyCountStale bool
+	bucket           model.DBBucket
+	countKey         model.DBKey
+	countedKey       model.DBKey
+	deletedKey       model.DBKey
 }
 
 // New instantiates a new BlockStore. Its block cache holds at most cacheSize blocks whose serialized
@@ -50,6 +66,8 @@ func New(dbContext model.DBReader, prefixBucket model.DBBucket, cacheSize int, c
 		existsCache: lrucache.New[struct{}](cacheSize, preallocate),
 		bucket:      prefixBucket.Bucket(bucketName),
 		countKey:    prefixBucket.Key([]byte("blocks-count")),
+		countedKey:  prefixBucket.Key([]byte("blocks-count-deleted")),
+		deletedKey:  prefixBucket.Key([]byte("blocks-deleted")),
 	}
 
 	err := blockStore.initializeCount(dbContext)
@@ -80,10 +98,75 @@ func (bs *blockStore) initializeCount(dbContext model.DBReader) error {
 			return err
 		}
 	}
+	deleted, err := bs.storedCount(dbContext, bs.deletedKey)
+	if err != nil {
+		return err
+	}
+	counted, err := bs.storedCount(dbContext, bs.countedKey)
+	if err != nil {
+		return err
+	}
+	// blocks-count already took off the deletions up to blocks-count-deleted; history
+	// deletion batches deleted the rest of blocks-deleted after the last block commit. A
+	// missing key reads zero. This is exact after a restart, after a crash between a batch
+	// and the next block commit, and after the previous release ran on an un-normalized
+	// database: it keeps blocks-count from the value it found, adds and deletes its own
+	// blocks there, and never writes the other two keys.
+	stale := counted != deleted
+	if counted > deleted || deleted-counted > count {
+		// The keys contradict each other (damage, or a writer that is none of the above).
+		// ponytail: an O(blocks) recount at startup, in this case only.
+		bodies, err := bs.countStoredBodies(dbContext)
+		if err != nil {
+			return err
+		}
+		log.Warnf("blocks-count %d, blocks-count-deleted %d and blocks-deleted %d do not agree; recounted %d "+
+			"stored blocks", count, counted, deleted, bodies)
+		count, stale = bodies, true
+	} else {
+		if stale {
+			log.Infof("blocks-count %d is behind %d deletions after the last block commit; the count is %d",
+				count, deleted-counted, count-(deleted-counted))
+		}
+		count -= deleted - counted
+	}
 	bs.lock.Lock()
 	bs.countCached = count
+	bs.deletedCount = deleted
+	bs.legacyCountStale = stale
 	bs.lock.Unlock()
 	return nil
+}
+
+// countStoredBodies counts the blocks stored in the database.
+func (bs *blockStore) countStoredBodies(dbContext model.DBReader) (count uint64, err error) {
+	cursor, err := dbContext.Cursor(bs.bucket)
+	if err != nil {
+		return 0, err
+	}
+	// An exhausted iterator may have stopped on an I/O error. Do not publish or
+	// persist a partial recovery count when Close reports that failure.
+	defer func() {
+		if closeErr := cursor.Close(); err == nil && closeErr != nil {
+			count, err = 0, closeErr
+		}
+	}()
+	for ok := cursor.First(); ok; ok = cursor.Next() {
+		count++
+	}
+	return count, nil
+}
+
+// storedCount reads a count key; a missing key is zero.
+func (bs *blockStore) storedCount(dbContext model.DBReader, key model.DBKey) (uint64, error) {
+	countBytes, err := dbContext.Get(key)
+	if database.IsNotFoundError(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return bs.deserializeBlockCount(countBytes)
 }
 
 // Stage stages the given block for the given blockHash
@@ -138,6 +221,9 @@ func (bs *blockStore) BlockWithoutCaching(dbContext model.DBReader, blockHash *e
 func (bs *blockStore) committedBlock(dbContext model.DBReader, blockHash *externalapi.DomainHash, addToCache bool) (
 	*externalapi.DomainBlock, error,
 ) {
+	if bs.historyMask.Masks(database.HistoryMaskBlocks, blockHash) {
+		return nil, database.MaskedDataNotFound("block", blockHash)
+	}
 	var cachedBlock *externalapi.DomainBlock
 	hit, err := bs.cache.Decode(blockHash, func(blockBytes []byte, powHash string) error {
 		var err error
@@ -196,6 +282,9 @@ func (bs *blockStore) HasBlockWithoutCaching(dbContext model.DBReader, blockHash
 func (bs *blockStore) committedHasBlock(dbContext model.DBReader, blockHash *externalapi.DomainHash, addToCache bool) (
 	bool, error,
 ) {
+	if bs.historyMask.Masks(database.HistoryMaskBlocks, blockHash) {
+		return false, nil
+	}
 	cachedHas := bs.cache.Has(blockHash)
 	if !cachedHas {
 		bs.lock.Lock()

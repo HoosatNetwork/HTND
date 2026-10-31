@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/HoosatNetwork/HTND/v2/domain"
@@ -49,8 +50,14 @@ func HandleHandshake(context HandleHandshakeContext, netConnection *netadapter.N
 
 	peer := peerpkg.New(netConnection)
 
+	// children counts both goroutines below. HandleHandshake waits for them before it returns, so that the protocol
+	// manager, which waits for this flow on Close, does not count it as finished while one of them is still running.
+	var children sync.WaitGroup
+	children.Add(2)
+
 	var peerAddress *appmessage.NetAddress
 	spawn("HandleHandshake-ReceiveVersion", func() {
+		defer children.Done()
 		address, err := ReceiveVersion(context, receiveVersionRoute, outgoingRoute, peer)
 		if err != nil {
 			handleError(err, "ReceiveVersion", &isStopping, errChan)
@@ -63,6 +70,7 @@ func HandleHandshake(context HandleHandshakeContext, netConnection *netadapter.N
 	})
 
 	spawn("HandleHandshake-SendVersion", func() {
+		defer children.Done()
 		err := SendVersion(context, sendVersionRoute, outgoingRoute, peer)
 		if err != nil {
 			handleError(err, "SendVersion", &isStopping, errChan)
@@ -75,6 +83,11 @@ func HandleHandshake(context HandleHandshakeContext, netConnection *netadapter.N
 
 	select {
 	case err := <-errChan:
+		// The other goroutine can still be waiting for a message, or be inside a consensus call. Close the handshake
+		// routes so that a wait for a message returns, and wait for it.
+		receiveVersionRoute.Close()
+		sendVersionRoute.Close()
+		children.Wait()
 		if err != nil {
 			return nil, err
 		}

@@ -502,6 +502,10 @@ func RPCBlockToDomainBlock(block *RPCBlock, powHash string) (*externalapi.Domain
 	if block.Header.Version > math.MaxUint16 {
 		return nil, errors.Errorf("block header version %d exceeds uint16", block.Header.Version)
 	}
+	err = ValidateBlockHeaderTimestamp(block.Header.Timestamp)
+	if err != nil {
+		return nil, err
+	}
 	header := blockheader.NewImmutableBlockHeader(
 		checkedUint32ToUint16(block.Header.Version),
 		parents,

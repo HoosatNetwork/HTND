@@ -56,8 +56,15 @@ func (bss *blockStagingShard) Commit(dbTx model.DBTransaction) error {
 	return nil
 }
 
+// commitCount writes blocks-count and the deletions it reflects (blocks-count-deleted). History
+// deletion batches take their bodies off countCached and add them to deletedCount without the
+// consensus lock (EvictDeleted), so the count is updated by delta and read together with the
+// deletions in one section under bs.lock.
 func (bss *blockStagingShard) commitCount(dbTx model.DBTransaction) error {
-	count := bss.store.count(bss)
+	bss.store.lock.Lock()
+	delta := uint64(len(bss.toAdd)) - uint64(len(bss.toDelete))
+	count, deleted := bss.store.countCached+delta, bss.store.deletedCount
+	bss.store.lock.Unlock()
 	countBytes, err := bss.store.serializeBlockCount(count)
 	if err != nil {
 		return err
@@ -66,7 +73,22 @@ func (bss *blockStagingShard) commitCount(dbTx model.DBTransaction) error {
 	if err != nil {
 		return err
 	}
-	bss.store.countCached = count
+	// With no history deletions, preserve the legacy count schema. A zero
+	// counter need not be recorded: a missing split key already reads as zero.
+	if deleted != 0 {
+		deletedBytes, err := bss.store.serializeBlockCount(deleted)
+		if err != nil {
+			return err
+		}
+		if err = dbTx.Put(bss.store.countedKey, deletedBytes); err != nil {
+			return err
+		}
+	}
+	// Publish only after both writes succeed. Apply the delta rather than the
+	// captured count because history eviction can decrement it during the writes.
+	bss.store.lock.Lock()
+	bss.store.countCached += delta
+	bss.store.lock.Unlock()
 	return nil
 }
 

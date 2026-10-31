@@ -199,6 +199,7 @@ func (ps *pruningStore) deserializeMultiset(multisetBytes []byte) (model.Multise
 }
 
 func (ps *pruningStore) CommitImportedPruningPointUTXOSet(dbContext model.DBWriter) error {
+	ps.pruningPointUTXOSetGeneration.Add(1)
 	// Delete all the old UTXOs from the database
 	deleteCursor, err := dbContext.Cursor(ps.pruningPointUTXOSetBucket)
 	if err != nil {

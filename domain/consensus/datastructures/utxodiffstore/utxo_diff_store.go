@@ -20,18 +20,21 @@ var (
 // utxoDiffStore represents a store of UTXODiffs
 type utxoDiffStore struct {
 	shardID             model.StagingShardID
-	utxoDiffCache       *lrucache.LRUCache[externalapi.UTXODiff]
-	utxoDiffChildCache  *lrucache.LRUCache[*externalapi.DomainHash]
+	utxoDiffCache       *lrucache.ConcurrentLRUCache[externalapi.UTXODiff]
+	utxoDiffChildCache  *lrucache.ConcurrentLRUCache[*externalapi.DomainHash]
 	utxoDiffBucket      model.DBBucket
 	utxoDiffChildBucket model.DBBucket
+	// historyMask makes the diffs and diff children a running history deletion job deletes
+	// read as not found (see database.HistoryMask). Set once, before any reader runs.
+	historyMask *database.HistoryMask
 }
 
 // New instantiates a new UTXODiffStore
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.UTXODiffStore {
 	return &utxoDiffStore{
 		shardID:             staging.GenerateShardingID(),
-		utxoDiffCache:       lrucache.New[externalapi.UTXODiff](cacheSize, preallocate),
-		utxoDiffChildCache:  lrucache.New[*externalapi.DomainHash](cacheSize, preallocate),
+		utxoDiffCache:       lrucache.NewConcurrent[externalapi.UTXODiff](cacheSize, preallocate),
+		utxoDiffChildCache:  lrucache.NewConcurrent[*externalapi.DomainHash](cacheSize, preallocate),
 		utxoDiffBucket:      prefixBucket.Bucket(utxoDiffBucketName),
 		utxoDiffChildBucket: prefixBucket.Bucket(utxoDiffChildBucketName),
 	}
@@ -74,6 +77,10 @@ func (uds *utxoDiffStore) UTXODiff(dbContext model.DBReader, stagingArea *model.
 		return utxoDiff, nil
 	}
 
+	if uds.historyMask.Masks(database.HistoryMaskUTXODiffs, blockHash) {
+		return nil, database.MaskedDataNotFound("UTXO diff", blockHash)
+	}
+
 	utxoDiffCached, ok := uds.utxoDiffCache.Get(blockHash)
 	if ok && utxoDiffCached != nil {
 		return utxoDiffCached, nil
@@ -109,6 +116,10 @@ func (uds *utxoDiffStore) UTXODiffChild(dbContext model.DBReader, stagingArea *m
 	if utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]; ok {
 		return utxoDiffChild, nil
 	}
+	// A deleted child reads as no child, as a missing key does below.
+	if uds.historyMask.Masks(database.HistoryMaskUTXODiffs, blockHash) {
+		return nil, nil
+	}
 	utxoDiffChildCached, ok := uds.utxoDiffChildCache.Get(blockHash)
 	if ok && utxoDiffChildCached != nil {
 		return utxoDiffChildCached, nil
@@ -137,6 +148,10 @@ func (uds *utxoDiffStore) HasUTXODiffChild(dbContext model.DBReader, stagingArea
 	utxoDiffChild, ok := stagingShard.utxoDiffChildToAdd[*blockHash]
 	if ok {
 		return utxoDiffChild != nil, nil
+	}
+
+	if uds.historyMask.Masks(database.HistoryMaskUTXODiffs, blockHash) {
+		return false, nil
 	}
 
 	if uds.utxoDiffChildCache.Has(blockHash) {

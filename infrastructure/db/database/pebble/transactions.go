@@ -54,7 +54,17 @@ func (db *DB) BeginUnindexed() (database.Transaction, error) {
 }
 
 // Commit commits whatever changes were made to the database within this transaction.
-func (tx *DBTransaction) Commit() error {
+func (tx *DBTransaction) Commit() error { return tx.commit(pebble.NoSync) }
+
+// CommitSync fences all preceding WAL records before a PP journal phase permits
+// dependent work. Disabled WAL cannot provide this ordering/durability guarantee.
+func (tx *DBTransaction) CommitSync() error {
+	if tx.db.walDisabled {
+		return errors.New("synced commit requires WAL")
+	}
+	return tx.commit(pebble.Sync)
+}
+func (tx *DBTransaction) commit(options *pebble.WriteOptions) error {
 	if tx.isClosed {
 		return errors.New("cannot commit a closed transaction")
 	}
@@ -67,7 +77,7 @@ func (tx *DBTransaction) Commit() error {
 	tx.cursors = nil
 	tx.isClosed = true
 	tx.keyModifications = nil // Clear key tracking
-	return errors.WithStack(tx.batch.Commit(pebble.NoSync))
+	return errors.WithStack(tx.batch.Commit(options))
 }
 
 // Rollback rolls back whatever changes were made to the database within this transaction.

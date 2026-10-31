@@ -339,3 +339,81 @@ func TestHandleGetBlocksCacheRespectsIncludeFlags(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleGetBlocksReturnsLowHashOnce(t *testing.T) {
+	os.Setenv("HTND_TEST_MODE", "true")
+	defer os.Unsetenv("HTND_TEST_MODE")
+
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestHandleGetBlocksReturnsLowHashOnce")
+		if err != nil {
+			t.Fatalf("Error setting up consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		cfg := &config.Config{
+			Flags: &config.Flags{},
+		}
+		cfg.ActiveNetParams = &consensusConfig.Params
+
+		fakeContext := rpccontext.Context{
+			Config: cfg,
+			Domain: fakeDomain{tc},
+		}
+
+		// Random extra data keeps these blocks apart from other tests' blocks in the response cache.
+		addBlockOnGenesis := func() *externalapi.DomainHash {
+			extra := make([]byte, 32)
+			_, _ = rand.Read(extra)
+			coinbaseData := &externalapi.DomainCoinbaseData{
+				ScriptPublicKey: &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0},
+				ExtraData:       extra,
+			}
+			blockHash, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, coinbaseData, nil)
+			if err != nil {
+				t.Fatalf("Failed adding block: %v", err)
+			}
+			return blockHash
+		}
+
+		// Of two blocks on genesis, the one that is not the virtual selected parent is in its anticone.
+		lowHash := addBlockOnGenesis()
+		otherHash := addBlockOnGenesis()
+		virtualSelectedParent, err := tc.GetVirtualSelectedParent()
+		if err != nil {
+			t.Fatalf("Failed getting SelectedParent: %v", err)
+		}
+		if lowHash.Equal(virtualSelectedParent) {
+			lowHash = otherHash
+		}
+
+		expected := []string{lowHash.String(), virtualSelectedParent.String()}
+		for _, includeBlocks := range []bool{false, true} {
+			request := &appmessage.GetBlocksRequestMessage{LowHash: lowHash.String(), IncludeBlocks: includeBlocks}
+			responseMsg, err := rpchandlers.HandleGetBlocks(&fakeContext, nil, request)
+			if err != nil {
+				t.Fatalf("HandleGetBlocks returned error: %v", err)
+			}
+			response := responseMsg.(*appmessage.GetBlocksResponseMessage)
+			if response.Error != nil {
+				t.Fatalf("HandleGetBlocks returned RPC error: %v", response.Error)
+			}
+
+			if !reflect.DeepEqual(response.BlockHashes, expected) {
+				t.Fatalf("includeBlocks=%t: expected block hashes %v, got %v", includeBlocks, expected, response.BlockHashes)
+			}
+			if !includeBlocks {
+				continue
+			}
+			if len(response.Blocks) != len(expected) {
+				t.Fatalf("expected %d blocks, got %d", len(expected), len(response.Blocks))
+			}
+			for i, block := range response.Blocks {
+				if block.VerboseData.Hash != expected[i] {
+					t.Fatalf("block %d is %s, want %s", i, block.VerboseData.Hash, expected[i])
+				}
+			}
+		}
+	})
+}

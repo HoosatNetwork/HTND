@@ -111,6 +111,17 @@ func (csm *consensusStateManager) updateVirtualWithParents(
 		return nil, err
 	}
 
+	// Every caller - ResolveVirtual, AddBlock's updateVirtual, RecomputeVirtual, the pruning point import - can move
+	// virtual onto a block whose diff is still relative to another block; give it a virtual-relative one first.
+	selectedTip, err := csm.virtualSelectedParent(stagingArea)
+	if err != nil {
+		return nil, err
+	}
+	err = csm.stageSelectedTipDiffRelativeToVirtual(stagingArea, selectedTip)
+	if err != nil {
+		return nil, err
+	}
+
 	// This is needed for `csm.CalculatePastUTXOAndAcceptanceData`
 	_, err = csm.difficultyManager.StageDAADataAndReturnRequiredDifficulty(stagingArea, model.VirtualBlockHash, false)
 	if err != nil {
@@ -149,6 +160,18 @@ func (csm *consensusStateManager) updateSelectedTipUTXODiff(
 	selectedTip, err := csm.virtualSelectedParent(stagingArea)
 	if err != nil {
 		return err
+	}
+
+	// The selected tip's stored diff is rebased below as if it were relative to virtual's UTXO set, which holds only
+	// for the one block with no diff child - see stageSelectedTipDiffRelativeToVirtual. Fail instead of writing a wrong
+	// virtual UTXO set and leaving a second root behind.
+	hasUTXODiffChild, err := csm.utxoDiffStore.HasUTXODiffChild(csm.databaseContext, stagingArea, selectedTip)
+	if err != nil {
+		return err
+	}
+	if hasUTXODiffChild {
+		return errors.Errorf("updateSelectedTipUTXODiff: virtual's selected parent %s still has a UTXO diff child, "+
+			"so its diff is not relative to virtual's UTXO set", selectedTip)
 	}
 
 	log.Debugf("Calculating new UTXO diff for virtual diff parent %s", selectedTip)

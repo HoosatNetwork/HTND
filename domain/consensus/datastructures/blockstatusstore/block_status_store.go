@@ -15,15 +15,18 @@ var bucketName = []byte("block-statuses")
 // blockStatusStore represents a store of BlockStatuses
 type blockStatusStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache[externalapi.BlockStatus]
+	cache   *lrucache.ConcurrentLRUCache[externalapi.BlockStatus]
 	bucket  model.DBBucket
+	// historyMask makes the blocks a running history deletion job deletes read as
+	// header-only (see database.HistoryMask). Set once, before any reader runs.
+	historyMask *database.HistoryMask
 }
 
 // New instantiates a new BlockStatusStore
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.BlockStatusStore {
 	return &blockStatusStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New[externalapi.BlockStatus](cacheSize, preallocate),
+		cache:   lrucache.NewConcurrent[externalapi.BlockStatus](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -44,6 +47,10 @@ func (bss *blockStatusStore) Get(dbContext model.DBReader, stagingArea *model.St
 
 	if status, ok := stagingShard.toAdd[*blockHash]; ok {
 		return status, nil
+	}
+
+	if bss.historyMask.Masks(database.HistoryMaskStatus, blockHash) {
+		return externalapi.StatusHeaderOnly, nil
 	}
 
 	if status, ok := bss.cache.Get(blockHash); ok {
@@ -67,13 +74,15 @@ func (bss *blockStatusStore) Get(dbContext model.DBReader, stagingArea *model.St
 }
 
 // GetWithoutCaching reads a block's last committed status from the database alone, reporting
-// whether it exists, for callers that do not hold the consensus lock. The status cache is an
-// lrucache.LRUCache, which is not safe for concurrent use - a Get reorders it - and block processing
-// writes it under the lock, so a lock-free reader must not touch it. A status changes as a block is
+// whether it exists, for callers that do not hold the consensus lock. Block processing writes the
+// status cache under the lock, so a lock-free reader must not touch it. A status changes as a block is
 // verified; this returns the one in the last committed transaction.
 func (bss *blockStatusStore) GetWithoutCaching(dbContext model.DBReader, blockHash *externalapi.DomainHash) (
 	status externalapi.BlockStatus, exists bool, err error,
 ) {
+	if bss.historyMask.Masks(database.HistoryMaskStatus, blockHash) {
+		return externalapi.StatusHeaderOnly, true, nil
+	}
 	statusBytes, err := dbContext.Get(bss.hashAsKey(blockHash))
 	if errors.Is(err, database.ErrNotFound) {
 		return 0, false, nil
@@ -93,6 +102,10 @@ func (bss *blockStatusStore) Exists(dbContext model.DBReader, stagingArea *model
 	stagingShard := bss.stagingShard(stagingArea)
 
 	if _, ok := stagingShard.toAdd[*blockHash]; ok {
+		return true, nil
+	}
+
+	if bss.historyMask.Masks(database.HistoryMaskStatus, blockHash) {
 		return true, nil
 	}
 

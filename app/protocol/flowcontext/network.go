@@ -52,30 +52,38 @@ func (f *FlowContext) AddToPeers(peer *peerpkg.Peer) error {
 	return nil
 }
 
-// RemoveFromPeers remove this peer from the peers list.
+// RemoveFromPeers remove this peer from the peers list. An entry that a newer connection of the same peer has added
+// since is left alone: the old connection removes its peer once more after its flows have returned.
 func (f *FlowContext) RemoveFromPeers(peer *peerpkg.Peer) {
 	f.peersMutex.Lock()
 	defer f.peersMutex.Unlock()
 
-	delete(f.peers, *peer.ID())
+	if f.peers[*peer.ID()] == peer {
+		delete(f.peers, *peer.ID())
+	}
 }
 
-// readyPeerConnections returns the NetConnections of all the ready peers.
-func (f *FlowContext) readyPeerConnections() []*netadapter.NetConnection {
+// readyPeerConnections returns the NetConnections of all the ready peers except excluded, which may be nil.
+func (f *FlowContext) readyPeerConnections(excluded *peerpkg.Peer) []*netadapter.NetConnection {
 	f.peersMutex.RLock()
 	defer f.peersMutex.RUnlock()
-	peerConnections := make([]*netadapter.NetConnection, len(f.peers))
-	i := 0
+	peerConnections := make([]*netadapter.NetConnection, 0, len(f.peers))
 	for _, peer := range f.peers {
-		peerConnections[i] = peer.Connection()
-		i++
+		if peer != excluded {
+			peerConnections = append(peerConnections, peer.Connection())
+		}
 	}
 	return peerConnections
 }
 
 // Broadcast broadcast the given message to all the ready peers.
 func (f *FlowContext) Broadcast(message appmessage.Message) error {
-	return f.netAdapter.P2PBroadcast(f.readyPeerConnections(), message)
+	return f.BroadcastExcept(message, nil)
+}
+
+// BroadcastExcept broadcasts the given message to all the ready peers except excluded.
+func (f *FlowContext) BroadcastExcept(message appmessage.Message, excluded *peerpkg.Peer) error {
+	return f.netAdapter.P2PBroadcast(f.readyPeerConnections(excluded), message)
 }
 
 // Peers returns the currently active peers

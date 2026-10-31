@@ -189,6 +189,15 @@ func (am *AddressManager) removeAddressNoLock(address *appmessage.NetAddress) er
 	return am.store.remove(key)
 }
 
+// Stop makes the address manager stop writing to the database, which the node closes once it has stopped. Addresses
+// are still kept in memory. Not everything that records addresses is stopped before the database is closed: a DNS
+// seeding lookup that returns later, for one, still adds what it found.
+func (am *AddressManager) Stop() {
+	am.mutex.Lock()
+	defer am.mutex.Unlock()
+	am.store.stopped = true
+}
+
 // AddAddress adds address to the address manager
 func (am *AddressManager) AddAddress(address *appmessage.NetAddress) error {
 	am.mutex.Lock()

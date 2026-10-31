@@ -32,13 +32,16 @@ func setGatedChecks(tc testapi.TestConsensus, version uint16) {
 	}
 }
 
-// TestGatedChecksAreUnscheduledOnMainnet pins that none of these checks is scheduled on mainnet: each
-// would reject blocks of the existing chain if it applied to a version mainnet has reached.
-func TestGatedChecksAreUnscheduledOnMainnet(t *testing.T) {
+// TestGatedChecksPreservePreActivationHistory guards historical mainnet blocks
+// before the deliberate v10 activation. Scheduling a check must not apply it
+// retroactively to versions whose header fields were not validated.
+func TestGatedChecksPreservePreActivationHistory(t *testing.T) {
 	gates := dagconfig.MainnetParams.HardForkGates
 	for name, gate := range gatedChecks {
-		if *gate(&gates) != ^uint16(0) {
-			t.Errorf("%s is scheduled on mainnet at block version %d", name, *gate(&gates))
+		for version := uint16(1); version < 10; version++ {
+			if dagconfig.HardForkActive(*gate(&gates), version) {
+				t.Errorf("%s activates in pre-fork history at version %d", name, version)
+			}
 		}
 	}
 }

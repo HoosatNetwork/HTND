@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"fmt"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/processes/pruningmanager"
 	"math"
 	"math/big"
 	"os"
@@ -96,6 +97,12 @@ type consensus struct {
 	disqualificationStreak disqualificationStreak
 	// servedUTXOSetCheck memoises CheckUTXOHealth. It has its own lock.
 	servedUTXOSetCheck servedUTXOSetCheck
+	// pruningPointUTXOSetScanner hashes the pruning point UTXO set without the lock, then compares its commitment
+	// and finishes the update under the lock, with deferPruningPointUTXOSetUpdate.
+	pruningPointUTXOSetScanner pruningPointUTXOSetScanner
+	// historyDeletionOwner runs the history deletion jobs the pruning point updates record, with
+	// Config.DeferPruningPointUTXOSetUpdate on a backend with read snapshots.
+	historyDeletionOwner historyDeletionOwner
 }
 
 func (s *consensus) exportPruningPointExodusBundle(pruningPoint *externalapi.DomainHash, exportRoot, network string) {
@@ -174,7 +181,8 @@ func (s *consensus) ValidateAndInsertBlockWithTrustedData(block *externalapi.Blo
 	if err != nil {
 		return err
 	}
-	// Nothing is announced on this path, so a pruning point move it made is finished here, as before.
+	// Nothing is announced on this path, so a pruning point move it made is updated here, as before (with
+	// deferPruningPointUTXOSetUpdate, the set is then checked against its commitment in the background).
 	return s.pruningManager.UpdatePruningPointIfRequired()
 }
 
@@ -502,7 +510,9 @@ func (s *consensus) ValidateAndInsertBlock(block *externalapi.DomainBlock, updat
 // add blocks call it after their attempt to announce them, so the block that moved the pruning point usually reaches
 // peers before the update holds the consensus lock. Other block-adding flows, IterateUTXOSetAtBlockFromAcceptanceData,
 // trusted-data insertion, ResolveVirtual and the next pruning point move run a pending update too, so it can also
-// start earlier.
+// start earlier. With deferPruningPointUTXOSetUpdate the update writes the set and returns: only the full-set hash
+// walk runs without the lock (pruningPointUTXOSetScanner). Diff derivation and application, commitment comparison,
+// and finalization (including past block deletion) still hold the lock.
 func (s *consensus) UpdatePruningPointIfRequired() error {
 	// Checked without the lock first: this runs after every added block and is almost always a no-op.
 	pending, err := s.pruningStore.HadStartedUpdatingPruningPointUTXOSet(s.databaseContext)
@@ -1236,7 +1246,16 @@ func (s *consensus) ValidateAndInsertImportedPruningPoint(newPruningPoint *exter
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.blockProcessor.ValidateAndInsertImportedPruningPoint(newPruningPoint)
+	// Active local journals and imported-state replacement cannot share a destination.
+	// Staging consensus (without a materialized position) retains the synchronous importer.
+	if pruningmanager.JournalActive(s.pruningManager) {
+		return errors.New("pruning journal: active instance refuses import; use staging consensus")
+	}
+
+	if err := s.blockProcessor.ValidateAndInsertImportedPruningPoint(newPruningPoint); err != nil {
+		return err
+	}
+	return pruningmanager.ResetJournalAfterImport(s.pruningManager)
 }
 
 func (s *consensus) GetVirtualSelectedParent() (*externalapi.DomainHash, error) {
@@ -1431,6 +1450,9 @@ func (s *consensus) ArePruningPointsViolatingFinality(pruningPoints []externalap
 func (s *consensus) ImportPruningPoints(pruningPoints []externalapi.BlockHeader) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	if pruningmanager.JournalActive(s.pruningManager) {
+		return errors.New("pruning journal: active instance refuses pruning-list import; use staging consensus")
+	}
 
 	stagingArea := model.NewStagingArea()
 	err := s.consensusStateManager.ImportPruningPoints(stagingArea, pruningPoints)
@@ -2073,7 +2095,14 @@ func (s *consensus) RepairDisqualifiedTipChains() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+	return s.repairDisqualifiedChains(stagingArea, tips)
+}
 
+// repairDisqualifiedChains is RepairDisqualifiedTipChains from the given chain tips. The
+// caller holds the lock.
+func (s *consensus) repairDisqualifiedChains(stagingArea *model.StagingArea, tips []*externalapi.DomainHash) (
+	uint64, error,
+) {
 	reset := make(map[externalapi.DomainHash]struct{})
 	for _, tip := range tips {
 		current := tip
@@ -2607,6 +2636,18 @@ func (s *consensus) IterateUTXOSetAtBlockFromAcceptanceData(blockHash *externala
 	err := s.pruningManager.UpdatePruningPointIfRequired()
 	if err != nil {
 		return err
+	}
+	// With deferPruningPointUTXOSetUpdate the update finishes only after the set passed its commitment check, in the
+	// background. Until then the set is not read, as it is not served.
+	if s.deferPruningPointUTXOSetUpdate {
+		pending, err := s.pruningStore.HadStartedUpdatingPruningPointUTXOSet(s.databaseContext)
+		if err != nil {
+			return err
+		}
+		if pending {
+			return errors.New("the pruning point UTXO set is still being checked against its commitment; " +
+				"try again in a few minutes")
+		}
 	}
 
 	stagingArea := model.NewStagingArea()

@@ -18,10 +18,30 @@ import (
 // on: 2^orphanResolutionRange * PHANTOM K.
 const maxOrphans = 600
 
-// AddOrphan adds the block to the orphan set
-func (f *FlowContext) AddOrphan(orphanBlock *externalapi.DomainBlock) {
+// AddOrphan adds the block to the orphan set and returns true. It returns false, and leaves the block out,
+// when every parent of the block is already in the DAG: the parents arrived after the block was refused for
+// missing them (the relay flow asks the peer for a block locator in between). Nothing would unorphan such a
+// block - UnorphanBlocks runs only when a parent is added - so it, and every block built on it, would wait in
+// the orphan set until an IBD fetched them again. The caller should process the block again instead.
+// The check runs under orphansMutex, as UnorphanBlocks does, so a parent added after it still finds the orphan.
+func (f *FlowContext) AddOrphan(orphanBlock *externalapi.DomainBlock) (bool, error) {
 	f.orphansMutex.Lock()
 	defer f.orphansMutex.Unlock()
+
+	hasAllParents := true
+	for _, parentHash := range orphanBlock.Header.DirectParents() {
+		parentInfo, err := f.domain.Consensus().GetBlockInfo(parentHash)
+		if err != nil {
+			return false, err
+		}
+		if !parentInfo.Exists || parentInfo.BlockStatus == externalapi.StatusHeaderOnly {
+			hasAllParents = false
+			break
+		}
+	}
+	if hasAllParents {
+		return false, nil
+	}
 
 	orphanHash := consensushashing.BlockHash(orphanBlock)
 	f.orphans[*orphanHash] = orphanBlock
@@ -32,6 +52,7 @@ func (f *FlowContext) AddOrphan(orphanBlock *externalapi.DomainBlock) {
 	}
 
 	// log.Infof("Received a block with missing parents, adding to orphan pool: %s", orphanHash)
+	return true, nil
 }
 
 func (f *FlowContext) evictRandomOrphan() {

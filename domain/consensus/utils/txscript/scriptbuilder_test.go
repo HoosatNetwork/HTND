@@ -284,6 +284,38 @@ func TestScriptBuilderAddData(t *testing.T) {
 	}
 }
 
+// TestScriptBuilderAddLockTimeAndSequence tests that lock times and sequences are
+// pushed as their little-endian bytes without trailing zeros, and that zero,
+// which has no such bytes, is pushed as empty data.
+func TestScriptBuilderAddLockTimeAndSequence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value    uint64
+		expected []byte
+	}{
+		{value: 0, expected: []byte{Op0}},
+		{value: 0x1234, expected: []byte{OpData2, 0x34, 0x12}},
+	}
+
+	for _, test := range tests {
+		lockTimeScript, err := NewScriptBuilder().AddLockTimeNumber(test.value).Script()
+		if err != nil {
+			t.Fatalf("AddLockTimeNumber(%d): %v", test.value, err)
+		}
+		if !bytes.Equal(lockTimeScript, test.expected) {
+			t.Errorf("AddLockTimeNumber(%d) = %x, want %x", test.value, lockTimeScript, test.expected)
+		}
+		sequenceScript, err := NewScriptBuilder().AddSequenceNumber(test.value).Script()
+		if err != nil {
+			t.Fatalf("AddSequenceNumber(%d): %v", test.value, err)
+		}
+		if !bytes.Equal(sequenceScript, test.expected) {
+			t.Errorf("AddSequenceNumber(%d) = %x, want %x", test.value, sequenceScript, test.expected)
+		}
+	}
+}
+
 // TestExceedMaxScriptSize ensures that all of the functions that can be used
 // to add data to a script don't allow the script to exceed the max allowed
 // size.

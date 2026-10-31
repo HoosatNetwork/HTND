@@ -73,31 +73,33 @@ func TestOffHeapStaysWithinBudgetAndAccountsWeight(t *testing.T) {
 // invisible to the collector, so without the cleanup every dropped store - one per staging-consensus
 // swap, one per test consensus - would leak its whole cache.
 func TestOffHeapFreesBuffersWhenDropped(t *testing.T) {
-	state := make(chan *offHeapState[string], 1)
+	// Observe the allocator's synchronized accounting rather than reading cache state
+	// concurrently with the runtime cleanup. No tests in this package run in parallel.
+	t.Setenv("MEMORY_ALLOCATIONS", "1")
+	waitForFree := func() {
+		t.Helper()
+		deadline := time.After(10 * time.Second)
+		for {
+			runtime.GC()
+			if memory.LogLeaks() == 0 {
+				return
+			}
+			select {
+			case <-deadline:
+				t.Fatal("the dropped cache did not free its buffers")
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+	// Drain any caches from earlier tests before tracking this cache's allocation.
+	waitForFree()
 	func() {
 		c := NewOffHeap[string](10, 1<<20, false)
 		c.Add(newTestHash(t, 1), []byte{1, 2, 3}, "")
-		runtime.AddCleanup(c, func(s *offHeapState[string]) { state <- s }, c.state)
-	}()
-
-	deadline := time.After(10 * time.Second)
-	for {
-		runtime.GC()
-		select {
-		case s := <-state:
-			// Cleanups run one at a time, in no set order: give the cache's own one time to run.
-			for range 100 {
-				if s.lru.Len() == 0 && s.bytes == 0 {
-					return
-				}
-				runtime.GC()
-				time.Sleep(10 * time.Millisecond)
-			}
-			t.Fatalf("the dropped cache still holds %d entries", s.lru.Len())
-		case <-deadline:
-			t.Fatalf("the dropped cache was never collected")
-		default:
-			time.Sleep(10 * time.Millisecond)
+		if count := memory.LogLeaks(); count != 1 {
+			t.Fatalf("the live cache has %d allocations, want 1", count)
 		}
-	}
+		runtime.KeepAlive(c)
+	}()
+	waitForFree()
 }

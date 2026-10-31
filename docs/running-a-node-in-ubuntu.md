@@ -90,10 +90,20 @@ The minimum command to start a node is:
 ~/bin/HTND --saferpc --rpclisten=127.0.0.1:42420
 ```
 
-`--rpclisten=127.0.0.1:42420` keeps the RPC interface on this machine. Without it, HTND listens for RPC on
-every interface, and the RPC interface has no authentication. If another machine needs RPC (a pool, an explorer),
-replace `127.0.0.1` with a private address, or add a second `--rpclisten` for that address, and allow only those
-clients in the firewall.
+`--rpclisten=127.0.0.1:42420` keeps RPC on IPv4 loopback. By default, RPC listens only on IPv4 and IPv6
+loopback. RPC has no authentication.
+
+To allow specific remote clients, use `--rpcallowip` with comma-separated IP addresses or CIDR networks:
+
+```bash
+~/bin/HTND --saferpc --rpcallowip=192.168.1.0/24,203.0.113.7
+```
+
+Bare IPv4 addresses mean `/32`; bare IPv6 addresses mean `/128`. Loopback is always allowed. Setting
+`--rpcallowip` opens the IPv4 wildcard listener (`0.0.0.0`) and rejects RPC connections whose source IP is not
+loopback or in the list. IPv6 entries also open the IPv6 wildcard listener (`[::]`). Because RPC has no
+authentication, use a firewall to restrict exposure too. HTND checks the source address it sees, so a proxy or
+NAT may cause it to see the proxy or translated address instead of the original client.
 
 `--saferpc` disables selected administrative methods (such as `ShutDown`, `Ban`, `Unban` and `AddPeer`) and
 restricts some expensive queries. It does not bind localhost, authenticate callers, or make RPC read-only:
@@ -169,6 +179,8 @@ User=htnd
 ExecStart=/home/htnd/bin/HTND --saferpc --rpclisten=127.0.0.1:42420
 Restart=on-failure
 RestartSec=5s
+# Allow more than HTND's 2-minute component-stop timeout, plus database close time.
+TimeoutStopSec=300
 
 [Install]
 WantedBy=multi-user.target

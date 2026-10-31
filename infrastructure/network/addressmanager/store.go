@@ -20,6 +20,7 @@ type addressStore struct {
 	database           database.Database
 	notBannedAddresses map[addressKey]*address
 	bannedAddresses    map[ipv6]*address
+	stopped            bool // Set by AddressManager.Stop; nothing is written to the database afterwards.
 }
 
 func newAddressStore(database database.Database) (*addressStore, error) {
@@ -104,7 +105,7 @@ func (as *addressStore) add(key addressKey, address *address) error {
 
 	databaseKey := as.notBannedDatabaseKey(key)
 	serializedAddress := as.serializeAddress(address)
-	return as.database.Put(databaseKey, serializedAddress)
+	return as.put(databaseKey, serializedAddress)
 }
 
 // updateNotBanned updates the not-banned address collection
@@ -117,7 +118,7 @@ func (as *addressStore) updateNotBanned(key addressKey, address *address) error 
 
 	databaseKey := as.notBannedDatabaseKey(key)
 	serializedAddress := as.serializeAddress(address)
-	return as.database.Put(databaseKey, serializedAddress)
+	return as.put(databaseKey, serializedAddress)
 }
 
 func (as *addressStore) getNotBanned(key addressKey) (*address, bool) {
@@ -129,7 +130,22 @@ func (as *addressStore) remove(key addressKey) error {
 	delete(as.notBannedAddresses, key)
 
 	databaseKey := as.notBannedDatabaseKey(key)
-	return as.database.Delete(databaseKey)
+	return as.delete(databaseKey)
+}
+
+// put and delete write to the database unless the address manager was stopped.
+func (as *addressStore) put(key *database.Key, value []byte) error {
+	if as.stopped {
+		return nil
+	}
+	return as.database.Put(key, value)
+}
+
+func (as *addressStore) delete(key *database.Key) error {
+	if as.stopped {
+		return nil
+	}
+	return as.database.Delete(key)
 }
 
 func (as *addressStore) getAllNotBanned() []*address {
@@ -174,14 +190,14 @@ func (as *addressStore) addBanned(key addressKey, address *address) error {
 
 	databaseKey := as.bannedDatabaseKey(key)
 	serializedAddress := as.serializeAddress(address)
-	return as.database.Put(databaseKey, serializedAddress)
+	return as.put(databaseKey, serializedAddress)
 }
 
 func (as *addressStore) removeBanned(key addressKey) error {
 	delete(as.bannedAddresses, key.address)
 
 	databaseKey := as.bannedDatabaseKey(key)
-	return as.database.Delete(databaseKey)
+	return as.delete(databaseKey)
 }
 
 func (as *addressStore) getAllBannedNetAddresses() []*appmessage.NetAddress {

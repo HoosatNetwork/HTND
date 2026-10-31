@@ -15,15 +15,18 @@ var bucketName = []byte("multisets")
 // multisetStore represents a store of Multisets
 type multisetStore struct {
 	shardID model.StagingShardID
-	cache   *lrucache.LRUCache[model.Multiset]
+	cache   *lrucache.ConcurrentLRUCache[model.Multiset]
 	bucket  model.DBBucket
+	// historyMask makes the multisets a running history deletion job deletes read as not
+	// found (see database.HistoryMask). Set once, before any reader runs.
+	historyMask *database.HistoryMask
 }
 
 // New instantiates a new MultisetStore
 func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.MultisetStore {
 	return &multisetStore{
 		shardID: staging.GenerateShardingID(),
-		cache:   lrucache.New[model.Multiset](cacheSize, preallocate),
+		cache:   lrucache.NewConcurrent[model.Multiset](cacheSize, preallocate),
 		bucket:  prefixBucket.Bucket(bucketName),
 	}
 }
@@ -51,6 +54,9 @@ func (ms *multisetStore) Get(dbContext model.DBReader, stagingArea *model.Stagin
 	multiset, ok := stagingShard.toAdd[*blockHash]
 	if ok && multiset != nil {
 		return multiset.Clone(), nil
+	}
+	if ms.historyMask.Masks(database.HistoryMaskMultisets, blockHash) {
+		return nil, database.MaskedDataNotFound("multiset", blockHash)
 	}
 	multisetCached, ok := ms.cache.Get(blockHash)
 	if ok && multisetCached != nil {
