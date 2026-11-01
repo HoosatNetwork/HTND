@@ -17,6 +17,8 @@ type pruningStagingShard struct {
 	finishUpdatingPruningPointUTXOSet bool
 
 	lastPruningTime *time.Time
+
+	historyDeletionJob *HistoryDeletionJob
 }
 
 func (ps *pruningStore) stagingShard(stagingArea *model.StagingArea) *pruningStagingShard {
@@ -91,6 +93,13 @@ func (mss *pruningStagingShard) Commit(dbTx model.DBTransaction) error {
 		}
 	}
 
+	if mss.historyDeletionJob != nil {
+		err := dbTx.Put(mss.store.historyDeletionJobKey(mss.historyDeletionJob.Index), mss.historyDeletionJob.serialize())
+		if err != nil {
+			return err
+		}
+	}
+
 	if mss.finishUpdatingPruningPointUTXOSet {
 		err := dbTx.Delete(mss.store.updatingPruningPointUTXOSetKey)
 		if err != nil {
@@ -110,7 +119,8 @@ func (mss *pruningStagingShard) isStaged() bool {
 		mss.newPruningPointCandidate != nil ||
 		mss.startUpdatingPruningPointUTXOSet ||
 		mss.finishUpdatingPruningPointUTXOSet ||
-		mss.lastPruningTime != nil
+		mss.lastPruningTime != nil ||
+		mss.historyDeletionJob != nil
 }
 
 func (mss *pruningStagingShard) UnstageAll() {
@@ -120,4 +130,5 @@ func (mss *pruningStagingShard) UnstageAll() {
 	mss.startUpdatingPruningPointUTXOSet = false
 	mss.finishUpdatingPruningPointUTXOSet = false
 	mss.lastPruningTime = nil
+	mss.historyDeletionJob = nil
 }

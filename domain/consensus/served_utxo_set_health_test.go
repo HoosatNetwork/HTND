@@ -73,6 +73,23 @@ func TestCheckUTXOHealthJudgesTheServedSet(t *testing.T) {
 			if health.EntryCount == 0 || !health.SetMultiset.Equal(health.HeaderCommitment) {
 				t.Fatalf("a verified result must carry matching values: %+v", health)
 			}
+
+			// A no-op legacy rewrite advances the store generation without changing
+			// the served set. Synchronous instances retain their verified memoization.
+			diff, err := utxo.NewUTXODiffFromCollections(utxo.NewUTXOCollection(nil), utxo.NewUTXOCollection(nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.PruningStore().UpdatePruningPointUTXOSet(tc.DatabaseContext(), diff); err != nil {
+				t.Fatal(err)
+			}
+			again, err := tc.CheckUTXOHealth(pruningPoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again != health {
+				t.Fatal("synchronous health discarded a verified legacy memoization")
+			}
 		})
 
 		t.Run("rewriting", func(t *testing.T) {

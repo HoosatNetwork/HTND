@@ -7,6 +7,8 @@ package appmessage
 import (
 	"math/big"
 
+	"github.com/pkg/errors"
+
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
@@ -99,4 +101,13 @@ func NewBlockHeader(version uint16, parents []externalapi.BlockLevelParents, has
 		BlueWork:             blueWork,
 		PruningPoint:         pruningPoint,
 	}
+}
+
+// ValidateBlockHeaderTimestamp returns an error if the given header timestamp (in milliseconds)
+// is negative or does not survive the conversion to and from mstime.Time.
+func ValidateBlockHeaderTimestamp(timestamp int64) error {
+	if timestamp < 0 || mstime.UnixMilliseconds(timestamp).UnixMilliseconds() != timestamp {
+		return errors.Errorf("invalid block header timestamp %d", timestamp)
+	}
+	return nil
 }

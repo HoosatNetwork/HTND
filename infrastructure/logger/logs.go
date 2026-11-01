@@ -44,10 +44,9 @@ import (
 
 // Logger is a subsystem logger for a Backend.
 type Logger struct {
-	lvl       Level // atomic
-	tag       string
-	b         *Backend
-	writeChan chan<- logEntry
+	lvl Level // atomic
+	tag string
+	b   *Backend
 }
 
 type logEntry struct {
@@ -180,11 +179,7 @@ func (l *Logger) printf(lvl Level, tag string, format string, args ...any) {
 	_, _ = fmt.Fprintf(bytesBuf, format, args...)
 	bytesBuf.WriteByte('\n')
 
-	if !l.b.IsRunning() {
-		_, _ = fmt.Fprint(os.Stderr, bytesBuf.String())
-		panic("Writing to the logger when it's not running")
-	}
-	l.writeChan <- logEntry{bytesBuf.Bytes(), lvl}
+	l.b.write(logEntry{bytesBuf.Bytes(), lvl})
 }
 
 // print outputs a log message to the writer associated with the backend after
@@ -192,9 +187,6 @@ func (l *Logger) printf(lvl Level, tag string, format string, args ...any) {
 // function and formatting the provided arguments using the default formatting
 // rules.
 func (l *Logger) print(lvl Level, tag string, args ...any) {
-	if l.b.isRunning.Load() == 0 {
-		panic("printing log without initializing")
-	}
 	t := mstime.Now() // get as early as possible
 
 	var file string
@@ -208,10 +200,7 @@ func (l *Logger) print(lvl Level, tag string, args ...any) {
 	bytesBuf := bytes.NewBuffer(buf)
 	_, _ = fmt.Fprintln(bytesBuf, args...)
 
-	if !l.b.IsRunning() {
-		panic("Writing to the logger when it's not running")
-	}
-	l.writeChan <- logEntry{bytesBuf.Bytes(), lvl}
+	l.b.write(logEntry{bytesBuf.Bytes(), lvl})
 }
 
 // From stdlib log package.

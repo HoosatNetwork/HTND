@@ -3,6 +3,7 @@ package consensusstatemanager
 import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashset"
 	"github.com/pkg/errors"
 )
 
@@ -16,37 +17,68 @@ func (csm *consensusStateManager) stageDiff(stagingArea *model.StagingArea, bloc
 	csm.utxoDiffStore.Stage(stagingArea, blockHash, utxoDiff, utxoDiffChild)
 }
 
-// stageDisqualifiedProcessingPointAsSelectedTip gives a disqualified resolve processing point the UTXO diff virtual's
-// selected parent must have: relative to virtual's UTXO set, with no diff child. ResolveBlockStatus leaves every block
-// of a disqualified chain, the resolve tip included, with a diff relative to its selected parent, and ReverseUTXODiffs
-// only runs for a valid one. updateSelectedTipUTXODiff reads the selected tip's diff as relative to virtual, so the
-// processing point's past lost the changes of every block of the chunk but its own. The next chunk started from that
-// past and committed it into virtual's UTXO set, and the difference carried into every chunk after it, growing the
-// diffs each chunk had to process.
+// stageSelectedTipDiffRelativeToVirtual gives selectedTip, the block virtual is about to have as its selected parent,
+// the UTXO diff virtual's selected parent must have: relative to virtual's UTXO set, with no diff child.
+// updateSelectedTipUTXODiff reads the selected tip's diff as relative to virtual, and every other block's past is
+// restored by composing diffs along diff children up to that one root.
 //
-// The previous virtual selected parent's diff stops being relative to virtual once virtual moves, so it is re-pointed
-// to the processing point, as resolveSingleBlockStatus does for a new valid selected tip.
-func (csm *consensusStateManager) stageDisqualifiedProcessingPointAsSelectedTip(stagingArea *model.StagingArea,
-	processingPoint, previousVirtualSelectedParent *externalapi.DomainHash,
+// A block that becomes the selected tip through resolveSingleBlockStatus as a new selected tip already has such a diff,
+// and nothing is staged. Any other block still has a diff relative to its diff child: a disqualified resolve processing
+// point (ResolveBlockStatus gives every block of a disqualified chain a diff relative to its selected parent, and
+// ReverseUTXODiffs only runs for a valid one), a tip that was already UTXO-valid, a valid block whose resolve tip was
+// disqualified. Reading such a diff as virtual-relative put a wrong past into virtual's UTXO set, and the previous root
+// kept no diff child, so every block whose diff chain ended there restored a wrong past from then on.
+//
+// The current root - the block whose diff is relative to virtual's UTXO set, normally the previous selected parent - is
+// found by following diff children from selectedTip, as restorePastUTXO does, and is re-pointed to selectedTip, as
+// resolveSingleBlockStatus does for a new valid selected tip. Both pasts are restored before anything is staged, so
+// every block's restored past is unchanged.
+func (csm *consensusStateManager) stageSelectedTipDiffRelativeToVirtual(stagingArea *model.StagingArea,
+	selectedTip *externalapi.DomainHash,
 ) error {
-	processingPointPastUTXO, err := csm.restorePastUTXO(stagingArea, processingPoint)
+	root, err := csm.utxoDiffStore.UTXODiffChild(csm.databaseContext, stagingArea, selectedTip)
 	if err != nil {
 		return err
 	}
-
-	if !previousVirtualSelectedParent.Equal(processingPoint) {
-		previousVirtualSelectedParentPastUTXO, err := csm.restorePastUTXO(stagingArea, previousVirtualSelectedParent)
+	if root == nil {
+		return nil
+	}
+	visited := hashset.New()
+	visited.Add(selectedTip)
+	for {
+		if visited.Contains(root) {
+			return errors.Errorf("UTXO diff child chain from %s loops at %s", selectedTip, root)
+		}
+		visited.Add(root)
+		child, err := csm.utxoDiffStore.UTXODiffChild(csm.databaseContext, stagingArea, root)
 		if err != nil {
 			return err
 		}
-		previousVirtualSelectedParentUTXODiff, err := processingPointPastUTXO.DiffFrom(previousVirtualSelectedParentPastUTXO)
-		if err != nil {
-			return errors.Wrapf(err, "failed to diff disqualified processing point %s against the previous virtual "+
-				"selected parent %s", processingPoint, previousVirtualSelectedParent)
+		if child == nil {
+			break
 		}
-		csm.stageDiff(stagingArea, previousVirtualSelectedParent, previousVirtualSelectedParentUTXODiff, processingPoint)
+		root = child
+	}
+	// The root must hold a stored diff; restorePastUTXO tolerates a missing one, which would hide a broken chain here.
+	if _, err := csm.utxoDiffStore.UTXODiff(csm.databaseContext, stagingArea, root); err != nil {
+		return errors.Wrapf(err, "UTXO diff root %s of the new selected tip %s has no stored UTXO diff", root, selectedTip)
 	}
 
-	csm.stageDiff(stagingArea, processingPoint, processingPointPastUTXO, nil)
+	selectedTipPastUTXO, err := csm.restorePastUTXO(stagingArea, selectedTip)
+	if err != nil {
+		return err
+	}
+	rootPastUTXO, err := csm.restorePastUTXO(stagingArea, root)
+	if err != nil {
+		return err
+	}
+	rootUTXODiff, err := selectedTipPastUTXO.DiffFrom(rootPastUTXO)
+	if err != nil {
+		return errors.Wrapf(err, "failed to diff the new selected tip %s against the previous UTXO diff root %s",
+			selectedTip, root)
+	}
+	log.Debugf("Re-pointing the UTXO diff root %s to the new selected tip %s", root, selectedTip)
+	csm.stageDiff(stagingArea, root, rootUTXODiff, selectedTip)
+	csm.stageDiff(stagingArea, selectedTip, selectedTipPastUTXO, nil)
 	return nil
 }

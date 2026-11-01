@@ -84,6 +84,13 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 	if err != nil {
 		return (errors.Wrapf(err, "Error connecting to RPC server %s", rpcServer))
 	}
+	// Ask the node first, so that a failure has only the listener and this client to release.
+	dagInfo, err := rpcClient.GetBlockDAGInfo()
+	if err != nil {
+		_ = rpcClient.Close()
+		_ = listener.Close()
+		return errors.Wrapf(err, "Error getting the DAG info from RPC server %s", rpcServer)
+	}
 	backgroundRPCClient, err := connectToRPC(params, rpcServer, timeout)
 	if err != nil {
 		return (errors.Wrapf(err, "Error making a second connection to RPC server %s", rpcServer))
@@ -98,11 +105,6 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 	err = keysFile.TryLock()
 	if err != nil {
 		return err
-	}
-
-	dagInfo, err := rpcClient.GetBlockDAGInfo()
-	if err != nil {
-		return nil
 	}
 
 	coinbaseMaturity := params.BlockCoinbaseMaturity

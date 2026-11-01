@@ -39,7 +39,7 @@ jobs:
           GOEXPERIMENT: "simd,jsonv2"
         run: |
           mkdir -p bin
-          go build -v -ldflags="-s -w -extldflags=-static" -tags netgo,osusergo -o ./bin/ . ./cmd/...
+          go build -v -ldflags="-s -w -extldflags=-static" -tags pebblegozstd,netgo,osusergo -o ./bin/ . ./cmd/...
 
           # Detect architecture
           if [ "${{ runner.arch }}" = "ARM64" ]; then
@@ -62,7 +62,7 @@ jobs:
         run: |
           mkdir -p bin
           go build -v \
-            -ldflags="-s -w -buildid=" \
+            -ldflags="-s -w -buildid=" -tags deadlock,pebblegozstd \
             -trimpath \
             -o bin/ . ./cmd/...
 
@@ -82,7 +82,7 @@ jobs:
           GOEXPERIMENT: "simd,jsonv2"
         run: |
           mkdir -p bin
-          go build -v -ldflags="-s -w" -o ./bin/ . ./cmd/...
+          go build -v -ldflags="-s -w" -tags pebblegozstd -o ./bin/ . ./cmd/...
           archive="bin/HTND-${{ github.event.release.tag_name }}-osx.zip"
           zip -r "${archive}" ./bin/*
           sha1sum "${archive}" > "${archive}.sha1sum"

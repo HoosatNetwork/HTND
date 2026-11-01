@@ -64,6 +64,13 @@ func HandleRelayedTransactions(context TransactionsRelayContext, incomingRoute *
 // dropped, as invs already are when the route is full.
 const maxQueuedInvTransactionIDs = 4 * appmessage.MaxInvPerTxInvMsg
 
+// maxTransactionsPerRequest bounds the ids of one MsgRequestTransactions this node sends. The peer answers every id
+// with one message on its outgoing route to this node, which holds router.DefaultMaxMessages messages, and a node
+// that does not wait for this node to read them drops it once that route is full. The wire limit,
+// appmessage.MaxInvPerRequestTransactionsMsg, stays as it is, since peers still running older versions send up to
+// that many.
+const maxTransactionsPerRequest = 1_000
+
 // pendingRetryInterval is how often the flow wakes to re-check whether it can now process the
 // transactions it is holding, when no new inv happens to arrive to drive the loop.
 const pendingRetryInterval = 1 * time.Second
@@ -126,14 +133,18 @@ func (flow *handleRelayedTransactionsFlow) start() error {
 			return err
 		}
 
-		requestedIDs, err := flow.requestInvTransactions(inv)
-		if err != nil {
-			return err
-		}
+		// Request the inv's transactions a chunk at a time and receive each chunk's answers before requesting the
+		// next, so the peer never has to queue more than maxTransactionsPerRequest answers for this node at once.
+		for i := 0; i < len(inv.TxIDs); i += maxTransactionsPerRequest {
+			requestedIDs, err := flow.requestInvTransactions(inv.TxIDs[i:min(i+maxTransactionsPerRequest, len(inv.TxIDs))])
+			if err != nil {
+				return err
+			}
 
-		err = flow.receiveTransactions(requestedIDs)
-		if err != nil {
-			return err
+			err = flow.receiveTransactions(requestedIDs)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -248,10 +259,10 @@ func (flow *handleRelayedTransactionsFlow) processPendingTransactions() error {
 }
 
 func (flow *handleRelayedTransactionsFlow) requestInvTransactions(
-	inv *appmessage.MsgInvTransaction,
+	txIDs []*externalapi.DomainTransactionID,
 ) (requestedIDs []*externalapi.DomainTransactionID, err error) {
-	idsToRequest := make([]*externalapi.DomainTransactionID, 0, len(inv.TxIDs))
-	for _, txID := range inv.TxIDs {
+	idsToRequest := make([]*externalapi.DomainTransactionID, 0, len(txIDs))
+	for _, txID := range txIDs {
 		if flow.isKnownTransaction(txID) {
 			continue
 		}

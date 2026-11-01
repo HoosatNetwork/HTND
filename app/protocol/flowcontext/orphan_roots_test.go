@@ -12,12 +12,24 @@ import (
 
 type knownBlocksConsensus struct {
 	externalapi.Consensus
-	blocks map[externalapi.DomainHash]*externalapi.DomainBlock
+	blocks     map[externalapi.DomainHash]*externalapi.DomainBlock
+	headerOnly map[externalapi.DomainHash]bool
 }
 
 func (c knownBlocksConsensus) GetBlock(hash *externalapi.DomainHash) (*externalapi.DomainBlock, bool, error) {
 	block, ok := c.blocks[*hash]
 	return block, ok, nil
+}
+
+func (c knownBlocksConsensus) GetBlockInfo(hash *externalapi.DomainHash) (*externalapi.BlockInfo, error) {
+	switch {
+	case c.headerOnly[*hash]:
+		return &externalapi.BlockInfo{Exists: true, BlockStatus: externalapi.StatusHeaderOnly}, nil
+	case c.blocks[*hash] != nil:
+		return &externalapi.BlockInfo{Exists: true, BlockStatus: externalapi.StatusUTXOValid}, nil
+	default:
+		return &externalapi.BlockInfo{}, nil
+	}
 }
 
 type knownBlocksDomain struct {
@@ -50,7 +62,9 @@ func TestGetOrphanRootsSkipsKnownParents(t *testing.T) {
 	f := New(nil, knownBlocksDomain{consensus: knownBlocksConsensus{
 		blocks: map[externalapi.DomainHash]*externalapi.DomainBlock{*knownParentHash: knownParent},
 	}}, nil, nil, nil)
-	f.AddOrphan(orphan)
+	if added, err := f.AddOrphan(orphan); err != nil || !added {
+		t.Fatalf("AddOrphan: added %t, err %+v", added, err)
+	}
 
 	roots, orphanExists, err := f.GetOrphanRoots(orphanHash)
 	if err != nil {

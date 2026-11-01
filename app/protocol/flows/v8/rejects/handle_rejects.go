@@ -1,10 +1,16 @@
 package rejects
 
 import (
+	"unicode/utf8"
+
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
+
+// maxRejectReasonLength bounds how much of a peer's reject reason is kept in the
+// resulting error, which is stored on the connection and logged.
+const maxRejectReasonLength = 2048
 
 // HandleRejectsContext is the interface for the context needed for the HandleRejects flow.
 type HandleRejectsContext any
@@ -32,5 +38,15 @@ func (flow *handleRejectsFlow) start() error {
 	}
 	rejectMessage := message.(*appmessage.MsgReject)
 
-	return protocolerrors.Errorf(false, "got reject message: `%s`", rejectMessage.Reason)
+	reason := rejectMessage.Reason
+	if len(reason) > maxRejectReasonLength {
+		// Cut at a character boundary so the kept part stays valid UTF-8.
+		cut := maxRejectReasonLength
+		for cut > 0 && !utf8.RuneStart(reason[cut]) {
+			cut--
+		}
+		reason = reason[:cut]
+	}
+
+	return protocolerrors.Errorf(false, "got reject message: `%s`", reason)
 }

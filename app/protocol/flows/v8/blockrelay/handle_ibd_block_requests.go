@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain"
@@ -54,7 +55,7 @@ func HandleIBDBlockRequests(context HandleIBDBlockRequestsContext, incomingRoute
 				// TODO (Partial nodes): Convert block to partial block if needed
 				log.Debugf("Relaying IBD block %s to peer %s", hash, peer.Address())
 				ibdBlockMessage := appmessage.NewMsgIBDBlock(appmessage.DomainBlockToMsgBlock(block))
-				return outgoingRoute.Enqueue(ibdBlockMessage)
+				return outgoingRoute.EnqueueWithTimeout(ibdBlockMessage, common.DefaultTimeout)
 			})
 		if err != nil {
 			return err

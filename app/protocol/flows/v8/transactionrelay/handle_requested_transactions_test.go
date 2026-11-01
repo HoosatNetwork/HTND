@@ -1,7 +1,9 @@
 package transactionrelay_test
 
 import (
+	"encoding/binary"
 	"testing"
+	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/flowcontext"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/transactionrelay"
@@ -88,6 +90,77 @@ func TestHandleRequestedTransactionsNotFound(t *testing.T) {
 		err = transactionrelay.HandleRequestedTransactions(context, incomingRoute, outgoingRoute)
 		// Make sure the error is due to the closed route.
 		if err == nil || !errors.Is(err, router.ErrRouteClosed) {
+			t.Fatalf("Unexpected error: expected: %v, got : %v", router.ErrRouteClosed, err)
+		}
+	})
+}
+
+// TestHandleRequestedTransactionsAnswersMoreThanTheRouteHolds pins that a request for more transactions than the
+// outgoing route holds is answered in full, in order, at the pace the peer reads it. The answers used to be enqueued
+// without waiting, so the one past the route's capacity failed and the peer was disconnected.
+func TestHandleRequestedTransactionsAnswersMoreThanTheRouteHolds(t *testing.T) {
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		log := logger.RegisterSubSystem("PROT")
+		spawn := panics.GoroutineWrapperFunc(log)
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestHandleRequestedTransactionsAnswersMoreThanTheRouteHolds")
+		if err != nil {
+			t.Fatalf("Error setting up test Consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		adapter, err := netadapter.NewNetAdapter(config.DefaultConfig())
+		if err != nil {
+			t.Fatalf("Failed to create a NetAdapter: %v", err)
+		}
+		domainInstance, err := domain.New(consensusConfig, mempool.DefaultConfig(&consensusConfig.Params), tc.Database())
+		if err != nil {
+			t.Fatalf("Failed to set up a domain Instance: %v", err)
+		}
+		context := &mocTransactionsRelayContext{
+			netAdapter:                  adapter,
+			domain:                      domainInstance,
+			sharedRequestedTransactions: flowcontext.NewSharedRequestedTransactions(),
+		}
+		incomingRoute := router.NewRoute("incoming")
+		outgoingRoute := router.NewRoute("outgoing")
+		defer outgoingRoute.Close()
+
+		txIDs := make([]*externalapi.DomainTransactionID, outgoingRoute.Capacity()+1000)
+		for i := range txIDs {
+			var txID [externalapi.DomainHashSize]byte
+			binary.LittleEndian.PutUint32(txID[:], uint32(i+1))
+			txIDs[i] = externalapi.NewDomainTransactionIDFromByteArray(&txID)
+		}
+		err = incomingRoute.Enqueue(appmessage.NewMsgRequestTransactions(txIDs))
+		if err != nil {
+			t.Fatalf("Unexpected error from incomingRoute.Enqueue: %v", err)
+		}
+
+		flowErr := make(chan error, 1)
+		spawn("HandleRequestedTransactions", func() {
+			flowErr <- transactionrelay.HandleRequestedTransactions(context, incomingRoute, outgoingRoute)
+		})
+
+		// Start reading only once the flow had time to fill the route, as with a peer behind a slow link.
+		time.Sleep(200 * time.Millisecond)
+		for i, txID := range txIDs {
+			msg, err := outgoingRoute.DequeueWithTimeout(5 * time.Second)
+			if err != nil {
+				select {
+				case err := <-flowErr:
+					t.Fatalf("got %d of %d answers; the flow failed: %v", i, len(txIDs), err)
+				default:
+				}
+				t.Fatalf("got %d of %d answers: %v", i, len(txIDs), err)
+			}
+			if notFound := msg.(*appmessage.MsgTransactionNotFound); !notFound.ID.Equal(txID) {
+				t.Fatalf("answer %d is for %s, want %s", i, notFound.ID, txID)
+			}
+		}
+
+		incomingRoute.Close()
+		if err := <-flowErr; !errors.Is(err, router.ErrRouteClosed) {
 			t.Fatalf("Unexpected error: expected: %v, got : %v", router.ErrRouteClosed, err)
 		}
 	})

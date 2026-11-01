@@ -25,6 +25,9 @@ type acceptanceDataStore struct {
 	// and no reader takes Fee or Mass from these transactions (RPC recomputes a zero mass).
 	cache  *lrucache.OffHeap[struct{}]
 	bucket model.DBBucket
+	// historyMask makes the acceptance data a running history deletion job deletes read as
+	// not found (see database.HistoryMask). Set once, before any reader runs.
+	historyMask *database.HistoryMask
 }
 
 // New instantiates a new AcceptanceDataStore. Its cache holds at most cacheSize entries whose
@@ -59,6 +62,9 @@ func (ads *acceptanceDataStore) Get(dbContext model.DBReader, stagingArea *model
 	acceptanceData, ok := stagingShard.toAdd[*blockHash]
 	if ok && acceptanceData != nil {
 		return acceptanceData.Clone(), nil
+	}
+	if ads.historyMask.Masks(database.HistoryMaskAcceptanceData, blockHash) {
+		return nil, database.MaskedDataNotFound("acceptance data", blockHash)
 	}
 	var cached externalapi.AcceptanceData
 	hit, err := ads.cache.Decode(blockHash, func(acceptanceDataBytes []byte, _ struct{}) error {

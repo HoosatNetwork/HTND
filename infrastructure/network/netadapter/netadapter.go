@@ -63,7 +63,8 @@ func NewNetAdapter(cfg *config.Config) (*NetAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	rpcServer, err := grpcserver.NewRPCServer(cfg.RPCListeners, cfg.RPCMaxClients)
+	rpcServer, err := grpcserver.NewRPCServerWithAllowlist(cfg.RPCListeners,
+		cfg.RPCMaxClients, cfg.RPCAllowIPNets)
 	if err != nil {
 		return nil, err
 	}

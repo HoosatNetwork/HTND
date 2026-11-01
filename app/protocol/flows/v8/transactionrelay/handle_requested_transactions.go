@@ -2,6 +2,7 @@ package transactionrelay
 
 import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 )
 
@@ -29,18 +30,20 @@ func (flow *handleRequestedTransactionsFlow) start() error {
 			return err
 		}
 
+		// A request can ask for many more transactions than the outgoing route holds, so the answers wait for the
+		// peer to read them instead of failing once the route is full.
 		for _, transactionID := range msgRequestTransactions.IDs {
 			tx, _, ok := flow.Domain().MiningManager().GetTransactionNoClone(transactionID, true, false)
 
 			if !ok {
 				msgTransactionNotFound := appmessage.NewMsgTransactionNotFound(transactionID)
-				err := flow.outgoingRoute.Enqueue(msgTransactionNotFound)
+				err := flow.outgoingRoute.EnqueueWithTimeout(msgTransactionNotFound, common.DefaultTimeout)
 				if err != nil {
 					return err
 				}
 				continue
 			}
-			err := flow.outgoingRoute.Enqueue(appmessage.DomainTransactionToMsgTx(tx))
+			err := flow.outgoingRoute.EnqueueWithTimeout(appmessage.DomainTransactionToMsgTx(tx), common.DefaultTimeout)
 			if err != nil {
 				return err
 			}

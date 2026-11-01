@@ -303,6 +303,8 @@ func TestPruningPointAnticoneIsServedInTopologicalOrder(t *testing.T) {
 			return
 		}
 		headersProofTestConfig(cfg)
+		// Model legacy headers whose claimed blue work was not validated.
+		cfg.HardForkGates.HeaderBlueWorkVersion = ^uint16(0)
 		factory := consensus.NewFactory()
 		decreasingClaim := func(round int, header externalapi.BlockHeader) externalapi.BlockHeader {
 			claim := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 64), big.NewInt(int64(round)))

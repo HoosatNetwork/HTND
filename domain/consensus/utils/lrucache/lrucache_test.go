@@ -239,3 +239,28 @@ func TestLRUCache_PeekDoesNotPromoteAndRemoveOldestEvictsLRU(t *testing.T) {
 		t.Fatalf("Get(a) after drain = %d, %v", v, ok)
 	}
 }
+
+// BenchmarkLRUCacheGet is an uncontended Get hit on a full cache, for the lock-free LRUCache and the
+// ConcurrentLRUCache the history-deletion-evicted stores use (C4-OFFLOCK-EVICTION §7).
+func BenchmarkLRUCacheGet(b *testing.B) {
+	const size = 100_000
+	keys := make([]*externalapi.DomainHash, size)
+	plain, concurrent := New[uint64](size, true), NewConcurrent[uint64](size, true)
+	for i := range keys {
+		var arr [externalapi.DomainHashSize]byte
+		arr[0], arr[1], arr[2] = byte(i), byte(i>>8), byte(i>>16)
+		keys[i] = externalapi.NewDomainHashFromByteArray(&arr)
+		plain.Add(keys[i], uint64(i))
+		concurrent.Add(keys[i], uint64(i))
+	}
+	b.Run("plain", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			plain.Get(keys[i%size])
+		}
+	})
+	b.Run("concurrent", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			concurrent.Get(keys[i%size])
+		}
+	})
+}

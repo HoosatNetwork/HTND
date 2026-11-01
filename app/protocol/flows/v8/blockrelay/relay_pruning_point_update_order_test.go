@@ -145,7 +145,7 @@ type relayOrderContext struct {
 
 func (c *relayOrderContext) Domain() domain.Domain { return c.domain }
 
-func (c *relayOrderContext) Broadcast(message appmessage.Message) error {
+func (c *relayOrderContext) BroadcastExcept(message appmessage.Message, excluded *peerpkg.Peer) error {
 	if inv, ok := message.(*appmessage.MsgInvRelayBlock); ok {
 		c.order.mu.Lock()
 		if c.order.moving != nil && inv.Hash.Equal(c.order.moving) {
@@ -155,7 +155,7 @@ func (c *relayOrderContext) Broadcast(message appmessage.Message) error {
 		}
 		c.order.mu.Unlock()
 	}
-	return c.FlowContext.Broadcast(message)
+	return c.FlowContext.BroadcastExcept(message, excluded)
 }
 
 func (c *relayOrderContext) UpdatePruningPointIfRequired() {
@@ -199,6 +199,7 @@ func TestRelayFlowAnnouncesBeforeTheDeferredPruningPointUpdate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("domain.New: %+v", err)
 		}
+		defer domainInstance.Consensus().Close()
 		cfg := config.DefaultConfig()
 		cfg.ActiveNetParams = &consensusConfig.Params
 		cfg.AllowSubmitBlockWhenNotSynced = true
@@ -285,8 +286,12 @@ func TestRelayFlowAnnouncesBeforeTheDeferredPruningPointUpdate(t *testing.T) {
 			t.Errorf("the pruning point UTXO set update ran before the relay flow announced the block that moved " +
 				"the pruning point")
 		}
-		if order.pending() {
-			t.Errorf("the relay flow did not run the pending pruning point UTXO set update after announcing the block")
+		// The update's last step, the check of the set against its commitment, runs in the background.
+		for deadline := time.Now().Add(30 * time.Second); order.pending(); time.Sleep(time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("the relay flow did not run the pending pruning point UTXO set update after announcing " +
+					"the block")
+			}
 		}
 	})
 }

@@ -61,6 +61,11 @@ func CalculateIDMerkleRoot(transactions []*externalapi.DomainTransaction) *exter
 
 // merkleRoot creates a merkle tree from a slice of hashes, and returns its root.
 func merkleRoot(hashes []*externalapi.DomainHash) *externalapi.DomainHash {
+	// An empty tree has no root to hash: nextPowerOfTwo(0) is 0, which would make the array size -1.
+	if len(hashes) == 0 {
+		return &externalapi.DomainHash{}
+	}
+
 	// Calculate how many entries are required to hold the binary merkle
 	// tree as a linear array and create an array of that size.
 	nextPoT := nextPowerOfTwo(len(hashes))

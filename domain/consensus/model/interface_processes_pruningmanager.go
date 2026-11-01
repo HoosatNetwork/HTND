@@ -1,6 +1,11 @@
 package model
 
-import "github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+import (
+	"context"
+	"sync"
+
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+)
 
 // PruningManager resolves and manages the current pruning point
 type PruningManager interface {
@@ -11,6 +16,7 @@ type PruningManager interface {
 	ClearImportedPruningPointData() error
 	AppendImportedPruningPointUTXOs(outpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair) error
 	UpdatePruningPointIfRequired() error
+	ScanPruningPointUTXOSet(ctx context.Context, lock sync.Locker) error
 	PruneAllBlocksBelow(stagingArea *StagingArea, pruningPointHash *externalapi.DomainHash) error
 	PruningPointAndItsAnticone() ([]*externalapi.DomainHash, error)
 	ExpectedHeaderPruningPoint(stagingArea *StagingArea, blockHash *externalapi.DomainHash) (*externalapi.DomainHash, error)

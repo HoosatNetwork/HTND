@@ -1,6 +1,8 @@
 package grpcserver
 
 import (
+	"net"
+
 	"github.com/pkg/errors"
 
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/server"
@@ -66,10 +68,35 @@ func SetMaxMessageSizes(p2pSize, rpcSize int) error {
 
 // NewRPCServer creates a new RPCServer
 func NewRPCServer(listeningAddresses []string, rpcMaxInboundConnections int) (server.Server, error) {
+	return NewRPCServerWithAllowlist(listeningAddresses, rpcMaxInboundConnections, nil)
+}
+
+// NewRPCServerWithAllowlist creates an RPC server that applies an IP allowlist when it is non-nil.
+func NewRPCServerWithAllowlist(listeningAddresses []string, rpcMaxInboundConnections int, rpcAllowIPNets []*net.IPNet) (server.Server, error) {
 	gRPCServer := newGRPCServer(listeningAddresses, RPCMaxMessageSize, rpcMaxInboundConnections, "RPC")
+	gRPCServer.rpcAllowIPNets = rpcAllowIPNets
 	rpcServer := &rpcServer{gRPCServer: *gRPCServer}
 	protowire.RegisterRPCServer(gRPCServer.server, rpcServer)
 	return rpcServer, nil
+}
+
+func isRPCIPAllowed(ip net.IP, allowed []*net.IPNet) bool {
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	ipv4 := ip.To4()
+	if ipv4 != nil && ipv4.IsLoopback() {
+		return true
+	}
+	for _, ipNet := range allowed {
+		if ipNet.Contains(ip) || (ipv4 != nil && ipNet.Contains(ipv4)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *rpcServer) MessageStream(stream protowire.RPC_MessageStreamServer) error {

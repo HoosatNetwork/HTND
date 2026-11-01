@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain"
@@ -48,7 +49,7 @@ func HandleRelayBlockRequests(context RelayBlockRequestsContext, incomingRoute *
 				}
 
 				log.Debugf("Relaying block %s to peer %s", hash, peer.Address())
-				return outgoingRoute.Enqueue(appmessage.DomainBlockToMsgBlock(block))
+				return outgoingRoute.EnqueueWithTimeout(appmessage.DomainBlockToMsgBlock(block), common.DefaultTimeout)
 			})
 		if err != nil {
 			return err

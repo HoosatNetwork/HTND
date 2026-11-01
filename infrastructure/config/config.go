@@ -31,6 +31,19 @@ import (
 // This allows boolean flags to be set to false via command line (e.g., --flag=false or --flag false)
 type Bool bool
 
+// RPCAllowIPList records both the configured value and whether the option was specified.
+type RPCAllowIPList struct {
+	Value string
+	Set   bool
+}
+
+// UnmarshalFlag implements flags.Unmarshaler and preserves explicit empty values.
+func (l *RPCAllowIPList) UnmarshalFlag(value string) error {
+	l.Value = value
+	l.Set = true
+	return nil
+}
+
 // UnmarshalFlag implements the flags.Unmarshaler interface for Bool
 func (b *Bool) UnmarshalFlag(value string) error {
 	// Handle empty string (flag present without value, e.g., --autoupdate)
@@ -110,66 +123,69 @@ var RunServiceCommand func(string) error
 //
 // See loadConfig for details on the configuration load process.
 type Flags struct {
-	ShowVersion                     bool          `short:"V" long:"version" description:"Display version information and exit"`
-	ConfigFile                      string        `short:"C" long:"configfile" description:"Path to configuration file"`
-	AppDir                          string        `short:"b" long:"appdir" description:"Directory to store data"`
-	LogDir                          string        `long:"logdir" description:"Directory to log output."`
-	AddPeers                        []string      `short:"a" long:"addpeer" description:"Add a peer to connect with at startup"`
-	ConnectPeers                    []string      `long:"connect" description:"Connect only to the specified peers at startup"`
-	DisableListen                   bool          `long:"nolisten" description:"Disable listening for incoming connections -- NOTE: Listening is automatically disabled if the --connect or --proxy options are used without also specifying listen interfaces via --listen"`
-	Listeners                       []string      `long:"listen" description:"Add an interface/port to listen for connections (default all interfaces port: 42421, testnet: 42423)"`
-	TargetOutboundPeers             int           `long:"outpeers" description:"Target number of outbound peers"`
-	MaxInboundPeers                 int           `long:"maxinpeers" description:"Max number of inbound peers (0 accepts no inbound P2P connections)"`
-	EnableBanning                   bool          `long:"enablebanning" description:"Enable banning of misbehaving peers"`
-	BanDuration                     time.Duration `long:"banduration" description:"How long to ban misbehaving peers. Valid time units are {s, m, h}. Minimum 1 second"`
-	BanThreshold                    uint32        `long:"banthreshold" description:"Maximum allowed ban score before disconnecting and banning misbehaving peers."`
-	Whitelists                      []string      `long:"whitelist" description:"Add an IP network or IP that will not be banned. (eg. 192.168.1.0/24 or ::1)"`
-	RPCListeners                    []string      `long:"rpclisten" description:"Add an interface/port to listen for RPC connections (default: loopback only, port 42420, testnet: 42422). RPC has no authentication; use 127.0.0.1 unless a firewall restricts access"`
-	RPCCert                         string        `long:"rpccert" description:"File containing the certificate file"`
-	RPCKey                          string        `long:"rpckey" description:"File containing the certificate key"`
-	RPCMaxClients                   int           `long:"rpcmaxclients" description:"Max number of RPC clients for standard connections"`
-	RPCMaxWebsockets                int           `long:"rpcmaxwebsockets" description:"Max number of RPC websocket connections"`
-	RPCMaxConcurrentReqs            int           `long:"rpcmaxconcurrentreqs" description:"Max number of concurrent RPC requests that may be processed concurrently"`
-	DisableRPC                      bool          `long:"norpc" description:"Disable built-in RPC server"`
-	SafeRPC                         bool          `long:"saferpc" description:"Disable RPC commands which affect the state of the node"`
-	DisableDNSSeed                  bool          `long:"nodnsseed" description:"Disable DNS seeding for peers"`
-	DNSSeed                         string        `long:"dnsseed" description:"Override DNS seeds with specified hostname (Only 1 hostname allowed)"`
-	GRPCSeed                        string        `long:"grpcseed" description:"Hostname of gRPC server for seeding peers"`
-	ExternalIPs                     []string      `long:"externalip" description:"Add an ip to the list of local addresses we claim to listen on to peers"`
-	Proxy                           string        `long:"proxy" description:"Connect via SOCKS5 proxy (eg. 127.0.0.1:9050)"`
-	DisallowLoopbackP2PConnections  bool          `long:"disallow-loopback-p2p" description:"Disallow outbound P2P connections to loopback addresses (127.0.0.1/::1/localhost). Useful to avoid accidental self-connections."`
-	ProxyUser                       string        `long:"proxyuser" description:"Username for proxy server"`
-	ProxyPass                       string        `long:"proxypass" default-mask:"-" description:"Password for proxy server"`
-	DbType                          string        `long:"dbtype" description:"Database backend to use for the Block DAG"`
-	Profile                         string        `long:"profile" description:"Enable HTTP profiling on the given port (all interfaces) or host:port, e.g. 127.0.0.1:6061 -- NOTE port must be between 1024 and 65535"`
-	LogLevel                        string        `short:"d" long:"loglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
-	Upnp                            bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
-	MinRelayTxFee                   float64       `long:"minrelaytxfee" description:"The minimum transaction fee in HTN/kB to be considered a non-zero fee."`
-	MaxOrphanTxs                    uint64        `long:"maxorphantx" description:"Max number of orphan transactions to keep in memory"`
-	BlockMaxMass                    uint64        `long:"blockmaxmass" description:"Maximum transaction mass to be used when creating a block"`
-	UserAgentComments               []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
-	ForceSameVersion                bool          `long:"force-same-version" description:"Disconnect peers whose advertised HTND version does not exactly match this node's version"`
-	NoPeerBloomFilters              bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
-	SigCacheMaxSize                 uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
-	BlocksOnly                      bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
-	RelayNonStd                     bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
-	RejectNonStd                    bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
-	ResetDatabase                   bool          `long:"reset-db" description:"Reset database before starting node. It's needed when switching between subnetworks."`
-	UTXOIndex                       bool          `long:"utxoindex" description:"Enable the UTXO index"`
-	IsArchivalNode                  bool          `long:"archival" description:"Run as an archival node: don't delete old block data when moving the pruning point. (Warning: heavy disk usage)'"`
-	DataRetentionHours              uint64        `long:"data-retention-hours" description:"Minimum number of hours of chain data to keep before allowing pruning deletion. 0 (default) uses standard pruning depth rules with no additional time-based retention. (Warning: Setting a high value may significantly increase disk usage.)"`
-	PruningIntervalHours            uint64        `long:"pruning-interval-hours" description:"Minimum number of hours post pruning point movement that the UTXO recalculation will be triggered, alongside the block deletion. 0 (default) prunes at every pruning point update using standard rules."`
-	DeletionDepth                   uint64        `long:"deletion-depth" hidden:"true" description:"The depth at which pruning deletes blocks, multiplies pruning depth. Defaults to 0, which uses the configured pruning depth. (Warning: Setting a custom depth may significantly increase disk usage.)"`
-	AllowSubmitBlockWhenNotSynced   bool          `long:"allow-submit-block-when-not-synced" hidden:"true" description:"Allow the node to accept blocks from RPC while not synced (this flag is mainly used for testing)"`
-	EnableSanityCheckPruningUTXOSet bool          `long:"enable-sanity-check-pruning-utxo" hidden:"true" description:"When moving the pruning point - check that the utxo set matches the utxo commitment"`
-	EnableUTXODebugDiagnostics      bool          `long:"enable-utxo-debug-diagnostics" hidden:"true" description:"At startup, run the expensive [UTXO-DEBUG] pruning-point/virtual-UTXO-set self-consistency checks and root-disqualification bisection (each pass can take 15-20+ minutes on a mature chain). Off by default - only for actively investigating a UTXO commitment mismatch."`
-	MuHashJournal                   string        `long:"muhash-journal" hidden:"true" description:"Append a JSONL record of every element added to or removed from each block's UTXO multiset (MuHash) to this file, for analyzing UTXO commitment mismatches with cmd/muhashjournal. Also records block templates, so run it on the miner too. Off by default."`
-	RepairBlockStatuses             bool          `long:"repair-block-statuses" hidden:"true" description:"At startup, re-mark every block that is neither invalid nor header-only as UTXO-valid, to recover a node that has disqualified its whole chain. Walks every block in the store before the node starts serving RPC, so on a mature or archival node it delays startup by a long time. Off by default - ask for it when recovering."`
-	RepairMissingMultisets          bool          `long:"repair-missing-multisets" hidden:"true" description:"At startup, re-mark for verification any UTXO-valid block reachable from a virtual tip that has no stored multiset (a state --repair-block-statuses, or a similar incident, can leave behind), so the normal resolve path re-derives it. Fixes a node stuck unable to build any further block template with 'Multiset <hash> does not exist in db'. Off by default - ask for it when recovering, do not leave it on every boot."`
-	EnableAutoExodusExportOnPruning bool          `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
-	AutoExodusExportDir             string        `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
-	ProtocolVersion                 uint32        `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
-	ShutdownOnDisqualifiedStreak    bool          `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified tip chains after a consecutive streak"`
+	ShowVersion                     bool           `short:"V" long:"version" description:"Display version information and exit"`
+	ConfigFile                      string         `short:"C" long:"configfile" description:"Path to configuration file"`
+	AppDir                          string         `short:"b" long:"appdir" description:"Directory to store data"`
+	LogDir                          string         `long:"logdir" description:"Directory to log output."`
+	AddPeers                        []string       `short:"a" long:"addpeer" description:"Add a peer to connect with at startup"`
+	ConnectPeers                    []string       `long:"connect" description:"Connect only to the specified peers at startup"`
+	DisableListen                   bool           `long:"nolisten" description:"Disable listening for incoming connections -- NOTE: Listening is automatically disabled if the --connect or --proxy options are used without also specifying listen interfaces via --listen"`
+	Listeners                       []string       `long:"listen" description:"Add an interface/port to listen for connections (default all interfaces port: 42421, testnet: 42423)"`
+	TargetOutboundPeers             int            `long:"outpeers" description:"Target number of outbound peers"`
+	MaxInboundPeers                 int            `long:"maxinpeers" description:"Max number of inbound peers (0 accepts no inbound P2P connections)"`
+	EnableBanning                   bool           `long:"enablebanning" description:"Enable banning of misbehaving peers"`
+	BanDuration                     time.Duration  `long:"banduration" description:"How long to ban misbehaving peers. Valid time units are {s, m, h}. Minimum 1 second"`
+	BanThreshold                    uint32         `long:"banthreshold" description:"Maximum allowed ban score before disconnecting and banning misbehaving peers."`
+	Whitelists                      []string       `long:"whitelist" description:"Add an IP network or IP that will not be banned. (eg. 192.168.1.0/24 or ::1)"`
+	RPCListeners                    []string       `long:"rpclisten" description:"Add an interface/port to listen for RPC connections (default: loopback only, port 42420, testnet: 42422). RPC has no authentication; use 127.0.0.1 unless a firewall restricts access"`
+	RPCAllowIPs                     RPCAllowIPList `long:"rpcallowip" description:"Comma-separated IPs (IPv4 /32, IPv6 /128) or CIDRs allowed for RPC; opens 0.0.0.0 and, for IPv6 entries, [::]"`
+	RPCCert                         string         `long:"rpccert" description:"File containing the certificate file"`
+	RPCKey                          string         `long:"rpckey" description:"File containing the certificate key"`
+	RPCMaxClients                   int            `long:"rpcmaxclients" description:"Max number of RPC clients for standard connections"`
+	RPCMaxWebsockets                int            `long:"rpcmaxwebsockets" description:"Max number of RPC websocket connections"`
+	RPCMaxConcurrentReqs            int            `long:"rpcmaxconcurrentreqs" description:"Max number of concurrent RPC requests that may be processed concurrently"`
+	DisableRPC                      bool           `long:"norpc" description:"Disable built-in RPC server"`
+	SafeRPC                         bool           `long:"saferpc" description:"Disable RPC commands which affect the state of the node"`
+	DisableDNSSeed                  bool           `long:"nodnsseed" description:"Disable DNS seeding for peers"`
+	DNSSeed                         string         `long:"dnsseed" description:"Override DNS seeds with specified hostname (Only 1 hostname allowed)"`
+	GRPCSeed                        string         `long:"grpcseed" description:"Hostname of gRPC server for seeding peers"`
+	ExternalIPs                     []string       `long:"externalip" description:"Add an ip to the list of local addresses we claim to listen on to peers"`
+	Proxy                           string         `long:"proxy" description:"Connect via SOCKS5 proxy (eg. 127.0.0.1:9050)"`
+	DisallowLoopbackP2PConnections  bool           `long:"disallow-loopback-p2p" description:"Disallow outbound P2P connections to loopback addresses (127.0.0.1/::1/localhost). Useful to avoid accidental self-connections."`
+	ProxyUser                       string         `long:"proxyuser" description:"Username for proxy server"`
+	ProxyPass                       string         `long:"proxypass" default-mask:"-" description:"Password for proxy server"`
+	DbType                          string         `long:"dbtype" description:"Database backend to use for the Block DAG"`
+	Profile                         string         `long:"profile" description:"Enable HTTP profiling on the given port (all interfaces) or host:port, e.g. 127.0.0.1:6061 -- NOTE port must be between 1024 and 65535"`
+	LogLevel                        string         `short:"d" long:"loglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
+	Upnp                            bool           `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
+	MinRelayTxFee                   float64        `long:"minrelaytxfee" description:"The minimum transaction fee in HTN/kB to be considered a non-zero fee."`
+	MaxOrphanTxs                    uint64         `long:"maxorphantx" description:"Max number of orphan transactions to keep in memory"`
+	BlockMaxMass                    uint64         `long:"blockmaxmass" description:"Maximum transaction mass to be used when creating a block"`
+	UserAgentComments               []string       `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
+	ForceSameVersion                bool           `long:"force-same-version" description:"Disconnect peers whose advertised HTND version does not exactly match this node's version"`
+	NoPeerBloomFilters              bool           `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
+	SigCacheMaxSize                 uint           `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
+	BlocksOnly                      bool           `long:"blocksonly" description:"Do not accept transactions from remote peers."`
+	RelayNonStd                     bool           `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
+	RejectNonStd                    bool           `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
+	ResetDatabase                   bool           `long:"reset-db" description:"Reset database before starting node. It's needed when switching between subnetworks."`
+	UTXOIndex                       bool           `long:"utxoindex" description:"Enable the UTXO index"`
+	IsArchivalNode                  bool           `long:"archival" description:"Run as an archival node: don't delete old block data when moving the pruning point. (Warning: heavy disk usage)'"`
+	DataRetentionHours              uint64         `long:"data-retention-hours" description:"Minimum number of hours of chain data to keep before allowing pruning deletion. 0 (default) uses standard pruning depth rules with no additional time-based retention. (Warning: Setting a high value may significantly increase disk usage.)"`
+	PruningIntervalHours            uint64         `long:"pruning-interval-hours" description:"Minimum number of hours post pruning point movement that the UTXO recalculation will be triggered, alongside the block deletion. 0 (default) prunes at every pruning point update using standard rules."`
+	DeletionDepth                   uint64         `long:"deletion-depth" hidden:"true" description:"The depth at which pruning deletes blocks, multiplies pruning depth. Defaults to 0, which uses the configured pruning depth. (Warning: Setting a custom depth may significantly increase disk usage.)"`
+	AllowSubmitBlockWhenNotSynced   bool           `long:"allow-submit-block-when-not-synced" hidden:"true" description:"Allow the node to accept blocks from RPC while not synced (this flag is mainly used for testing)"`
+	EnableSanityCheckPruningUTXOSet bool           `long:"enable-sanity-check-pruning-utxo" hidden:"true" description:"When moving the pruning point - check that the utxo set matches the utxo commitment"`
+	EnableUTXODebugDiagnostics      bool           `long:"enable-utxo-debug-diagnostics" hidden:"true" description:"At startup, run the expensive [UTXO-DEBUG] pruning-point/virtual-UTXO-set self-consistency checks and root-disqualification bisection (each pass can take 15-20+ minutes on a mature chain). Off by default - only for actively investigating a UTXO commitment mismatch."`
+	MuHashJournal                   string         `long:"muhash-journal" hidden:"true" description:"Append a JSONL record of every element added to or removed from each block's UTXO multiset (MuHash) to this file, for analyzing UTXO commitment mismatches with cmd/muhashjournal. Also records block templates, so run it on the miner too. Off by default."`
+	RepairBlockStatuses             bool           `long:"repair-block-statuses" hidden:"true" description:"At startup, re-mark every block that is neither invalid nor header-only as UTXO-valid, to recover a node that has disqualified its whole chain. Walks every block in the store before the node starts serving RPC, so on a mature or archival node it delays startup by a long time. Off by default - ask for it when recovering."`
+	RepairMissingMultisets          bool           `long:"repair-missing-multisets" hidden:"true" description:"At startup, re-mark for verification any UTXO-valid block reachable from a virtual tip that has no stored multiset (a state --repair-block-statuses, or a similar incident, can leave behind), so the normal resolve path re-derives it. Fixes a node stuck unable to build any further block template with 'Multiset <hash> does not exist in db'. Off by default - ask for it when recovering, do not leave it on every boot."`
+	EnableAutoExodusExportOnPruning bool           `long:"enable-auto-exodus-export-on-pruning" hidden:"true" description:"After each pruning point movement, asynchronously export an acceptance-data Exodus bundle and log its header commitment comparison. Off by default."`
+	AutoExodusExportDir             string         `long:"auto-exodus-export-dir" hidden:"true" description:"Directory for automatic Exodus exports (default: <appdir>/exodus-auto-export)"`
+	ProtocolVersion                 uint32         `long:"protocol-version" hidden:"true" description:"Use non default p2p protocol version"`
+	PruningDiagnostics              bool           `long:"pruning-diagnostics" description:"Log pruning consensus-lock holds and journal/history deletion phase durations"`
+	PrepareDowngrade                bool           `long:"prepare-downgrade" description:"Prepare the database for an older release, then exit without starting the node: finish and check any unfinished pruning point UTXO update, run every pending history deletion job to its end, write the exact block count in the older release's form, and remove the pruning point UTXO journal. Run it with the node stopped, before installing the older release"`
+	ShutdownOnDisqualifiedStreak    bool           `long:"shutdown-on-disqualified-streak" description:"Stop the process instead of repairing disqualified tip chains after a consecutive streak"`
 
 	// Compound transaction rate limiting flags
 	MaxCompoundTxPerMinute    uint64 `long:"max-compound-tx-per-minute" description:"Maximum compound transactions per address per minute" default:"10"`
@@ -225,12 +241,13 @@ type Flags struct {
 // See loadConfig for details on the configuration load process.
 type Config struct {
 	*Flags
-	Lookup        func(string) ([]net.IP, error)
-	Dial          func(string, string, time.Duration) (net.Conn, error)
-	MiningAddrs   []util.Address
-	MinRelayTxFee util.Amount
-	Whitelists    []*net.IPNet
-	SubnetworkID  *externalapi.DomainSubnetworkID // nil in full nodes
+	Lookup         func(string) ([]net.IP, error)
+	Dial           func(string, string, time.Duration) (net.Conn, error)
+	MiningAddrs    []util.Address
+	MinRelayTxFee  util.Amount
+	Whitelists     []*net.IPNet
+	RPCAllowIPNets []*net.IPNet
+	SubnetworkID   *externalapi.DomainSubnetworkID // nil in full nodes
 }
 
 // ServiceOptions defines the configuration options for the daemon as a service on
@@ -332,6 +349,85 @@ func minRelayTxFeeIsValid(flag float64, fee util.Amount) bool {
 	return flag > 0 && fee > 0
 }
 
+func parseRPCAllowIPNetworks(value string) ([]*net.IPNet, error) {
+	entries := strings.Split(value, ",")
+	networks := make([]*net.IPNet, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			return nil, errors.New("RPC allowlist entries must not be empty")
+		}
+
+		if _, ipNet, err := net.ParseCIDR(entry); err == nil {
+			networks = append(networks, ipNet)
+			continue
+		}
+
+		ip := net.ParseIP(entry)
+		if ip == nil {
+			return nil, errors.Errorf("invalid RPC allowlist entry %q: expected an IP address or CIDR", entry)
+		}
+		bits := net.IPv6len * 8
+		if ip.To4() != nil {
+			ip = ip.To4()
+			bits = net.IPv4len * 8
+		}
+		networks = append(networks, &net.IPNet{
+			IP:   ip,
+			Mask: net.CIDRMask(bits, bits),
+		})
+	}
+	return networks, nil
+}
+
+func ensureRPCListener(listeners []string, host, port string) []string {
+	for i, address := range listeners {
+		address, err := network.NormalizeAddress(address, port)
+		if err != nil {
+			continue
+		}
+		listenerHost, listenerPort, err := net.SplitHostPort(address)
+		if err != nil || listenerPort != port {
+			continue
+		}
+		if listenerHost == host {
+			return listeners
+		}
+		if listenerHost == "" && host == "0.0.0.0" {
+			listeners[i] = net.JoinHostPort(host, port)
+			return listeners
+		}
+		if listenerHost == "::" && host == "::1" {
+			return listeners
+		}
+	}
+	return append(listeners, net.JoinHostPort(host, port))
+}
+
+func rpcListenersWithAllowlist(listeners []string, rpcPort string, allowIPv6 bool) []string {
+	listeners = ensureRPCListener(listeners, "0.0.0.0", rpcPort)
+	if allowIPv6 {
+		return ensureRPCListener(listeners, "::", rpcPort)
+	}
+
+	ipv6Loopback := net.JoinHostPort("::1", rpcPort)
+	for _, address := range listeners {
+		normalizedAddress, err := network.NormalizeAddress(address, rpcPort)
+		if err != nil {
+			continue
+		}
+		host, port, err := net.SplitHostPort(normalizedAddress)
+		if err == nil && port == rpcPort && host == "::" {
+			return listeners
+		}
+	}
+	if listener, err := net.Listen("tcp6", ipv6Loopback); err == nil {
+		_ = listener.Close()
+		listeners = ensureRPCListener(listeners, "::1", rpcPort)
+	}
+	return listeners
+}
+
 func LoadConfig() (*Config, error) {
 	cfgFlags := defaultFlags()
 
@@ -415,6 +511,13 @@ func LoadConfig() (*Config, error) {
 	err = cfg.ResolveNetwork(parser)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.RPCAllowIPs.Set {
+		cfg.RPCAllowIPNets, err = parseRPCAllowIPNetworks(cfg.RPCAllowIPs.Value)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid --rpcallowip")
+		}
 	}
 
 	// Set the default policy for relaying non-standard transactions
@@ -577,10 +680,22 @@ func LoadConfig() (*Config, error) {
 		log.Infof("RPC service is disabled")
 	}
 
-	// Add the default RPC listener if none were specified. The default
-	// RPC listener is all addresses on the RPC listen port for the
-	// network we are to connect to.
-	if !cfg.DisableRPC && len(cfg.RPCListeners) == 0 {
+	// By default, RPC is only available on loopback. An explicit allowlist also
+	// opens the IPv4 wildcard listener, while retaining IPv6 loopback when possible.
+	if !cfg.DisableRPC && cfg.RPCAllowIPs.Set {
+		hasIPv6Allowlist := false
+		for _, ipNet := range cfg.RPCAllowIPNets {
+			if ipNet.IP.To4() == nil && len(ipNet.IP) == net.IPv6len {
+				hasIPv6Allowlist = true
+				break
+			}
+		}
+		cfg.RPCListeners = rpcListenersWithAllowlist(cfg.RPCListeners,
+			cfg.NetParams().RPCPort, hasIPv6Allowlist)
+	}
+
+	// Add loopback listeners if none were specified.
+	if !cfg.DisableRPC && !cfg.RPCAllowIPs.Set && len(cfg.RPCListeners) == 0 {
 		rpcPort := cfg.NetParams().RPCPort
 		var listeners []string
 

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
@@ -44,6 +45,8 @@ type pruningStore struct {
 	currentPruningPointIndexCache *uint64
 	pruningPointCandidateCache    *externalapi.DomainHash
 	lastPruningTimeCache          *time.Time
+	// pruningPointUTXOSetGeneration counts the writes to pruningPointUTXOSetBucket made by this process.
+	pruningPointUTXOSetGeneration atomic.Uint64
 
 	currentPruningPointIndexKey        model.DBKey
 	candidatePruningPointHashKey       model.DBKey
@@ -54,6 +57,7 @@ type pruningStore struct {
 	importedPruningPointMultisetKey    model.DBKey
 	pruningPointByIndexBucket          model.DBBucket
 	lastPruningTimeKey                 model.DBKey
+	historyDeletionJobsBucket          model.DBBucket
 
 	lastUTXODebugCheckedPruningPointKey   model.DBKey
 	lastUTXODebugReproducedRootHashKey    model.DBKey
@@ -74,6 +78,7 @@ func New(prefixBucket model.DBBucket, cacheSize int, preallocate bool) model.Pru
 		importedPruningPointMultisetKey:    prefixBucket.Key(importedPruningPointMultisetKeyName),
 		pruningPointByIndexBucket:          prefixBucket.Bucket(pruningPointByIndexBucketName),
 		lastPruningTimeKey:                 prefixBucket.Key(lastPruningTimeKeyName),
+		historyDeletionJobsBucket:          prefixBucket.Bucket(historyDeletionJobsBucketName),
 
 		lastUTXODebugCheckedPruningPointKey:   prefixBucket.Key(lastUTXODebugCheckedPruningPointKeyName),
 		lastUTXODebugReproducedRootHashKey:    prefixBucket.Key(lastUTXODebugReproducedRootHashKeyName),
@@ -159,6 +164,7 @@ func (ps *pruningStore) UnstageAll(stagingArea *model.StagingArea) {
 }
 
 func (ps *pruningStore) UpdatePruningPointUTXOSet(dbContext model.DBWriter, diff externalapi.UTXODiff) error {
+	ps.pruningPointUTXOSetGeneration.Add(1)
 	toRemoveIterator := diff.ToRemove().Iterator()
 	defer toRemoveIterator.Close()
 	for ok := toRemoveIterator.First(); ok; ok = toRemoveIterator.Next() {
@@ -287,6 +293,13 @@ func (ps *pruningStore) HasPruningPoint(dbContext model.DBReader, stagingArea *m
 	}
 
 	return dbContext.Has(ps.currentPruningPointIndexKey)
+}
+
+// PruningPointUTXOSetGeneration changes whenever this process starts writing to the pruning point UTXO set. A
+// reader that walks the set without the consensus lock compares it, under the lock, with the value it read when it
+// opened its iterator, to know whether the set it walked is still the stored one.
+func (ps *pruningStore) PruningPointUTXOSetGeneration() uint64 {
+	return ps.pruningPointUTXOSetGeneration.Load()
 }
 
 func (ps *pruningStore) PruningPointUTXOIterator(dbContext model.DBReader) (externalapi.ReadOnlyUTXOSetIterator, error) {

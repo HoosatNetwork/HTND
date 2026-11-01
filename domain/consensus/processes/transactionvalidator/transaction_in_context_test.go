@@ -34,19 +34,35 @@ func TestScriptFlagsFollowMLDSA44BlockVersion(t *testing.T) {
 	}
 }
 
-// TestMLDSA44IsInertOnEveryNetwork pins that version 11 is out of reach of every network's
-// POWScores today, so shipping this code changes no block's validity until an activation DAA
-// score is added.
+// TestMLDSA44IsInertOnEveryNetwork guards the intentionally postponed signature
+// rules at every version the shipped schedules can produce, including their final
+// MaxUint64 threshold. Versions are derived from POWScores, as in the block
+// builder; GetBlockVersion only reflects blocks seen since startup.
 func TestMLDSA44IsInertOnEveryNetwork(t *testing.T) {
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams,
-		&dagconfig.SimnetParams, &dagconfig.DevnetParams} {
-		if params.HardForkGates.MLDSA44SignaturesBlockVersion != 11 {
-			t.Fatalf("%s: MLDSA44SignaturesBlockVersion is %d, want 11", params.Name, params.HardForkGates.MLDSA44SignaturesBlockVersion)
-		}
-		highestVersion := constants.BlockVersionForDAAScore(params.POWScores, math.MaxUint64)
-		if params.MLDSA44SignaturesActive(highestVersion) {
-			t.Fatalf("%s: ML-DSA-44 is active at the highest reachable block version %d", params.Name, highestVersion)
-		}
+		&dagconfig.TestnetParamsB5, &dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
+		t.Run(params.Name, func(t *testing.T) {
+			highestVersion := constants.BlockVersionForDAAScore(params.POWScores, math.MaxUint64)
+			for version := uint16(1); version <= highestVersion; version++ {
+				if params.MLDSA44SignaturesActive(version) {
+					t.Errorf("ML-DSA-44 is active at producible block version %d", version)
+				}
+			}
+			validator := transactionValidator{dagParams: params}
+			// Check the actual script flags at both sides of every scheduled fork.
+			scores := []uint64{0, math.MaxUint64}
+			for _, score := range params.POWScores {
+				scores = append(scores, score)
+				if score > 0 {
+					scores = append(scores, score-1)
+				}
+			}
+			for _, score := range scores {
+				if validator.scriptFlagsForDAAScore(score)&txscript.ScriptEnableMLDSA44 != 0 {
+					t.Errorf("ML-DSA-44 script flag enabled at DAA score %d", score)
+				}
+			}
+		})
 	}
 }
 

@@ -297,6 +297,17 @@ func (bp *blockProcessor) checkBlockStatus(stagingArea *model.StagingArea, block
 	}
 
 	if !isHeaderOnlyBlock {
+		// All body insertion paths, including trusted data, must respect the history
+		// owner's logical deletion. Check before validation can stage or commit a
+		// status: the owner may already have evicted this block, and will not evict
+		// it again before retiring the mask. This is a soft body refusal, not a
+		// consensus invalidity, and ends when the history job removes its mask.
+		if masked, ok := bp.blockStore.(interface {
+			IsHistoryDataMasked(*externalapi.DomainHash) bool
+		}); ok && masked.IsHistoryDataMasked(hash) {
+			return errors.Wrapf(ruleerrors.ErrPrunedBlock, "cannot add block body to block %s, whose history is "+
+				"being deleted", hash)
+		}
 		hasBlock, err := bp.blockStore.HasBlock(bp.databaseContext, stagingArea, hash)
 		if err != nil {
 			return err

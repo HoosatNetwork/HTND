@@ -15,9 +15,12 @@ import (
 
 // DB defines a thin wrapper around Pebble.
 type DB struct {
-	db      *pebble.DB
-	cursors []*DBCursor // Track all cursors
-	mu      sync.Mutex  // Protect cursors slice
+	db          *pebble.DB
+	metrics     *metricsLogger
+	cursors     []*DBCursor // Track all cursors
+	mu          sync.Mutex  // Protect cursors slice
+	walDisabled bool
+	directory   string
 }
 
 // OpenPebbleDB opens a Pebble instance defined by the given path, and returns pebble's error when it
@@ -27,6 +30,7 @@ type DB struct {
 // suspect, and NewPebbleDB's recovery would silently wipe the very copy being investigated.
 func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	options := Options(cacheSizeMiB)
+	metrics := newMetricsLogger(options)
 	// pebble.Open takes its own reference to the block cache; drop the creator's so Close frees it.
 	defer options.Cache.Unref()
 
@@ -34,7 +38,9 @@ func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return &DB{db: db}, nil
+	observed := observedDB(db, options, metrics)
+	observed.directory = path
+	return observed, nil
 }
 
 // NewPebbleDB opens a Pebble instance defined by the given path. It is meant for the node's own
@@ -42,6 +48,7 @@ func OpenPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 // pebble has no repair API. Offline tools must use OpenPebbleDB instead.
 func NewPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 	options := Options(cacheSizeMiB)
+	metrics := newMetricsLogger(options)
 	// pebble.Open takes its own reference to the block cache; drop the creator's so Close frees it.
 	// Deferred so the cache stays valid for the second Open below.
 	defer options.Cache.Unref()
@@ -70,10 +77,9 @@ func NewPebbleDB(path string, cacheSizeMiB int) (*DB, error) {
 		}
 	}
 
-	dbInstance := &DB{
-		db: db,
-	}
-	return dbInstance, nil
+	observed := observedDB(db, options, metrics)
+	observed.directory = path
+	return observed, nil
 }
 
 // Compact compacts the Pebble instance (full range).
@@ -85,6 +91,11 @@ func (db *DB) Compact() error {
 
 // Close closes the Pebble instance and all associated cursors.
 func (db *DB) Close() error {
+	// Metrics reads must finish before Pebble is closed.
+	if db.metrics != nil {
+		db.metrics.close()
+	}
+
 	// Close all tracked cursors. Iterate over a snapshot: each cursor's Close deregisters it from
 	// db.cursors, and ranging over the live slice while it shrank skipped every other cursor.
 	db.mu.Lock()
@@ -101,8 +112,18 @@ func (db *DB) Close() error {
 	db.cursors = nil // Clear cursors
 	db.mu.Unlock()
 
+	// Without the write-ahead log, writes still in the memtables exist nowhere else, and pebble's Close
+	// does not flush them, so a clean shutdown lost them.
+	var flushErr error
+	if db.walDisabled {
+		flushErr = db.db.Flush()
+	}
+
 	// Close the database
 	err := db.db.Close()
+	if flushErr != nil {
+		return errors.Wrap(flushErr, "flushing the memtables before closing the database")
+	}
 	return errors.WithStack(err)
 }
 

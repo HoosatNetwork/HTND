@@ -63,10 +63,9 @@ func WriteElement(w io.Writer, element any) error {
 		return nil
 
 	case int64:
-		if e < 0 {
-			return fmt.Errorf("int64 value %d is negative, cannot convert to uint64", e)
-		}
-		err := binaryserializer.PutUint64(w, uint64(e))
+		// Hash serialization must be infallible: two's complement is the original encoding, and valid
+		// blocks never carry negative values, so no hash changes.
+		err := binaryserializer.PutUint64(w, uint64(e)) // #nosec G115
 		if err != nil {
 			return err
 		}

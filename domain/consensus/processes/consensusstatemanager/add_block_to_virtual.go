@@ -216,6 +216,9 @@ func (csm *consensusStateManager) calculateNewTips(
 	}
 
 	newTips := make([]*externalapi.DomainHash, 0, 1+len(currentTips))
+	// Disqualified blocks are not kept as tips, so a template never merges one, but each is replaced below by its
+	// ancestors that only it covered.
+	var disqualifiedTips []*externalapi.DomainHash
 
 	// Check the new block's status before adding to tips
 	if newTipStatus != externalapi.StatusDisqualifiedFromChain {
@@ -223,6 +226,8 @@ func (csm *consensusStateManager) calculateNewTips(
 			csm.lastValidBlock = newTipHash
 		}
 		newTips = append(newTips, newTipHash)
+	} else {
+		disqualifiedTips = append(disqualifiedTips, newTipHash)
 	}
 
 	for _, currentTip := range currentTips {
@@ -231,16 +236,26 @@ func (csm *consensusStateManager) calculateNewTips(
 		}
 
 		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, currentTip)
-		if err != nil {
+		if database.IsNotFoundError(err) {
 			continue
+		}
+		if err != nil {
+			return nil, err
 		}
 
 		if status == externalapi.StatusDisqualifiedFromChain {
-			// Just drop it. Do NOT walk its parents.
-			// log.Infof("Dropping disqualified/invalid tip %s", currentTip)
+			disqualifiedTips = append(disqualifiedTips, currentTip)
 			continue
 		}
 		newTips = append(newTips, currentTip)
+	}
+	newTips, err = csm.appendAncestorsCoveredOnlyByDisqualified(stagingArea, newTips, disqualifiedTips)
+	if err != nil {
+		return nil, err
+	}
+	newTips, err = csm.dropTipsInPastOfOtherTips(stagingArea, newTips)
+	if err != nil {
+		return nil, err
 	}
 	if len(newTips) < 1 {
 		if csm.lastValidBlock != nil {
@@ -261,4 +276,143 @@ func (csm *consensusStateManager) calculateNewTips(
 	log.Debugf("The new number of tips is: %d", len(newTips))
 
 	return newTips, nil
+}
+
+// appendAncestorsCoveredOnlyByDisqualified appends to tips the blocks that disqualifiedTips leave uncovered: walking back
+// from them through disqualified blocks, every block reached that is not disqualified and has no child that is UTXO-valid
+// or pending verification. These are the blocks kaspad's selectVirtualSelectedParent falls back to from a disqualified
+// tip (it pushes a parent once all its children are disqualified). Dropping a disqualified tip without them took its
+// valid ancestors out of the running for virtual's selected parent: a single invalid child of virtual's selected parent
+// moved virtual onto a lighter branch, or left no tip at all.
+//
+// Only which tips virtual's parents are picked from changes. A block covered by an eligible child is never appended, and
+// no disqualified block becomes a tip. An appended block can still be in another tip's past, through a disqualified
+// child that tip merges; dropTipsInPastOfOtherTips removes it.
+func (csm *consensusStateManager) appendAncestorsCoveredOnlyByDisqualified(stagingArea *model.StagingArea,
+	tips, disqualifiedTips []*externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
+	if len(disqualifiedTips) == 0 {
+		return tips, nil
+	}
+	visited := hashset.New()
+	for _, tip := range tips {
+		visited.Add(tip)
+	}
+	for _, tip := range disqualifiedTips {
+		visited.Add(tip)
+	}
+	queue := disqualifiedTips
+	for len(queue) > 0 {
+		var block *externalapi.DomainHash
+		block, queue = queue[0], queue[1:]
+		parents, err := csm.dagTopologyManager.Parents(stagingArea, block)
+		if err != nil {
+			return nil, err
+		}
+		for _, parent := range parents {
+			if visited.Contains(parent) || parent.Equal(model.VirtualGenesisBlockHash) {
+				continue
+			}
+			visited.Add(parent)
+
+			status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, parent)
+			if database.IsNotFoundError(err) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if status != externalapi.StatusDisqualifiedFromChain && status != externalapi.StatusUTXOValid &&
+				status != externalapi.StatusUTXOPendingVerification {
+				continue
+			}
+			hasEligibleChild, err := csm.hasValidOrPendingChild(stagingArea, parent)
+			if err != nil {
+				return nil, err
+			}
+			if hasEligibleChild {
+				continue // that child, or a tip in its future, covers the parent and its past
+			}
+			if status == externalapi.StatusDisqualifiedFromChain {
+				queue = append(queue, parent)
+				continue
+			}
+			tips = append(tips, parent)
+		}
+	}
+	return tips, nil
+}
+
+// hasValidOrPendingChild is the walk's "covered" rule. A child with StatusInvalid does not cover its parent here, while
+// selectVirtualSelectedParent's getRelevantChildCount counts it as a child that is never disqualified, so it never falls
+// back to that parent. An invalid block can carry no chain, so its parent is only covered by its other children; the
+// walk is the more permissive of the two on purpose, and a block it appends needs no fall-back.
+func (csm *consensusStateManager) hasValidOrPendingChild(stagingArea *model.StagingArea,
+	block *externalapi.DomainHash,
+) (bool, error) {
+	children, err := csm.dagTopologyManager.Children(stagingArea, block)
+	if err != nil {
+		return false, err
+	}
+	for _, child := range children {
+		if child.Equal(model.VirtualBlockHash) {
+			continue
+		}
+		status, err := csm.blockStatusStore.Get(csm.databaseContext, stagingArea, child)
+		if database.IsNotFoundError(err) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if status == externalapi.StatusUTXOValid || status == externalapi.StatusUTXOPendingVerification {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// dropTipsInPastOfOtherTips keeps the tips an antichain, as kaspad's are. Only a tip with a child can be in another tip's
+// past: a block appended by appendAncestorsCoveredOnlyByDisqualified whose disqualified child another tip merges (in
+// either order), or a block whose children have no body. pickVirtualParents skips a candidate only in the past of the
+// parents it has already chosen, and with at least maxBlockParents candidates it moves the lightest ones ahead, so such
+// a tip could become a virtual parent next to a block in its future, which checkParentsIncest rejects from
+// ParentsIncestVersion on.
+func (csm *consensusStateManager) dropTipsInPastOfOtherTips(stagingArea *model.StagingArea,
+	tips []*externalapi.DomainHash,
+) ([]*externalapi.DomainHash, error) {
+	if len(tips) < 2 {
+		return tips, nil
+	}
+	kept := make([]*externalapi.DomainHash, 0, len(tips))
+	for _, tip := range tips {
+		children, err := csm.dagTopologyManager.Children(stagingArea, tip)
+		if err != nil {
+			return nil, err
+		}
+		hasChild := false
+		for _, child := range children {
+			if !child.Equal(model.VirtualBlockHash) {
+				hasChild = true
+				break
+			}
+		}
+		if hasChild {
+			others := make([]*externalapi.DomainHash, 0, len(tips)-1)
+			for _, other := range tips {
+				if !other.Equal(tip) {
+					others = append(others, other)
+				}
+			}
+			inPastOfOtherTip, err := csm.dagTopologyManager.IsAncestorOfAny(stagingArea, tip, others)
+			if err != nil {
+				return nil, err
+			}
+			if inPastOfOtherTip {
+				continue
+			}
+		}
+		kept = append(kept, tip)
+	}
+	return kept, nil
 }

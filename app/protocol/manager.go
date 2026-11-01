@@ -26,6 +26,9 @@ type Manager struct {
 	context          *flowcontext.FlowContext
 	routersWaitGroup sync.WaitGroup
 	isClosed         atomic.Uint32
+	// routersLock orders every routersWaitGroup.Add before Close's Wait: Close sets isClosed under it, and a router is
+	// added under it only while isClosed is not set.
+	routersLock sync.Mutex
 }
 
 // NewManager creates a new instance of the p2p protocol manager
@@ -43,13 +46,27 @@ func NewManager(cfg *config.Config, domain domain.Domain, netAdapter *netadapter
 // Close closes the protocol manager and waits until all p2p flows
 // finish.
 func (m *Manager) Close() {
+	m.routersLock.Lock()
 	if !m.isClosed.CompareAndSwap(0, 1) {
+		m.routersLock.Unlock()
 		panic(errors.New("The protocol manager was already closed"))
 	}
+	m.routersLock.Unlock()
 
 	m.isClosed.Store(1)
 	m.context.Close()
 	m.routersWaitGroup.Wait()
+}
+
+// addRouter registers a router with routersWaitGroup, unless the manager is closed.
+func (m *Manager) addRouter() bool {
+	m.routersLock.Lock()
+	defer m.routersLock.Unlock()
+	if m.isClosed.Load() == 1 {
+		return false
+	}
+	m.routersWaitGroup.Add(1)
+	return true
 }
 
 // Peers returns the currently active peers

@@ -302,48 +302,18 @@ func TestValidateAndInsertImportedPruningPoint(t *testing.T) {
 				t.Fatalf("AppendImportedPruningPointUTXOs: %+v", err)
 			}
 
-			// These two checks were commented out with "DISABLE this test because the validation is
-			// disabled" - HTN-006 and HTN-005 respectively. Both validations now exist again behind
-			// hardfork gates at block version 11, so each assertion is run twice: once with the gate
-			// off, pinning today's documented (permissive) behaviour, and once with it moved to
-			// version 1, pinning the behaviour the fork will bring.
-			//
-			// All blocks here are version 1 (POWScores is math.MaxUint64 above), so scheduling a
-			// gate at version 1 activates it for everything this test builds.
-
-			// HTN-006's own assertion is deliberately NOT made here. The original commented-out check
-			// imported at tcSyncer's virtual selected parent and expected ErrUnexpectedPruningPoint;
-			// with the gate off that import does fail, but with a bare database "not found" from much
-			// further down, once something looks for data the syncee does not have for that hash. So
-			// the gate does not turn an accepted import into a rejected one - it turns a late,
-			// untyped, incidental failure into an early typed rule error. That is worth having and
-			// worth testing, but it needs a consensus this test is not free to leave half-imported,
-			// so it belongs in its own test rather than in the middle of this one.
-
-			// HTN-005, gate off: a UTXO set that cannot hash to the pruning point's commitment is
-			// accepted anyway - the node repairs its own trust anchor and carries on. This is the
-			// behaviour every mainnet node relies on today.
-			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint, nil)
-
-			// HTN-005, gate on: the same set is refused with ErrBadPruningPointUTXOSet.
+			// Mismatched sets are always refused, including below the configured import
+			// gate: the release removed the permissive accept-and-repair path.
 			previousImportGate := synceeStaging.HardForkGates().RefuseMismatchedImportVersion
-			synceeStaging.HardForkGates().RefuseMismatchedImportVersion = 1
-			assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint,
-				ruleerrors.ErrBadPruningPointUTXOSet)
-
-			// The plan's specific case: not a wholly fabricated set, but the real one with a single
-			// sompi removed from one entry. That is the smallest possible corruption, and the one a
-			// commitment check exists to catch - it is indistinguishable from the real set by any
-			// means other than the MuHash.
-			assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
-				pruningPoint, ruleerrors.ErrBadPruningPointUTXOSet)
+			for _, gate := range []uint16{^uint16(0), 1} {
+				synceeStaging.HardForkGates().RefuseMismatchedImportVersion = gate
+				assertImportedPruningPointVerdict(t, synceeStaging, makeFakeUTXOs(), pruningPoint,
+					ruleerrors.ErrBadPruningPointUTXOSet)
+				// Even a single sompi of corruption must be refused.
+				assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
+					pruningPoint, ruleerrors.ErrBadPruningPointUTXOSet)
+			}
 			synceeStaging.HardForkGates().RefuseMismatchedImportVersion = previousImportGate
-
-			// And with the gate off again, that same one-sompi-short set is accepted - which is
-			// precisely how a node ends up on an offset baseline without anything going wrong
-			// loudly.
-			assertImportedPruningPointVerdict(t, synceeStaging, withOneSompiRemoved(t, pruningPointUTXOs),
-				pruningPoint, nil)
 
 			err = synceeStaging.ClearImportedPruningPointData()
 			if err != nil {
@@ -598,14 +568,12 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 		}
 		defer teardown(false)
 
-		// Create a block that accepts the genesis coinbase so that we won't have script problems down the line
-		emptyCoinbase := &externalapi.DomainCoinbaseData{
-			ScriptPublicKey: &externalapi.ScriptPublicKey{
-				Script:  nil,
-				Version: 0,
-			},
+		// Mine spendable coinbase rewards instead of injecting uncommitted virtual UTXOs.
+		scriptPublicKey, redeemScript := testutils.OpTrueScript()
+		coinbaseData := &externalapi.DomainCoinbaseData{
+			ScriptPublicKey: scriptPublicKey,
 		}
-		blockAboveGenesis, err := testConsensus.BuildBlock(emptyCoinbase, nil)
+		blockAboveGenesis, err := testConsensus.BuildBlock(coinbaseData, nil)
 		if err != nil {
 			t.Fatalf("Error building block above genesis: %+v", err)
 		}
@@ -615,18 +583,8 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 			t.Fatalf("Error validating and inserting block above genesis: %+v", err)
 		}
 
-		// Bootstrap a real spendable transaction output in the DAG.
-		scriptPublicKey, redeemScript := testutils.OpTrueScript()
-		bootstrapTransaction := testutils.CreateTransactionWithOutput(10000 * 901)
-		err = testutils.StageTransactionOutputsToVirtual(testConsensus, bootstrapTransaction, 0)
-		if err != nil {
-			t.Fatalf("StageTransactionOutputsToVirtual: %+v", err)
-		}
-		fundingSeedTransaction, err := testutils.CreateTransaction(bootstrapTransaction, 1)
-		if err != nil {
-			t.Fatalf("Error creating funding seed transaction: %+v", err)
-		}
-		fundingBlock, err := testConsensus.BuildBlock(emptyCoinbase, []*externalapi.DomainTransaction{fundingSeedTransaction})
+		// This block's coinbase pays the preceding block's script and can fund the spend.
+		fundingBlock, err := testConsensus.BuildBlock(coinbaseData, nil)
 		if err != nil {
 			t.Fatalf("Error building funding block: %+v", err)
 		}
@@ -636,7 +594,7 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 		}
 
 		// Create a transaction that adds a lot of UTXOs to the UTXO set
-		transactionToSpend := fundingBlock.Transactions[1]
+		transactionToSpend := fundingBlock.Transactions[0]
 		signatureScript, err := txscript.PayToScriptHashSignatureScript(redeemScript, nil)
 		if err != nil {
 			t.Fatalf("Error creating signature script: %+v", err)
@@ -665,7 +623,7 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 		}
 
 		// Create a block with that includes the above transaction
-		includingBlock, err := testConsensus.BuildBlock(emptyCoinbase, []*externalapi.DomainTransaction{spendingTransaction})
+		includingBlock, err := testConsensus.BuildBlock(coinbaseData, []*externalapi.DomainTransaction{spendingTransaction})
 		if err != nil {
 			t.Fatalf("Error building including block: %+v", err)
 		}
@@ -676,7 +634,7 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 
 		// Add enough blocks to move the pruning point
 		for {
-			block, err := testConsensus.BuildBlock(emptyCoinbase, nil)
+			block, err := testConsensus.BuildBlock(coinbaseData, nil)
 			if err != nil {
 				t.Fatalf("Error building block: %+v", err)
 			}
@@ -710,7 +668,7 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 
 		// Get pruning point UTXOs in a loop
 		var allOutpointAndUTXOEntryPairs []*externalapi.OutpointAndUTXOEntryPair
-		const step = 100_000
+		const step = 100
 		var fromOutpoint *externalapi.DomainOutpoint
 		for {
 			outpointAndUTXOEntryPairs, err := testConsensus.GetPruningPointUTXOs(pruningPoint, fromOutpoint, step)
@@ -734,10 +692,8 @@ func TestGetPruningPointUTXOs(t *testing.T) {
 			}
 		}
 
-		// fundingBlock.Transactions[1] (fundingSeedTransaction) is fully spent by spendingTransaction
-		// (its only output, index 0, is transactionToSpend's input), so it does not contribute any
-		// unspent outputs to the pruning point UTXO set.
-		expected := len(outputs) + len(includingBlock.Transactions[0].Outputs) + len(fundingBlock.Transactions[0].Outputs)
+		// The funding coinbase's first output is spent; its other outputs remain.
+		expected := len(outputs) + len(includingBlock.Transactions[0].Outputs) + len(fundingBlock.Transactions[0].Outputs) - 1
 		// Make sure the pruning point UTXO set contains all outputs from the spending transaction
 		// plus any outputs actually present on the including and funding blocks' coinbases.
 		if len(allOutpointAndUTXOEntryPairs) != expected {

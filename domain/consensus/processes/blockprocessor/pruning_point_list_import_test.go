@@ -50,6 +50,8 @@ func TestImportedPruningPointListGateActive(t *testing.T) {
 			return
 		}
 		headersProofTestConfig(cfg)
+		// This synthetic chain does not contain the release-pinned mainnet checkpoint.
+		cfg.PruningPointCheckpoint = nil
 		factory := consensus.NewFactory()
 		syncer, teardownSyncer, err := factory.NewTestConsensus(cfg, "TestImportedPruningPointListGateActiveSyncer")
 		if err != nil {

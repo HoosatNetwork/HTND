@@ -28,15 +28,23 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 
 	receiveVersionRoute, sendVersionRoute, receiveReadyRoute := registerHandshakeRoutes(router)
 
+	// A connection whose router is initialized just before the net adapter stops can get here after Close. That is
+	// part of shutdown, not a programming error, and the net adapter has already disconnected the connection (it is
+	// stopped before Close is called).
+	//
+	// The router is added to routersWaitGroup here, before its goroutine is spawned, so that Close waits for it. Added
+	// from inside the goroutine, it could be added after Close's Wait had found no routers and returned, or while
+	// that Wait was being woken by the last router to finish, which the WaitGroup does not allow.
+	if !m.addRouter() {
+		log.Debugf("Not running flows for %s: the protocol manager is closed", netConnection)
+		return
+	}
+
 	// After flows were registered - spawn a new thread that will wait for connection to finish initializing
 	// and start receiving messages
 	spawn("routerInitializer-runFlows", func() {
-		m.routersWaitGroup.Add(1)
 		defer m.routersWaitGroup.Done()
 
-		// A connection whose router was initialized just before the net adapter stopped can get here
-		// after Close. That is part of shutdown, not a programming error, and the net adapter has
-		// already disconnected the connection (it is stopped before Close is called).
 		if m.isClosed.Load() == 1 {
 			log.Debugf("Not running flows for %s: the protocol manager is closed", netConnection)
 			return
@@ -97,20 +105,25 @@ func (m *Manager) routerInitializer(router *routerpkg.Router, netConnection *net
 		removeHandshakeRoutes(router)
 
 		log.Debugf("Registered p2p flows and running them for peer %s", peer)
-		flowsWaitGroup := &sync.WaitGroup{}
-		err = m.runFlows(flows, peer, errChan, flowsWaitGroup)
-
-		if err != nil {
-			router.Close()
-			m.handleError(err, netConnection, router.OutgoingRoute())
-			flowsWaitGroup.Wait()
-			return
-		}
-
-		// Clean exit path
-		router.Close()
-		flowsWaitGroup.Wait()
+		m.runFlowsUntilStopped(flows, peer, errChan, router, netConnection)
 	})
+}
+
+// runFlowsUntilStopped runs the peer's flows until the first of them stops, then closes the router and waits for the
+// rest. The peer leaves the peers list as soon as the router is closed, not once every flow has returned: some flows
+// notice only later (SendPings on its next tick, up to two minutes on), and while the entry is there the same peer
+// cannot connect again.
+func (m *Manager) runFlowsUntilStopped(flows []*common.Flow, peer *peerpkg.Peer, errChan <-chan error,
+	router *routerpkg.Router, netConnection *netadapter.NetConnection,
+) {
+	flowsWaitGroup := &sync.WaitGroup{}
+	err := m.runFlows(flows, peer, errChan, flowsWaitGroup)
+	router.Close()
+	m.context.RemoveFromPeers(peer)
+	if err != nil {
+		m.handleError(err, netConnection, router.OutgoingRoute())
+	}
+	flowsWaitGroup.Wait()
 }
 
 func registerFlowsForProtocol(m *Manager, netConnection *netadapter.NetConnection, router *routerpkg.Router,

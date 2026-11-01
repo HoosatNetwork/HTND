@@ -12,7 +12,7 @@ If you want to make a big change it's better to discuss it first by opening an i
 
 ## Code submission process
 
-- All contributions via well formed Pull Requests against the master branch are welcome. Please ensure that each PR only deals with a single issue.
+- All contributions via well formed Pull Requests against the master branch or current development branch are welcome. Please ensure that each PR only deals with a single issue.
 - This is most easily carried out by forking this repo on GitHub, making your changes in it, and then submitting an upstream PR.
 - No other submission mechanism will be considered.
 - If you identify an issue, but are not a developer, then please raise it as an issue here on GitHub.

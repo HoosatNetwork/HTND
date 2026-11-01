@@ -13,6 +13,9 @@ import (
 const (
 	// DefaultMaxMessages is the default capacity for a route with a capacity defined
 	DefaultMaxMessages = 5000
+
+	// enqueueWithTimeoutRetryInterval is how often EnqueueWithTimeout re-checks a route it is waiting on.
+	enqueueWithTimeoutRetryInterval = 25 * time.Millisecond
 )
 
 var (
@@ -108,6 +111,45 @@ func (r *Route) Enqueue(message appmessage.Message) error {
 	r.channel <- message
 	r.closeLock.Unlock()
 	return nil
+}
+
+// EnqueueWithTimeout enqueues a message to the Route like Enqueue, but while the route is half full or more it
+// waits, up to timeout, for the reader to drain it instead of failing at once. Flows answering a peer's request with
+// many messages use it, so the answer goes out at the pace the peer reads it. The wait is at half capacity rather
+// than on the channel send: a sender blocked on the send would keep the route full for as long as the answer drains,
+// and every non-blocking Enqueue the peer's other flows make meanwhile would fail and disconnect the peer.
+func (r *Route) EnqueueWithTimeout(message appmessage.Message, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		r.closeLock.Lock()
+		if r.closed {
+			r.closeLock.Unlock()
+			return errors.WithStack(ErrRouteClosed)
+		}
+		if 2*len(r.channel) < r.capacity {
+			// Every send happens under closeLock and readers only shrink the channel, so this cannot block.
+			r.channel <- message
+			r.closeLock.Unlock()
+			return nil
+		}
+		closedChan := r.closedChan
+		handler := r.onCapacityReachedHandler
+		r.closeLock.Unlock()
+
+		wait := time.Until(deadline)
+		if wait <= 0 {
+			if handler != nil {
+				handler(r, message)
+			}
+			return errors.Wrapf(ErrRouteCapacityReached, "route '%s' was not drained below half of its capacity "+
+				"of %d within %s", r.name, r.capacity, timeout)
+		}
+		select {
+		case <-closedChan:
+			return errors.WithStack(ErrRouteClosed)
+		case <-time.After(min(wait, enqueueWithTimeoutRetryInterval)):
+		}
+	}
 }
 
 // MaybeEnqueue enqueues a message to the route, but doesn't throw an error

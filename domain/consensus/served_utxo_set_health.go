@@ -23,9 +23,12 @@ const servedUTXOSetMismatchRecheckInterval = 10 * time.Minute
 // servedUTXOSetCheck memoises CheckUTXOHealth. mu is held across the walk, so concurrent requests
 // from several peers wait for one walk instead of each starting their own.
 type servedUTXOSetCheck struct {
-	mu        sync.Mutex
-	last      *externalapi.ServedUTXOSetHealth
-	checkedAt time.Time
+	mu         sync.Mutex
+	last       *externalapi.ServedUTXOSetHealth
+	checkedAt  time.Time
+	generation uint64
+	// trackGeneration is fixed at construction: journal admission or recovery.
+	trackGeneration bool
 }
 
 // CheckUTXOHealth reports whether the pruning point UTXO set this node would serve hashes to the UTXO
@@ -40,6 +43,9 @@ func (s *consensus) CheckUTXOHealth(pruningPointHash *externalapi.DomainHash) (*
 	s.servedUTXOSetCheck.mu.Lock()
 	defer s.servedUTXOSetCheck.mu.Unlock()
 
+	// Capture before admission and recheck after hashing/cached lookup: same-hash
+	// rewrites must not reuse health from a previous complete generation.
+	generation := s.servedUTXOSetGeneration()
 	headerCommitment, updating, err := s.servedUTXOSetState(pruningPointHash)
 	if err != nil {
 		return nil, err
@@ -54,7 +60,7 @@ func (s *consensus) CheckUTXOHealth(pruningPointHash *externalapi.DomainHash) (*
 	}
 
 	last := s.servedUTXOSetCheck.last
-	if last != nil && last.PruningPoint.Equal(pruningPointHash) &&
+	if last != nil && s.servedUTXOSetCheck.generation == generation && s.servedUTXOSetGeneration() == generation && last.PruningPoint.Equal(pruningPointHash) &&
 		(last.Verified || time.Since(s.servedUTXOSetCheck.checkedAt) < servedUTXOSetMismatchRecheckInterval) {
 		return last, nil
 	}
@@ -65,7 +71,7 @@ func (s *consensus) CheckUTXOHealth(pruningPointHash *externalapi.DomainHash) (*
 	}
 
 	_, updating, err = s.servedUTXOSetState(pruningPointHash)
-	if errors.Is(err, ruleerrors.ErrWrongPruningPointHash) || (err == nil && updating) {
+	if errors.Is(err, ruleerrors.ErrWrongPruningPointHash) || (err == nil && (updating || s.servedUTXOSetGeneration() != generation)) {
 		return notReady, nil
 	}
 	if err != nil {
@@ -80,6 +86,7 @@ func (s *consensus) CheckUTXOHealth(pruningPointHash *externalapi.DomainHash) (*
 		HeaderCommitment: headerCommitment,
 		EntryCount:       entryCount,
 	}
+	s.servedUTXOSetCheck.generation = generation
 	s.servedUTXOSetCheck.last = health
 	s.servedUTXOSetCheck.checkedAt = time.Now()
 
@@ -150,4 +157,13 @@ func (s *consensus) hashServedPruningPointUTXOSet() (*externalapi.DomainHash, ui
 		entryCount++
 	}
 	return setMultiset.Hash(), entryCount, nil
+}
+
+// servedUTXOSetGeneration preserves legacy memoization for synchronous instances.
+// Journal instances also distinguish complete rewrites of the same pruning point.
+func (s *consensus) servedUTXOSetGeneration() uint64 {
+	if !s.servedUTXOSetCheck.trackGeneration {
+		return 0
+	}
+	return s.pruningStore.PruningPointUTXOSetGeneration()
 }

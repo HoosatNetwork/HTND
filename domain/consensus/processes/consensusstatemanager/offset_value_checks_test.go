@@ -63,13 +63,13 @@ func TestOffsetModeValueChecksGate(t *testing.T) {
 	}
 }
 
-func TestStrictCoinbaseGateIsUnscheduled(t *testing.T) {
-	if dagconfig.MainnetParams.HardForkGates.StrictCoinbaseVersion != ^uint16(0) {
-		t.Fatalf("StrictCoinbaseVersion is scheduled at block version %d", dagconfig.MainnetParams.HardForkGates.StrictCoinbaseVersion)
-	}
-	for _, version := range []uint16{1, 9, 10, 11, ^uint16(0) - 1} {
+// TestStrictCoinbaseGatePreservesPreActivationHistory protects mainnet history
+// before the maintainer's deliberate v11 activation, rather than requiring that
+// strict coinbase validation remain unscheduled forever.
+func TestStrictCoinbaseGatePreservesPreActivationHistory(t *testing.T) {
+	for version := uint16(1); version < 11; version++ {
 		if dagconfig.HardForkActive(dagconfig.MainnetParams.HardForkGates.StrictCoinbaseVersion, version) {
-			t.Errorf("strict coinbase gate active at reachable block version %d", version)
+			t.Errorf("strict coinbase gate active in pre-fork history at version %d", version)
 		}
 	}
 }

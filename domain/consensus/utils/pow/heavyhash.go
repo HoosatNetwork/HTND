@@ -203,8 +203,10 @@ func ComplexNonLinear(x float64) float64 {
 }
 
 func ComplexNonLinear110(x float64) float64 {
-	transformFactorOne := (x*COMPLEX_TRANSFORM_MULTIPLIER)/8.0 - math.Floor((x*COMPLEX_TRANSFORM_MULTIPLIER)/8.0)
-	transformFactorTwo := (x*COMPLEX_TRANSFORM_MULTIPLIER)/4.0 - math.Floor((x*COMPLEX_TRANSFORM_MULTIPLIER)/4.0)
+	// The float64() conversions forbid fused multiply-add (Go spec), which arm64 and GOAMD64>=v3
+	// would otherwise use. HoohashV110 output must be bit-identical on every platform.
+	transformFactorOne := float64((x*COMPLEX_TRANSFORM_MULTIPLIER)/8.0) - math.Floor((x*COMPLEX_TRANSFORM_MULTIPLIER)/8.0)
+	transformFactorTwo := float64((x*COMPLEX_TRANSFORM_MULTIPLIER)/4.0) - math.Floor((x*COMPLEX_TRANSFORM_MULTIPLIER)/4.0)
 	if transformFactorOne < 0.33 {
 		if transformFactorTwo < 0.25 {
 			return MediumComplexNonLinear(x + (1 + transformFactorTwo))
@@ -401,7 +403,8 @@ func ForComplex(forComplex float64) float64 {
 
 func TransformFactor(x float64) float64 {
 	const granularity = 1024.0 // Increase for finer granularity
-	return x/granularity - math.Floor(x/granularity)
+	// float64() forbids fused multiply-add; see ComplexNonLinear110.
+	return float64(x/granularity) - math.Floor(x/granularity)
 }
 
 func (mat *floatMatrix) HoohashMatrixMultiplicationV110(hash *externalapi.DomainHash, Nonce uint64) *externalapi.DomainHash {
@@ -426,15 +429,16 @@ func (mat *floatMatrix) HoohashMatrixMultiplicationV110(hash *externalapi.Domain
 		for j := range 64 {
 			if sw <= 0.02 {
 				mathashmod := mat[i][j] * hashMod
-				mathashmodvector := mathashmod * float64(vector[j])
+				// float64() conversions below forbid fused multiply-add; see ComplexNonLinear110.
+				mathashmodvector := float64(mathashmod * float64(vector[j]))
 				input := (mathashmodvector + nonceMod)
 				forComplex := ForComplex(input)
 				outputMultipliedByvector := forComplex * float64(vector[j])
-				outputMultipliedByMultiplier := outputMultipliedByvector * multiplier
+				outputMultipliedByMultiplier := float64(outputMultipliedByvector * multiplier)
 				product[i] += outputMultipliedByMultiplier
 			} else {
 				outputMultipliedByDivider := mat[i][j] * divider
-				outputMultipliedByVector := outputMultipliedByDivider * float64(vector[j])
+				outputMultipliedByVector := float64(outputMultipliedByDivider * float64(vector[j]))
 				product[i] += outputMultipliedByVector
 			}
 			sw = TransformFactor(product[i])

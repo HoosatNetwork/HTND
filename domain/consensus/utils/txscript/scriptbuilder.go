@@ -275,7 +275,7 @@ func (b *ScriptBuilder) addLockTimeOrSequence(lockTimeOrSequence uint64) *Script
 	lockTimeOrSequenceBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(lockTimeOrSequenceBytes, lockTimeOrSequence)
 	unpaddedSize := 8
-	for lockTimeOrSequenceBytes[unpaddedSize-1] == 0 {
+	for unpaddedSize > 0 && lockTimeOrSequenceBytes[unpaddedSize-1] == 0 {
 		unpaddedSize--
 	}
 	fixedLockTimeOrSequenceBytesBytes := lockTimeOrSequenceBytes[:unpaddedSize]

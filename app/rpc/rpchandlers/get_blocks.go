@@ -138,7 +138,13 @@ func HandleGetBlocks(context *rpccontext.Context, _ *router.Router, request appm
 		if err != nil {
 			return nil, err
 		}
-		blockHashes = append(blockHashes, virtualSelectedParentAnticone...)
+		// When lowHash is not in the virtual selected parent's past it is in its anticone,
+		// and it was already prepended above. The other hashes are all in that past.
+		for _, blockHash := range virtualSelectedParentAnticone {
+			if !blockHash.Equal(lowHash) {
+				blockHashes = append(blockHashes, blockHash)
+			}
+		}
 	}
 
 	// Prepare the response

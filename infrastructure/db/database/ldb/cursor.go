@@ -148,8 +148,9 @@ func (c *LevelDBCursor) Close() error {
 		return errors.New("cannot close an already closed cursor")
 	}
 	c.isClosed = true
+	iterErr := c.ldbIterator.Error()
 	c.ldbIterator.Release()
 	c.ldbIterator = nil
 	c.bucket = nil
-	return nil
+	return errors.WithStack(iterErr)
 }

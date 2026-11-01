@@ -1,6 +1,8 @@
 package database
 
 import (
+	"fmt"
+
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
@@ -71,4 +73,13 @@ func (d *dbTransaction) RollbackUnlessClosed() error {
 
 func newDBTransaction(transaction database.Transaction) model.DBTransaction {
 	return &dbTransaction{transaction: transaction}
+}
+
+// CommitSync is an optional capability used only by the journal protocol.
+func (d *dbTransaction) CommitSync() error {
+	tx, ok := d.transaction.(interface{ CommitSync() error })
+	if !ok {
+		return fmt.Errorf("pruning journal: backend cannot sync a transaction")
+	}
+	return tx.CommitSync()
 }

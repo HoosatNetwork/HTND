@@ -1,6 +1,7 @@
 package transactionrelay_test
 
 import (
+	"encoding/binary"
 	"errors"
 	"strings"
 	"testing"
@@ -297,4 +298,87 @@ func TestHandleRelayedTransactionsAlwaysFetches(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHandleRelayedTransactionsRequestsInChunks pins that the transactions of a large inv are requested in chunks of
+// at most 1,000 ids, each only after the previous chunk was answered, so that the answers to one request fit the
+// outgoing route of a responder that does not wait for this node to read them.
+func TestHandleRelayedTransactionsRequestsInChunks(t *testing.T) {
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		log := logger.RegisterSubSystem("PROT")
+		spawn := panics.GoroutineWrapperFunc(log)
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestHandleRelayedTransactionsRequestsInChunks")
+		if err != nil {
+			t.Fatalf("Error setting up test consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		adapter, err := netadapter.NewNetAdapter(config.DefaultConfig())
+		if err != nil {
+			t.Fatalf("Failed to create a NetAdapter: %v", err)
+		}
+		domainInstance, err := domain.New(consensusConfig, mempool.DefaultConfig(&consensusConfig.Params), tc.Database())
+		if err != nil {
+			t.Fatalf("Failed to set up a domain instance: %v", err)
+		}
+		context := &mocTransactionsRelayContext{
+			netAdapter:                  adapter,
+			domain:                      domainInstance,
+			sharedRequestedTransactions: flowcontext.NewSharedRequestedTransactions(),
+		}
+		incomingRoute := router.NewRoute("incoming")
+		defer incomingRoute.Close()
+		peerIncomingRoute := router.NewRoute("outgoing")
+		defer peerIncomingRoute.Close()
+
+		txIDs := make([]*externalapi.DomainTransactionID, 2500)
+		for i := range txIDs {
+			var txID [externalapi.DomainHashSize]byte
+			binary.LittleEndian.PutUint32(txID[:], uint32(i+1))
+			txIDs[i] = externalapi.NewDomainTransactionIDFromByteArray(&txID)
+		}
+		err = incomingRoute.Enqueue(appmessage.NewMsgInvTransaction(txIDs))
+		if err != nil {
+			t.Fatalf("Unexpected error from incomingRoute.Enqueue: %v", err)
+		}
+
+		flowErr := make(chan error, 1)
+		spawn("HandleRelayedTransactions", func() {
+			flowErr <- transactionrelay.HandleRelayedTransactions(context, incomingRoute, peerIncomingRoute)
+		})
+
+		answered := 0
+		for i, wantIDs := range []int{1000, 1000, 500} {
+			msg, err := peerIncomingRoute.DequeueWithTimeout(5 * time.Second)
+			if err != nil {
+				t.Fatalf("request %d: %v", i, err)
+			}
+			request := msg.(*appmessage.MsgRequestTransactions)
+			if len(request.IDs) != wantIDs {
+				t.Fatalf("request %d asks for %d transactions, want %d", i, len(request.IDs), wantIDs)
+			}
+			if _, err := peerIncomingRoute.DequeueWithTimeout(100 * time.Millisecond); !errors.Is(err, router.ErrTimeout) {
+				t.Fatalf("the flow sent another message before request %d was answered (%v)", i, err)
+			}
+			for _, id := range request.IDs {
+				if !id.Equal(txIDs[answered]) {
+					t.Fatalf("got a request for %s, want %s", id, txIDs[answered])
+				}
+				answered++
+				err = incomingRoute.Enqueue(appmessage.NewMsgTransactionNotFound(id))
+				if err != nil {
+					t.Fatalf("Unexpected error from incomingRoute.Enqueue: %v", err)
+				}
+			}
+		}
+		if msg, err := peerIncomingRoute.DequeueWithTimeout(100 * time.Millisecond); !errors.Is(err, router.ErrTimeout) {
+			t.Fatalf("the flow sent %v after every transaction was requested (%v)", msg, err)
+		}
+
+		incomingRoute.Close()
+		if err := <-flowErr; !errors.Is(err, router.ErrRouteClosed) {
+			t.Fatalf("Unexpected error: expected: %v, got : %v", router.ErrRouteClosed, err)
+		}
+	})
 }

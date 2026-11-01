@@ -20,6 +20,8 @@ import (
 // shallow one, and so must the ungated header walk.
 func TestPruningListCheck(t *testing.T) {
 	config := &consensus.Config{Params: dagconfig.MainnetParams}
+	// This synthetic chain cannot contain the release network's checkpoint.
+	config.PruningPointCheckpoint = nil
 	config.SkipProofOfWork = true
 	config.DisableDifficultyAdjustment = true
 	config.POWScores = []uint64{math.MaxUint64}
