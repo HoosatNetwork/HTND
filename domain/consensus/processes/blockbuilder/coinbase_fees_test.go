@@ -162,3 +162,55 @@ func TestBuiltCoinbasePaysEveryMergedBlock(t *testing.T) {
 		}
 	})
 }
+
+func TestBuiltCoinbaseStopsPayingDevFeeAtGate(t *testing.T) {
+	testutils.ForAllNets(t, true, func(t *testing.T, consensusConfig *consensus.Config) {
+		consensusConfig.POWScores = []uint64{1}
+		consensusConfig.HardForkGates.DevFeeRemovalBlockVersion = 2
+		factory := consensus.NewFactory()
+		tc, teardown, err := factory.NewTestConsensus(consensusConfig, "TestBuiltCoinbaseStopsPayingDevFeeAtGate")
+		if err != nil {
+			t.Fatalf("Error setting up consensus: %+v", err)
+		}
+		defer teardown(false)
+
+		firstBlock, _, err := tc.AddBlock([]*externalapi.DomainHash{consensusConfig.GenesisHash}, nil, nil)
+		if err != nil {
+			t.Fatalf("Error adding first block: %+v", err)
+		}
+		for i := range 2 {
+			_, _, err = tc.AddBlock([]*externalapi.DomainHash{firstBlock},
+				&externalapi.DomainCoinbaseData{
+					ScriptPublicKey: &externalapi.ScriptPublicKey{Script: []byte{byte(i + 1)}, Version: 0},
+				}, nil)
+			if err != nil {
+				t.Fatalf("Error adding sibling %d: %+v", i, err)
+			}
+		}
+
+		stagingArea := model.NewStagingArea()
+		virtualGHOSTDAGData, err := tc.GHOSTDAGDataStore().Get(tc.DatabaseContext(), stagingArea,
+			model.VirtualBlockHash, false)
+		if err != nil {
+			t.Fatalf("Error getting virtual's GHOSTDAG data: %+v", err)
+		}
+		mergeSetSize := len(virtualGHOSTDAGData.MergeSetBlues()) + len(virtualGHOSTDAGData.MergeSetReds())
+
+		block, err := tc.BuildBlock(&externalapi.DomainCoinbaseData{
+			ScriptPublicKey: &externalapi.ScriptPublicKey{Script: nil, Version: 0},
+		}, nil)
+		if err != nil {
+			t.Fatalf("Error building the block: %+v", err)
+		}
+		if block.Header.Version() != 2 {
+			t.Fatalf("built block has version %d, want the activated version 2", block.Header.Version())
+		}
+		if got := len(block.Transactions[0].Outputs); got != mergeSetSize {
+			t.Fatalf("built coinbase has %d outputs, want %d miner outputs without dev-fee outputs",
+				got, mergeSetSize)
+		}
+		if err := tc.ValidateAndInsertBlock(block, true, true); err != nil {
+			t.Fatalf("The block this node built was rejected by this node: %+v", err)
+		}
+	})
+}

@@ -42,7 +42,8 @@ type coinbaseManager struct {
 
 	// powScores derives the version of a block that has no stored header yet - the block being built - from its
 	// staged DAA score (see blockVersion).
-	powScores []uint64
+	powScores     []uint64
+	hardForkGates dagconfig.HardForkGates
 }
 
 // mergeSetRewardIgnoresDAAWindowVersion is the block version, activated by a hard fork, from which a
@@ -132,6 +133,9 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 	if err != nil {
 		return nil, false, err
 	}
+	// Removal follows the receiving block's fork version, not each reward's originating version.
+	devFeeRemoved := c.hardForkGates.DevFeeRemovalBlockVersion != 0 &&
+		ownBlockVersion >= c.hardForkGates.DevFeeRemovalBlockVersion
 
 	txOuts := make([]*externalapi.DomainTransactionOutput, 0, len(ghostdagData.MergeSetBlues()))
 	acceptanceDataMap := acceptanceDataFromArrayToMap(filteredAcceptanceData)
@@ -179,13 +183,16 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		})
 		log.Tracef("Processing %d total merge set blocks (blues + reds)", len(allMergeBlocks))
 
-		devFeeDecodedAddress, err := util.DecodeAddress(constants.DevFeeAddress, util.Bech32PrefixHoosat)
-		if err != nil {
-			return nil, false, err
-		}
-		devFeeScriptPublicKey, err := txscript.PayToAddrScript(devFeeDecodedAddress)
-		if err != nil {
-			return nil, false, err
+		var devFeeScriptPublicKey *externalapi.ScriptPublicKey
+		if !devFeeRemoved {
+			devFeeDecodedAddress, err := util.DecodeAddress(constants.DevFeeAddress, util.Bech32PrefixHoosat)
+			if err != nil {
+				return nil, false, err
+			}
+			devFeeScriptPublicKey, err = txscript.PayToAddrScript(devFeeDecodedAddress)
+			if err != nil {
+				return nil, false, err
+			}
 		}
 
 		// Which merge set blocks the coinbase pays is consensus, and the two sides answer it about
@@ -250,16 +257,15 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 			var minerScript *externalapi.ScriptPublicKey
 			minerScript = blockCoinbaseData.ScriptPublicKey
 
-			blockVersion := mergeSetBlockVersion
 			var devFee uint64
-			if blockVersion >= 10 {
-				devFee = calcDevFeeQuantity(blockReward)
-			} else {
-				devFee = uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+			if !devFeeRemoved {
+				if mergeSetBlockVersion >= 10 {
+					devFee = calcDevFeeQuantity(blockReward)
+				} else {
+					devFee = uint64(float64(constants.DevFee) / 100 * float64(blockReward))
+				}
+				blockReward -= devFee
 			}
-			// Calculate dev fee
-
-			blockReward -= devFee
 			if blockReward <= 0 {
 				droppedMergeSetBlocks = append(droppedMergeSetBlocks,
 					fmt.Sprintf("%s (whole reward consumed by the dev fee %d)", blockHash, devFee))
@@ -271,14 +277,14 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 				Value:           blockReward,
 				ScriptPublicKey: minerScript,
 			}
-			// Create dev fee output
-			devTx := &externalapi.DomainTransactionOutput{
-				Value:           devFee,
-				ScriptPublicKey: devFeeScriptPublicKey,
-			}
-
 			txOuts = append(txOuts, txOut)
-			txOuts = append(txOuts, devTx)
+			if !devFeeRemoved {
+				devTx := &externalapi.DomainTransactionOutput{
+					Value:           devFee,
+					ScriptPublicKey: devFeeScriptPublicKey,
+				}
+				txOuts = append(txOuts, devTx)
+			}
 		}
 
 		if len(droppedMergeSetBlocks) > 0 {
@@ -784,6 +790,7 @@ func New(
 	pruningStore model.PruningStore,
 	blockHeaderStore model.BlockHeaderStore,
 	powScores []uint64,
+	hardForkGates dagconfig.HardForkGates,
 ) model.CoinbaseManager {
 	return &coinbaseManager{
 		databaseContext: databaseContext,
@@ -805,5 +812,6 @@ func New(
 		pruningStore:        pruningStore,
 		blockHeaderStore:    blockHeaderStore,
 		powScores:           powScores,
+		hardForkGates:       hardForkGates,
 	}
 }

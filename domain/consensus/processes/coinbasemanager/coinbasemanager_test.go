@@ -37,7 +37,7 @@ func TestCalcDeflationaryPeriodBlockSubsidy(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil, nil)
+		nil, nil, dagconfig.HardForkGates{})
 	coinbaseManagerInstance := coinbaseManagerInterface.(*coinbaseManager)
 
 	tests := []struct {
@@ -158,7 +158,7 @@ func TestBuildSubsidyTable(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil, nil)
+		nil, nil, dagconfig.HardForkGates{})
 	coinbaseManagerInstance := coinbaseManagerInterface.(*coinbaseManager)
 
 	var subsidyTable []uint64
@@ -239,7 +239,7 @@ func TestCalcMergedBlockRewardPaysRegardlessOfDAAWindowFromActivation(t *testing
 	coinbaseManagerInterface := New(
 		nil, 0, 0, 255, &externalapi.DomainHash{}, 0, 0, 1,
 		dagconfig.MainnetParams.TargetTimePerBlock,
-		nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil, nil, dagconfig.HardForkGates{})
 	cbm := coinbaseManagerInterface.(*coinbaseManager)
 
 	blockHash := *externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{1})
