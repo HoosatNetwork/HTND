@@ -62,7 +62,7 @@ jobs:
         run: |
           mkdir -p bin
           go build -v \
-            -ldflags="-s -w -buildid=" -tags pebblegozstd \
+            -ldflags="-s -w -buildid=" -tags deadlock,pebblegozstd \
             -trimpath \
             -o bin/ . ./cmd/...
 
