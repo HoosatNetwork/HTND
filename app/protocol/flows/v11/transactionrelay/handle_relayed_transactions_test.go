@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/flowcontext"
-	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/transactionrelay"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v11/transactionrelay"
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain"

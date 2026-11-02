@@ -15,7 +15,7 @@ Severity mapping from the audit: P0 = critical, P1 = high, P2 = medium, P3 = low
 - area: pruning
 - evidence:
   - domain/consensus/factory.go:311 and domain/consensus/factory.go:394-395 — `config.FinalityDepth()` / `config.PruningDepth()` are evaluated once at construction; both read the process-global `constants.GetBlockVersion()` (domain/dagconfig/params.go:249, domain/dagconfig/params.go:267), which is 1 in a freshly started process.
-  - app/protocol/flows/v8/blockrelay/ibd_with_headers_proof.go:19-20 — the global is raised to the tip version *before* `InitStagingConsensusWithoutGenesis`, so a staging consensus (promoted by `CommitStagingConsensus`) freezes version-9 values instead.
+  - app/protocol/flows/v11/blockrelay/ibd_with_headers_proof.go:19-20 — the global is raised to the tip version *before* `InitStagingConsensusWithoutGenesis`, so a staging consensus (promoted by `CommitStagingConsensus`) freezes version-9 values instead.
   - Mainnet result: restarted node finalityInterval=86400, pruningDepth=185798; node that finished headers-proof IBD without restarting finalityInterval=54000, pruningDepth=136882.
   - domain/consensus/processes/pruningmanager/pruningmanager.go:411 (depth test) and :421 / :1095 (`finalityScore` move rule) — two nodes with identical DAGs pick different pruning points.
   - domain/consensus/processes/finalitymanager/finality_manager.go:101, :118, :146 — virtual finality point uses the frozen depth (24h vs 3h window), so `isViolatingFinality` disagrees on reorgs between 54000 and 86400 blue score deep.
@@ -97,8 +97,8 @@ Severity mapping from the audit: P0 = critical, P1 = high, P2 = medium, P3 = low
     - domain/consensus/processes/consensusstatemanager/resolve.go:70 (tip ordering).
     - domain/consensus/processes/pruningmanager/pruningmanager.go:223 (one-interval pruning guard).
   - Where the global is raised:
-    - app/protocol/flows/v8/blockrelay/handle_relay_invs.go:309-310 raises it from an unvalidated header DAA score before validation (`checkDAAScore` is disabled at domain/consensus/processes/blockvalidator/block_header_in_context.go:88).
-    - app/protocol/flows/v8/blockrelay/ibd.go:119 raises it to the tip version before replaying blocks from the pruning point.
+    - app/protocol/flows/v11/blockrelay/handle_relay_invs.go:309-310 raises it from an unvalidated header DAA score before validation (`checkDAAScore` is disabled at domain/consensus/processes/blockvalidator/block_header_in_context.go:88).
+    - app/protocol/flows/v11/blockrelay/ibd.go:119 raises it to the tip version before replaying blocks from the pruning point.
     - app/rpc/rpchandlers/submit_block.go:33 / :66 checks the version but never raises the global.
   - Divergence cases:
     - (a) Around a fork at DAA score D, a late anticone block with DAA < D is colored under post-fork rules on nodes that already saw a block >= D, and under pre-fork rules elsewhere.
@@ -189,7 +189,7 @@ Severity mapping from the audit: P0 = critical, P1 = high, P2 = medium, P3 = low
 - severity: high
 - area: ibd
 - evidence:
-  - app/protocol/flows/v8/blockrelay/ibd_with_headers_proof.go:479-486 and domain/consensus/processes/blockprocessor/validate_and_insert_imported_pruning_point.go:13-29 — `IsValidPruningPoint` and `ArePruningPointsInValidChain` are commented out, so the IBD node imports whatever list `ImportPruningPoints` receives (domain/consensus/processes/consensusstatemanager/import_pruning_utxo_set.go:384-402), including the serving peer's HTN-001 lineage.
+  - app/protocol/flows/v11/blockrelay/ibd_with_headers_proof.go:479-486 and domain/consensus/processes/blockprocessor/validate_and_insert_imported_pruning_point.go:13-29 — `IsValidPruningPoint` and `ArePruningPointsInValidChain` are commented out, so the IBD node imports whatever list `ImportPruningPoints` receives (domain/consensus/processes/consensusstatemanager/import_pruning_utxo_set.go:384-402), including the serving peer's HTN-001 lineage.
   - domain/consensus/processes/pruningmanager/pruningmanager.go:676 — even when used, `IsValidPruningPoint` accepts depth `pruningDepth-1`.
   - domain/consensus/processes/pruningproofmanager/pruningproofmanager.go:1155-1164 — level-0 GHOSTDAG data of proof blocks is overwritten with `header.BlueScore()` / `header.BlueWork()`.
   - domain/consensus/processes/blockvalidator/block_header_in_context.go:94 and :100 — the header blue-work and blue-score checks are disabled ("after finding reason for the issues with the blocks"), which suggests mainnet headers disagree with computed values.
@@ -263,7 +263,7 @@ Severity mapping from the audit: P0 = critical, P1 = high, P2 = medium, P3 = low
 - severity: medium
 - area: p2p
 - evidence:
-  - app/protocol/flows/v8/blockrelay/handle_pruning_point_and_its_anticone_requests.go:64 and :111 — DAA window size and K for trusted data come from `GetBlockVersion()`.
+  - app/protocol/flows/v11/blockrelay/handle_pruning_point_and_its_anticone_requests.go:64 and :111 — DAA window size and K for trusted data come from `GetBlockVersion()`.
   - domain/consensus/processes/pruningmanager/pruningmanager.go:2430-2433 — `TrustedBlockAssociatedGHOSTDAGDataBlockHashes` walks `K[ambient]`+1 blocks; a restarted server at version 1 sends 19 GHOSTDAG entries instead of 41.
   - domain/consensus/processes/pruningmanager/pruningmanager.go:511 — `calculateBlocksToKeep` uses the window size in effect when deletion runs, so a later request can need a block that was already deleted.
   - Effect: IBD nodes receive different trusted GHOSTDAG context per server, so pruning-point anticone coloring can differ or IBD can fail.
@@ -344,7 +344,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: domain/miningmanager/mempool/orphan_pool.go:143 queue only held the accepted tx
 - repro: go test ./domain/miningmanager/mempool -run TestOrphanChainIsPromotedTransitively (2 of 4 accepted before fix)
 - fix_plan: append each promoted tx to the queue
-- tests: go test ./domain/miningmanager/... ./app/protocol/flows/v8/transactionrelay -count=1 pass
+- tests: go test ./domain/miningmanager/... ./app/protocol/flows/v11/transactionrelay -count=1 pass
 - commit: 959642cad
 
 ## HTN-104
@@ -352,10 +352,10 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: high
 - area: p2p
-- evidence: app/protocol/flows/v8/transactionrelay/handle_relayed_transactions.go:63 and :115 — holdTransaction stores fetched transactions with no validation, no per-tx size check and no byte budget; P2P max message is 4GB (infrastructure/network/netadapter/server/grpcserver/p2pserver.go:24). A peer advertises crafted tx IDs and serves large transactions while the node is in IBD; each flow keeps up to 2M of them. Even honest traffic at ~1KB/tx is ~2GB per peer.
+- evidence: app/protocol/flows/v11/transactionrelay/handle_relayed_transactions.go:63 and :115 — holdTransaction stores fetched transactions with no validation, no per-tx size check and no byte budget; P2P max message is 4GB (infrastructure/network/netadapter/server/grpcserver/p2pserver.go:24). A peer advertises crafted tx IDs and serves large transactions while the node is in IBD; each flow keeps up to 2M of them. Even honest traffic at ~1KB/tx is ~2GB per peer.
 - repro: unit test in pending_transactions_test.go holding transactions whose total size exceeds the budget
 - fix_plan: add a per-flow byte budget using the serialized-size estimate; evict oldest until the new tx fits; drop any single tx larger than the budget
-- tests: go test ./app/protocol/flows/v8/transactionrelay -count=1 pass; go build ./app/... pass (TestHoldTransactionIsBoundedByBytes held 1GiB and TestHoldTransactionDropsOversized failed before fix)
+- tests: go test ./app/protocol/flows/v11/transactionrelay -count=1 pass; go build ./app/... pass (TestHoldTransactionIsBoundedByBytes held 1GiB and TestHoldTransactionDropsOversized failed before fix)
 - commit: 975568650
 
 ## HTN-105
@@ -388,7 +388,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: app/protocol/flowcontext/orphans.go:182 — `!found || !(PoWHash=="" && version>=PoWIntegrityMinVersion)` is true for any stored block that has a PoW hash, so known parents are queued as orphan-root invs (kaspad checks GetBlockInfo Exists/HeaderOnly). handle_relay_invs.go:236 then skips them via HasBlock, so the cost is full GetBlock reads under orphansMutex and queue churn, not wrong behaviour.
 - repro: go test ./app/protocol/flowcontext -run TestGetOrphanRootsSkipsKnownParents
 - fix_plan: treat a parent as a root only when it is missing or header-only (GetBlockInfo), keeping the missing-PoW skip
-- tests: go test ./app/protocol/flowcontext ./app/protocol/flows/v8/blockrelay -count=1 pass; go vet pass; go build ./... pass (before fix the known parent was returned as a root)
+- tests: go test ./app/protocol/flowcontext ./app/protocol/flows/v11/blockrelay -count=1 pass; go vet pass; go build ./... pass (before fix the known parent was returned as a root)
 - commit: 3a7b431bc
 
 ## HTN-108
@@ -396,7 +396,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: wontfix
 - severity: medium
 - area: p2p
-- evidence: app/protocol/flows/v8/blockrelay/handle_request_anticone.go:53 — limit is MergeSetSizeLimit(K*10)*5000 while the comment still describes a 2x factor (kaspad uses *2). The request is unauthenticated and loops forever; each one runs GetAnticone under the consensus lock and builds a BlockHeadersMessage of that many headers. Raised deliberately in 74fcae548 / d262c60bf ("increase max traversal") for sync gaps.
+- evidence: app/protocol/flows/v11/blockrelay/handle_request_anticone.go:53 — limit is MergeSetSizeLimit(K*10)*5000 while the comment still describes a 2x factor (kaspad uses *2). The request is unauthenticated and loops forever; each one runs GetAnticone under the consensus lock and builds a BlockHeadersMessage of that many headers. Raised deliberately in 74fcae548 / d262c60bf ("increase max traversal") for sync gaps.
 - repro: static
 - fix_plan: maintainer decision (2026-09-14): keep the large limit, syncing peers may need it. Lowering the limit makes the server return a ban-worthy protocol error to honest syncees that legitimately need more, so it is a p2p behaviour change. Options: per-peer rate limit on RequestAnticone, or keep the cap but paginate headers.
 - tests: not run
@@ -407,10 +407,10 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: high
 - area: ibd
-- evidence: app/protocol/flows/v8/blockrelay/ibd.go:1096-1100 — any new hash increments receivedCount, whether or not it is in hashesToRequest; the loop exits once the count matches, and the processing loop at :1117 `continue`s past requested hashes missing from receivedBlocks. After any timeout+retry (:1066) the server answers both requests, so late duplicates of batch k arrive during batch k+1, finish it early, and its missing bodies are never inserted (later parents lack bodies / IBD re-finds missing bodies). A peer can also send arbitrary blocks to skip bodies.
-- repro: go test ./app/protocol/flows/v8/blockrelay -run TestReceiveRequestedIBDBlocksIgnoresUnrequestedBlocks (second requested block missing before fix)
+- evidence: app/protocol/flows/v11/blockrelay/ibd.go:1096-1100 — any new hash increments receivedCount, whether or not it is in hashesToRequest; the loop exits once the count matches, and the processing loop at :1117 `continue`s past requested hashes missing from receivedBlocks. After any timeout+retry (:1066) the server answers both requests, so late duplicates of batch k arrive during batch k+1, finish it early, and its missing bodies are never inserted (later parents lack bodies / IBD re-finds missing bodies). A peer can also send arbitrary blocks to skip bodies.
+- repro: go test ./app/protocol/flows/v11/blockrelay -run TestReceiveRequestedIBDBlocksIgnoresUnrequestedBlocks (second requested block missing before fix)
 - fix_plan: count only hashes that are in the requested batch; ignore (debug log) anything else. Receive-side only, no wire change.
-- tests: go test ./app/protocol/flows/v8/blockrelay -count=1 pass; go vet blockrelay and testing/integration pass; go build ./app/... ./testing/... pass
+- tests: go test ./app/protocol/flows/v11/blockrelay -count=1 pass; go vet blockrelay and testing/integration pass; go build ./app/... ./testing/... pass
 - commit: 03f598db7
 
 ## HTN-110
@@ -418,10 +418,10 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: medium
 - area: ibd
-- evidence: app/protocol/flows/v8/blockrelay/ibd.go:1044-1069 — on every IBDDequeueTimeout (default 5m) the missing hashes are re-requested with no retry bound; the flag's help text (infrastructure/config/config.go:181) says the peer is disconnected and another tried. checkPeriodicRate only runs inside the processing loop, so it never fires while waiting.
-- repro: go test ./app/protocol/flows/v8/blockrelay -run TestReceiveRequestedIBDBlocksGivesUpOnSilentPeer (pre-fix: build failure since the bound did not exist; retry loop had no exit on timeout)
+- evidence: app/protocol/flows/v11/blockrelay/ibd.go:1044-1069 — on every IBDDequeueTimeout (default 5m) the missing hashes are re-requested with no retry bound; the flag's help text (infrastructure/config/config.go:181) says the peer is disconnected and another tried. checkPeriodicRate only runs inside the processing loop, so it never fires while waiting.
+- repro: go test ./app/protocol/flows/v11/blockrelay -run TestReceiveRequestedIBDBlocksGivesUpOnSilentPeer (pre-fix: build failure since the bound did not exist; retry loop had no exit on timeout)
 - fix_plan: bound retries per batch (small constant), then return a protocol timeout error so the peer is dropped and IBD moves on
-- tests: go test ./app/protocol/flows/v8/blockrelay -count=1 pass; go vet pass; go build ./app/... pass
+- tests: go test ./app/protocol/flows/v11/blockrelay -count=1 pass; go vet pass; go build ./app/... pass
 - commit: 6a1615559
 
 ## HTN-111
@@ -429,10 +429,10 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: low
 - area: p2p
-- evidence: app/protocol/flows/v8/blockrelay/handle_relay_block_requests.go:51-60 — on GetBlock error or not-found the goroutine only sets `done` and logs; nothing is sent. handle_relay_invs.go readMsgBlock then waits common.DefaultTimeout (600s) before returning router.ErrTimeout (non-ban protocol error, disconnect). kaspad returns protocolerrors.Errorf(false, "Relay block %s not found") from the server instead. handle_ibd_block_requests.go:113-150 has the same pattern for IBD batches. For a single-hash relay request `done` is set after the loop already finished, so the error is never seen at all. Also spawns bare goroutines (not `spawn`), so a panic in GetBlock is not handled by the panic wrapper.
-- repro: go test ./app/protocol/flows/v8/blockrelay -run TestBlockRequestServersFailOnMissingBlock
+- evidence: app/protocol/flows/v11/blockrelay/handle_relay_block_requests.go:51-60 — on GetBlock error or not-found the goroutine only sets `done` and logs; nothing is sent. handle_relay_invs.go readMsgBlock then waits common.DefaultTimeout (600s) before returning router.ErrTimeout (non-ban protocol error, disconnect). kaspad returns protocolerrors.Errorf(false, "Relay block %s not found") from the server instead. handle_ibd_block_requests.go:113-150 has the same pattern for IBD batches. For a single-hash relay request `done` is set after the loop already finished, so the error is never seen at all. Also spawns bare goroutines (not `spawn`), so a panic in GetBlock is not handled by the panic wrapper.
+- repro: go test ./app/protocol/flows/v11/blockrelay -run TestBlockRequestServersFailOnMissingBlock
 - fix_plan: on not-found/error return a non-ban protocol error from the server flow (kaspad behaviour) so the requester is disconnected immediately; use spawn for the workers
-- tests: go test ./app/protocol/flows/v8/blockrelay -count=1 pass; -race on the new tests pass; go vet blockrelay and testing/integration pass; go build ./... pass (both servers neither served nor failed within 5s before fix)
+- tests: go test ./app/protocol/flows/v11/blockrelay -count=1 pass; -race on the new tests pass; go vet blockrelay and testing/integration pass; go build ./... pass (both servers neither served nor failed within 5s before fix)
 - commit: 486460b82
 
 ## HTN-112
@@ -474,7 +474,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: needs_human
 - severity: low
 - area: p2p
-- evidence: infrastructure/network/netadapter/server/grpcserver/protowire/p2p_request_ibd_blocks.go:15 has no len check (compare MaxRequestRelayBlocksHashes in p2p_request_relay_blocks.go:19). app/protocol/flows/v8/blockrelay/handle_ibd_block_requests.go serves every hash (8*NumCPU goroutines), so one message can ask for the whole stored DAG; a peer can repeat it. Bandwidth/IO amplification of what IBD legitimately serves; syncee batch is getIBDBatchSize()=495.
+- evidence: infrastructure/network/netadapter/server/grpcserver/protowire/p2p_request_ibd_blocks.go:15 has no len check (compare MaxRequestRelayBlocksHashes in p2p_request_relay_blocks.go:19). app/protocol/flows/v11/blockrelay/handle_ibd_block_requests.go serves every hash (8*NumCPU goroutines), so one message can ask for the whole stored DAG; a peer can repeat it. Bandwidth/IO amplification of what IBD legitimately serves; syncee batch is getIBDBatchSize()=495.
 - repro: static
 - fix_plan: cap at a small multiple of getIBDBatchSize() in the converter (p2p protocol behaviour: needs care that honest syncees never exceed it, including retries)
 - tests: not run
@@ -585,7 +585,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: domain/miningmanager/mempool/orphan_pool.go:196-241 unorphanTransaction validates against consensus and validateTransactionInContext (validate_transaction.go:48, no double-spend check) and then addMempoolTransaction; checkDoubleSpends runs only in validateTransactionPreUTXOEntry for arriving txs, and checkOrphanDoubleSpend only compares orphans. Sequence: orphan O spends missing P:0 and confirmed F:0; T spending F:0 arrives and is accepted (O is not in the pool); P arrives, O is promoted. mempool_utxo_set.addTransaction then overwrites transactionByPreviousOutpoint[F:0]; templates include both (BuildBlockTemplate invalid-tx retry), and removing either deletes the index entry the other still relies on, so later double spends of F:0 are admitted too. Same in kaspad.
 - repro: go test ./domain/miningmanager/mempool -run TestUnorphanRejectsDoubleSpendOfPoolTransaction
 - fix_plan: in unorphanTransaction run mempoolUTXOSet.checkDoubleSpends before adding (RejectDuplicate rule error, orphan already removed)
-- tests: go test ./domain/miningmanager/... ./app/protocol/flows/v8/transactionrelay -count=1 pass; go vet pass (new test failed before fix: orphan promoted, 2 accepted)
+- tests: go test ./domain/miningmanager/... ./app/protocol/flows/v11/transactionrelay -count=1 pass; go vet pass (new test failed before fix: orphan promoted, 2 accepted)
 - commit: 61962e159
 
 ## HTN-125
@@ -607,7 +607,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - evidence: domain/miningmanager/mempool/validate_and_insert_transaction_replacement.go:43-96 fills inputs (from parents in the pool) before removing the conflicts and their redeemers, then recomputes parents and adds the transaction. If the replacement spends an output of an evicted transaction (C spends X, D spends C:0, R spends X and D:0), R enters the pool with an input whose transaction is gone: it looks ready (no parents in pool), is relayed and put in templates, and can never be valid. RPC-only (local submissions).
 - repro: go test ./domain/miningmanager/mempool -run TestReplacementCannotSpendEvictedOutput
 - fix_plan: after computing the removal set, reject the replacement if any input spends an output of a transaction in that set
-- tests: go test ./domain/miningmanager/... ./app/protocol/flows/v8/transactionrelay ./app/rpc/rpchandlers -count=1 pass; go vet pass (new test failed before fix: replacement accepted)
+- tests: go test ./domain/miningmanager/... ./app/protocol/flows/v11/transactionrelay ./app/rpc/rpchandlers -count=1 pass; go vet pass (new test failed before fix: replacement accepted)
 - commit: d7ea98c5b
 
 ## HTN-127
@@ -615,10 +615,10 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: low
 - area: p2p
-- evidence: app/protocol/flows/v8/blockrelay/handle_request_block_locator.go:42-44 — `if err != nil || len(locator) == 0 { return errors.Wrapf(err, ...) }`; Wrapf(nil, ...) is nil, so an empty locator with no error ends the flow with nil (no error reaches errChan, the connection stays up, later RequestBlockLocator messages are never read). The requester's isBlockInOrphanResolutionRange then waits common.DefaultTimeout (600s). A non-protocol err is turned into a ban by HandleError, or silently swallowed if it is database not-found. kaspad returns a protocol error here.
-- repro: go test ./app/protocol/flows/v8/blockrelay -run TestRequestBlockLocatorEmptyLocatorIsProtocolError
+- evidence: app/protocol/flows/v11/blockrelay/handle_request_block_locator.go:42-44 — `if err != nil || len(locator) == 0 { return errors.Wrapf(err, ...) }`; Wrapf(nil, ...) is nil, so an empty locator with no error ends the flow with nil (no error reaches errChan, the connection stays up, later RequestBlockLocator messages are never read). The requester's isBlockInOrphanResolutionRange then waits common.DefaultTimeout (600s). A non-protocol err is turned into a ban by HandleError, or silently swallowed if it is database not-found. kaspad returns a protocol error here.
+- repro: go test ./app/protocol/flows/v11/blockrelay -run TestRequestBlockLocatorEmptyLocatorIsProtocolError
 - fix_plan: return a non-ban protocol error (wrapping err when present) so the peer is disconnected instead of left waiting
-- tests: go test ./app/protocol/flows/v8/blockrelay -count=1 pass; go vet pass; go build ./... pass (before fix the flow returned nil for an empty locator)
+- tests: go test ./app/protocol/flows/v11/blockrelay -count=1 pass; go vet pass; go build ./... pass (before fix the flow returned nil for an empty locator)
 - commit: ee753d8dd
 
 ## HTN-128
@@ -648,7 +648,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: wontfix
 - severity: low
 - area: ibd
-- evidence: app/protocol/flows/v8/blockrelay/ibd_with_headers_proof.go validateAndInsertPruningPoints computes consensushashing.HeaderHash(headers[len(headers)-1]) with no length check on the peer-supplied list. The IBD flow runs under spawn, whose panic handler exits the process, so a peer the node syncs from can crash it by answering with an empty pruning points list. Same line in kaspad.
+- evidence: app/protocol/flows/v11/blockrelay/ibd_with_headers_proof.go validateAndInsertPruningPoints computes consensushashing.HeaderHash(headers[len(headers)-1]) with no length check on the peer-supplied list. The IBD flow runs under spawn, whose panic handler exits the process, so a peer the node syncs from can crash it by answering with an empty pruning points list. Same line in kaspad.
 - repro: static - not reachable: domain/consensus/processes/pruningmanager/pruningmanager.go:699-720 ArePruningPointsViolatingFinality returns (true, nil) for an empty list (loop body never runs), so the flow returns "pruning points are violating finality" before indexing headers[len-1]. The guard is indirect and fragile; an explicit length check would be clearer but is not needed.
 - fix_plan: reject an empty list with a banning protocol error before any use (honest servers always send at least the genesis/current pruning point)
 - tests: not run (path proven unreachable by reading)
@@ -670,10 +670,10 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: critical
 - area: ibd
-- evidence: app/protocol/flows/v8/blockrelay/ibd_with_headers_proof.go processBlockWithTrustedData indexes data.DAAWindow[index] and data.GHOSTDAGData[index] with index taken straight from the peer's MsgBlockWithTrustedDataV4.DAAWindowIndices / GHOSTDAGDataIndices, with no bounds check. The IBD flow runs under spawn, so the panic exits the process. Reached during headers-proof IBD after the proof, pruning points and pruning-point block (all of which a peer can relay honestly) - the indices are the only crafted part. Same code in kaspad.
-- repro: go test ./app/protocol/flows/v8/blockrelay -run TestProcessBlockWithTrustedDataRejectsOutOfRangeIndices
+- evidence: app/protocol/flows/v11/blockrelay/ibd_with_headers_proof.go processBlockWithTrustedData indexes data.DAAWindow[index] and data.GHOSTDAGData[index] with index taken straight from the peer's MsgBlockWithTrustedDataV4.DAAWindowIndices / GHOSTDAGDataIndices, with no bounds check. The IBD flow runs under spawn, so the panic exits the process. Reached during headers-proof IBD after the proof, pruning points and pruning-point block (all of which a peer can relay honestly) - the indices are the only crafted part. Same code in kaspad.
+- repro: go test ./app/protocol/flows/v11/blockrelay -run TestProcessBlockWithTrustedDataRejectsOutOfRangeIndices
 - fix_plan: check each index against the trusted data length and return a banning protocol error when out of range
-- tests: go test ./app/protocol/flows/v8/blockrelay -count=1 pass; -race on new test pass; go vet pass; go build ./... pass (panic: index out of range [3] with length 0 before fix)
+- tests: go test ./app/protocol/flows/v11/blockrelay -count=1 pass; -race on new test pass; go vet pass; go build ./... pass (panic: index out of range [3] with length 0 before fix)
 - commit: 56d7b74f0
 
 ## HTN-133
@@ -786,7 +786,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: high
 - area: p2p
-- evidence: infrastructure/network/netadapter/server/grpcserver/protowire/common.go:118 converts the peer's int64 timestamp unchecked; app/protocol/flows/v8/addressexchange/receiveaddresses.go:38 (and the handshake's version address, handshake.go:93) pass it to AddressManager.AddAddresses; addAddressNoLock (addressmanager.go:91-114) only checks routability, then addressStore.add -> serializeAddress (store.go:252-255) panics "timestamp is negative". Flows run under spawn, so the panic exits the process: any peer can take the node down with one address message carrying a new routable IP and a pre-1970 timestamp.
+- evidence: infrastructure/network/netadapter/server/grpcserver/protowire/common.go:118 converts the peer's int64 timestamp unchecked; app/protocol/flows/v11/addressexchange/receiveaddresses.go:38 (and the handshake's version address, handshake.go:93) pass it to AddressManager.AddAddresses; addAddressNoLock (addressmanager.go:91-114) only checks routability, then addressStore.add -> serializeAddress (store.go:252-255) panics "timestamp is negative". Flows run under spawn, so the panic exits the process: any peer can take the node down with one address message carrying a new routable IP and a pre-1970 timestamp.
 - repro: addressmanager unit test adding a routable address with a negative timestamp (panics before the fix)
 - fix_plan: ignore addresses whose timestamp precedes the Unix epoch in addAddressNoLock (covers every caller); do not reject at the wire converter (that would change message validity rules)
 - tests: negative_timestamp_test.go (TestAddAddressWithNegativeTimestamp); mutation check: disabling the guard reproduces "panic: timestamp is negative"; addressmanager/handshake/addressexchange/connmanager tests, go build ./..., staticcheck subset pass
@@ -838,7 +838,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: high
 - area: p2p
-- evidence: app/protocol/flows/v8/register.go:103-104 registers HandleRequestHeaders for both CmdRequestHeaders and CmdRequestNextHeaders on one route; handle_request_headers.go:145 receiveRequestHeaders does message.(*appmessage.MsgRequestHeaders) without checking. A MsgRequestNextHeaders arriving while the flow waits for a new request (first message, or after DoneHeaders) panics in the spawned flow goroutine and the node exits. The other unchecked assertions in flows sit on single-command routes.
+- evidence: app/protocol/flows/v11/register.go:103-104 registers HandleRequestHeaders for both CmdRequestHeaders and CmdRequestNextHeaders on one route; handle_request_headers.go:145 receiveRequestHeaders does message.(*appmessage.MsgRequestHeaders) without checking. A MsgRequestNextHeaders arriving while the flow waits for a new request (first message, or after DoneHeaders) panics in the spawned flow goroutine and the node exits. The other unchecked assertions in flows sit on single-command routes.
 - repro: blockrelay test feeding MsgRequestNextHeaders into HandleRequestHeaders' route (panics before the fix)
 - fix_plan: check the type in receiveRequestHeaders and return a banning protocol error, as the same flow already does for an unexpected message inside the loop (handle_request_headers.go:121-124)
 - tests: request_headers_unexpected_message_test.go; mutation check: restoring the unchecked assertion reproduces "interface conversion: ... is *MsgRequestNextHeaders"; blockrelay tests, go build ./..., staticcheck subset pass
@@ -1091,7 +1091,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: needs_human
 - severity: low
 - area: p2p
-- evidence: (1) app/protocol/flowcontext/errors.go:39-45 bans (ShouldBan true) any flow error whose text matches isWireFormatError ("proto: ... wire-format", "protobuf ... parse"). Flows never decode protobuf bytes themselves (no UnmarshalVT/protowire use in app/protocol); peer message decoding fails earlier and is already banned as "received bad message" (protocol.go:54). The consensus stores return raw UnmarshalVT errors unwrapped (e.g. blockstore/block_store.go:191-193), so a corrupted local record read inside a flow produces exactly that text and bans an honest peer - the HTN-167 class by another route. The heuristic was added in 207b30620 to stop a panic on that error, with an explicit "should ban the peer". (2) app/protocol/flows/v8/blockrelay/handle_request_anticone.go:55 wraps every GetAnticone error as a banning protocol error, including local database errors and limit/unknown-hash errors for a peer syncing from a point this node does not have (kaspad does the same). Also reviewed and left as deliberate policy: ibd.go:156 IBD timeout ban and ibd.go:1283 low-IBD-rate ban (both logged as --enablebanning policy). Banning is opt-in (EnableBanning defaults false).
+- evidence: (1) app/protocol/flowcontext/errors.go:39-45 bans (ShouldBan true) any flow error whose text matches isWireFormatError ("proto: ... wire-format", "protobuf ... parse"). Flows never decode protobuf bytes themselves (no UnmarshalVT/protowire use in app/protocol); peer message decoding fails earlier and is already banned as "received bad message" (protocol.go:54). The consensus stores return raw UnmarshalVT errors unwrapped (e.g. blockstore/block_store.go:191-193), so a corrupted local record read inside a flow produces exactly that text and bans an honest peer - the HTN-167 class by another route. The heuristic was added in 207b30620 to stop a panic on that error, with an explicit "should ban the peer". (2) app/protocol/flows/v11/blockrelay/handle_request_anticone.go:55 wraps every GetAnticone error as a banning protocol error, including local database errors and limit/unknown-hash errors for a peer syncing from a point this node does not have (kaspad does the same). Also reviewed and left as deliberate policy: ibd.go:156 IBD timeout ban and ibd.go:1283 low-IBD-rate ban (both logged as --enablebanning policy). Banning is opt-in (EnableBanning defaults false).
 - repro: static
 - fix_plan: maintainer decision - e.g. treat wire-format errors reaching HandleError as non-banning (peer decode errors are already banned upstream), and ban anticone failures only for rule/limit violations attributable to the request
 - decision (user, 2026-09-19): approved as part of a batch of non-consensus needs_human fixes
@@ -1263,7 +1263,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: medium
 - area: p2p/transactionrelay
-- evidence: app/protocol/flows/v8/transactionrelay/handle_relayed_transactions.go readMsgTxOrNotFound appends every MsgInvTransaction that arrives while it waits for a requested transaction to flow.invsQueue, with no cap. One request can cover up to MaxInvPerMsg = 1<<17 = 131,072 transaction IDs and each response is awaited for up to common.DefaultTimeout = 600s, so a peer that answers slowly (just inside the timeout) can keep the flow in receiveTransactions for a very long time while sending inv messages continuously; the route capacity (10,000) only bounds messages not yet dequeued, and each dequeued inv (up to 131,072 IDs, several MB as DomainTransactionIDs) is retained in invsQueue. Memory grows until the node runs out. Same code as upstream kaspad. Related to the message-size limits parked in HTN-166.
+- evidence: app/protocol/flows/v11/transactionrelay/handle_relayed_transactions.go readMsgTxOrNotFound appends every MsgInvTransaction that arrives while it waits for a requested transaction to flow.invsQueue, with no cap. One request can cover up to MaxInvPerMsg = 1<<17 = 131,072 transaction IDs and each response is awaited for up to common.DefaultTimeout = 600s, so a peer that answers slowly (just inside the timeout) can keep the flow in receiveTransactions for a very long time while sending inv messages continuously; the route capacity (10,000) only bounds messages not yet dequeued, and each dequeued inv (up to 131,072 IDs, several MB as DomainTransactionIDs) is retained in invsQueue. Memory grows until the node runs out. Same code as upstream kaspad. Related to the message-size limits parked in HTN-166.
 - repro: static
 - fix_plan: maintainer decision, since it is a P2P acceptance rule: cap the queued invs (count or total IDs) and either drop further invs (they are optional; the receive loop already drops invs on a full route) or disconnect without banning when the cap is exceeded
 - tests: transactionrelay/queued_invs_bound_test.go (7 full invs queued 917504 IDs before the fix, bound 524288); transactionrelay tests -race, build, gofmt, staticcheck pass
@@ -1275,7 +1275,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: medium
 - area: p2p/blockrelay (IBD serving)
-- evidence: app/protocol/flows/v8/blockrelay/handle_pruning_point_and_its_anticone_requests.go takes the package-global isBusy flag (CompareAndSwap 0->1, released by defer) for the whole of a request. After every getIBDBatchSize() (495) blocks it waits for MsgRequestNextPruningPointAndItsAnticoneBlocks with incomingRoute.Dequeue() - no timeout, by design ("we don't care if the syncee takes its time"). A peer that sends RequestPruningPointAndItsAnticone and then never sends the next request, while staying connected (answering pings), keeps isBusy set indefinitely; every other peer's request meanwhile returns "node is busy with other pruning point anticone requests" and is disconnected. With an anticone larger than one batch this lets a single connection deny pruning-point IBD from this node to the whole network. The flag also ignores the first message's type (a RequestNext message starts a full serve), which is harmless.
+- evidence: app/protocol/flows/v11/blockrelay/handle_pruning_point_and_its_anticone_requests.go takes the package-global isBusy flag (CompareAndSwap 0->1, released by defer) for the whole of a request. After every getIBDBatchSize() (495) blocks it waits for MsgRequestNextPruningPointAndItsAnticoneBlocks with incomingRoute.Dequeue() - no timeout, by design ("we don't care if the syncee takes its time"). A peer that sends RequestPruningPointAndItsAnticone and then never sends the next request, while staying connected (answering pings), keeps isBusy set indefinitely; every other peer's request meanwhile returns "node is busy with other pruning point anticone requests" and is disconnected. With an anticone larger than one batch this lets a single connection deny pruning-point IBD from this node to the whole network. The flag also ignores the first message's type (a RequestNext message starts a full serve), which is harmless.
 - repro: static
 - fix_plan: maintainer decision (changes IBD serving behaviour): e.g. release isBusy while waiting for the syncee's next request and re-acquire it per batch, or bound the wait with a generous timeout, or make the limit per peer / a small semaphore instead of one global flag
 - tests: blockrelay/pruning_point_anticone_busy_test.go (stub consensus, 496-block anticone: second syncee refused "node is busy" while the first waited, before the fix); blockrelay package tests, -race x5, build, gofmt, staticcheck pass
@@ -1287,7 +1287,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - status: fixed
 - severity: medium
 - area: p2p/blockrelay
-- evidence: infrastructure/network/netadapter/server/grpcserver/protowire/p2p_ibd_block_locator.go converts BlockLocatorHashes without a count check, unlike BlockLocatorMessage (MaxBlockLocatorsPerMsg = 500, p2p_block_locator.go). app/protocol/flows/v8/blockrelay/handle_ibd_block_locator.go calls Consensus().GetBlock (full block) and IsInSelectedParentChainOf for every hash until one is on targetHash's selected chain; each call takes the consensus lock. A peer can repeat a known hash that is not in targetHash's selected parent chain, so no early break happens, and a P2P message may be up to 4 GiB (HTN-166): millions of full block reads contending with block processing. Honest locators are logarithmic (both syncmanager builders double the step each iteration, so tens of hashes at most), and no code in this repository sends MsgIBDBlockLocator (only the constructor exists), so a 500 cap affects no HTND syncee - but it is still a new P2P acceptance rule for other implementations.
+- evidence: infrastructure/network/netadapter/server/grpcserver/protowire/p2p_ibd_block_locator.go converts BlockLocatorHashes without a count check, unlike BlockLocatorMessage (MaxBlockLocatorsPerMsg = 500, p2p_block_locator.go). app/protocol/flows/v11/blockrelay/handle_ibd_block_locator.go calls Consensus().GetBlock (full block) and IsInSelectedParentChainOf for every hash until one is on targetHash's selected chain; each call takes the consensus lock. A peer can repeat a known hash that is not in targetHash's selected parent chain, so no early break happens, and a P2P message may be up to 4 GiB (HTN-166): millions of full block reads contending with block processing. Honest locators are logarithmic (both syncmanager builders double the step each iteration, so tens of hashes at most), and no code in this repository sends MsgIBDBlockLocator (only the constructor exists), so a 500 cap affects no HTND syncee - but it is still a new P2P acceptance rule for other implementations.
 - repro: static
 - fix_plan: maintainer decision, same as HTN-115: cap len(BlockLocatorHashes) at appmessage.MaxBlockLocatorsPerMsg in IbdBlockLocatorMessage.toAppMessage
 - tests: blockrelay/ibd_block_locator_bound_test.go (10000 block reads for one 10000-hash locator before the fix, at most 500 after); blockrelay tests, -race, build, gofmt, staticcheck pass
@@ -1521,7 +1521,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   changed: domain/consensus/model/externalapi/errors.go gained a sentinel
   ErrPruningPointDataDoesNotReconcile (same pattern as ErrVirtualHasNoUsableTip); that one branch in
   domain/consensus/processes/syncmanager/antipast.go now returns it instead of an empty success.
-  app/protocol/flows/v8/blockrelay/ibd.go's syncMissingBlockBodies catches it with errors.Is and wraps
+  app/protocol/flows/v11/blockrelay/ibd.go's syncMissingBlockBodies catches it with errors.Is and wraps
   it protocolerrors.Wrapf(false, err, ...) - ShouldBan=false because this is a network-wide baseline-
   consistency condition (the same one HTN-002/HTN-208 are about), not evidence this specific peer
   misbehaved. Without that wrap the error would reach protocol.go's handleError unrecognised and PANIC
@@ -1575,7 +1575,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
     is exact with or without these fixes, so that pruning point never triggered it.
   - tests: domain/consensus/processes/blockprocessor/headers_proof_sync_exactness_test.go
     (TestHeadersProofSyncReproducesSyncerGHOSTDAG, TestPruningPointAnticoneIsServedInTopologicalOrder)
-    at block version 10; app/protocol/flows/v8/blockrelay/trusted_blocks_order_test.go. Each of the
+    at block version 10; app/protocol/flows/v11/blockrelay/trusted_blocks_order_test.go. Each of the
     three fixes, undone alone, makes at least one of them fail; undoing the sort reproduces "pruning
     point not on the tip's selected chain". Randomized harness (not committed): before, 26 of 40 seeds
     diverged and some flipped selected parents; after, 0 of 90 across versions 1 and 10, wide DAGs,
@@ -1593,7 +1593,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   consensus: nothing is committed, the node keeps its state and tries another peer, nobody is
   banned. That is the state HTN-196 nodes used to commit and could not leave. The serving side
   refuses to hand out a proof when its own pruning point is not on its own headers selected chain.
-  Tests: app/protocol/flows/v8/blockrelay/pruning_point_chain_check_test.go - on a real consensus
+  Tests: app/protocol/flows/v11/blockrelay/pruning_point_chain_check_test.go - on a real consensus
   left with the pruning point off the tip's chain (anticone inserted children-first) the IBD check
   refuses it without a ban, and it accepts the same DAG synced parent-first.
 
@@ -2043,7 +2043,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   below: could not demonstrate it firing under stress, so treat the severity as "definitely wrong code
   in a load-bearing place" rather than "observed live failure")
 - area: consensus/utils/constants
-- reported: 2026-09-18, found by self (not a fork) while auditing app/protocol/flows/v8's
+- reported: 2026-09-18, found by self (not a fork) while auditing app/protocol/flows/v11's
   handle_relay_invs.go, which calls constants.SetBlockVersion(version) once per relayed block, from
   each peer's own connection goroutine - i.e. concurrently across peers by construction.
 - mechanism: the old implementation was
@@ -2102,7 +2102,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
 - mechanism: resolve.go has two different ways virtual's selected parent gets chosen. The normal live-
   block path (AddBlock -> updateVirtual -> pickVirtualParents -> selectVirtualSelectedParent) is pure
   blue-work GHOSTDAG selection off a DownHeap - fine, not affected. The IBD/catch-up path
-  (ResolveVirtual, called at the end of every IBD round from app/protocol/flows/v8/blockrelay/ibd.go's
+  (ResolveVirtual, called at the end of every IBD round from app/protocol/flows/v11/blockrelay/ibd.go's
   syncMissingBlockBodies, i.e. essentially every time a node falls even slightly behind and catches
   back up, not only cold starts) picks its starting "pending tip" via findNextPendingTip, which orders
   tips by DAGKnight's OrderDAG (k-colouring votes, hash tie-break) from block version 6 - a different
@@ -2908,7 +2908,7 @@ IDs 101+ are used here so they never collide with the consensus audit above.
   MaxBlockMassForCurrentVersion and converted the two call sites it found; a grep for the raw shape
   `[constants.GetBlockVersion()-1]` finds four more:
   - domain/miningmanager/blocktemplatebuilder/blocktemplatebuilder.go calcTxValue - BlockMaxMass.
-  - app/protocol/flows/v8/blockrelay/handle_pruning_point_and_its_anticone_requests.go - two sites,
+  - app/protocol/flows/v11/blockrelay/handle_pruning_point_and_its_anticone_requests.go - two sites,
     DifficultyAdjustmentWindowSize and K, both only make() capacity hints.
   - domain/consensus/processes/blockprocessor/validate_and_insert_block.go - targetTimePerBlock, in a
     lazily-evaluated debug log closure, so it only evaluates on a node running at debug level.

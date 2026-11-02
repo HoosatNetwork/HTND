@@ -6,7 +6,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/common"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/ready"
-	v8 "github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8"
+	v8 "github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v11"
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/handshake"
