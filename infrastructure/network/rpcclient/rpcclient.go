@@ -40,7 +40,46 @@ type RPCClient struct {
 	// GetInfo call, and SetTimeout can be called from user code at any time, both racing an in-flight
 	// request method reading it to build a DequeueWithTimeout call - see getTimeout/SetTimeout.
 	timeoutNanos atomic.Int64
+
+	// The node keeps notification registrations per connection, so the client keeps them to send again after
+	// a reconnect. notificationRegistrations holds them per Notify request command and notificationDeliveries
+	// the handler and delivery worker per notification command. Both maps are guarded by notificationsMutex.
+	notificationsMutex        sync.Mutex
+	notificationRegistrations map[appmessage.MessageCommand]*notificationRegistration
+	notificationDeliveries    map[appmessage.MessageCommand]*notificationDelivery
 }
+
+// notificationRegistration is what the client keeps for one Notify request command. mutex is held for the
+// whole of every request and response on this command's routes: registering, sending it again after a
+// reconnect and unregistering. So none of them can overtake another, and none can take another's response
+// from the shared response route. Waiting for mutex is not covered by the call timeout: a call queued behind
+// another of the same command, such as a replay waiting on the node, can take longer than one timeout.
+type notificationRegistration struct {
+	mutex           sync.Mutex
+	responseCommand appmessage.MessageCommand
+	// register sends the Notify request a reconnect sends again and waits for its response; nil once
+	// unregistered.
+	register func(router *rpcRouter) error
+	// registeredOn is the router whose node accepted register. A reconnect has nothing to send there.
+	registeredOn *rpcRouter
+	// lateResponses counts per response command the responses lateRouter still owes for requests that timed
+	// out. The node answers the requests of a connection one at a time and in order, so these arrive before
+	// the response to the next request and are dropped.
+	lateRouter    *rpcRouter
+	lateResponses map[appmessage.MessageCommand]int
+	// addresses holds every address registered so far. Used for UTXOsChanged only.
+	addresses []string
+}
+
+// notificationDelivery is the handler of one notification command and the wakeup of the one worker
+// delivering it, see deliverNotifications.
+type notificationDelivery struct {
+	handler func(notification appmessage.Message)
+	wake    chan struct{}
+}
+
+// notificationHandlers maps notification commands to the handlers their notifications are delivered to.
+type notificationHandlers map[appmessage.MessageCommand]func(notification appmessage.Message)
 
 // getTimeout returns the current RPC call timeout.
 func (c *RPCClient) getTimeout() time.Duration {
@@ -93,6 +132,7 @@ func (c *RPCClient) connect() error {
 	c.rpcRouterMutex.Lock()
 	c.rpcRouter = rpcRouter
 	c.rpcRouterMutex.Unlock()
+	c.wakeNotificationDeliveries()
 
 	log.Debugf("Connected to %s", c.rpcAddress)
 
@@ -176,6 +216,10 @@ func (c *RPCClient) Reconnect() error {
 		if lastDisconnected == 0 || time.Since(time.Unix(0, lastDisconnected)) > retryDelay {
 			err := c.connect()
 			if err == nil {
+				// Not waited for: a request can wait for the call timeout, and a disconnect meanwhile must be able
+				// to start the next reconnect, which isReconnecting refuses until Reconnect returns.
+				router := c.currentRPCRouter()
+				spawn("reregisterNotifications", func() { c.reregisterNotifications(router) })
 				return nil
 			}
 			log.Warnf("Could not automatically reconnect to %s: %s", c.rpcAddress, err)
@@ -260,6 +304,7 @@ func (c *RPCClient) Close() error {
 		c.rpcRouter.router.Close()
 	}
 	c.rpcRouterMutex.RUnlock()
+	c.wakeNotificationDeliveries()
 	return c.GRPCClient.Close()
 }
 
@@ -272,6 +317,204 @@ func (c *RPCClient) route(command appmessage.MessageCommand) *routerpkg.Route {
 	c.rpcRouterMutex.RLock()
 	defer c.rpcRouterMutex.RUnlock()
 	return c.rpcRouter.routes[command]
+}
+
+// currentRPCRouter returns the router of the current connection.
+func (c *RPCClient) currentRPCRouter() *rpcRouter {
+	c.rpcRouterMutex.RLock()
+	defer c.rpcRouterMutex.RUnlock()
+	return c.rpcRouter
+}
+
+// notificationRegistration returns the kept registration for requestCommand, whose response arrives on
+// responseCommand's route.
+func (c *RPCClient) notificationRegistration(requestCommand, responseCommand appmessage.MessageCommand,
+) *notificationRegistration {
+	c.notificationsMutex.Lock()
+	defer c.notificationsMutex.Unlock()
+	if c.notificationRegistrations == nil {
+		c.notificationRegistrations = make(map[appmessage.MessageCommand]*notificationRegistration)
+	}
+	registration, ok := c.notificationRegistrations[requestCommand]
+	if !ok {
+		registration = &notificationRegistration{responseCommand: responseCommand}
+		c.notificationRegistrations[requestCommand] = registration
+	}
+	return registration
+}
+
+// registerForNotifications sends a Notify request with register and, once the node accepted it, keeps register
+// to send again after a reconnect and delivers the notifications in handlers to their handlers. Both replace
+// any earlier registration for requestCommand.
+func (c *RPCClient) registerForNotifications(requestCommand, responseCommand appmessage.MessageCommand,
+	register func(router *rpcRouter) error, handlers notificationHandlers,
+) error {
+	registration := c.notificationRegistration(requestCommand, responseCommand)
+	// Not bounded by the call timeout, see the notificationRegistration type.
+	registration.mutex.Lock()
+	defer registration.mutex.Unlock()
+	return c.registerLocked(registration, c.currentRPCRouter(), register, register, handlers)
+}
+
+// registerLocked sends send on router and, once the node accepted it, keeps keep as what a reconnect sends
+// again and installs handlers. Must be called with registration.mutex held.
+func (c *RPCClient) registerLocked(registration *notificationRegistration, router *rpcRouter,
+	send, keep func(router *rpcRouter) error, handlers notificationHandlers,
+) error {
+	err := c.sendNotificationRequest(registration, router, registration.responseCommand, send)
+	if err != nil {
+		return err
+	}
+	registration.register = keep
+	registration.registeredOn = router
+	c.setNotificationHandlers(handlers)
+	return nil
+}
+
+// sendNotificationRequest calls send, which sends a request on router and waits for its response on the route
+// of responseCommand. The responses still owed there for earlier requests that timed out are dropped first.
+// Must be called with registration.mutex held.
+func (c *RPCClient) sendNotificationRequest(registration *notificationRegistration, router *rpcRouter,
+	responseCommand appmessage.MessageCommand, send func(router *rpcRouter) error,
+) error {
+	if registration.lateRouter != router {
+		registration.lateRouter = router
+		registration.lateResponses = make(map[appmessage.MessageCommand]int)
+	}
+	for registration.lateResponses[responseCommand] > 0 {
+		_, err := router.routes[responseCommand].DequeueWithTimeout(c.getTimeout())
+		if err != nil {
+			return err
+		}
+		registration.lateResponses[responseCommand]--
+	}
+	err := send(router)
+	if errors.Is(err, routerpkg.ErrTimeout) {
+		registration.lateResponses[responseCommand]++
+	}
+	return err
+}
+
+// reregisterNotifications sends the kept notification registrations again on router, the one a reconnect just
+// connected, each on its own goroutine so one that waits on the node does not hold up the others. It returns
+// once all of them are done.
+func (c *RPCClient) reregisterNotifications(router *rpcRouter) {
+	c.notificationsMutex.Lock()
+	registrations := make(map[appmessage.MessageCommand]*notificationRegistration, len(c.notificationRegistrations))
+	for requestCommand, registration := range c.notificationRegistrations {
+		registrations[requestCommand] = registration
+	}
+	c.notificationsMutex.Unlock()
+
+	var waitGroup sync.WaitGroup
+	for requestCommand, registration := range registrations {
+		waitGroup.Add(1)
+		spawn("reregisterNotification-"+requestCommand.String(), func() {
+			defer waitGroup.Done()
+			c.reregisterNotification(requestCommand, registration, router)
+		})
+	}
+	waitGroup.Wait()
+}
+
+// reregisterNotification sends registration again on router. It sends the registration current when it holds
+// the registration's mutex, and nothing when it was unregistered, already accepted on router, or router is no
+// longer the current one: the reconnect that replaced router sends it on its own router. A timeout, or a full
+// outgoing route that the connection outlives, is retried, so the node may get the same Notify request more than
+// once; registering is idempotent on the node. Any other error ends it: a refusal is logged and left for the next
+// reconnect.
+func (c *RPCClient) reregisterNotification(requestCommand appmessage.MessageCommand,
+	registration *notificationRegistration, router *rpcRouter,
+) {
+	for {
+		registration.mutex.Lock()
+		if registration.register == nil || registration.registeredOn == router ||
+			router != c.currentRPCRouter() || c.isClosed.Load() == 1 {
+			registration.mutex.Unlock()
+			return
+		}
+		err := c.sendNotificationRequest(registration, router, registration.responseCommand, registration.register)
+		if err == nil {
+			registration.registeredOn = router
+		}
+		registration.mutex.Unlock()
+
+		switch {
+		case err == nil || errors.Is(err, routerpkg.ErrRouteClosed):
+			return
+		case errors.Is(err, routerpkg.ErrTimeout), errors.Is(err, routerpkg.ErrRouteCapacityReached):
+			log.Warnf("Could not send %s again after reconnecting to %s: %s. Retrying in %s",
+				requestCommand, c.rpcAddress, err, reconnectRetryDelay)
+			time.Sleep(reconnectRetryDelay)
+		default:
+			log.Warnf("Could not send %s again after reconnecting to %s: %s", requestCommand, c.rpcAddress, err)
+			return
+		}
+	}
+}
+
+// setNotificationHandlers makes handlers the ones notifications of their commands are delivered to, starting
+// the delivery worker of a command that has none yet.
+func (c *RPCClient) setNotificationHandlers(handlers notificationHandlers) {
+	c.notificationsMutex.Lock()
+	defer c.notificationsMutex.Unlock()
+	if c.notificationDeliveries == nil {
+		c.notificationDeliveries = make(map[appmessage.MessageCommand]*notificationDelivery)
+	}
+	for command, handler := range handlers {
+		delivery, ok := c.notificationDeliveries[command]
+		if ok {
+			delivery.handler = handler
+			continue
+		}
+		delivery = &notificationDelivery{handler: handler, wake: make(chan struct{}, 1)}
+		c.notificationDeliveries[command] = delivery
+		spawn("deliverNotifications-"+command.String(), func() { c.deliverNotifications(command, delivery) })
+	}
+}
+
+// deliverNotifications is the one worker delivering the notifications of command, for the life of the client.
+// It reads them from the route of the current router, and moves to the next router only once the route it
+// reads is closed, which happens before a connection is replaced, and its handler call has returned. So the
+// handlers of a command are never called concurrently. Handlers are called without any client lock held and may
+// call the client, including registering again. A notification taken from the route before a new handler was
+// set may still reach the handler it replaced; every later one reaches the new handler.
+func (c *RPCClient) deliverNotifications(command appmessage.MessageCommand, delivery *notificationDelivery) {
+	var router *rpcRouter
+	for c.isClosed.Load() == 0 {
+		current := c.currentRPCRouter()
+		if current == router {
+			<-delivery.wake
+			continue
+		}
+		router = current
+		route := router.routes[command]
+		for {
+			notification, err := route.Dequeue()
+			if err != nil {
+				if errors.Is(err, routerpkg.ErrRouteClosed) {
+					break
+				}
+				panic(err)
+			}
+			c.notificationsMutex.Lock()
+			handler := delivery.handler
+			c.notificationsMutex.Unlock()
+			handler(notification)
+		}
+	}
+}
+
+// wakeNotificationDeliveries wakes the delivery workers waiting for a new router or for the client to close.
+func (c *RPCClient) wakeNotificationDeliveries() {
+	c.notificationsMutex.Lock()
+	defer c.notificationsMutex.Unlock()
+	for _, delivery := range c.notificationDeliveries {
+		select {
+		case delivery.wake <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // outgoingRoute returns the active router's outgoing route. Every rpc_*.go request method goes
