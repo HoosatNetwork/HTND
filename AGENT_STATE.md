@@ -283,7 +283,7 @@ superseded_next_action: push this commit (b45692455) and the ISSUES.md/AGENT_STA
   all, which is a consensus question, so left alone). Everything else open in ISSUES.md is
   needs_human, needs_info from the user, wontfix, or already resolved. Candidates in rough priority
   order: (1) resume the
-  app/protocol/flows/v8 sweep (block_locator.go, handle_ibd_*.go, handle_request_*.go,
+  app/protocol/flows/v11 sweep (block_locator.go, handle_ibd_*.go, handle_request_*.go,
   transactionrelay/*, addressexchange/*, ping/*, rejects/* not yet re-read since HTN-205/206/207/208
   changed hot-path timing); (2) HTN-197/HTN-203 stay needs_human, and the whole "parked needs_human"
   list further down this file remains open pending the user. Historical note now superseded by the
@@ -299,7 +299,7 @@ superseded_next_action: push this commit (b45692455) and the ISSUES.md/AGENT_STA
   transactions.go's blockTransactions slice always has a coinbase (only ever called with a consensus-
   accepted block, traced from flowcontext/blocks.go:41); HandleNewBlockTransactions confirmed under
   mp.mtx; map_types/mempool_transaction/orphan_transaction/transaction.go are trivial, nothing to find.
-  Started app/protocol/flows/v8 pass (self, not a fork - already had deep context on pruning-point/IBD
+  Started app/protocol/flows/v11 pass (self, not a fork - already had deep context on pruning-point/IBD
   mechanics from HTN-196/208): handle_pruning_point_and_its_anticone_requests.go read end to end,
   checked safe (the pruningPointAnticoneSlot release-during-wait/reacquire design is correct - every
   "holds the slot" phase is bounded, the only unbounded wait releases first, and the defer covers
@@ -333,7 +333,7 @@ superseded_next_action: push this commit (b45692455) and the ISSUES.md/AGENT_STA
   (domain/consensus/... 53 ok, -tags=ci ./... 110 ok, rest of tree 49 ok, cmd/htnwallet ok,
   testing/integration full non-ci green). New test verified to fail pre-fix (selected parent visibly
   moved to the lighter tip) and pass after.
-  Rest of app/protocol/flows/v8 (block_locator.go, handle_ibd_*.go except what HTN-196 touched,
+  Rest of app/protocol/flows/v11 (block_locator.go, handle_ibd_*.go except what HTN-196 touched,
   handle_request_*.go, transactionrelay/*, addressexchange/*, ping/*, rejects/*) NOT yet re-read this
   pass - most already have "checked safe" entries from earlier in this session's history (see the long
   block of "checked safe:"/"audited safe:" notes above), but none of those predate HTN-205/206/207/208.
