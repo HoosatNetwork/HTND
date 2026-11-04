@@ -19,6 +19,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashset"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/staging"
@@ -717,16 +718,19 @@ func (ppm *pruningProofManager) ValidatePruningPointProof(pruningPointProof *ext
 	// loop looked at the current DAG alone, and its first level (maxLevel, where the current pruning
 	// point is normally absent) accepted any proof, including one with no proof of work at all.
 	for blockLevel := maxLevel; blockLevel >= 0; blockLevel-- {
-		proofSelectedTip := selectedTipByLevel[blockLevel]
-		if proofSelectedTip.Equal(model.VirtualGenesisBlockHash) {
-			continue
-		}
-		proofSelectedTipGHOSTDAGData, err := ghostdagDataStores[blockLevel].Get(ppm.databaseContext, stagingArea, proofSelectedTip, false)
-		if err != nil {
-			return err
-		}
-		if proofSelectedTipGHOSTDAGData.BlueScore() < 2*ppm.pruningProofM {
-			continue
+		if ppm.genesisHash.Equal(dagconfig.MainnetParams.GenesisHash) {
+			proofSelectedTip := selectedTipByLevel[blockLevel]
+			if proofSelectedTip.Equal(model.VirtualGenesisBlockHash) {
+				continue
+			}
+			proofSelectedTipGHOSTDAGData, err := ghostdagDataStores[blockLevel].Get(
+				ppm.databaseContext, stagingArea, proofSelectedTip, false)
+			if err != nil {
+				return err
+			}
+			if proofSelectedTipGHOSTDAGData.BlueScore() < 2*ppm.pruningProofM {
+				continue
+			}
 		}
 
 		currentDAGPruningPointParents, err := ppm.dagTopologyManagers[blockLevel].Parents(model.NewStagingArea(), currentDAGPruningPoint)
