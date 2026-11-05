@@ -43,7 +43,7 @@ type coinbaseManager struct {
 	// powScores derives the version of a block that has no stored header yet - the block being built - from its
 	// staged DAA score (see blockVersion).
 	powScores     []uint64
-	hardForkGates dagconfig.HardForkGates
+	hardForkGates *dagconfig.HardForkGates
 }
 
 // mergeSetRewardIgnoresDAAWindowVersion is the block version, activated by a hard fork, from which a
@@ -790,7 +790,7 @@ func New(
 	pruningStore model.PruningStore,
 	blockHeaderStore model.BlockHeaderStore,
 	powScores []uint64,
-	hardForkGates dagconfig.HardForkGates,
+	hardForkGates *dagconfig.HardForkGates,
 ) model.CoinbaseManager {
 	return &coinbaseManager{
 		databaseContext: databaseContext,
