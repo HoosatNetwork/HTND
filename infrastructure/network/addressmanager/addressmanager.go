@@ -43,7 +43,13 @@ type address struct {
 
 // hardcodedBannedIPs are permanently banned and never expire.
 // In the general case this capbility should remain UNUSED
-var hardcodedBannedIPs = []string{}
+// Here we show three RFC5737 addresses as exemplar place holders
+// These will never be encounted on either the Internet or private networks
+var hardcodedBannedIPs = []string{
+	"192.0.2.1",
+	"198.51.100.2",
+	"203.0.110.3",
+}
 
 func isHardcodedBan(ip net.IP) bool {
 	for _, s := range hardcodedBannedIPs {
