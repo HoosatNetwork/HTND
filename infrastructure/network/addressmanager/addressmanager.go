@@ -48,7 +48,7 @@ type address struct {
 var hardcodedBannedIPs = []string{
 	"192.0.2.1",
 	"198.51.100.2",
-	"203.0.110.3",
+	"203.0.113.3",
 }
 
 func isHardcodedBan(ip net.IP) bool {
