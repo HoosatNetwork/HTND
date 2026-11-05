@@ -11,6 +11,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockversion"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/hashset"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/subnetworks"
@@ -133,9 +134,10 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 	if err != nil {
 		return nil, false, err
 	}
-	// Removal follows the receiving block's fork version, not each reward's originating version.
-	devFeeRemoved := c.hardForkGates.DevFeeRemovalBlockVersion != 0 &&
-		ownBlockVersion >= c.hardForkGates.DevFeeRemovalBlockVersion
+	devFeeRemoved, err := c.devFeeRemoved(stagingArea, blockHash)
+	if err != nil {
+		return nil, false, err
+	}
 
 	txOuts := make([]*externalapi.DomainTransactionOutput, 0, len(ghostdagData.MergeSetBlues()))
 	acceptanceDataMap := acceptanceDataFromArrayToMap(filteredAcceptanceData)
@@ -338,6 +340,21 @@ func (c *coinbaseManager) ExpectedCoinbaseTransactionInternal(stagingArea *model
 		Payload:      payload,
 	}
 	return domainTransaction, hasRedReward, nil
+}
+
+// devFeeRemoved follows the validator's activation decision (blockvalidator.hardForkActiveFor): the version of
+// the selected parent's DAA score, not the block's own version, which differs at an activation boundary.
+func (c *coinbaseManager) devFeeRemoved(stagingArea *model.StagingArea, blockHash *externalapi.DomainHash) (bool, error) {
+	gate := c.hardForkGates.DevFeeRemovalBlockVersion
+	if gate == 0 || gate == ^uint16(0) || blockHash.Equal(c.genesisHash) {
+		return false, nil
+	}
+	selectedParentVersion, err := blockversion.OfSelectedParent(c.databaseContext, stagingArea,
+		c.ghostdagDataStore, c.daaBlocksStore, c.powScores, blockHash)
+	if err != nil {
+		return false, err
+	}
+	return dagconfig.HardForkActive(gate, selectedParentVersion), nil
 }
 
 // blockVersion returns blockHash's own header version. Used when parsing a coinbase

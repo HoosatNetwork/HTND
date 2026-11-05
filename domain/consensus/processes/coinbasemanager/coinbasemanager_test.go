@@ -281,3 +281,51 @@ func TestCalcMergedBlockRewardPaysRegardlessOfDAAWindowFromActivation(t *testing
 			subsidy, reward)
 	}
 }
+
+type fakeGHOSTDAGStore struct {
+	model.GHOSTDAGDataStore
+	selectedParent *externalapi.DomainHash
+}
+
+func (s *fakeGHOSTDAGStore) Get(model.DBReader, *model.StagingArea, *externalapi.DomainHash, bool) (*externalapi.BlockGHOSTDAGData, error) {
+	return externalapi.NewBlockGHOSTDAGData(0, big.NewInt(0), s.selectedParent, nil, nil, nil, 0), nil
+}
+
+type fakeDAAStore struct {
+	model.DAABlocksStore
+	score uint64
+}
+
+func (s *fakeDAAStore) DAAScore(model.DBReader, *model.StagingArea, *externalapi.DomainHash) (uint64, error) {
+	return s.score, nil
+}
+
+// TestDevFeeRemovedFollowsSelectedParentVersion pins the boundary where the prospective block's own DAA score
+// reaches the gate but its selected parent's does not: the validator still requires the dev fee there.
+func TestDevFeeRemovedFollowsSelectedParentVersion(t *testing.T) {
+	const gate = 3
+	powScores := []uint64{10, 20}
+	parent := &externalapi.DomainHash{}
+	block := externalapi.NewDomainHashFromByteArray(&[externalapi.DomainHashSize]byte{7})
+
+	for _, test := range []struct {
+		name              string
+		selectedParentDAA uint64
+		want              bool
+	}{
+		{"parent below gate", 19, false},
+		{"parent at gate", 20, true},
+	} {
+		cbm := New(nil, 0, 0, 255, &externalapi.DomainHash{}, 0, 0, 1,
+			dagconfig.MainnetParams.TargetTimePerBlock,
+			nil, &fakeGHOSTDAGStore{selectedParent: parent}, nil, &fakeDAAStore{score: test.selectedParentDAA},
+			nil, nil, nil, powScores, &dagconfig.HardForkGates{DevFeeRemovalBlockVersion: gate}).(*coinbaseManager)
+		got, err := cbm.devFeeRemoved(model.NewStagingArea(), block)
+		if err != nil {
+			t.Fatalf("%s: %+v", test.name, err)
+		}
+		if got != test.want {
+			t.Errorf("%s: devFeeRemoved = %t, want %t", test.name, got, test.want)
+		}
+	}
+}
