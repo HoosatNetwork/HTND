@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/blockheader"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/testutils"
+	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/pkg/errors"
 )
 
@@ -20,6 +21,9 @@ import (
 // accepted by a fresh node and by one whose pruning point had moved. An honest proof is still accepted.
 func TestValidatePruningPointProofRequiresProofWork(t *testing.T) {
 	testutils.ForAllNets(t, true, func(t *testing.T, cfg *consensus.Config) {
+		if !cfg.GenesisHash.Equal(dagconfig.MainnetParams.GenesisHash) {
+			t.Skip("the proof-side blue-work check runs only on mainnet")
+		}
 		finalityDepth := 5
 		cfg.FinalityDuration = []time.Duration{time.Duration(finalityDepth) * cfg.TargetTimePerBlock[constants.GetBlockVersion()-1]}
 		cfg.K[constants.GetBlockVersion()-1] = 0
