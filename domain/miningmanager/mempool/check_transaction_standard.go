@@ -166,6 +166,21 @@ func (mp *mempool) IsTransactionOutputDust(output *externalapi.DomainTransaction
 	return output.Value*1000/(3*totalSerializedSize) < uint64(mp.config.MinimumRelayTransactionFee)
 }
 
+// scriptFlagsAtVirtual returns the script flags consensus applies to a transaction validated at the
+// current virtual DAA score.
+func (mp *mempool) scriptFlagsAtVirtual() (txscript.ScriptFlags, error) {
+	virtualDAAScore, err := mp.consensusReference.Consensus().GetVirtualDAAScore()
+	if err != nil {
+		return txscript.ScriptNoFlags, err
+	}
+	flags := txscript.ScriptNoFlags
+	if mp.config.DAGParams.MLDSA44SignaturesActive(
+		constants.BlockVersionForDAAScore(mp.config.DAGParams.POWScores, virtualDAAScore)) {
+		flags |= txscript.ScriptEnableMLDSA44
+	}
+	return flags, nil
+}
+
 // checkTransactionStandardInContext performs a series of checks on a transaction's
 // inputs to ensure they are "standard". A standard transaction input within the
 // context of this function is one whose referenced public key script is of a
@@ -174,6 +189,10 @@ func (mp *mempool) IsTransactionOutputDust(output *externalapi.DomainTransaction
 // In addition, makes sure that the transaction's fee is above the minimum for acceptance
 // into the mempool and relay
 func (mp *mempool) checkTransactionStandardInContext(transaction *externalapi.DomainTransaction) error {
+	// P2SH sigops are counted under the script flags consensus applies at the virtual DAA score, as
+	// admission does (transactionValidator.scriptFlagsForDAAScore), so ML-DSA-44 opcodes count once
+	// active. Read lazily: the read takes the consensus lock, and most transactions have no P2SH input.
+	var p2shFlags *txscript.ScriptFlags
 	for i, input := range transaction.Inputs {
 		// It is safe to elide existence and index checks here since
 		// they have already been checked prior to calling this
@@ -187,7 +206,14 @@ func (mp *mempool) checkTransactionStandardInContext(transaction *externalapi.Do
 		}
 		scriptClass := txscript.GetScriptClassFromParsedScript(parsedScript)
 		if scriptClass == txscript.ScriptHashTy {
-			numSigOps := txscript.GetPreciseSigOpCountFromParsedScript(input.SignatureScript, parsedScript)
+			if p2shFlags == nil {
+				flags, err := mp.scriptFlagsAtVirtual()
+				if err != nil {
+					return err
+				}
+				p2shFlags = &flags
+			}
+			numSigOps := txscript.GetPreciseSigOpCountFromParsedScriptWithFlags(input.SignatureScript, parsedScript, *p2shFlags)
 			if numSigOps > maxStandardP2SHSigOps {
 				str := fmt.Sprintf("transaction input #%d has %d signature operations which is more than the allowed max amount of %d", i, numSigOps, maxStandardP2SHSigOps)
 				return transactionRuleError(RejectNonstandard, str)
