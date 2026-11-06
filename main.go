@@ -74,6 +74,15 @@ func applyDefaultMemoryLimit(
 		earlyInfof(
 			"UNABLE TO DETERMINE SYSTEM MEMORY; USING DEFAULT MEMORY LIMITS",
 		)
+		limitSource, gcSource := "default", "default"
+		if explicitMemoryLimit {
+			limitSource = "environment"
+		}
+		if hasGOGC && gogc != "" {
+			gcSource = "environment"
+		}
+		earlyInfof(" -> GOMEMLIMIT: %s (%s)", app.EffectiveMemoryLimit(setMemoryLimit), limitSource)
+		earlyInfof(" -> GOGC: %s (%s)", app.EffectiveGCPercent(), gcSource)
 		return
 	}
 
@@ -177,10 +186,14 @@ func applyDefaultMemoryLimit(
 			" -> GOMEMLIMIT set to: %d MB",
 			targetLimit/MiB,
 		)
+	} else {
+		earlyInfof(" -> GOMEMLIMIT: %s (environment)", app.EffectiveMemoryLimit(setMemoryLimit))
 	}
 
 	if !(hasGOGC && gogc != "") {
 		earlyInfof(" -> GOGC set to: %d%%", targetGOGC)
+	} else {
+		earlyInfof(" -> GOGC: %s (environment)", app.EffectiveGCPercent())
 	}
 
 	earlyInfof(
