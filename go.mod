@@ -1,6 +1,7 @@
 module github.com/HoosatNetwork/HTND/v2
 
 go 1.27.2
+godebug multipathtcp=0
 
 require (
 	github.com/btcsuite/btcutil v1.0.2

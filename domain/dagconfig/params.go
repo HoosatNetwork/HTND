@@ -225,8 +225,8 @@ func (p *Params) MLDSA44SignaturesActive(blockVersion uint16) bool {
 // Each consensus copies the gates from its Config when it is built and shares that copy with every
 // process that reads one. Production code never assigns to the gates outside these declarations
 // (build_and_test.sh enforces that), except that a custom network's JSON config may set
-// MLDSA44SignaturesBlockVersion. Tests activate a rule at a version their blocks reach through
-// TestConsensus.HardForkGates.
+// MLDSA44SignaturesBlockVersion or DevFeeRemovalBlockVersion. Tests activate a rule at a version
+// their blocks reach through TestConsensus.HardForkGates.
 type HardForkGates struct {
 	// StrictUTXOCommitmentVersion activates HTN-002/HTN-004: from this block version,
 	// verifyAndBuildUTXO stops swallowing RuleErrors from the UTXO commitment, accepted-ID merkle
@@ -287,6 +287,10 @@ type HardForkGates struct {
 	// this version and the rule stays off.
 	MLDSA44SignaturesBlockVersion uint16
 
+	// DevFeeRemovalBlockVersion stops adding the on-chain dev-fee output to coinbases from this
+	// block version onward. The miner receives the full merge-set reward instead.
+	DevFeeRemovalBlockVersion uint16
+
 	// The gates below re-enable header and structural checks that were commented out with no
 	// version gate (see blockvalidator). Each was off long enough that the existing chain may
 	// violate it, so each applies only from its own block version onward. Like every other gate,
@@ -336,7 +340,8 @@ var mainnetHardForkGates = HardForkGates{
 	ValidateIBDPruningPointVersion: 10, // We start this today to do the checkpoints during IBD
 	ValidateIBDPruningListVersion:  10, // We start this today to do the checkpoints during IBD
 	OffsetModeValueChecksVersion:   10, // Already implemented
-	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point.  Foztor. 5/Oct/27
+	MLDSA44SignaturesBlockVersion:  12,
+	DevFeeRemovalBlockVersion:      12,
 	ParentsIncestVersion:           10,
 	MergeSetSizeLimitVersion:       10,
 	HeaderDAAScoreVersion:          10,
@@ -389,7 +394,8 @@ var testnetHardForkGates = HardForkGates{
 	ValidateIBDPruningPointVersion: 12,
 	ValidateIBDPruningListVersion:  unscheduledHardForkGate,
 	OffsetModeValueChecksVersion:   10,
-	MLDSA44SignaturesBlockVersion:  15, // This is postponed until some later point. Foztor 5/Oct/27
+	MLDSA44SignaturesBlockVersion:  13,
+	DevFeeRemovalBlockVersion:      13,
 
 	ParentsIncestVersion:      10,
 	MergeSetSizeLimitVersion:  10,
@@ -638,8 +644,8 @@ var MainnetParams = Params{
 		217137983,
 		218735007,
 		227679830,
-		236878000, // v11 activation - Foztor 6/Oct/26, retargeted for ~Mon 12 Oct 2026 18:00 GMT
-		^uint64(0),
+		236878000,   // v11 activation - Foztor 6/Oct/26, retargeted for ~Mon 12 Oct 2026 18:00 GMT
+		258_000_000, // v12 activation: ML-DSA-44 signatures and dev-fee removal
 	},
 	PruningPointCheckpoint: mainnetPruningPointCheckpoint,
 
@@ -854,10 +860,8 @@ var TestnetParams = Params{
 		400,
 		450,
 		1534673,
-		// Block version 13 activates the header and structural checks gated at 13 in
-		// testnetHardForkGates. ^uint64(0) is a placeholder that never triggers: set it to the
-		// testnet DAA score the fork should activate at.
-		^uint64(0),
+		// Block version 13 activates ML-DSA-44 signatures and dev-fee removal.
+		10_000_000,
 	},
 	PruningMultiplier: []uint64{
 		0,

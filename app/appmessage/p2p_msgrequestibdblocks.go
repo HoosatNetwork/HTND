@@ -7,7 +7,7 @@ import (
 // MaxRequestIBDBlocksHashes is the maximum number of hashes that can be in a single
 // RequestIBDBlocks message. Unlike relay's inv-driven MaxRequestRelayBlocksHashes, every legitimate
 // IBD block request is bounded by the syncee's own batch loop (getIBDBatchSize() in
-// app/protocol/flows/v8/blockrelay, currently 99*5 = 495 - both the normal per-chunk request and the
+// app/protocol/flows/v11/blockrelay, currently 99*5 = 495 - both the normal per-chunk request and the
 // missing-hash retry stay within it), so this can be capped much lower: 4x that batch size,
 // generously covering retries without letting a peer ask a syncer to serve the whole stored DAG in
 // one message. Hardcoded rather than importing blockrelay's constant to avoid a layering cycle

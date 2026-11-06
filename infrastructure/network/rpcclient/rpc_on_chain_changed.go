@@ -2,40 +2,33 @@ package rpcclient
 
 import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
-	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
-	"github.com/pkg/errors"
 )
 
 // RegisterForVirtualSelectedParentChainChangedNotifications sends an RPC request respective to the function's name and returns the RPC server's response.
 // Additionally, it starts listening for the appropriate notification using the given handler function
+// A later call replaces the handler, and the client registers again after a reconnect.
 func (c *RPCClient) RegisterForVirtualSelectedParentChainChangedNotifications(includeAcceptedTransactionIDs bool,
 	onChainChanged func(notification *appmessage.VirtualSelectedParentChainChangedNotificationMessage),
 ) error {
-	err := c.outgoingRoute().Enqueue(
-		appmessage.NewNotifyVirtualSelectedParentChainChangedRequestMessage(includeAcceptedTransactionIDs))
-	if err != nil {
-		return err
-	}
-	response, err := c.route(appmessage.CmdNotifyVirtualSelectedParentChainChangedResponseMessage).DequeueWithTimeout(c.getTimeout())
-	if err != nil {
-		return err
-	}
-	notifyChainChangedResponse := response.(*appmessage.NotifyVirtualSelectedParentChainChangedResponseMessage)
-	if notifyChainChangedResponse.Error != nil {
-		return c.convertRPCError(notifyChainChangedResponse.Error)
-	}
-	spawn("RegisterForVirtualSelectedParentChainChangedNotifications", func() {
-		for {
-			notification, err := c.route(appmessage.CmdVirtualSelectedParentChainChangedNotificationMessage).Dequeue()
+	return c.registerForNotifications(appmessage.CmdNotifyVirtualSelectedParentChainChangedRequestMessage,
+		appmessage.CmdNotifyVirtualSelectedParentChainChangedResponseMessage, func(router *rpcRouter) error {
+			err := router.outgoingRoute().Enqueue(
+				appmessage.NewNotifyVirtualSelectedParentChainChangedRequestMessage(includeAcceptedTransactionIDs))
 			if err != nil {
-				if errors.Is(err, routerpkg.ErrRouteClosed) {
-					break
-				}
-				panic(err)
+				return err
 			}
-			ChainChangedNotification := notification.(*appmessage.VirtualSelectedParentChainChangedNotificationMessage)
-			onChainChanged(ChainChangedNotification)
-		}
-	})
-	return nil
+			response, err := router.routes[appmessage.CmdNotifyVirtualSelectedParentChainChangedResponseMessage].DequeueWithTimeout(c.getTimeout())
+			if err != nil {
+				return err
+			}
+			notifyChainChangedResponse := response.(*appmessage.NotifyVirtualSelectedParentChainChangedResponseMessage)
+			if notifyChainChangedResponse.Error != nil {
+				return c.convertRPCError(notifyChainChangedResponse.Error)
+			}
+			return nil
+		}, notificationHandlers{
+			appmessage.CmdVirtualSelectedParentChainChangedNotificationMessage: func(notification appmessage.Message) {
+				onChainChanged(notification.(*appmessage.VirtualSelectedParentChainChangedNotificationMessage))
+			},
+		})
 }

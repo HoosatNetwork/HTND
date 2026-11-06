@@ -328,7 +328,6 @@ func (flow *handleRelayInvsFlow) start() error {
 			flow.banConnection(false)
 		}
 		version := blockVersionForDAAScore(flow.Config().ActiveNetParams.POWScores, block.Header.DAAScore())
-		constants.SetBlockVersion(version)
 		// Compare against this block's own correctly-computed version, not the ambient
 		// constants.GetBlockVersion() - SetBlockVersion is a one-way ratchet that never decreases,
 		// so once it's been bumped higher by anything else (this node building its own candidate
@@ -423,6 +422,8 @@ func (flow *handleRelayInvsFlow) start() error {
 			}
 		}
 
+		// Ratchet only ater the block passed validation to prevent an unvalidated peer header raising the global.  Closes Issue #96
+		constants.SetBlockVersion(version)
 		oldVirtualParents := hashset.New()
 		for _, parent := range oldVirtualInfo.ParentHashes {
 			oldVirtualParents.Add(parent)
