@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -97,6 +98,7 @@ func (app *htndApp) main(startedChan chan<- struct{}) (resultErr error) {
 
 	// Show version at startup.
 	log.Infof("Version %s", version.Version())
+	log.Infof("Memory settings: GOMEMLIMIT %s, GOGC %s", EffectiveMemoryLimit(debug.SetMemoryLimit), EffectiveGCPercent())
 
 	// Enable http profiling server if requested.
 	if !app.cfg.PrepareDowngrade && app.cfg.Profile != "" {
