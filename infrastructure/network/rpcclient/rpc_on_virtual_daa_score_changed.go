@@ -2,40 +2,33 @@ package rpcclient
 
 import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
-	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
-	"github.com/pkg/errors"
 )
 
 // RegisterForVirtualDaaScoreChangedNotifications sends an RPC request respective to the function's
 // name and returns the RPC server's response. Additionally, it starts listening for the appropriate notification
 // using the given handler function
+// A later call replaces the handler, and the client registers again after a reconnect.
 func (c *RPCClient) RegisterForVirtualDaaScoreChangedNotifications(
 	onVirtualDaaScoreChanged func(notification *appmessage.VirtualDaaScoreChangedNotificationMessage),
 ) error {
-	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualDaaScoreChangedRequestMessage())
-	if err != nil {
-		return err
-	}
-	response, err := c.route(appmessage.CmdNotifyVirtualDaaScoreChangedResponseMessage).DequeueWithTimeout(c.getTimeout())
-	if err != nil {
-		return err
-	}
-	notifyVirtualDaaScoreChangedResponse := response.(*appmessage.NotifyVirtualDaaScoreChangedResponseMessage)
-	if notifyVirtualDaaScoreChangedResponse.Error != nil {
-		return c.convertRPCError(notifyVirtualDaaScoreChangedResponse.Error)
-	}
-	spawn("RegisterForVirtualDaaScoreChangedNotifications", func() {
-		for {
-			notification, err := c.route(appmessage.CmdVirtualDaaScoreChangedNotificationMessage).Dequeue()
+	return c.registerForNotifications(appmessage.CmdNotifyVirtualDaaScoreChangedRequestMessage,
+		appmessage.CmdNotifyVirtualDaaScoreChangedResponseMessage, func(router *rpcRouter) error {
+			err := router.outgoingRoute().Enqueue(appmessage.NewNotifyVirtualDaaScoreChangedRequestMessage())
 			if err != nil {
-				if errors.Is(err, routerpkg.ErrRouteClosed) {
-					break
-				}
-				panic(err)
+				return err
 			}
-			VirtualDaaScoreChangedNotification := notification.(*appmessage.VirtualDaaScoreChangedNotificationMessage)
-			onVirtualDaaScoreChanged(VirtualDaaScoreChangedNotification)
-		}
-	})
-	return nil
+			response, err := router.routes[appmessage.CmdNotifyVirtualDaaScoreChangedResponseMessage].DequeueWithTimeout(c.getTimeout())
+			if err != nil {
+				return err
+			}
+			notifyVirtualDaaScoreChangedResponse := response.(*appmessage.NotifyVirtualDaaScoreChangedResponseMessage)
+			if notifyVirtualDaaScoreChangedResponse.Error != nil {
+				return c.convertRPCError(notifyVirtualDaaScoreChangedResponse.Error)
+			}
+			return nil
+		}, notificationHandlers{
+			appmessage.CmdVirtualDaaScoreChangedNotificationMessage: func(notification appmessage.Message) {
+				onVirtualDaaScoreChanged(notification.(*appmessage.VirtualDaaScoreChangedNotificationMessage))
+			},
+		})
 }

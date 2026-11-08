@@ -30,7 +30,7 @@ go test -tags=ci ./...                      # what CI runs; skips tests guarded 
 | `main.go` | Loads config, raises rlimit, sets up panic auto-report and optional pprof (`HTND_PROFILER` → 127.0.0.1:6060, or the `--profile` address when given), then calls `app.StartAppWithConfig`. |
 | `app/` | `app.go` opens the DB (pebble by default, `--dbtype=leveldb` optional). `component_manager.go` wires domain, netadapter, addressmanager, connmanager, protocol, rpc, utxoindex and autoupdate. |
 | `app/appmessage/` | Transport-agnostic message types for P2P (`p2p_*`) and RPC (`rpc_*`), plus domain converters. |
-| `app/protocol/` | P2P flows. The current protocol version is `flows/v8`; `register.go` maps message commands to flow funcs. Also contains handshake, IBD and block/tx relay. |
+| `app/protocol/` | P2P flows. The current protocol version is `flows/v11`; `register.go` maps message commands to flow funcs. Also contains handshake, IBD and block/tx relay. |
 | `app/rpc/` | `rpc.go` has the `handlers` map from command to `rpchandlers.HandleX`. Handlers take `(*rpccontext.Context, *router.Router, appmessage.Message)`. |
 | `domain/domain.go` | Wraps consensus, the staging consensus used for pruning-point IBD (swapped in atomically by `CommitStagingConsensus`), and the mining manager. |
 | `domain/consensus/` | The consensus engine. See the next section. |

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v8/addressexchange"
+	"github.com/HoosatNetwork/HTND/v2/app/protocol/flows/v11/addressexchange"
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"

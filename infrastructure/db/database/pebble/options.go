@@ -93,6 +93,7 @@ func Options(cacheSizeMiB int) *pebble.Options {
 			cacheBytes = int64(mb) << 20
 		}
 	}
+	log.Infof("Block cache: %d MiB", cacheBytes>>20)
 
 	// ────────────────────────────────────────────────
 	// Core Pebble options

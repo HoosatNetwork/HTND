@@ -343,7 +343,8 @@ func (f *factory) NewConsensus(config *Config, db infrastructuredatabase.Databas
 		blockStore,
 		pruningStore,
 		blockHeaderStore,
-		config.POWScores)
+		config.POWScores,
+		&hardForkGates)
 	headerTipsManager := headersselectedtipmanager.New(dbManager, dagTopologyManager, dagTraversalManager,
 		ghostdagManager, headersSelectedTipStore, headersSelectedChainStore)
 	genesisHash := config.GenesisHash

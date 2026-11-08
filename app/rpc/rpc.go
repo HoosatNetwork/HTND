@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"sync"
+
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpccontext"
 	"github.com/HoosatNetwork/HTND/v2/app/rpc/rpchandlers"
@@ -69,10 +71,20 @@ func (m *Manager) routerInitializer(rtr *router.Router, netConnection *netadapte
 	for messageType := range handlers {
 		messageTypes = append(messageTypes, messageType)
 	}
+	// This handler runs inside Route.Enqueue, and for a notification inside NotificationManager's read
+	// lock (NotifyBlockAdded and friends). Disconnecting synchronously from here runs the connection's
+	// disconnect handler on this goroutine, and that handler (set below) calls RemoveListener, which
+	// takes the same NotificationManager lock for writing: the goroutine waits on itself forever, every
+	// later RLock queues behind the pending writer, the consensus events handler stops and the node
+	// freezes while still looking alive. So the disconnect runs on a goroutine of its own, once per
+	// connection; until it closes the route, further sends to this client are dropped as before.
+	var disconnectSlowClientOnce sync.Once
 	rtr.OutgoingRoute().SetOnCapacityReachedHandler(func(route *router.Route, message appmessage.Message) {
-		log.Warnf("Disconnecting slow RPC client %s because outgoing route '%s' is full (%d/%d) while sending '%s'",
-			netConnection, route.Name(), route.Length(), route.Capacity(), message.Command())
-		netConnection.Disconnect()
+		disconnectSlowClientOnce.Do(func() {
+			log.Warnf("Disconnecting slow RPC client %s because outgoing route '%s' is full (%d/%d) while sending '%s'",
+				netConnection, route.Name(), route.Length(), route.Capacity(), message.Command())
+			spawn("routerInitializer-disconnectSlowClient", netConnection.Disconnect)
+		})
 	})
 	incomingRoute, err := rtr.AddIncomingRoute("rpc router", messageTypes)
 	if err != nil {

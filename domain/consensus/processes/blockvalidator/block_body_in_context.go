@@ -48,11 +48,19 @@ func (v *blockValidator) ValidateBodyInContext(stagingArea *model.StagingArea, b
 			return err
 		}
 
-		err = v.checkDevFee(stagingArea, block, reward)
-		if err != nil {
-			return err
+		devFeeRemoved := false
+		if gate := v.hardForkGates.DevFeeRemovalBlockVersion; gate != 0 {
+			devFeeRemoved, err = v.hardForkActiveFor(stagingArea, blockHash, gate)
+			if err != nil {
+				return err
+			}
 		}
-
+		if !devFeeRemoved {
+			err = v.checkDevFee(stagingArea, block, reward)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

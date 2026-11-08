@@ -2,37 +2,30 @@ package rpcclient
 
 import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
-	routerpkg "github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
-	"github.com/pkg/errors"
 )
 
 // RegisterForBlockAddedNotifications sends an RPC request respective to the function's name and returns the RPC server's response.
 // Additionally, it starts listening for the appropriate notification using the given handler function
+// A later call replaces the handler, and the client registers again after a reconnect.
 func (c *RPCClient) RegisterForBlockAddedNotifications(onBlockAdded func(notification *appmessage.BlockAddedNotificationMessage)) error {
-	err := c.outgoingRoute().Enqueue(appmessage.NewNotifyBlockAddedRequestMessage())
-	if err != nil {
-		return err
-	}
-	response, err := c.route(appmessage.CmdNotifyBlockAddedResponseMessage).DequeueWithTimeout(c.getTimeout())
-	if err != nil {
-		return err
-	}
-	notifyBlockAddedResponse := response.(*appmessage.NotifyBlockAddedResponseMessage)
-	if notifyBlockAddedResponse.Error != nil {
-		return c.convertRPCError(notifyBlockAddedResponse.Error)
-	}
-	spawn("RegisterForBlockAddedNotifications", func() {
-		for {
-			notification, err := c.route(appmessage.CmdBlockAddedNotificationMessage).Dequeue()
+	return c.registerForNotifications(appmessage.CmdNotifyBlockAddedRequestMessage,
+		appmessage.CmdNotifyBlockAddedResponseMessage, func(router *rpcRouter) error {
+			err := router.outgoingRoute().Enqueue(appmessage.NewNotifyBlockAddedRequestMessage())
 			if err != nil {
-				if errors.Is(err, routerpkg.ErrRouteClosed) {
-					break
-				}
-				panic(err)
+				return err
 			}
-			blockAddedNotification := notification.(*appmessage.BlockAddedNotificationMessage)
-			onBlockAdded(blockAddedNotification)
-		}
-	})
-	return nil
+			response, err := router.routes[appmessage.CmdNotifyBlockAddedResponseMessage].DequeueWithTimeout(c.getTimeout())
+			if err != nil {
+				return err
+			}
+			notifyBlockAddedResponse := response.(*appmessage.NotifyBlockAddedResponseMessage)
+			if notifyBlockAddedResponse.Error != nil {
+				return c.convertRPCError(notifyBlockAddedResponse.Error)
+			}
+			return nil
+		}, notificationHandlers{
+			appmessage.CmdBlockAddedNotificationMessage: func(notification appmessage.Message) {
+				onBlockAdded(notification.(*appmessage.BlockAddedNotificationMessage))
+			},
+		})
 }
