@@ -128,3 +128,67 @@ func TestUTXOsSizesFromTheMaintainedCountNotAScan(t *testing.T) {
 		t.Fatalf("expected exactly 3 UTXOs with limit=3, got %d", len(limited))
 	}
 }
+
+// TestLimitDoesNotSizeTheBuffer: a limit far above an address's coin count must not allocate a buffer
+// of the limit's size. With the default response budget, every GetUTXOsByAddresses read used to
+// allocate millions of entries for an address holding a few coins.
+func TestLimitDoesNotSizeTheBuffer(t *testing.T) {
+	path, err := os.MkdirTemp("", "utxoindex-store")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %s", err)
+	}
+	defer os.RemoveAll(path)
+	db, err := ldb.NewLevelDB(path, 8)
+	if err != nil {
+		t.Fatalf("NewLevelDB: %s", err)
+	}
+	defer db.Close()
+	store := newUTXOIndexStore(db)
+	if err := db.Put(circulatingSupplyKey, binaryserialization.SerializeUint64(0)); err != nil {
+		t.Fatalf("initializing circulating supply: %s", err)
+	}
+
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51, 0x21, 0x0c}, Version: 0}
+	entry := consensusutxo.NewUTXOEntry(1000, script, false, 100)
+	for i := byte(0); i < 3; i++ {
+		outpoint := &externalapi.DomainOutpoint{
+			TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{i}),
+		}
+		if err := store.add(script, outpoint, entry); err != nil {
+			t.Fatalf("add %d: %s", i, err)
+		}
+	}
+	if err := store.commit(); err != nil {
+		t.Fatalf("commit: %s", err)
+	}
+
+	const hugeLimit = 3_000_000
+	pairs, buf, err := store.UTXOs(script, hugeLimit, nil)
+	if err != nil {
+		t.Fatalf("UTXOs: %s", err)
+	}
+	if len(pairs) != 3 || len(buf.Slice()) != 3 {
+		t.Fatalf("UTXOs with limit %d: got %d coins in a buffer of %d, want 3 in 3",
+			hugeLimit, len(pairs), len(buf.Slice()))
+	}
+	memory.Free(buf)
+
+	pairs, buf, err = store.UTXOs(script, 2, nil)
+	if err != nil {
+		t.Fatalf("UTXOs limit 2: %s", err)
+	}
+	if len(pairs) != 2 || len(buf.Slice()) != 2 {
+		t.Fatalf("UTXOs with limit 2: got %d coins in a buffer of %d, want 2 in 2", len(pairs), len(buf.Slice()))
+	}
+	memory.Free(buf)
+
+	pairs, buf, err = store.PaginatedUTXOs(script, 1, hugeLimit, nil)
+	if err != nil {
+		t.Fatalf("PaginatedUTXOs: %s", err)
+	}
+	if len(pairs) != 2 || len(buf.Slice()) != 2 {
+		t.Fatalf("PaginatedUTXOs offset 1 limit %d: got %d coins in a buffer of %d, want 2 in 2",
+			hugeLimit, len(pairs), len(buf.Slice()))
+	}
+	memory.Free(buf)
+}
