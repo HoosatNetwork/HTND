@@ -34,18 +34,20 @@ func TestScriptFlagsFollowMLDSA44BlockVersion(t *testing.T) {
 	}
 }
 
-// TestMLDSA44IsInertOnEveryNetwork guards the intentionally postponed signature
-// rules at every version the shipped schedules can produce, including their final
-// MaxUint64 threshold. Versions are derived from POWScores, as in the block
-// builder; GetBlockVersion only reflects blocks seen since startup.
-func TestMLDSA44IsInertOnEveryNetwork(t *testing.T) {
+// TestMLDSA44FollowsNetworkGate checks the signature gate at every version each
+// shipped schedule can produce. Versions are derived from POWScores, as in the
+// block builder; GetBlockVersion only reflects blocks seen since startup.
+func TestMLDSA44FollowsNetworkGate(t *testing.T) {
 	for _, params := range []*dagconfig.Params{&dagconfig.MainnetParams, &dagconfig.TestnetParams,
 		&dagconfig.TestnetParamsB5, &dagconfig.TestnetParamsB10, &dagconfig.SimnetParams, &dagconfig.DevnetParams} {
 		t.Run(params.Name, func(t *testing.T) {
 			highestVersion := constants.BlockVersionForDAAScore(params.POWScores, math.MaxUint64)
 			for version := uint16(1); version <= highestVersion; version++ {
-				if params.MLDSA44SignaturesActive(version) {
-					t.Errorf("ML-DSA-44 is active at producible block version %d", version)
+				wantActive := params.HardForkGates.MLDSA44SignaturesBlockVersion != 0 &&
+					version >= params.HardForkGates.MLDSA44SignaturesBlockVersion
+				if gotActive := params.MLDSA44SignaturesActive(version); gotActive != wantActive {
+					t.Errorf("ML-DSA-44 active at block version %d = %t, want %t",
+						version, gotActive, wantActive)
 				}
 			}
 			validator := transactionValidator{dagParams: params}
@@ -58,11 +60,46 @@ func TestMLDSA44IsInertOnEveryNetwork(t *testing.T) {
 				}
 			}
 			for _, score := range scores {
-				if validator.scriptFlagsForDAAScore(score)&txscript.ScriptEnableMLDSA44 != 0 {
-					t.Errorf("ML-DSA-44 script flag enabled at DAA score %d", score)
+				blockVersion := constants.BlockVersionForDAAScore(params.POWScores, score)
+				wantActive := params.MLDSA44SignaturesActive(blockVersion)
+				gotActive := validator.scriptFlagsForDAAScore(score)&txscript.ScriptEnableMLDSA44 != 0
+				if gotActive != wantActive {
+					t.Errorf("ML-DSA-44 script flag at DAA score %d = %t, want %t",
+						score, gotActive, wantActive)
 				}
 			}
 		})
+	}
+}
+
+func TestNextForkScoresActivateMLDSA44AndDevFeeRemoval(t *testing.T) {
+	tests := []struct {
+		params       *dagconfig.Params
+		score        uint64
+		blockVersion uint16
+	}{
+		{params: &dagconfig.MainnetParams, score: 258_000_000, blockVersion: 12},
+		{params: &dagconfig.TestnetParams, score: 10_000_000, blockVersion: 13},
+	}
+
+	for _, test := range tests {
+		params := test.params
+		if got := constants.BlockVersionForDAAScore(params.POWScores, test.score-1); got != test.blockVersion-1 {
+			t.Errorf("%s: block version immediately before DAA score %d is %d, want %d",
+				params.Name, test.score, got, test.blockVersion-1)
+		}
+		if got := constants.BlockVersionForDAAScore(params.POWScores, test.score); got != test.blockVersion {
+			t.Errorf("%s: block version at DAA score %d is %d, want %d",
+				params.Name, test.score, got, test.blockVersion)
+		}
+		if params.HardForkGates.MLDSA44SignaturesBlockVersion != test.blockVersion {
+			t.Errorf("%s: ML-DSA-44 gate is %d, want %d",
+				params.Name, params.HardForkGates.MLDSA44SignaturesBlockVersion, test.blockVersion)
+		}
+		if params.HardForkGates.DevFeeRemovalBlockVersion != test.blockVersion {
+			t.Errorf("%s: dev-fee removal gate is %d, want %d",
+				params.Name, params.HardForkGates.DevFeeRemovalBlockVersion, test.blockVersion)
+		}
 	}
 }
 

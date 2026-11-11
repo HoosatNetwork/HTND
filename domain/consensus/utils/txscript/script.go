@@ -380,6 +380,12 @@ func GetPreciseSigOpCountFromParsedScript(scriptSig []byte, pops []parsedOpcode)
 	return getPreciseSigOpCountFromParsedScript(scriptSig, pops, ScriptNoFlags)
 }
 
+// GetPreciseSigOpCountFromParsedScriptWithFlags is GetPreciseSigOpCountFromParsedScript under the
+// given script flags, which decide whether OP_CHECKSIGMLDSA44 is a signature operation.
+func GetPreciseSigOpCountFromParsedScriptWithFlags(scriptSig []byte, pops []parsedOpcode, flags ScriptFlags) int {
+	return getPreciseSigOpCountFromParsedScript(scriptSig, pops, flags)
+}
+
 func getPreciseSigOpCountFromParsedScript(scriptSig []byte, pops []parsedOpcode, flags ScriptFlags) int {
 	// Treat non P2SH transactions as normal.
 	if !isScriptHash(pops) {
