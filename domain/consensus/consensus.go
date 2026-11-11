@@ -2,7 +2,6 @@ package consensus
 
 import (
 	"fmt"
-	"github.com/HoosatNetwork/HTND/v2/domain/consensus/processes/pruningmanager"
 	"math"
 	"math/big"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/processes/pruningmanager"
 
 	"github.com/HoosatNetwork/HTND/v2/util/memory"
 	"github.com/HoosatNetwork/HTND/v2/util/mstime"
@@ -1065,7 +1066,8 @@ func (s *consensus) GetVirtualUTXOEntriesPreferring(outpoints []*externalapi.Dom
 func (s *consensus) virtualUTXOEntries(outpoints []*externalapi.DomainOutpoint, preferred []externalapi.UTXOEntry,
 	maxWait time.Duration,
 ) ([]externalapi.UTXOEntry, []*externalapi.DomainHash, bool, error) {
-	ordered, err := s.consensusStateStore.PrepareOrderedVirtualUTXOKeys(outpoints)
+	ordered, release, err := s.consensusStateStore.PrepareOrderedVirtualUTXOKeys(outpoints)
+	defer release()
 	if err != nil {
 		return nil, nil, false, err
 	}

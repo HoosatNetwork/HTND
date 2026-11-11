@@ -118,7 +118,8 @@ func (css *consensusStateStore) UTXOsByOutpointsWithoutPopulatingCache(dbContext
 	if len(entries) != len(outpoints) {
 		return errors.Errorf("%d entries given for %d outpoints", len(entries), len(outpoints))
 	}
-	ordered, err := css.PrepareOrderedVirtualUTXOKeys(outpoints)
+	ordered, release, err := css.PrepareOrderedVirtualUTXOKeys(outpoints)
+	defer release()
 	if err != nil {
 		return err
 	}

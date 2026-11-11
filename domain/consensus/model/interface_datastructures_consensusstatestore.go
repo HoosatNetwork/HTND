@@ -4,7 +4,7 @@ import "github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 
 // OrderedVirtualUTXOKey is one outpoint encoded as a virtual-UTXO-set database key.
 // Index is that outpoint's position in the slice passed to PrepareOrderedVirtualUTXOKeys.
-// Key aliases memory owned by the returned slice and stays valid while that slice is reachable.
+// Key aliases an mmap'ed slab and stays valid until the release func returned with it is called.
 type OrderedVirtualUTXOKey struct {
 	Index int
 	Key   []byte
@@ -28,7 +28,8 @@ type ConsensusStateStore interface {
 		outpoints []*externalapi.DomainOutpoint, entries []externalapi.UTXOEntry) error
 	// PrepareOrderedVirtualUTXOKeys encodes outpoints as virtual-UTXO-set keys and sorts them by
 	// those keys. It does not read the database, so a caller may run it outside the consensus lock.
-	PrepareOrderedVirtualUTXOKeys(outpoints []*externalapi.DomainOutpoint) ([]OrderedVirtualUTXOKey, error)
+	// The caller must call release after the last read of any returned Key.
+	PrepareOrderedVirtualUTXOKeys(outpoints []*externalapi.DomainOutpoint) (ordered []OrderedVirtualUTXOKey, release func(), err error)
 	// UTXOsByOrderedKeysWithoutPopulatingCache fills entries from ordered, which must be a key-sorted
 	// slice produced by PrepareOrderedVirtualUTXOKeys for these outpoints. entries[ordered[i].Index]
 	// is set to the coin, or nil where virtual does not hold it. When preferred is non-nil,

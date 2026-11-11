@@ -7,6 +7,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 	"github.com/pkg/errors"
 )
 
@@ -111,25 +112,49 @@ func (css *consensusStateStore) cursorUpper(lastKey []byte) []byte {
 
 // PrepareOrderedVirtualUTXOKeys encodes outpoints as virtual-UTXO-set keys and sorts
 // them by those keys. It does not read the database.
+//
+// The keys and the returned slice live in mmap'ed blocks the garbage collector does not
+// manage, so the caller must call release once nothing reads ordered or a Key any more -
+// including any cursor that was handed a Key as a bound. A read after release faults.
+// release is never nil.
+//
+// ordered may sit in unscanned memory although each Key is a pointer, because every Key
+// points into the slab, which is not Go heap either: the collector has nothing to keep
+// alive there. That holds only while the slab never grows, see its sizing below.
 func (css *consensusStateStore) PrepareOrderedVirtualUTXOKeys(
 	outpoints []*externalapi.DomainOutpoint,
-) ([]model.OrderedVirtualUTXOKey, error) {
-	ordered := make([]model.OrderedVirtualUTXOKey, len(outpoints))
+) (ordered []model.OrderedVirtualUTXOKey, release func(), err error) {
 	if len(outpoints) == 0 {
-		return ordered, nil
+		return nil, func() {}, nil
 	}
-	// The slab is filled before any key slice is taken from it. Appending can grow
-	// the slab, and a slice taken earlier would then point at the old array.
-	slab := make([]byte, 0, len(outpoints)*(len(css.utxoSetKeyPrefix)+40))
-	ends := make([]int, len(outpoints))
+	// Sized for the largest key encoder.append accepts, so appending never outgrows the
+	// slab. A grown slab would move to the Go heap, and ordered - in unscanned memory -
+	// would then hold the only references to it.
+	// The slab is filled before any key slice is taken from it.
+	slabBlock := memory.Malloc[byte](len(outpoints) * (len(css.utxoSetKeyPrefix) + maxOutpointSuffix))
+	orderedBlock := memory.Malloc[model.OrderedVirtualUTXOKey](len(outpoints))
+	release = func() {
+		memory.Free(orderedBlock)
+		memory.Free(slabBlock)
+	}
+	endsBlock := memory.Malloc[int](len(outpoints))
+	defer memory.Free(endsBlock)
+
+	ordered = orderedBlock.Slice()
+	slab := slabBlock.Slice()[:0]
+	ends := endsBlock.Slice()
 	var encoder outpointKeyEncoder
 	for i, outpoint := range outpoints {
-		var err error
 		slab, err = encoder.append(slab, css.utxoSetKeyPrefix, outpoint)
 		if err != nil {
-			return nil, err
+			release()
+			return nil, func() {}, err
 		}
 		ends[i] = len(slab)
+	}
+	if cap(slab) != len(slabBlock.Slice()) {
+		release()
+		return nil, func() {}, errors.Errorf("virtual UTXO key slab outgrew its %d bytes", len(slabBlock.Slice()))
 	}
 	start := 0
 	for i := range outpoints {
@@ -140,7 +165,7 @@ func (css *consensusStateStore) PrepareOrderedVirtualUTXOKeys(
 	slices.SortFunc(ordered, func(a, b model.OrderedVirtualUTXOKey) int {
 		return bytes.Compare(a.Key, b.Key)
 	})
-	return ordered, nil
+	return ordered, release, nil
 }
 
 type cursorRanger interface {

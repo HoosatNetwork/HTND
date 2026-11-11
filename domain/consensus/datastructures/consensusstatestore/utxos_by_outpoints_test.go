@@ -249,11 +249,12 @@ func BenchmarkVirtualUTXOLookup(b *testing.B) {
 	})
 	b.Run("sorted-cursor-reuse", func(b *testing.B) {
 		for b.Loop() {
-			ordered, err := store.PrepareOrderedVirtualUTXOKeys(lookups)
+			ordered, release, err := store.PrepareOrderedVirtualUTXOKeys(lookups)
 			if err != nil {
 				b.Fatalf("PrepareOrderedVirtualUTXOKeys: %v", err)
 			}
 			err = store.UTXOsByOrderedKeysWithoutPopulatingCache(dbManager, model.NewStagingArea(), lookups, ordered, entries, preferred)
+			release()
 			if err != nil {
 				b.Fatalf("lookup: %v", err)
 			}
@@ -273,10 +274,11 @@ func TestOrderedVirtualUTXOKeyMatchesUTXOKey(t *testing.T) {
 		externalapi.NewDomainOutpoint(&zeroID.TransactionID, 0),
 		externalapi.NewDomainOutpoint(&maxID.TransactionID, math.MaxUint32),
 	}
-	ordered, err := store.PrepareOrderedVirtualUTXOKeys(outpoints)
+	ordered, release, err := store.PrepareOrderedVirtualUTXOKeys(outpoints)
 	if err != nil {
 		t.Fatalf("PrepareOrderedVirtualUTXOKeys: %v", err)
 	}
+	defer release()
 	if len(ordered) != len(outpoints) {
 		t.Fatalf("got %d keys for %d outpoints", len(ordered), len(outpoints))
 	}
@@ -319,10 +321,11 @@ func TestUTXOsByOrderedKeysReusesAMatchingEntry(t *testing.T) {
 			stageAndCommitUTXOs(t, dbManager, store, toAdd, map[externalapi.DomainOutpoint]externalapi.UTXOEntry{})
 			store.virtualUTXOSetCache.Clear()
 
-			ordered, err := store.PrepareOrderedVirtualUTXOKeys(outpoints)
+			ordered, release, err := store.PrepareOrderedVirtualUTXOKeys(outpoints)
 			if err != nil {
 				t.Fatalf("PrepareOrderedVirtualUTXOKeys: %v", err)
 			}
+			defer release()
 			middle := -1
 			for i, item := range ordered {
 				if i > 0 && i < len(ordered)-1 {
