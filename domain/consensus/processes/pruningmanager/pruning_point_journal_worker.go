@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/datastructures/pruningstore"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	rawdb "github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 // ConfigureJournalWorker runs before any background goroutine. The on-disk marker
@@ -64,7 +65,21 @@ func ConfigureJournalWorker(manager model.PruningManager, prefix model.DBBucket,
 		return fmt.Errorf("pruning journal: durable journal admission unavailable")
 	}
 	if err := admission.CheckPruningJournalAdmission(); err != nil {
-		return err
+		if !errors.Is(err, rawdb.ErrJournalRequiresWAL) {
+			return err
+		}
+		if state != nil {
+			// Journal phases need synced commits, so unfinished journal work cannot continue
+			// or be removed without the WAL.
+			return fmt.Errorf("%w: unfinished pruning point UTXO journal work (phase %s, index %d) needs it to "+
+				"finish; restart without HTND_PEBBLE_DISABLE_WAL and HTND_TEST_MODE", err, state.Phase, state.TargetIndex)
+		}
+		// Nothing journal-owned is in flight: the synchronous path used by nodes without the
+		// journal serves this run, including any legacy pending update.
+		pm.journalRequested = false
+		log.Warnf("Pruning point UTXO journal not enabled because the database write-ahead log is disabled; " +
+			"the synchronous update path is kept")
+		return nil
 	}
 	// Declared disk policy, checked before any journal or legacy-recovery write.
 	// Without in-flight work a refusal keeps (or normalizes back to) the synchronous
