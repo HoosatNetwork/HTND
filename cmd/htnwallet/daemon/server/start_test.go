@@ -62,10 +62,12 @@ const startTestChildEnv = "HTNWALLET_START_TEST_CHILD"
 // DAG info. Start used to return nil there, so start-daemon exited with success without serving or saying why.
 func TestStartReturnsDAGInfoError(t *testing.T) {
 	// Start sets up process-wide state that can be set up only once (the log backend), so the scenario runs in a
-	// child process of its own.
-	if os.Getenv(startTestChildEnv) != "1" {
+	// child process of its own. The child keeps its log files and the keys lock file open until it exits, and
+	// Windows cannot delete open files, so the parent owns the directory and removes it after the child is gone.
+	dir := os.Getenv(startTestChildEnv)
+	if dir == "" {
 		child := exec.Command(os.Args[0], "-test.run=^TestStartReturnsDAGInfoError$", "-test.count=1", "-test.v")
-		child.Env = append(os.Environ(), startTestChildEnv+"=1")
+		child.Env = append(os.Environ(), startTestChildEnv+"="+t.TempDir())
 		output, err := child.CombinedOutput()
 		if err != nil {
 			t.Fatalf("the Start scenario failed: %v\n%s", err, output)
@@ -73,9 +75,8 @@ func TestStartReturnsDAGInfoError(t *testing.T) {
 		return
 	}
 
-	logDir := t.TempDir()
 	savedLogFile, savedErrLogFile := defaultLogFile, defaultErrLogFile
-	defaultLogFile, defaultErrLogFile = filepath.Join(logDir, "daemon.log"), filepath.Join(logDir, "daemon_err.log")
+	defaultLogFile, defaultErrLogFile = filepath.Join(dir, "daemon.log"), filepath.Join(dir, "daemon_err.log")
 	t.Cleanup(func() { defaultLogFile, defaultErrLogFile = savedLogFile, savedErrLogFile })
 
 	nodeListener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -97,7 +98,7 @@ func TestStartReturnsDAGInfoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileFromMnemonic: %+v", err)
 	}
-	keysFilePath := filepath.Join(t.TempDir(), "keys.json")
+	keysFilePath := filepath.Join(dir, "keys.json")
 	if err := keysFile.SetPath(params, keysFilePath, true); err != nil {
 		t.Fatalf("SetPath: %+v", err)
 	}
