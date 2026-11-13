@@ -20,10 +20,13 @@ func utxoCollectionToDBUTXOCollection(utxoCollection externalapi.UTXOCollection,
 			return nil, buffer, err
 		}
 
-		items = append(items, &DbUtxoCollectionItem{
+		item := &DbUtxoCollectionItem{
 			Outpoint:  DomainOutpointToDbOutpoint(outpoint),
 			UtxoEntry: UTXOEntryToDBUTXOEntry(entry),
-		})
+		}
+		// items is off-heap: the item needs a reference the collector can see.
+		buffer.Retain(item)
+		items = append(items, item)
 	}
 
 	return items, buffer, nil

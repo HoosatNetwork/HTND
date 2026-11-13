@@ -112,7 +112,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		// what they are. Handing out a coin consensus does not hold gives the wallet a transaction every
 		// node will refuse.
 		utxoOutpointEntryPairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(
-			context.Domain.Consensus(), utxoOutpointEntryPairs, indexVirtualParents)
+			context.Domain.Consensus(), utxoOutpointEntryPairs, indexVirtualParents, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return nil, err

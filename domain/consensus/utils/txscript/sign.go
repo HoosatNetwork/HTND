@@ -86,7 +86,9 @@ func SignatureScriptMLDSA44(tx *externalapi.DomainTransaction, idx int, hashType
 	}
 	publicKey := privKey.Public().(*mldsa44.PublicKey)
 
-	return NewScriptBuilder().AddFullData(sig).AddFullData(publicKey.Bytes()).Script()
+	pkBytes := publicKey.Bytes()
+	return NewScriptBuilderWithCapacity(canonicalDataSize(sig) + canonicalDataSize(pkBytes)).
+		AddFullData(sig).AddFullData(pkBytes).Script()
 }
 
 // SignatureScript creates an input signature script for tx to spend HTN sent
@@ -105,7 +107,7 @@ func SignatureScript(tx *externalapi.DomainTransaction, idx int, hashType consen
 		return nil, err
 	}
 
-	return NewScriptBuilder().AddData(sig).Script()
+	return NewScriptBuilderWithCapacity(canonicalDataSize(sig)).AddData(sig).Script()
 }
 
 // SignatureScriptPubKeyHash creates an input signature script for tx to spend HTN sent
@@ -128,7 +130,8 @@ func SignatureScriptPubKeyHash(tx *externalapi.DomainTransaction, idx int, hashT
 		return nil, err
 	}
 
-	return NewScriptBuilder().AddData(sig).AddData(publicKeySerialized[:]).Script()
+	return NewScriptBuilderWithCapacity(canonicalDataSize(sig) + canonicalDataSize(publicKeySerialized[:])).
+		AddData(sig).AddData(publicKeySerialized[:]).Script()
 }
 
 // SignatureScriptECDSA creates an input signature script for tx to spend HTN sent
@@ -147,7 +150,7 @@ func SignatureScriptECDSA(tx *externalapi.DomainTransaction, idx int, hashType c
 		return nil, err
 	}
 
-	return NewScriptBuilder().AddData(sig).Script()
+	return NewScriptBuilderWithCapacity(canonicalDataSize(sig)).AddData(sig).Script()
 }
 
 func sign(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction, idx int,
@@ -244,7 +247,7 @@ func mergeScripts(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction
 		}
 
 		// Reappend the script and return the result.
-		builder := NewScriptBuilder()
+		builder := NewScriptBuilderWithCapacity(len(mergedScript) + canonicalDataSize(script))
 		builder.AddOps(mergedScript)
 		builder.AddData(script)
 		return builder.Script()
@@ -322,7 +325,7 @@ func SignTxOutput(dagParams *dagconfig.Params, tx *externalapi.DomainTransaction
 		}
 
 		// Append the p2sh script as the last push in the script.
-		builder := NewScriptBuilder()
+		builder := NewScriptBuilderWithCapacity(len(realSigScript) + canonicalDataSize(sigScript))
 		builder.AddOps(realSigScript)
 		builder.AddData(sigScript)
 

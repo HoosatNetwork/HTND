@@ -210,7 +210,7 @@ func walletAddressUTXOs(context *rpccontext.Context, address util.Address, hexBu
 		return nil, false, nil
 	}
 
-	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents)
+	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents, buffer)
 	if err != nil {
 		return nil, false, err
 	}

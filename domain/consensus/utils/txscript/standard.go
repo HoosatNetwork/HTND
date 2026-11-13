@@ -467,7 +467,7 @@ func CalcScriptInfo(sigScript, scriptPubKey []byte, isP2SH bool) (*ScriptInfo, e
 // payToPubKeyScript creates a new script to pay a transaction
 // output to a 32-byte pubkey.
 func payToPubKeyScript(pubKey []byte) ([]byte, error) {
-	return NewScriptBuilder().
+	return NewScriptBuilderWithCapacity(canonicalDataSize(pubKey) + 1).
 		AddData(pubKey).
 		AddOp(OpCheckSig).
 		Script()
@@ -476,7 +476,7 @@ func payToPubKeyScript(pubKey []byte) ([]byte, error) {
 // payToPubKeyScript creates a new script to pay a transaction
 // output to a 33-byte pubkey.
 func payToPubKeyScriptECDSA(pubKey []byte) ([]byte, error) {
-	return NewScriptBuilder().
+	return NewScriptBuilderWithCapacity(canonicalDataSize(pubKey) + 1).
 		AddData(pubKey).
 		AddOp(OpCheckSigECDSA).
 		Script()
@@ -485,7 +485,7 @@ func payToPubKeyScriptECDSA(pubKey []byte) ([]byte, error) {
 // payToPubKeyHashScript creates a new script to pay a transaction output to a
 // 32-byte pubkey hash.
 func payToPubKeyHashScript(pubKeyHash []byte) ([]byte, error) {
-	return NewScriptBuilder().
+	return NewScriptBuilderWithCapacity(4 + canonicalDataSize(pubKeyHash)).
 		AddOp(OpDup).
 		AddOp(OpBlake2b).
 		AddData(pubKeyHash).
@@ -497,7 +497,7 @@ func payToPubKeyHashScript(pubKeyHash []byte) ([]byte, error) {
 // payToPubKeyHashScriptECDSA creates a new script to pay a transaction output to a
 // 32-byte pubkey hash, spending via ECDSA.
 func payToPubKeyHashScriptECDSA(pubKeyHash []byte) ([]byte, error) {
-	return NewScriptBuilder().
+	return NewScriptBuilderWithCapacity(4 + canonicalDataSize(pubKeyHash)).
 		AddOp(OpDup).
 		AddOp(OpBlake2b).
 		AddData(pubKeyHash).
@@ -509,7 +509,7 @@ func payToPubKeyHashScriptECDSA(pubKeyHash []byte) ([]byte, error) {
 // payToPubKeyHashScriptMLDSA44 creates a new script to pay a transaction output to a
 // 32-byte pubkey hash, spending via ML-DSA-44.
 func payToPubKeyHashScriptMLDSA44(pubKeyHash []byte) ([]byte, error) {
-	return NewScriptBuilder().
+	return NewScriptBuilderWithCapacity(4 + canonicalDataSize(pubKeyHash)).
 		AddOp(OpDup).
 		AddOp(OpBlake2b).
 		AddData(pubKeyHash).
@@ -521,7 +521,7 @@ func payToPubKeyHashScriptMLDSA44(pubKeyHash []byte) ([]byte, error) {
 // payToScriptHashScript creates a new script to pay a transaction output to a
 // script hash. It is expected that the input is a valid hash.
 func payToScriptHashScript(scriptHash []byte) ([]byte, error) {
-	return NewScriptBuilder().AddOp(OpBlake2b).AddData(scriptHash).
+	return NewScriptBuilderWithCapacity(2 + canonicalDataSize(scriptHash)).AddOp(OpBlake2b).AddData(scriptHash).
 		AddOp(OpEqual).Script()
 }
 
@@ -628,7 +628,7 @@ func PayToAddrScript(addr util.Address) (*externalapi.ScriptPublicKey, error) {
 // PayToScriptHashScript takes a script and returns an equivalent pay-to-script-hash script
 func PayToScriptHashScript(redeemScript []byte) ([]byte, error) {
 	redeemScriptHash := util.HashBlake2b(redeemScript)
-	script, err := NewScriptBuilder().
+	script, err := NewScriptBuilderWithCapacity(2 + canonicalDataSize(redeemScriptHash)).
 		AddOp(OpBlake2b).AddData(redeemScriptHash).
 		AddOp(OpEqual).Script()
 	if err != nil {
@@ -639,7 +639,7 @@ func PayToScriptHashScript(redeemScript []byte) ([]byte, error) {
 
 // PayToScriptHashSignatureScript generates a signature script that fits a pay-to-script-hash script
 func PayToScriptHashSignatureScript(redeemScript []byte, signature []byte) ([]byte, error) {
-	redeemScriptAsData, err := NewScriptBuilder().AddData(redeemScript).Script()
+	redeemScriptAsData, err := NewScriptBuilderWithCapacity(canonicalDataSize(redeemScript)).AddData(redeemScript).Script()
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +660,12 @@ func PayToMultiSigScript(pubKeys [][]byte, requiredSigs int, ecdsa bool) ([]byte
 		return nil, errors.New("at least one public key is required")
 	}
 
-	builder := NewScriptBuilder()
+	// Two small-integer opcodes, the checkmulti opcode, and the key pushes.
+	scriptSize := 3
+	for _, pubKey := range pubKeys {
+		scriptSize += canonicalDataSize(pubKey)
+	}
+	builder := NewScriptBuilderWithCapacity(scriptSize)
 	builder.AddInt64(int64(requiredSigs))
 
 	for _, pubKey := range pubKeys {
@@ -683,7 +688,7 @@ func PayToMultiSigScript(pubKeys [][]byte, requiredSigs int, ecdsa bool) ([]byte
 // OP_DUP OP_BLAKE2B <multisig-script-hash> OP_EQUALVERIFY OP_CHECKSIG
 // However, this is unconventional and may not work for all multisig cases.
 func payToMultiSigPKHScript(scriptHash []byte) ([]byte, error) {
-	return NewScriptBuilder().
+	return NewScriptBuilderWithCapacity(4 + canonicalDataSize(scriptHash)).
 		AddOp(OpDup).
 		AddOp(OpBlake2b).
 		AddData(scriptHash).

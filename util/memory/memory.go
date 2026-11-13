@@ -8,11 +8,57 @@ import (
 	"unsafe"
 )
 
+// Block is n elements of T in mmap'ed memory the garbage collector neither manages nor scans.
+//
+// That last part is the catch for element types that hold Go pointers (pointers, interfaces,
+// slices, strings, maps). A pointer stored in the block is invisible to the collector, so if the
+// block holds the only reference to a Go heap object, the collector frees that object while the
+// block still points at it. Copying the stale pointer back out later crashes the process with
+// "found bad pointer in Go heap", or silently reads another object's memory.
+//
+// Whoever stores a Go heap pointer in a block must therefore also hand it to Retain, which keeps
+// the object alive until the block is freed. Pointers to memory that is not Go heap (another
+// block, for instance) need nothing.
 type Block[T any] struct {
 	mem []byte         // keep the original mmap'ed slice
 	ptr unsafe.Pointer // derived pointer — only valid while mem exists
 	len int            // number of T elements
 	id  uint64
+
+	// retained holds, where the collector can see them, the Go heap objects this block's elements
+	// point at. See Retain.
+	retained *retainChunk
+}
+
+// retainChunkLen makes a retainChunk exactly 8 KiB: small fixed-size allocations instead of one
+// slice that doubles, so retaining never copies and never asks the heap for a huge object.
+const retainChunkLen = 511
+
+type retainChunk struct {
+	next *retainChunk
+	n    int
+	refs [retainChunkLen]any
+}
+
+// Retain keeps the Go heap object v refers to alive until b is freed. Call it for every Go heap
+// pointer written into b's elements, before the last ordinary reference to the object goes away -
+// in practice, right before the write. v is the pointer itself, or the interface value holding it.
+//
+// It costs 16 bytes of Go heap per call and nothing for blocks that never call it, which is why
+// retention is explicit instead of moving every pointer-holding block onto the Go heap.
+//
+// A nil or freed block retains nothing: there is no off-heap memory for v to be hidden in.
+func (b *Block[T]) Retain(v any) {
+	if b == nil || b.mem == nil || v == nil {
+		return
+	}
+	chunk := b.retained
+	if chunk == nil || chunk.n == retainChunkLen {
+		chunk = &retainChunk{next: b.retained}
+		b.retained = chunk
+	}
+	chunk.refs[chunk.n] = v
+	chunk.n++
 }
 
 type allocationInfo struct {
@@ -94,6 +140,8 @@ func Realloc[T any](b *Block[T], n int) *Block[T] {
 	newBlock := Malloc[T](n)
 	copyLen := min(b.len, n)
 	copy(newBlock.Slice()[:copyLen], b.Slice()[:copyLen])
+	// The copied elements still point at whatever b retained for them.
+	newBlock.retained = b.retained
 	log.Debugf("Realloc old_id=%d new_id=%d type=%T old_len=%d new_len=%d old_ptr=%p new_ptr=%p", b.id, newBlock.id, *new(T), b.len, n, b.ptr, newBlock.ptr)
 	Free(b)
 
@@ -118,7 +166,7 @@ func Free[T any](b *Block[T]) {
 	}
 	unregisterAllocation(id)
 	log.Debugf("Free id=%d type=%s len=%d bytes=%d ptr=%p", id, typeName, length, byteSize, ptr)
-	*b = Block[T]{} // zero out to prevent use-after-free
+	*b = Block[T]{} // zero out to prevent use-after-free; this also lets go of everything retained
 }
 
 func LogLeaks() int {

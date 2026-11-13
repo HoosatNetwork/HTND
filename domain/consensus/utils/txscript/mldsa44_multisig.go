@@ -42,7 +42,9 @@ func MultiSigMLDSA44RedeemScript(publicKeyHashes [][]byte, requiredSignatures in
 			MaxMLDSA44MultiSigSignatures, requiredSignatures, keyCount)
 	}
 
-	builder := NewScriptBuilder()
+	// Nine opcodes per key plus its hash push, then the sum and the threshold check.
+	// This is only a hint: the threshold push may be larger than one byte.
+	builder := NewScriptBuilderWithCapacity(len(publicKeyHashes)*(9+1+blake2b.Size256) + 2*keyCount + 4)
 	for i, publicKeyHash := range publicKeyHashes {
 		if len(publicKeyHash) != blake2b.Size256 {
 			return nil, errors.Errorf("public key hash #%d is %d bytes, expected %d", i, len(publicKeyHash), blake2b.Size256)
@@ -142,7 +144,15 @@ func MultiSigMLDSA44SignatureScript(redeemScript []byte, signatures [][]byte, pu
 	}
 
 	// The first key's items must end up on top of the stack, so push the keys in reverse.
-	builder := NewScriptBuilder()
+	scriptSize := canonicalDataSize(redeemScript)
+	for i := range signatures {
+		if signatures[i] == nil {
+			scriptSize++
+		} else {
+			scriptSize += canonicalDataSize(signatures[i]) + canonicalDataSize(publicKeys[i]) + 1
+		}
+	}
+	builder := NewScriptBuilderWithCapacity(scriptSize)
 	for i := len(publicKeyHashes) - 1; i >= 0; i-- {
 		if signatures[i] == nil {
 			builder.AddOp(Op0)

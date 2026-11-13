@@ -98,7 +98,7 @@ func getBalanceByAddress(context *rpccontext.Context, addressString string) (uin
 	}
 	defer memory.Free(buffer)
 
-	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents)
+	pairs, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(context.Domain.Consensus(), pairs, indexVirtualParents, buffer)
 	if err != nil {
 		return 0, err
 	}

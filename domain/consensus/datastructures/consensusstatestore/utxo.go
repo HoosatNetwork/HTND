@@ -175,6 +175,7 @@ func (css *consensusStateStore) UTXOsByOrderedKeysWithoutPopulatingCache(dbConte
 
 	var encoder utxoEntryEncoder
 	for _, miss := range misses {
+		// log.Infof("Seeking from key %s", miss.Key)
 		err := cursor.SeekFullKey(miss.Key)
 		if database.IsNotFoundError(err) {
 			// Nothing remains at or after this key. Later keys are greater, so they are absent too,

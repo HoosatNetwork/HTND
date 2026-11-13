@@ -50,7 +50,7 @@ func TestBalanceCountsOnlyCoinsConsensusHolds(t *testing.T) {
 		t.Fatalf("the fixture should add up to 1299 unfiltered, got %d", indexOnly)
 	}
 
-	kept, withheld, _, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, fromIndex, nil)
+	kept, withheld, _, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, fromIndex, nil, nil)
 	if err != nil {
 		t.Fatalf("FilterUTXOPairsAgainstVirtual: %+v", err)
 	}

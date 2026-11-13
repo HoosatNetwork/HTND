@@ -13,6 +13,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
+	"github.com/HoosatNetwork/HTND/v2/util/memory"
 )
 
 // virtualUTXOSource is the part of consensus this file needs: what virtual's UTXO set holds.
@@ -59,8 +60,12 @@ const virtualCheckMaxLockWait = 2 * time.Second
 // true only when coins were withheld and indexVirtualParents - those of the last change the index
 // applied, read together with pairs - equal virtual's parents during the lookup, so both described the
 // same virtual state.
+//
+// kept reuses pairs' memory. buffer is the off-heap block pairs lives in, or nil when pairs is an
+// ordinary Go slice: the entries consensus hands back are written into it, and the block has to
+// retain them because the garbage collector cannot see them there.
 func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.UTXOPair,
-	indexVirtualParents []*externalapi.DomainHash,
+	indexVirtualParents []*externalapi.DomainHash, buffer *memory.Block[utxoindex.UTXOPair],
 ) (kept []utxoindex.UTXOPair, withheld int, drifted bool, err error) {
 	if len(pairs) == 0 {
 		return pairs, 0, false, nil
@@ -97,6 +102,10 @@ func FilterUTXOPairsAgainstVirtual(source virtualUTXOSource, pairs []utxoindex.U
 			continue
 		}
 		pair := pairs[i]
+		if entry != pair.Entry {
+			// Not the entry the index read, which the block already retains.
+			buffer.Retain(entry)
+		}
 		pair.Entry = entry
 		kept = append(kept, pair)
 	}

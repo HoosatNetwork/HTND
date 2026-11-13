@@ -1,7 +1,10 @@
 package memory
 
 import (
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestMallocAndFree(t *testing.T) {
@@ -157,5 +160,69 @@ func TestLogLeaksTracksOutstandingAllocations(t *testing.T) {
 
 	if count := LogLeaks(); count != 0 {
 		t.Fatalf("Expected LogLeaks to report 0 outstanding allocations after Free, got %d", count)
+	}
+}
+
+type retainedObject struct{ value [64]byte }
+
+// A block is not scanned by the garbage collector, so an object referenced only from a block is
+// collected under it unless the block retains it. This pins both halves: a retained object
+// survives collections for as long as the block lives, and Free lets it go.
+func TestRetainKeepsObjectsAliveUntilFree(t *testing.T) {
+	const count = 2000 // several retain chunks
+
+	var finalized atomic.Int64
+	// Starts too small, so Realloc has to carry what was retained over to the new block.
+	b := fillRetained(Malloc[*retainedObject](1), count, &finalized)
+
+	for range 3 {
+		runtime.GC()
+	}
+	if got := finalized.Load(); got != 0 {
+		t.Fatalf("%d of %d retained objects were collected while the block was alive", got, count)
+	}
+	for i, object := range b.Slice() {
+		if object.value[0] != byte(i) {
+			t.Fatalf("object %d reads %d, want %d", i, object.value[0], byte(i))
+		}
+	}
+
+	Free(b)
+	deadline := time.Now().Add(10 * time.Second)
+	for finalized.Load() != count && time.Now().Before(deadline) {
+		runtime.GC()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := finalized.Load(); got != count {
+		t.Fatalf("%d of %d objects were collected after Free; the block still holds the rest", got, count)
+	}
+}
+
+// fillRetained is its own function so no object stays referenced from the test's stack frame.
+//
+//go:noinline
+func fillRetained(b *Block[*retainedObject], count int, finalized *atomic.Int64) *Block[*retainedObject] {
+	b.Retain(&retainedObject{}) // retained before the block grows
+	b = Realloc(b, count)
+	s := b.Slice()
+	for i := range s {
+		object := &retainedObject{}
+		object.value[0] = byte(i)
+		runtime.SetFinalizer(object, func(*retainedObject) { finalized.Add(1) })
+		b.Retain(object)
+		s[i] = object
+	}
+	return b
+}
+
+func TestRetainOnNilOrFreedBlockIsANoOp(t *testing.T) {
+	var nilBlock *Block[*int]
+	nilBlock.Retain(new(int))
+
+	b := Malloc[*int](1)
+	Free(b)
+	b.Retain(new(int))
+	if b.retained != nil {
+		t.Fatal("a freed block retained an object")
 	}
 }

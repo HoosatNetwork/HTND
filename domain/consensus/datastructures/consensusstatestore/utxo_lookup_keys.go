@@ -121,6 +121,10 @@ func (css *consensusStateStore) cursorUpper(lastKey []byte) []byte {
 // ordered may sit in unscanned memory although each Key is a pointer, because every Key
 // points into the slab, which is not Go heap either: the collector has nothing to keep
 // alive there. That holds only while the slab never grows, see its sizing below.
+//
+// Handing a Key to a pebble cursor is safe: pebble copies bounds into its own buffers,
+// and zeroes the iterator state it pools on Close, so nothing of pebble's keeps pointing
+// at the slab once the cursor is closed.
 func (css *consensusStateStore) PrepareOrderedVirtualUTXOKeys(
 	outpoints []*externalapi.DomainOutpoint,
 ) (ordered []model.OrderedVirtualUTXOKey, release func(), err error) {
@@ -137,12 +141,9 @@ func (css *consensusStateStore) PrepareOrderedVirtualUTXOKeys(
 		memory.Free(orderedBlock)
 		memory.Free(slabBlock)
 	}
-	endsBlock := memory.Malloc[int](len(outpoints))
-	defer memory.Free(endsBlock)
 
 	ordered = orderedBlock.Slice()
 	slab := slabBlock.Slice()[:0]
-	ends := endsBlock.Slice()
 	var encoder outpointKeyEncoder
 	for i, outpoint := range outpoints {
 		slab, err = encoder.append(slab, css.utxoSetKeyPrefix, outpoint)
@@ -150,17 +151,20 @@ func (css *consensusStateStore) PrepareOrderedVirtualUTXOKeys(
 			release()
 			return nil, func() {}, err
 		}
-		ends[i] = len(slab)
+		// Index holds where key i ends until the keys are sliced below, which saves a
+		// third block just for the offsets.
+		ordered[i].Index = len(slab)
 	}
 	if cap(slab) != len(slabBlock.Slice()) {
 		release()
 		return nil, func() {}, errors.Errorf("virtual UTXO key slab outgrew its %d bytes", len(slabBlock.Slice()))
 	}
 	start := 0
-	for i := range outpoints {
+	for i := range ordered {
+		end := ordered[i].Index
 		ordered[i].Index = i
-		ordered[i].Key = slab[start:ends[i]]
-		start = ends[i]
+		ordered[i].Key = slab[start:end]
+		start = end
 	}
 	slices.SortFunc(ordered, func(a, b model.OrderedVirtualUTXOKey) int {
 		return bytes.Compare(a.Key, b.Key)

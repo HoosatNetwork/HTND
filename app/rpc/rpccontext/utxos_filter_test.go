@@ -64,7 +64,7 @@ func TestFilterUTXOPairsAgainstVirtual(t *testing.T) {
 		{Outpoint: drifted, Entry: utxo.NewUTXOEntry(300, script, false, 700)},
 	}
 
-	kept, withheld, _, err := FilterUTXOPairsAgainstVirtual(source, pairs, nil)
+	kept, withheld, _, err := FilterUTXOPairsAgainstVirtual(source, pairs, nil, nil)
 	if err != nil {
 		t.Fatalf("FilterUTXOPairsAgainstVirtual: %+v", err)
 	}
@@ -87,17 +87,17 @@ func TestFilterUTXOPairsAgainstVirtualEdgeCases(t *testing.T) {
 	script := &externalapi.ScriptPublicKey{Script: []byte{0x51}, Version: 0}
 	pairs := []utxoindex.UTXOPair{{Outpoint: testOutpoint(1), Entry: utxo.NewUTXOEntry(100, script, false, 500)}}
 
-	if kept, withheld, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{}, nil, nil); err != nil || len(kept) != 0 || withheld != 0 {
+	if kept, withheld, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{}, nil, nil, nil); err != nil || len(kept) != 0 || withheld != 0 {
 		t.Errorf("no coins in, no coins out: got %v, %d, %v", kept, withheld, err)
 	}
-	if _, _, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{err: errors.New("boom")}, pairs, nil); err == nil {
+	if _, _, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{err: errors.New("boom")}, pairs, nil, nil); err == nil {
 		t.Error("a consensus failure must be reported, not treated as 'the coin does not exist'")
 	}
-	if _, _, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{answerCount: 0, held: nil}, pairs, nil); err != nil {
+	if _, _, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{answerCount: 0, held: nil}, pairs, nil, nil); err != nil {
 		t.Errorf("unexpected error: %+v", err)
 	}
 	short := &virtualHolding{answerCount: 1}
-	if _, _, _, err := FilterUTXOPairsAgainstVirtual(short, append(pairs, utxoindex.UTXOPair{Outpoint: testOutpoint(2), Entry: pairs[0].Entry}), nil); err == nil {
+	if _, _, _, err := FilterUTXOPairsAgainstVirtual(short, append(pairs, utxoindex.UTXOPair{Outpoint: testOutpoint(2), Entry: pairs[0].Entry}), nil, nil); err == nil {
 		t.Error("an answer that does not cover every outpoint must be an error, not a silent withholding")
 	}
 }
@@ -114,7 +114,7 @@ func TestFilterUTXOPairsAgainstVirtualServesIndexWhenConsensusIsBusy(t *testing.
 	}
 
 	// It holds nothing: had the check run, both coins would have been withheld.
-	kept, withheld, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{busy: true}, pairs, nil)
+	kept, withheld, _, err := FilterUTXOPairsAgainstVirtual(&virtualHolding{busy: true}, pairs, nil, nil)
 	if err != nil {
 		t.Fatalf("a busy consensus is not an error: %+v", err)
 	}
@@ -157,7 +157,7 @@ func TestFilterUTXOPairsAgainstVirtualReportsDriftOnlyWhenInStep(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			source := &virtualHolding{parents: test.virtualParents}
-			kept, withheld, drifted, err := FilterUTXOPairsAgainstVirtual(source, onlyGone(), test.indexParents)
+			kept, withheld, drifted, err := FilterUTXOPairsAgainstVirtual(source, onlyGone(), test.indexParents, nil)
 			if err != nil {
 				t.Fatalf("FilterUTXOPairsAgainstVirtual: %+v", err)
 			}
@@ -177,7 +177,7 @@ func TestFilterUTXOPairsAgainstVirtualReportsDriftOnlyWhenInStep(t *testing.T) {
 		parents: []*externalapi.DomainHash{newTip},
 	}
 	pairs := []utxoindex.UTXOPair{{Outpoint: held, Entry: utxo.NewUTXOEntry(100, script, false, 500)}}
-	if _, _, drifted, err := FilterUTXOPairsAgainstVirtual(source, pairs, []*externalapi.DomainHash{newTip}); err != nil || drifted {
+	if _, _, drifted, err := FilterUTXOPairsAgainstVirtual(source, pairs, []*externalapi.DomainHash{newTip}, nil); err != nil || drifted {
 		t.Fatalf("nothing withheld is never drift: drifted=%t err=%+v", drifted, err)
 	}
 }

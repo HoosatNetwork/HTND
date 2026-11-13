@@ -8,6 +8,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/binaryserialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/memory"
@@ -544,7 +545,11 @@ func (uis *utxoIndexStore) isAnythingStaged() bool {
 	return len(uis.toAdd) > 0 || len(uis.toRemove) > 0
 }
 
-// UTXOPair is a struct for streaming UTXO results efficiently
+// UTXOPair is a struct for streaming UTXO results efficiently.
+//
+// Entry is a Go pointer. When a UTXOPair is written into a memory.Block, the entry must also be
+// kept alive through that block's Retain - directly, or through the utxo.EntryBatch it came from -
+// or the garbage collector frees it under the block.
 type UTXOPair struct {
 	Outpoint externalapi.DomainOutpoint
 	Entry    externalapi.UTXOEntry
@@ -583,6 +588,9 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		buffer = memory.Realloc(buffer, count)
 	}
 	slice = buffer.Slice()[:0]
+	// slice is off-heap, so the entries need references the collector can see. The batch hands the
+	// block one per chunk of entries, rather than the block holding one per entry.
+	decoder := newBatchEntryDecoder(utxo.NewEntryBatch(scriptPublicKey, count, buffer.Retain))
 
 	iterator = uint32(0) // reset iterator to reuse for filling buffer
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -599,7 +607,7 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 			if err != nil {
 				return nil, buffer, err
 			}
-			utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+			utxoEntry, err := decoder.decode(serializedUTXOEntry)
 			if err != nil {
 				return nil, buffer, err
 			}
@@ -672,6 +680,9 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		buffer = memory.Realloc(buffer, count) // reallocate if existing capacity is insufficient
 	}
 	slice = buffer.Slice()[:0]
+	// slice is off-heap, so the entries need references the collector can see. The batch hands the
+	// block one per chunk of entries, rather than the block holding one per entry.
+	decoder := newBatchEntryDecoder(utxo.NewEntryBatch(scriptPublicKey, count, buffer.Retain))
 
 	// Second pass: fill
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -687,7 +698,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		if err != nil {
 			return nil, buffer, err
 		}
-		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		utxoEntry, err := decoder.decode(serializedUTXOEntry)
 		if err != nil {
 			return nil, buffer, err
 		}

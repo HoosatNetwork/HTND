@@ -35,17 +35,12 @@ type usableAddressCacheEntry struct {
 }
 
 func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (bool, error) {
-	address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
-	if err != nil {
-		return false, appmessage.RPCErrorf("Couldn't decode address '%s': %s", addressString, err)
-	}
-
-	scriptPublicKey, err := txscript.PayToAddrScript(address)
-	if err != nil {
-		return false, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
-	}
 	// Cache the result for a short time to avoid repeated DB lookups.
 	// NOTE: We intentionally do not cache syncing errors (ErrUTXOIndexSyncing).
+	//
+	// The lookup comes before decoding: only addresses that decoded successfully are ever
+	// inserted, so a hit needs neither the decode nor the script, and an invalid address
+	// always misses and reaches the decode error below.
 	now := time.Now()
 	usableAddressesCacheMutex.Lock()
 	if entry, ok := usableAddressesCache[addressString]; ok {
@@ -55,6 +50,16 @@ func getUsabilityOfAddress(context *rpccontext.Context, addressString string) (b
 		}
 	}
 	usableAddressesCacheMutex.Unlock()
+
+	address, err := util.DecodeAddress(addressString, context.Config.ActiveNetParams.Prefix)
+	if err != nil {
+		return false, appmessage.RPCErrorf("Couldn't decode address '%s': %s", addressString, err)
+	}
+
+	scriptPublicKey, err := txscript.PayToAddrScript(address)
+	if err != nil {
+		return false, appmessage.RPCErrorf("Could not create a scriptPublicKey for address '%s': %s", addressString, err)
+	}
 
 	hasUTXOs, err := holdsSpendableCoin(context.UTXOIndex, context.Domain.Consensus(), scriptPublicKey, addressString)
 	if err != nil {
@@ -124,7 +129,7 @@ func holdsSpendableCoin(index addressUTXOLister, consensus virtualUTXOChecker,
 			return false, err
 		}
 		read := len(pairs)
-		kept, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, pairs, indexVirtualParents)
+		kept, withheld, drifted, err := rpccontext.FilterUTXOPairsAgainstVirtual(consensus, pairs, indexVirtualParents, buffer)
 		memory.Free(buffer)
 		if err != nil {
 			return false, err

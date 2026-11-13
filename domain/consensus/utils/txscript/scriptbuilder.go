@@ -156,16 +156,11 @@ func (b *ScriptBuilder) addData(data []byte) *ScriptBuilder {
 	case dataLen <= 0xff:
 		b.script = append(b.script, OpPushData1, byte(dataLen))
 	case dataLen <= 0xffff:
-		buf := make([]byte, 2)
-		binary.LittleEndian.PutUint16(buf, uint16(dataLen))
 		b.script = append(b.script, OpPushData2)
-		b.script = append(b.script, buf...)
+		b.script = binary.LittleEndian.AppendUint16(b.script, uint16(dataLen))
 	default:
-		buf := make([]byte, 4)
-		dataLenUint32 := uint32(dataLen)
-		binary.LittleEndian.PutUint32(buf, dataLenUint32)
 		b.script = append(b.script, OpPushData4)
-		b.script = append(b.script, buf...)
+		b.script = binary.LittleEndian.AppendUint32(b.script, uint32(dataLen))
 	}
 
 	// Append the actual data.
@@ -272,8 +267,8 @@ func (b *ScriptBuilder) addLockTimeOrSequence(lockTimeOrSequence uint64) *Script
 	if b.err != nil {
 		return b
 	}
-	lockTimeOrSequenceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(lockTimeOrSequenceBytes, lockTimeOrSequence)
+	var lockTimeOrSequenceBytes [8]byte
+	binary.LittleEndian.PutUint64(lockTimeOrSequenceBytes[:], lockTimeOrSequence)
 	unpaddedSize := 8
 	for unpaddedSize > 0 && lockTimeOrSequenceBytes[unpaddedSize-1] == 0 {
 		unpaddedSize--
@@ -299,7 +294,19 @@ func (b *ScriptBuilder) Script() ([]byte, error) {
 // NewScriptBuilder returns a new instance of a script builder. See
 // ScriptBuilder for details.
 func NewScriptBuilder() *ScriptBuilder {
+	return NewScriptBuilderWithCapacity(defaultScriptAlloc)
+}
+
+// NewScriptBuilderWithCapacity returns a script builder whose buffer starts
+// with the given capacity. The capacity is only a hint: the buffer still grows
+// as needed and every size limit is enforced exactly as for NewScriptBuilder.
+// Passing the exact size of the script avoids pinning a larger buffer than the
+// returned script needs. A negative capacity is treated as zero.
+func NewScriptBuilderWithCapacity(capacity int) *ScriptBuilder {
+	if capacity < 0 {
+		capacity = 0
+	}
 	return &ScriptBuilder{
-		script: make([]byte, 0, defaultScriptAlloc),
+		script: make([]byte, 0, capacity),
 	}
 }

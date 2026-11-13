@@ -3,9 +3,11 @@ package utxoindex
 import (
 	"encoding/binary"
 	"io"
+	"math"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/pkg/errors"
 )
 
@@ -32,14 +34,36 @@ func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
 	return dbUTXOEntry.MarshalVT()
 }
 
-func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
-	dbUTXOEntry := &serialization.DbUtxoEntry{}
-	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
+// batchEntryDecoder decodes the entries of one bulk read into an EntryBatch, without allocating
+// anything per entry beyond the batch's own chunks: the protobuf message is reused, and decoded
+// unsafely, so its script aliases the cursor's value until EntryBatch.New copies or shares it.
+type batchEntryDecoder struct {
+	entry  serialization.DbUtxoEntry
+	script serialization.DbScriptPublicKey
+	batch  *utxo.EntryBatch
+}
+
+func newBatchEntryDecoder(batch *utxo.EntryBatch) *batchEntryDecoder {
+	return &batchEntryDecoder{batch: batch}
+}
+
+// decode returns the entry serializedUTXOEntry holds. The entry does not alias serializedUTXOEntry,
+// so it outlives the cursor's next move.
+func (d *batchEntryDecoder) decode(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
+	// Reset every time: proto3 leaves zero values out of the encoding, so a field the previous
+	// entry set - IsCoinbase, say - would otherwise carry over into this one.
+	d.entry = serialization.DbUtxoEntry{}
+	d.script = serialization.DbScriptPublicKey{}
+	d.entry.ScriptPublicKey = &d.script
+	err := d.entry.UnmarshalVTUnsafe(serializedUTXOEntry)
 	if err != nil {
 		return nil, err
 	}
-	utxoEntry, err := serialization.DBUTXOEntryToUTXOEntry(dbUTXOEntry)
-	return utxoEntry, err
+	if d.script.Version > math.MaxUint16 {
+		return nil, errors.Errorf("script public key version is bigger than uint16")
+	}
+	return d.batch.New(d.entry.Amount, d.script.Script, uint16(d.script.Version), d.entry.IsCoinbase,
+		d.entry.BlockDaaScore), nil
 }
 
 func deserializeUTXOAmount(serializedUTXOEntry []byte) (uint64, error) {
