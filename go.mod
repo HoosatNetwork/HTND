@@ -1,6 +1,6 @@
 module github.com/HoosatNetwork/HTND/v2
 
-go 1.27.3
+go 1.27.4
 godebug multipathtcp=0
 
 require (
