@@ -2,7 +2,6 @@ package pruningmanager
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database"
@@ -56,17 +55,19 @@ func TestPP42WALAdmissionPrecedesJournalInitialization(t *testing.T) {
 	checkNoJournalInitialization(t, raw)
 }
 
+// Without the WAL and without journal work in flight, the node starts on the synchronous
+// path (#105); journal work in flight is refused, since finishing it needs synced commits.
 func checkNoJournalInitialization(t *testing.T, raw rawdb.Database) {
 	t.Helper()
 	db := database.New(raw)
 	prefix := database.MakeBucket([]byte("instance/"))
 	pm := &pruningManager{databaseContext: db, genesisHash: externalapi.NewZeroHash(),
 		pruningStore: pruningstore.New(prefix, 2, false), requestUTXOSetScan: func() {}}
-	if err := ConfigureJournalWorker(pm, prefix, nil, pruningstore.JournalDiskPolicy{}); err == nil || !strings.Contains(err.Error(), "WAL") {
-		t.Fatalf("WAL-disabled initialization accepted: %v", err)
+	if err := ConfigureJournalWorker(pm, prefix, nil, pruningstore.JournalDiskPolicy{}); err != nil {
+		t.Fatalf("WAL-disabled start without journal work refused: %v", err)
 	}
-	if JournalActive(pm) {
-		t.Fatal("journal installed after failed admission")
+	if JournalActive(pm) || pm.journalRequested {
+		t.Fatal("journal enabled without WAL")
 	}
 	j := pruningstore.NewJournal(db, prefix, pm.pruningStore)
 	if state, err := j.Load(); err != nil || state != nil {
@@ -74,5 +75,18 @@ func checkNoJournalInitialization(t *testing.T, raw rawdb.Database) {
 	}
 	if _, err := pm.pruningStore.CurrentPruningPointIndex(db, model.NewStagingArea()); !database.IsNotFoundError(err) {
 		t.Fatalf("admission changed pruning state: %v", err)
+	}
+	marker := []byte(`{"Version":1,"Phase":"complete","BaseIndex":0,"TargetIndex":0}`)
+	if err := db.Put(prefix.Key([]byte("pruning-point-utxo-set-journal-state")), marker); err != nil {
+		t.Fatal(err)
+	}
+	if err := ConfigureJournalWorker(pm, prefix, nil, pruningstore.JournalDiskPolicy{}); !errors.Is(err, rawdb.ErrJournalRequiresWAL) {
+		t.Fatalf("WAL-disabled start with journal work in flight accepted: %v", err)
+	}
+	if JournalActive(pm) {
+		t.Fatal("journal installed after failed admission")
+	}
+	if state, err := j.Load(); err != nil || state == nil || state.Phase != "complete" {
+		t.Fatalf("refused admission changed the marker: %v %v", state, err)
 	}
 }

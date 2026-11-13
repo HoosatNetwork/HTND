@@ -1,8 +1,10 @@
 package pebble
 
 import (
-	"strings"
+	"errors"
 	"testing"
+
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 )
 
 func TestPP42JournalAdmissionRejectsDisabledWALBeforeWrites(t *testing.T) {
@@ -20,7 +22,7 @@ func TestPP42JournalAdmissionRejectsDisabledWALBeforeWrites(t *testing.T) {
 	if err := snapshot.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CheckPruningJournalAdmission(); err == nil || !strings.Contains(err.Error(), "WAL") {
+	if err := db.CheckPruningJournalAdmission(); !errors.Is(err, database.ErrJournalRequiresWAL) {
 		t.Fatalf("WAL-disabled journal admitted: %v", err)
 	}
 }

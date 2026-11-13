@@ -1,6 +1,7 @@
 package pebble
 
 import (
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/cockroachdb/pebble/v2/vfs"
 	"github.com/pkg/errors"
 )
@@ -9,7 +10,7 @@ import (
 // journal initialization can write; the read snapshot itself does not require WAL.
 func (db *DB) CheckPruningJournalAdmission() error {
 	if db.walDisabled {
-		return errors.New("pruning journal: requires WAL enabled")
+		return errors.WithStack(database.ErrJournalRequiresWAL)
 	}
 	return nil
 }
