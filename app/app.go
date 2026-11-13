@@ -98,7 +98,8 @@ func (app *htndApp) main(startedChan chan<- struct{}) (resultErr error) {
 
 	// Show version at startup.
 	log.Infof("Version %s", version.Version())
-	log.Infof("Memory settings: GOMEMLIMIT %s, GOGC %s", EffectiveMemoryLimit(debug.SetMemoryLimit), EffectiveGCPercent())
+	log.Infof("Memory settings: GOMEMLIMIT %s, GOGC %s, MALLOC_ARENA_MAX %s",
+		EffectiveMemoryLimit(debug.SetMemoryLimit), EffectiveGCPercent(), MallocArenaMax())
 
 	// Enable http profiling server if requested.
 	if !app.cfg.PrepareDowngrade && app.cfg.Profile != "" {
