@@ -575,11 +575,7 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 			iterator++
 		}
 	} else {
-		// Size to the coins this page can hold, not to the limit; see UTXOs.
-		count = max(uis.maintainedUTXOCount(scriptPublicKey)-int(offset), 0)
-		if int(limit) < count {
-			count = int(limit)
-		}
+		count = int(limit)
 	}
 
 	slice := buffer.Slice()[:0]
@@ -623,21 +619,6 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 	return slice, buffer, nil
 }
 
-// maintainedUTXOCount returns the per-script coin count that applyUTXOCountDeltas keeps in the same
-// commit as the entries, or 0 when it is missing or unreadable. It only sizes buffers: a wrong count
-// makes the fill append past it or leaves capacity unused, never drops or adds coins.
-func (uis *utxoIndexStore) maintainedUTXOCount(scriptPublicKey *externalapi.ScriptPublicKey) int {
-	countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
-	if err != nil {
-		return 0
-	}
-	count64, err := binaryserialization.DeserializeUint64(countBytes)
-	if err != nil || count64 > math.MaxInt {
-		return 0
-	}
-	return int(count64)
-}
-
 // UTXOs streams UTXOs for a ScriptPublicKey directly into a slice (allocation-efficient)
 func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	if uis.isAnythingStaged() {
@@ -663,11 +644,25 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	// (also full) fill scan doubled this function's cost. Profiled at ~15% of a busy node's total CPU
 	// under ordinary GetBalancesByAddresses/GetUsableAddresses traffic, competing directly with block
 	// processing for the same CPU and GC budget.
-	count := uis.maintainedUTXOCount(scriptPublicKey)
-	// A limit caps how many coins are read; it is not the size of the result. Sizing the buffer to the
-	// limit allocated it in full on every call: with the default response budget that is millions of
-	// entries, hundreds of MB, for an address that holds a handful of coins.
-	if limit > 0 && int(limit) < count {
+	count := 0
+	if limit == 0 {
+		countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
+		if err != nil {
+			if !database.IsNotFoundError(err) {
+				return nil, buffer, err
+			}
+		} else {
+			count64, err := binaryserialization.DeserializeUint64(countBytes)
+			if err != nil {
+				return nil, buffer, err
+			}
+			if count64 > math.MaxInt {
+				return nil, buffer, errors.Errorf("utxo count %d for scriptPublicKey %s exceeds int",
+					count64, scriptPublicKey.String())
+			}
+			count = int(count64)
+		}
+	} else {
 		count = int(limit)
 	}
 
