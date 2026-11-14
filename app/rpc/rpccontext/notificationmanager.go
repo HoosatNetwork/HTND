@@ -96,6 +96,19 @@ func (nm *NotificationManager) HasBlockAddedListeners() bool {
 	return false
 }
 
+// HasUTXOsChangedListeners indicates if the notification manager has any listeners for `UTXOsChanged` events
+func (nm *NotificationManager) HasUTXOsChangedListeners() bool {
+	nm.RLock()
+	defer nm.RUnlock()
+
+	for _, listener := range nm.listeners {
+		if listener.propagateUTXOsChangedNotifications {
+			return true
+		}
+	}
+	return false
+}
+
 // NotifyBlockAdded notifies the notification manager that a block has been added to the DAG
 func (nm *NotificationManager) NotifyBlockAdded(notification *appmessage.BlockAddedNotificationMessage) error {
 	nm.RLock()
