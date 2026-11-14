@@ -77,7 +77,12 @@ func (tx *DBTransaction) commit(options *pebble.WriteOptions) error {
 	tx.cursors = nil
 	tx.isClosed = true
 	tx.keyModifications = nil // Clear key tracking
-	return errors.WithStack(tx.batch.Commit(options))
+	err := tx.batch.Commit(options)
+	// Closing a committed batch returns its buffer for reuse. A failure here does not undo the commit.
+	if closeErr := tx.batch.Close(); closeErr != nil {
+		log.Warnf("Failed to close batch after commit: %v", closeErr)
+	}
+	return errors.WithStack(err)
 }
 
 // Rollback rolls back whatever changes were made to the database within this transaction.
