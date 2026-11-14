@@ -8,7 +8,11 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
+	"github.com/HoosatNetwork/HTND/v2/util"
+	"github.com/HoosatNetwork/HTND/v2/util/txmass"
 )
 
 func checkedIntFromUint64(value uint64) (int, error) {
@@ -25,6 +29,33 @@ func checkedUint32FromInt(value int) (uint32, error) {
 		return 0, err
 	}
 	return uint32(parsedValue), nil
+}
+
+// minimumRelayFee returns the least fee, in sompi, that nodes relay a transaction of the given signed
+// mass for: the same rule as the mempool's, at its default minimum relay fee (sompi per 1000 mass).
+func (s *server) minimumRelayFee(mass uint64) uint64 {
+	rate := uint64(mempool.DefaultConfig(s.params).MinimumRelayTransactionFee)
+	fee := mass * rate / 1000
+	if fee == 0 && rate > 0 {
+		fee = rate
+	}
+	return fee
+}
+
+// isDust reports whether an output of value sompi to address is below the mempool's dust threshold at
+// its default minimum relay fee (603 sompi for a P2SH output): the same rule as the mempool's
+// IsTransactionOutputDust.
+func (s *server) isDust(address util.Address, value uint64) (bool, error) {
+	scriptPublicKey, err := txscript.PayToAddrScript(address)
+	if err != nil {
+		return false, err
+	}
+	if txscript.IsUnspendable(scriptPublicKey.Script) {
+		return true, nil
+	}
+	size := txmass.TransactionOutputEstimatedSerializedSize(
+		&externalapi.DomainTransactionOutput{Value: value, ScriptPublicKey: scriptPublicKey}) + 148
+	return value*1000/(3*size) < uint64(mempool.DefaultConfig(s.params).MinimumRelayTransactionFee), nil
 }
 
 // requireStandardMass returns the transaction as the single transaction to sign and broadcast, or an
