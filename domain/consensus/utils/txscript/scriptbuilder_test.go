@@ -161,7 +161,8 @@ func TestScriptBuilderAddData(t *testing.T) {
 	}{
 		// BIP0062: Pushing an empty byte sequence must use OP_0.
 		{name: "push empty byte sequence", data: nil, expected: []byte{Op0}},
-		{name: "push 1 byte 0x00", data: []byte{0x00}, expected: []byte{Op0}},
+		// A single zero byte is not an empty byte sequence, so it is a normal data push.
+		{name: "push 1 byte 0x00", data: []byte{0x00}, expected: []byte{OpData1, 0x00}},
 
 		// BIP0062: Pushing a 1-byte sequence of byte 0x01 through 0x10 must use OP_n.
 		{name: "push 1 byte 0x01", data: []byte{0x01}, expected: []byte{Op1}},
@@ -280,6 +281,10 @@ func TestScriptBuilderAddData(t *testing.T) {
 				"got: %x\nwant: %x", i, test.name, result,
 				test.expected)
 			continue
+		}
+		if !test.useFull && test.expected != nil && canonicalDataSize(test.data) != len(test.expected) {
+			t.Errorf("canonicalDataSize #%d (%s) = %d, want %d", i,
+				test.name, canonicalDataSize(test.data), len(test.expected))
 		}
 	}
 }
