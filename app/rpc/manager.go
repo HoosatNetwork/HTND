@@ -12,6 +12,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/utxoindex"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/addressmanager"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/connmanager"
@@ -328,6 +329,20 @@ func (m *Manager) notifyVirtualSelectedParentChainChanged(virtualChangeSet *exte
 		notification, err := m.context.ConvertVirtualSelectedParentChainChangesToChainChangedNotificationMessage(
 			virtualChangeSet.VirtualSelectedParentChainChanges, includeAcceptedTransactionIDs)
 		if err != nil {
+			// Like a block-added notification, this one is best-effort. After an IBD commits its staging consensus,
+			// a virtual change queued against the previous consensus names chain blocks whose acceptance data the
+			// new one does not have. Returning that error panics initConsensusEventsHandler and exits the node, so
+			// skip this one notification. Every other error stays fatal.
+			if database.IsNotFoundError(err) {
+				added := virtualChangeSet.VirtualSelectedParentChainChanges.Added
+				if len(added) == 0 {
+					log.Warnf("Skipping the virtual selected parent chain changed notification: %s", err)
+					return nil
+				}
+				log.Warnf("Skipping the virtual selected parent chain changed notification for %d added chain "+
+					"block(s), first %s, last %s: %s", len(added), added[0], added[len(added)-1], err)
+				return nil
+			}
 			return err
 		}
 		return m.context.NotificationManager.NotifyVirtualSelectedParentChainChanged(notification)
