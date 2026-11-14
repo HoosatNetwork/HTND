@@ -282,9 +282,14 @@ func (m *Manager) notifyUTXOsChanged(virtualChangeSet *externalapi.VirtualChange
 	onEnd := logger.LogAndMeasureExecutionTime(log, "RPCManager.NotifyUTXOsChanged")
 	defer onEnd()
 
-	utxoIndexChanges, err := m.context.UTXOIndex.Update(virtualChangeSet)
+	// The list of changes is only needed to notify subscribers, so the index builds it only if there are any. It asks
+	// while it holds its lock, so that a client subscribing right after finds this update in an uncached index read.
+	utxoIndexChanges, err := m.context.UTXOIndex.Update(virtualChangeSet, m.context.NotificationManager.HasUTXOsChangedListeners)
 	if err != nil {
 		return err
+	}
+	if utxoIndexChanges == nil {
+		return nil
 	}
 
 	return m.context.NotificationManager.NotifyUTXOsChanged(utxoIndexChanges)

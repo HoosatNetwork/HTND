@@ -283,8 +283,14 @@ func (ui *UTXOIndex) isSynced() (bool, error) {
 	return externalapi.HashesEqual(virtualInfo.ParentHashes, utxoIndexVirtualParents), nil
 }
 
-// Update updates the UTXO index with the given DAG selected parent chain changes
-func (ui *UTXOIndex) Update(virtualChangeSet *externalapi.VirtualChangeSet) (*UTXOChanges, error) {
+// Update updates the UTXO index with the given DAG selected parent chain changes. The returned list of changes is
+// built only if hasListeners returns true, since it is only needed to notify subscribers; otherwise it is nil. What is
+// written to the index does not depend on it.
+//
+// hasListeners is called while the index is locked, before the changes are committed: a client that subscribes after
+// the call can only read the index once the commit is done, so an uncached read after subscribing includes this
+// update. It may not get a notification for this update. hasListeners must not call back into the index.
+func (ui *UTXOIndex) Update(virtualChangeSet *externalapi.VirtualChangeSet, hasListeners func() bool) (*UTXOChanges, error) {
 	onEnd := logger.LogAndMeasureExecutionTime(log, "UTXOIndex.Update")
 	defer onEnd()
 
@@ -318,10 +324,13 @@ func (ui *UTXOIndex) Update(virtualChangeSet *externalapi.VirtualChangeSet) (*UT
 
 	ui.store.updateVirtualParents(virtualChangeSet.VirtualParents)
 
-	added, removed, _ := ui.store.stagedData()
-	utxoIndexChanges := &UTXOChanges{
-		Added:   added,
-		Removed: removed,
+	var utxoIndexChanges *UTXOChanges
+	if hasListeners() {
+		added, removed, _ := ui.store.stagedData()
+		utxoIndexChanges = &UTXOChanges{
+			Added:   added,
+			Removed: removed,
+		}
 	}
 
 	err = ui.store.commit()
