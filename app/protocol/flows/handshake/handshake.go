@@ -105,6 +105,8 @@ func HandleHandshake(context HandleHandshakeContext, netConnection *netadapter.N
 	if peerAddress != nil {
 		err := context.AddressManager().AddAddresses(peerAddress)
 		if err != nil {
+			// The caller removes only the peers it receives, so take this one out before the peer is dropped.
+			context.RemoveFromPeers(peer)
 			return nil, err
 		}
 	}
@@ -128,5 +130,11 @@ func handleError(err error, flowName string, isStopping *uint32, errChan chan er
 		}
 		return
 	}
-	panic(err)
+
+	// Anything else is this node's own failure, such as a database error. Disconnect without a ban, as
+	// FlowContext.HandleError does for the flows after the handshake; a panic would take the whole node down.
+	log.Errorf("Unexpected error in %s of the handshake (not a protocol error): %+v", flowName, err)
+	if atomic.AddUint32(isStopping, 1) == 1 {
+		errChan <- protocolerrors.Errorf(false, "unexpected error in %s: %s", flowName, err)
+	}
 }

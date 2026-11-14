@@ -66,6 +66,13 @@ func (b *Bool) UnmarshalFlag(value string) error {
 	return nil
 }
 
+// MinProtocolVersion and MaxProtocolVersion bound the p2p protocol versions the node accepts, for peers and for
+// --protocol-version.
+const (
+	MinProtocolVersion = 11
+	MaxProtocolVersion = 11
+)
+
 const (
 	defaultConfigFilename      = "htnd.conf"
 	defaultLogLevel            = "info"
@@ -327,6 +334,16 @@ func DefaultConfig() *Config {
 	config := &Config{Flags: defaultFlags()}
 	config.NetworkFlags.ActiveNetParams = &dagconfig.MainnetParams
 	return config
+}
+
+// validateProtocolVersion rejects a protocol version the node does not accept. Left unchecked, every handshake fails:
+// it used to panic and stop the node, and since a failed handshake only drops the peer, the node would run with no peers.
+func validateProtocolVersion(protocolVersion uint32) error {
+	if protocolVersion < MinProtocolVersion || protocolVersion > MaxProtocolVersion {
+		return errors.Errorf("The protocol-version option must be in between %d and %d -- parsed [%d]",
+			MinProtocolVersion, MaxProtocolVersion, protocolVersion)
+	}
+	return nil
 }
 
 // LoadConfig initializes and parses the config using a config file and command
@@ -735,6 +752,13 @@ func LoadConfig() (*Config, error) {
 		str := "%s: The rpcmaxwebsocketconcurrentrequests option may " +
 			"not be less than 0 -- parsed [%d]"
 		err := errors.Errorf(str, funcName, cfg.RPCMaxConcurrentReqs)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, err
+	}
+
+	if err := validateProtocolVersion(cfg.ProtocolVersion); err != nil {
+		err := errors.Errorf("%s: %s", funcName, err)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, err
