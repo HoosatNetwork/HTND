@@ -128,3 +128,74 @@ func TestUTXOsSizesFromTheMaintainedCountNotAScan(t *testing.T) {
 		t.Fatalf("expected exactly 3 UTXOs with limit=3, got %d", len(limited))
 	}
 }
+
+// TestUTXOBufferSizedFromCountNotLimit pins that a limit only caps the buffer: the RPC response budget
+// turns a requested limit of 0 into millions, and sizing the buffer to that allocated it for every call.
+func TestUTXOBufferSizedFromCountNotLimit(t *testing.T) {
+	db, err := ldb.NewLevelDB(t.TempDir(), 8)
+	if err != nil {
+		t.Fatalf("NewLevelDB: %s", err)
+	}
+	defer db.Close()
+
+	store := newUTXOIndexStore(db)
+	if err := db.Put(circulatingSupplyKey, binaryserialization.SerializeUint64(0)); err != nil {
+		t.Fatalf("initializing circulating supply: %s", err)
+	}
+	script := &externalapi.ScriptPublicKey{Script: []byte{0x51, 0x21, 0x0c}, Version: 0}
+	entry := consensusutxo.NewUTXOEntry(1000, script, false, 100)
+	const utxoCount = 10
+	for i := range utxoCount {
+		outpoint := &externalapi.DomainOutpoint{
+			TransactionID: *externalapi.NewDomainTransactionIDFromByteArray(&[32]byte{byte(i + 1)}),
+		}
+		if err := store.add(script, outpoint, entry); err != nil {
+			t.Fatalf("add: %s", err)
+		}
+	}
+	if err := store.commit(); err != nil {
+		t.Fatalf("commit: %s", err)
+	}
+
+	for _, test := range []struct {
+		name          string
+		offset, limit uint32
+		wantCapacity  int
+		wantLen       int
+	}{
+		{"no limit", 0, 0, utxoCount, utxoCount},
+		{"limit above count", 0, 3_500_000, utxoCount, utxoCount},
+		{"limit below count", 0, 4, 4, 4},
+		{"offset and no limit", 3, 0, utxoCount - 3, utxoCount - 3},
+		{"offset and limit above remainder", 3, 100, utxoCount - 3, utxoCount - 3},
+		{"offset past the end", utxoCount + 5, 100, 0, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got, err := store.bufferCapacityFor(script, test.offset, test.limit); err != nil || got != test.wantCapacity {
+				t.Fatalf("bufferCapacityFor = %d, %v; want %d", got, err, test.wantCapacity)
+			}
+			var pairs []UTXOPair
+			var buffer *memory.Block[UTXOPair]
+			if test.offset == 0 {
+				pairs, buffer, err = store.UTXOs(script, test.limit, nil)
+			} else {
+				pairs, buffer, err = store.PaginatedUTXOs(script, test.offset, test.limit, nil)
+			}
+			if err != nil {
+				t.Fatalf("read: %s", err)
+			}
+			defer memory.Free(buffer)
+			if len(pairs) != test.wantLen {
+				t.Fatalf("got %d UTXOs, want %d", len(pairs), test.wantLen)
+			}
+			if cap(pairs) != test.wantCapacity {
+				t.Fatalf("buffer capacity %d, want %d", cap(pairs), test.wantCapacity)
+			}
+		})
+	}
+
+	unknown := &externalapi.ScriptPublicKey{Script: []byte{0x51, 0x21, 0x0d}, Version: 0}
+	if got, err := store.bufferCapacityFor(unknown, 0, 100); err != nil || got != 0 {
+		t.Fatalf("unknown script: bufferCapacityFor = %d, %v; want 0", got, err)
+	}
+}
