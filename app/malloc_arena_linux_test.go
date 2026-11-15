@@ -2,6 +2,16 @@
 
 package app
 
+/*
+#include <stdlib.h>
+#ifdef __GLIBC__
+static int htndTestIsGlibc(void) { return 1; }
+#else
+static int htndTestIsGlibc(void) { return 0; }
+#endif
+*/
+import "C"
+
 import (
 	"os"
 	"testing"
@@ -15,7 +25,7 @@ func TestMallocArenaMax(t *testing.T) {
 		}
 		return
 	}
-	if os.Getenv("GLIBC_TUNABLES") == "" && got != "2 (set by htnd)" {
+	if C.htndTestIsGlibc() == 1 && os.Getenv("GLIBC_TUNABLES") == "" && got != "2 (set by htnd)" {
 		t.Fatalf("MallocArenaMax() = %q, want %q", got, "2 (set by htnd)")
 	}
 }
