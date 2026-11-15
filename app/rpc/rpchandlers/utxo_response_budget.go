@@ -40,23 +40,6 @@ func utxoEntryWireSize(address string, scriptHex string) int {
 	return utxoEntryWireOverhead + len(address) + len(scriptHex)
 }
 
-// limitFor returns the limit to read an address's coins with: requested (0 is no limit), lowered to
-// the coins that still fit. fits is false when not even one more coin fits.
-func (b *utxoResponseBudget) limitFor(address string, scriptHex string, requested uint32) (limit uint32, fits bool) {
-	fitting := b.remaining / utxoEntryWireSize(address, scriptHex)
-	if fitting <= 0 {
-		b.truncated = true
-		return 0, false
-	}
-	if fitting > math.MaxUint32 {
-		fitting = math.MaxUint32
-	}
-	if requested == 0 || uint32(fitting) < requested {
-		return uint32(fitting), true
-	}
-	return requested, true
-}
-
 // logTruncatedUTXOResponse says when a response was cut to fit, so an operator whose wallet sees fewer
 // coins than it holds can find out why.
 func logTruncatedUTXOResponse(budget *utxoResponseBudget, method string, coins int) {

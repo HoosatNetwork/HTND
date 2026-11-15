@@ -38,36 +38,3 @@ func TestUTXOEntryWireOverheadBoundsTheEncodedEntry(t *testing.T) {
 		t.Fatalf("an entry encodes to %d bytes, more than the %d utxoEntryWireSize allows for it", perEntry, bound)
 	}
 }
-
-func TestUTXOResponseBudgetCapsTheResponse(t *testing.T) {
-	address, scriptHex := "hoosat:addr", "51"
-	entrySize := utxoEntryWireSize(address, scriptHex)
-	budget := newUTXOResponseBudgetOfSize(80 * entrySize) // 70 entries after the eighth kept back
-
-	limit, fits := budget.limitFor(address, scriptHex, 0)
-	if !fits || limit != 70 {
-		t.Fatalf("with no requested limit, got limit %d (fits %t), want the 70 that fit", limit, fits)
-	}
-	if limit, _ := budget.limitFor(address, scriptHex, 10); limit != 10 {
-		t.Fatalf("a requested limit below what fits must be kept, got %d", limit)
-	}
-
-	// The first address fills the response; the read came back full at the lowered limit.
-	budget.spend(address, scriptHex, 0, 70, 70, 70)
-	if !budget.truncated {
-		t.Fatalf("a read that came back full at a limit the budget lowered must count as truncated")
-	}
-	if _, fits := budget.limitFor(address, scriptHex, 0); fits {
-		t.Fatalf("no room is left, so the next address must not fit")
-	}
-}
-
-func TestUTXOResponseBudgetDoesNotReportASmallResponseTruncated(t *testing.T) {
-	address, scriptHex := "hoosat:addr", "51"
-	budget := newUTXOResponseBudgetOfSize(1 << 20)
-	limit, _ := budget.limitFor(address, scriptHex, 0)
-	budget.spend(address, scriptHex, 0, limit, 3, 3)
-	if budget.truncated {
-		t.Fatalf("an address with 3 coins read under a limit of %d is complete", limit)
-	}
-}

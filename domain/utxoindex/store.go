@@ -572,14 +572,23 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 	// dropped one at every page boundary.
 	iterator := uint32(0)
 	count := 0
-	if limit == 0 {
-		for ok := cursor.First(); ok; ok = cursor.Next() {
-			if iterator >= offset {
-				count++
-			}
-			iterator++
+	countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
+	if err != nil {
+		if !database.IsNotFoundError(err) {
+			return nil, buffer, err
 		}
 	} else {
+		count64, err := binaryserialization.DeserializeUint64(countBytes)
+		if err != nil {
+			return nil, buffer, err
+		}
+		if count64 > math.MaxInt {
+			return nil, buffer, errors.Errorf("utxo count %d for scriptPublicKey %s exceeds int",
+				count64, scriptPublicKey.String())
+		}
+		count = int(count64)
+	}
+	if limit >= 0 && count > int(limit) {
 		count = int(limit)
 	}
 
@@ -653,24 +662,23 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	// under ordinary GetBalancesByAddresses/GetUsableAddresses traffic, competing directly with block
 	// processing for the same CPU and GC budget.
 	count := 0
-	if limit == 0 {
-		countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
-		if err != nil {
-			if !database.IsNotFoundError(err) {
-				return nil, buffer, err
-			}
-		} else {
-			count64, err := binaryserialization.DeserializeUint64(countBytes)
-			if err != nil {
-				return nil, buffer, err
-			}
-			if count64 > math.MaxInt {
-				return nil, buffer, errors.Errorf("utxo count %d for scriptPublicKey %s exceeds int",
-					count64, scriptPublicKey.String())
-			}
-			count = int(count64)
+	countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
+	if err != nil {
+		if !database.IsNotFoundError(err) {
+			return nil, buffer, err
 		}
 	} else {
+		count64, err := binaryserialization.DeserializeUint64(countBytes)
+		if err != nil {
+			return nil, buffer, err
+		}
+		if count64 > math.MaxInt {
+			return nil, buffer, errors.Errorf("utxo count %d for scriptPublicKey %s exceeds int",
+				count64, scriptPublicKey.String())
+		}
+		count = int(count64)
+	}
+	if limit >= 0 && count > int(limit) {
 		count = int(limit)
 	}
 
@@ -680,6 +688,8 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		buffer = memory.Realloc(buffer, count) // reallocate if existing capacity is insufficient
 	}
 	slice = buffer.Slice()[:0]
+
+	log.Infof("Size of the buffer %d with count %d", cap(slice), count)
 	// slice is off-heap, so the entries need references the collector can see. The batch hands the
 	// block one per chunk of entries, rather than the block holding one per entry.
 	decoder := newBatchEntryDecoder(utxo.NewEntryBatch(scriptPublicKey, count, buffer.Retain))
