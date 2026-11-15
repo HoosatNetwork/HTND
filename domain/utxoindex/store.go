@@ -585,7 +585,10 @@ func (uis *utxoIndexStore) bufferCapacityFor(scriptPublicKey *externalapi.Script
 	if err != nil {
 		return 0, err
 	}
-	count = max(count-int(offset), 0)
+	if uint64(offset) >= uint64(count) {
+		return 0, nil
+	}
+	count -= int(offset)
 	if limit > 0 && count > int(limit) {
 		count = int(limit)
 	}
