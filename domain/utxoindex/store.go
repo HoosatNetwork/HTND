@@ -550,6 +550,41 @@ type UTXOPair struct {
 	Entry    externalapi.UTXOEntry
 }
 
+// maintainedUTXOCount returns the number of UTXOs the index holds for a ScriptPublicKey, from the
+// count applyUTXOCountDeltas maintains. A missing count is zero.
+func (uis *utxoIndexStore) maintainedUTXOCount(scriptPublicKey *externalapi.ScriptPublicKey) (int, error) {
+	countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
+	if err != nil {
+		if database.IsNotFoundError(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	count64, err := binaryserialization.DeserializeUint64(countBytes)
+	if err != nil {
+		return 0, err
+	}
+	if count64 > math.MaxInt {
+		return 0, errors.Errorf("utxo count %d for scriptPublicKey %s exceeds int",
+			count64, scriptPublicKey.String())
+	}
+	return int(count64), nil
+}
+
+// bufferCapacityFor is how many entries a read skipping offset and capped at limit (0 is no cap) can
+// return: the coins past offset, lowered to limit.
+func (uis *utxoIndexStore) bufferCapacityFor(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32) (int, error) {
+	count, err := uis.maintainedUTXOCount(scriptPublicKey)
+	if err != nil {
+		return 0, err
+	}
+	count = max(count-int(offset), 0)
+	if limit > 0 && count > int(limit) {
+		count = int(limit)
+	}
+	return count, nil
+}
+
 func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPublicKey, offset uint32, limit uint32, buffer *memory.Block[UTXOPair]) ([]UTXOPair, *memory.Block[UTXOPair], error) {
 	if uis.isAnythingStaged() {
 		return nil, buffer, errors.Errorf("cannot get UTXOs while staging isn't empty")
@@ -566,16 +601,9 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 	// offset+1 entries, so no request could return an address's first UTXO and paging with offset += limit
 	// dropped one at every page boundary.
 	iterator := uint32(0)
-	count := 0
-	if limit == 0 {
-		for ok := cursor.First(); ok; ok = cursor.Next() {
-			if iterator >= offset {
-				count++
-			}
-			iterator++
-		}
-	} else {
-		count = int(limit)
+	count, err := uis.bufferCapacityFor(scriptPublicKey, offset, limit)
+	if err != nil {
+		return nil, buffer, err
 	}
 
 	slice := buffer.Slice()[:0]
@@ -637,33 +665,12 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 	defer cursor.Close()
 
-	// Sizing pass: the exact count, without a first cursor scan to compute it. applyUTXOCountDeltas
-	// already maintains this per-script count in the same commit as the entries themselves (see
-	// utxoCountKeyForScriptPublicKey), specifically so a caller that needs the count doesn't have to
-	// scan for it - this just wasn't using it, and a full scan just to size the buffer before the real
-	// (also full) fill scan doubled this function's cost. Profiled at ~15% of a busy node's total CPU
-	// under ordinary GetBalancesByAddresses/GetUsableAddresses traffic, competing directly with block
-	// processing for the same CPU and GC budget.
-	count := 0
-	if limit == 0 {
-		countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
-		if err != nil {
-			if !database.IsNotFoundError(err) {
-				return nil, buffer, err
-			}
-		} else {
-			count64, err := binaryserialization.DeserializeUint64(countBytes)
-			if err != nil {
-				return nil, buffer, err
-			}
-			if count64 > math.MaxInt {
-				return nil, buffer, errors.Errorf("utxo count %d for scriptPublicKey %s exceeds int",
-					count64, scriptPublicKey.String())
-			}
-			count = int(count64)
-		}
-	} else {
-		count = int(limit)
+	// Size the buffer from the maintained per-script count (see utxoCountKeyForScriptPublicKey), not from
+	// limit: callers pass limits that are only caps (the RPC response budget turns 0 into millions), and
+	// sizing to a cap allocates a GC-scanned buffer of that size for every call.
+	count, err := uis.bufferCapacityFor(scriptPublicKey, 0, limit)
+	if err != nil {
+		return nil, buffer, err
 	}
 
 	slice := buffer.Slice()[:0]
