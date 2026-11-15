@@ -266,17 +266,18 @@ func (am *AddressManager) MarkConnectionSuccess(address *appmessage.NetAddress) 
 	defer am.mutex.Unlock()
 
 	key := netAddressKey(address)
-	entry, ok := am.store.getNotBanned(key)
+	stored, ok := am.store.getNotBanned(key)
 	if !ok {
 		return errors.Errorf("address %s is not registered with the address manager", address.TCPAddress())
 	}
+	entry := *stored
 
 	now := time.Now()
 	entry.connectionFailedCount = 0
 	entry.lastSuccess = now
 	entry.lastAttempt = now
 
-	return am.store.updateNotBanned(key, entry)
+	return am.store.updateNotBanned(key, &entry)
 }
 
 // Addresses returns all addresses
