@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"errors"
 	"math"
 	"math/rand"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/ruleerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/mining"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/pow"
@@ -109,6 +111,10 @@ func TestIBDWithPruning(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RegisterPruningPointUTXOSetNotifications: %+v", err)
 		}
+
+		// The pruning point UTXO update runs asynchronously. A refusal disconnects this one-shot peer,
+		// so wait for the current set before connecting.
+		waitForServedPruningPointUTXOSet(t, syncer)
 
 		// We expect this to trigger IBD
 		connect(t, syncer, syncee)
@@ -240,6 +246,29 @@ func TestIBDWithPruning(t *testing.T) {
 
 	// Test a situation where a node with pruned headers syncs another fresh node.
 	testSync(syncee1, syncee2)
+}
+
+// waitForServedPruningPointUTXOSet waits until harness serves the UTXO set of its current pruning point.
+func waitForServedPruningPointUTXOSet(t *testing.T, harness *appHarness) {
+	consensus := harness.app.Domain().Consensus()
+	start := time.Now()
+	for {
+		pruningPoint, err := consensus.PruningPoint()
+		if err != nil {
+			t.Fatalf("PruningPoint: %+v", err)
+		}
+		_, err = consensus.GetPruningPointUTXOs(pruningPoint, nil, 1)
+		if err == nil {
+			return
+		}
+		if !errors.Is(err, ruleerrors.ErrWrongPruningPointHash) {
+			t.Fatalf("GetPruningPointUTXOs: %+v", err)
+		}
+		if time.Since(start) > defaultTimeout {
+			t.Fatalf("Timeout waiting for the pruning point UTXO set to be served: %s", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 var currentMockTimestamp int64
