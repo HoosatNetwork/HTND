@@ -553,7 +553,14 @@ type UTXOPair struct {
 // maintainedUTXOCount returns the number of UTXOs the index holds for a ScriptPublicKey, from the
 // count applyUTXOCountDeltas maintains. A missing count is zero.
 func (uis *utxoIndexStore) maintainedUTXOCount(scriptPublicKey *externalapi.ScriptPublicKey) (int, error) {
-	countBytes, err := uis.database.Get(uis.utxoCountKeyForScriptPublicKey(scriptPublicKey))
+	countKey := uis.utxoCountKeyForScriptPublicKey(scriptPublicKey)
+	// Has first: callers probe many addresses with no coins, and a failed Get builds an error with a
+	// stack trace and a formatted key every time.
+	has, err := uis.database.Has(countKey)
+	if err != nil || !has {
+		return 0, err
+	}
+	countBytes, err := uis.database.Get(countKey)
 	if err != nil {
 		if database.IsNotFoundError(err) {
 			return 0, nil
