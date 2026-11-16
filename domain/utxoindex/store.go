@@ -689,7 +689,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 	}
 	slice = buffer.Slice()[:0]
 
-	log.Infof("Size of the buffer %d with count %d", cap(slice), count)
+	// log.Infof("Size of the buffer %d with count %d", cap(slice), count)
 	// slice is off-heap, so the entries need references the collector can see. The batch hands the
 	// block one per chunk of entries, rather than the block holding one per entry.
 	decoder := newBatchEntryDecoder(utxo.NewEntryBatch(scriptPublicKey, count, buffer.Retain))
