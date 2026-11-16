@@ -53,10 +53,6 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 		if scriptHex == "" {
 			continue
 		}
-		limit, fits := budget.limitFor(addressString, scriptHex, getPaginatedUTXOsByAddressesRequest.Limit)
-		if !fits {
-			break
-		}
 		utxoOutpointEntryPairsBuffer := memory.Malloc[utxoindex.UTXOPair](1000)
 		if utxoOutpointEntryPairsBuffer == nil {
 			errorMessage := &appmessage.GetPaginatedUTXOsByAddressesResponseMessage{}
@@ -64,7 +60,7 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.PaginatedUTXOs(scriptPublicKey, getPaginatedUTXOsByAddressesRequest.Offset, getPaginatedUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -85,7 +81,7 @@ func HandleGetPaginatedUTXOsByAddresses(context *rpccontext.Context, _ *router.R
 			return nil, err
 		}
 		rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the response")
-		budget.spend(addressString, scriptHex, getPaginatedUTXOsByAddressesRequest.Limit, limit, read, len(utxoOutpointEntryPairs))
+		budget.spend(addressString, scriptHex, getPaginatedUTXOsByAddressesRequest.Limit, getPaginatedUTXOsByAddressesRequest.Limit, read, len(utxoOutpointEntryPairs))
 		if len(utxoOutpointEntryPairs) == 0 {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue

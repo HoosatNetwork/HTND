@@ -85,10 +85,6 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 		if scriptHex == "" {
 			continue
 		}
-		limit, fits := budget.limitFor(addressString, scriptHex, getUTXOsByAddressesRequest.Limit)
-		if !fits {
-			break
-		}
 
 		utxoOutpointEntryPairsBuffer := memory.Malloc[utxoindex.UTXOPair](1000)
 		if utxoOutpointEntryPairsBuffer == nil {
@@ -97,7 +93,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			return errorMessage, nil
 		}
-		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, limit, utxoOutpointEntryPairsBuffer)
+		utxoOutpointEntryPairs, utxoOutpointEntryPairsBuffer, indexVirtualParents, err := context.UTXOIndex.UTXOs(scriptPublicKey, getUTXOsByAddressesRequest.Limit, utxoOutpointEntryPairsBuffer)
 		if err != nil {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			if errors.Is(err, utxoindex.ErrUTXOIndexSyncing) {
@@ -118,7 +114,7 @@ func HandleGetUTXOsByAddresses(context *rpccontext.Context, _ *router.Router, re
 			return nil, err
 		}
 		rpccontext.LogWithheldUTXOs(withheld, drifted, addressString, "the response")
-		budget.spend(addressString, scriptHex, getUTXOsByAddressesRequest.Limit, limit, read, len(utxoOutpointEntryPairs))
+		budget.spend(addressString, scriptHex, getUTXOsByAddressesRequest.Limit, getUTXOsByAddressesRequest.Limit, read, len(utxoOutpointEntryPairs))
 		if len(utxoOutpointEntryPairs) == 0 {
 			memory.Free(utxoOutpointEntryPairsBuffer)
 			continue
