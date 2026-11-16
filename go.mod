@@ -1,6 +1,7 @@
 module github.com/HoosatNetwork/HTND/v2
 
-go 1.27.2
+go 1.27.4
+
 godebug multipathtcp=0
 
 require (
@@ -20,6 +21,7 @@ require (
 	github.com/kaspanet/go-secp256k1 v0.0.7
 	github.com/pkg/errors v0.9.1
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10
+	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/syndtr/goleveldb v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/crypto v0.55.0
@@ -58,7 +60,6 @@ require (
 	github.com/prometheus/common v1.20.99 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
-	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
