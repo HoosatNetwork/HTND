@@ -40,7 +40,7 @@ func TestDroppedVirtualChangeSetForcesRebuild(t *testing.T) {
 		return marked
 	}
 
-	_, err = ui.Update(&externalapi.VirtualChangeSet{VirtualUTXODiff: consensusutxo.NewUTXODiff()})
+	_, err = ui.Update(&externalapi.VirtualChangeSet{VirtualUTXODiff: consensusutxo.NewUTXODiff()}, func() bool { return true })
 	if err != nil {
 		t.Fatalf("Update: %s", err)
 	}
@@ -51,7 +51,7 @@ func TestDroppedVirtualChangeSetForcesRebuild(t *testing.T) {
 	_, err = ui.Update(&externalapi.VirtualChangeSet{
 		VirtualUTXODiff:          consensusutxo.NewUTXODiff(),
 		EarlierChangeSetsDropped: true,
-	})
+	}, func() bool { return true })
 	if err != nil {
 		t.Fatalf("Update: %s", err)
 	}

@@ -390,6 +390,11 @@ func (a *ComponentManager) AddressManager() *addressmanager.AddressManager {
 	return a.addressManager
 }
 
+// Domain returns the Domain associated with this ComponentManager
+func (a *ComponentManager) Domain() domain.Domain {
+	return a.protocolManager.Context().Domain()
+}
+
 // Updater returns the Updater associated with this ComponentManager, or nil if auto-update is disabled
 func (a *ComponentManager) Updater() *autoupdate.Updater {
 	return a.updater

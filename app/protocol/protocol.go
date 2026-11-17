@@ -180,7 +180,9 @@ func (m *Manager) handleError(err error, netConnection *netadapter.NetConnection
 		log.Debugf("Address not found: %v", netConnection)
 		return
 	}
-	panic(err)
+	// An error of this node's own, such as a database failure. Disconnect this peer rather than stop the node.
+	log.Errorf("Unexpected error from %s, disconnecting: %+v", netConnection, err)
+	netConnection.Disconnect()
 }
 
 // RegisterFlow registers a flow to the given router.

@@ -101,11 +101,15 @@ func (as *addressStore) add(key addressKey, address *address) error {
 		return nil
 	}
 
-	as.notBannedAddresses[key] = address
-
 	databaseKey := as.notBannedDatabaseKey(key)
 	serializedAddress := as.serializeAddress(address)
-	return as.put(databaseKey, serializedAddress)
+	if err := as.put(databaseKey, serializedAddress); err != nil {
+		return err
+	}
+
+	// Only keep the address in memory once it is stored, so failed writes do not grow the map.
+	as.notBannedAddresses[key] = address
+	return nil
 }
 
 // updateNotBanned updates the not-banned address collection
@@ -114,11 +118,15 @@ func (as *addressStore) updateNotBanned(key addressKey, address *address) error 
 		return errors.Errorf("address %s is not in the store", address.netAddress.TCPAddress())
 	}
 
-	as.notBannedAddresses[key] = address
-
 	databaseKey := as.notBannedDatabaseKey(key)
 	serializedAddress := as.serializeAddress(address)
-	return as.put(databaseKey, serializedAddress)
+	if err := as.put(databaseKey, serializedAddress); err != nil {
+		return err
+	}
+
+	// Only keep the address in memory once it is stored, so failed writes do not grow the map.
+	as.notBannedAddresses[key] = address
+	return nil
 }
 
 func (as *addressStore) getNotBanned(key addressKey) (*address, bool) {

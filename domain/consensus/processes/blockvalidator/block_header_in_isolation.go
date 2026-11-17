@@ -48,9 +48,10 @@ func (v *blockValidator) checkParentsLimit(header externalapi.BlockHeader) error
 	}
 
 	expectedVersion := v.expectedBlockVersion(header.DAAScore())
-	if uint64(len(header.DirectParents())) > uint64(v.maxBlockParents[int(expectedVersion)-1]) {
+	maxParents := v.maxBlockParents[int(expectedVersion)-1]
+	if uint64(len(header.DirectParents())) > uint64(maxParents) {
 		return errors.Wrapf(ruleerrors.ErrTooManyParents, "block header has %d parents, but the maximum allowed amount "+
-			"is %d", len(header.DirectParents()), v.maxBlockParents)
+			"is %d for block version %d", len(header.DirectParents()), maxParents, expectedVersion)
 	}
 	return nil
 }

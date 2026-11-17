@@ -8,6 +8,7 @@ import (
 	peerpkg "github.com/HoosatNetwork/HTND/v2/app/protocol/peer"
 	"github.com/HoosatNetwork/HTND/v2/app/protocol/protocolerrors"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/infrastructure/config"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 	"github.com/pkg/errors"
@@ -21,9 +22,9 @@ var (
 
 	// minAcceptableProtocolVersion is the lowest protocol version that a
 	// connected peer may support.
-	minAcceptableProtocolVersion = uint32(11)
+	minAcceptableProtocolVersion = uint32(config.MinProtocolVersion)
 
-	maxAcceptableProtocolVersion = uint32(11)
+	maxAcceptableProtocolVersion = uint32(config.MaxProtocolVersion)
 )
 
 const protocolVersionHardFork11BlockVersion = uint16(11)
