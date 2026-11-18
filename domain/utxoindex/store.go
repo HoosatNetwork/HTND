@@ -8,6 +8,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/binaryserialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/db/database"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/logger"
 	"github.com/HoosatNetwork/HTND/v2/util/memory"
@@ -621,6 +622,7 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 		buffer = memory.Realloc(buffer, count)
 	}
 	slice = buffer.Slice()[:0]
+	decoder := batchEntryDecoder{batch: utxo.NewEntryBatch(scriptPublicKey, count)}
 
 	iterator = uint32(0) // reset iterator to reuse for filling buffer
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -637,7 +639,7 @@ func (uis *utxoIndexStore) PaginatedUTXOs(scriptPublicKey *externalapi.ScriptPub
 			if err != nil {
 				return nil, buffer, err
 			}
-			utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+			utxoEntry, err := decoder.decode(serializedUTXOEntry)
 			if err != nil {
 				return nil, buffer, err
 			}
@@ -689,6 +691,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		buffer = memory.Realloc(buffer, count) // reallocate if existing capacity is insufficient
 	}
 	slice = buffer.Slice()[:0]
+	decoder := batchEntryDecoder{batch: utxo.NewEntryBatch(scriptPublicKey, count)}
 
 	// Second pass: fill
 	for ok := cursor.First(); ok; ok = cursor.Next() {
@@ -704,7 +707,7 @@ func (uis *utxoIndexStore) UTXOs(scriptPublicKey *externalapi.ScriptPublicKey, l
 		if err != nil {
 			return nil, buffer, err
 		}
-		utxoEntry, err := deserializeUTXOEntry(serializedUTXOEntry)
+		utxoEntry, err := decoder.decode(serializedUTXOEntry)
 		if err != nil {
 			return nil, buffer, err
 		}

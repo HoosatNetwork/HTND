@@ -3,9 +3,11 @@ package utxoindex
 import (
 	"encoding/binary"
 	"io"
+	"math"
 
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/database/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/pkg/errors"
 )
 
@@ -32,14 +34,28 @@ func serializeUTXOEntry(utxoEntry externalapi.UTXOEntry) ([]byte, error) {
 	return dbUTXOEntry.MarshalVT()
 }
 
-func deserializeUTXOEntry(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
-	dbUTXOEntry := &serialization.DbUtxoEntry{}
-	err := dbUTXOEntry.UnmarshalVT(serializedUTXOEntry)
+type batchEntryDecoder struct {
+	entry serialization.DbUtxoEntry
+	batch *utxo.EntryBatch
+}
+
+func (d *batchEntryDecoder) decode(serializedUTXOEntry []byte) (externalapi.UTXOEntry, error) {
+	// Unsafe decoding aliases the cursor value. EntryBatch.New copies or shares
+	// the script before the cursor advances.
+	d.entry = serialization.DbUtxoEntry{}
+	err := d.entry.UnmarshalVTUnsafe(serializedUTXOEntry)
 	if err != nil {
 		return nil, err
 	}
-	utxoEntry, err := serialization.DBUTXOEntryToUTXOEntry(dbUTXOEntry)
-	return utxoEntry, err
+	script := d.entry.ScriptPublicKey
+	if script == nil {
+		return nil, errors.New("utxo entry is missing its script public key")
+	}
+	if script.Version > math.MaxUint16 {
+		return nil, errors.New("script public key version is bigger than uint16")
+	}
+	return d.batch.New(d.entry.Amount, script.Script, uint16(script.Version), d.entry.IsCoinbase,
+		d.entry.BlockDaaScore), nil
 }
 
 func deserializeUTXOAmount(serializedUTXOEntry []byte) (uint64, error) {
