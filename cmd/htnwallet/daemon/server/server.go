@@ -37,6 +37,10 @@ type server struct {
 	lock                            sync.RWMutex
 	utxosSortedByAmount             []*walletUTXO
 	nextSyncStartIndex              uint32
+	nextRescanIndex                 uint32            // The batch collectOldAddresses scans next
+	rescanRoundEnd                  uint32            // Where the round of collectOldAddresses under way ends
+	oldBatchRechecks                []oldBatchRecheck // Old batches to scan once more; see collectOldAddresses
+	now                             func() time.Time  // The clock; nil means time.Now (tests set it)
 	keysFile                        *keys.File
 	shutdown                        chan struct{}
 	forceSyncChan                   chan struct{}

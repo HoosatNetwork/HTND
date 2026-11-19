@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"time"
 
@@ -29,6 +30,7 @@ func (s *server) syncLoop() error {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
+	s.warnOfUnscannableLastUsedIndexes()
 	err := s.collectRecentAddresses()
 	if err != nil {
 		return err
@@ -68,6 +70,11 @@ func (s *server) sync() error {
 		return err
 	}
 
+	err = s.collectOldAddresses()
+	if err != nil {
+		return err
+	}
+
 	// err = s.refreshUTXOs()
 	// if err != nil {
 	// 	return err
@@ -81,9 +88,50 @@ const (
 	numIndexesToQueryForRecentAddresses = 1000
 )
 
-// addressesToQueryCached is addressesToQuery, remembering the batches collectRecentAddresses scans. Every
-// sync rescans each of them, every two seconds, and deriving a batch of 1000 indexes takes most of a second
-// of CPU - a wallet with a few thousand used addresses kept a core busy deriving the same keys again. A
+// scanIndexLimit is the first index no scan reaches: public BIP32 derivation stops below the hardened
+// indexes (libhtnwallet/bip32), so no wallet address exists at or above it. Keeping every scanned range
+// below it also keeps the range arithmetic far from uint32 overflow. A variable only so that tests can use
+// a small index space.
+var scanIndexLimit uint32 = 1 << 31
+
+// scannableLastUsedIndex returns the recorded last used index of a key chain, or 0 for one no address can
+// have (see scanIndexLimit), which a damaged or hand-edited keys file can hold. Such a value would wrap the
+// scan's range ends around and skip every batch, the first included. Scanning up to scanIndexLimit instead would
+// take days before the wallet is usable, so the scans treat it as unknown: the first sync scans from index
+// 0 as for a new wallet, and a coin found on that key chain raises it as usual
+// (updateAddressesAndLastUsedIndexes).
+func scannableLastUsedIndex(index uint32) uint32 {
+	if index >= scanIndexLimit {
+		return 0
+	}
+	return index
+}
+
+// lastUsedIndexes returns the last used index of the external and of the internal key chain, as the scans
+// use them. The caller holds s.lock.
+func (s *server) lastUsedIndexes() (external, internal uint32) {
+	return scannableLastUsedIndex(s.keysFile.LastUsedExternalIndex()),
+		scannableLastUsedIndex(s.keysFile.LastUsedInternalIndex())
+}
+
+func (s *server) warnOfUnscannableLastUsedIndexes() {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	for name, index := range map[string]uint32{
+		"external": s.keysFile.LastUsedExternalIndex(),
+		"internal": s.keysFile.LastUsedInternalIndex(),
+	} {
+		if index >= scanIndexLimit {
+			log.Warnf("The keys file records %d as the last used %s address index, but no address exists at "+
+				"or above index %d; the address scan ignores it and starts from index 0", index, name, scanIndexLimit)
+		}
+	}
+}
+
+// addressesToQueryCached is addressesToQuery, remembering the batches collectRecentAddresses and
+// collectOldAddresses scan. They are scanned again and again while the daemon runs, and deriving a batch
+// of 1000 indexes takes most of a second of CPU - a wallet with a few thousand used addresses kept a core
+// busy deriving the same keys again. A
 // batch never changes while the daemon runs: the extended public keys, the ML-DSA-44 key pools and the
 // imported keys are all fixed once it has started.
 //
@@ -177,20 +225,28 @@ func (s *server) maxUsedIndexWithLock() uint32 {
 	return s.maxUsedIndex()
 }
 
+// maxUsedIndex is below scanIndexLimit, so adding a few batches to it cannot overflow.
 func (s *server) maxUsedIndex() uint32 {
-	maxUsedIndex := max(s.keysFile.LastUsedInternalIndex(), s.keysFile.LastUsedExternalIndex())
-
-	return maxUsedIndex
+	external, internal := s.lastUsedIndexes()
+	return max(external, internal)
 }
 
 // collectRecentAddresses collects addresses from used addresses until
 // the address with the index of the last used address + numIndexesToQueryForRecentAddresses.
 // collectRecentAddresses scans addresses in batches of numIndexesToQueryForRecentAddresses,
 // and releases the lock between scans.
+//
+// It scans the batches recentBatchIsDue names: every batch on the first sync after the daemon starts, and
+// from then on only the ones around the last used index of each key chain. It used to scan every batch on
+// every sync, so a single-key wallet with 75,000 used indexes sent the node 76 calls with about 456,000
+// address strings on every sync. collectOldAddresses rescans the batches skipped here, one per sync.
 func (s *server) collectRecentAddresses() error {
 	index := uint32(0)
-	maxUsedIndex := uint32(0)
+	maxUsedIndex := s.maxUsedIndexWithLock()
 	for ; index < maxUsedIndex+numIndexesToQueryForRecentAddresses; index += numIndexesToQueryForRecentAddresses {
+		if !s.recentBatchIsDueWithLock(index) {
+			continue
+		}
 		scanned, err := s.collectAddressesWithLock(index, index+numIndexesToQueryForRecentAddresses)
 		if err != nil {
 			return err
@@ -213,6 +269,155 @@ func (s *server) collectRecentAddresses() error {
 	return nil
 }
 
+func (s *server) recentBatchIsDueWithLock(start uint32) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.recentBatchIsDue(start)
+}
+
+// recentBatchIsDue returns whether collectRecentAddresses scans the batch starting at start on this sync:
+//   - a batch not scanned since the daemon started, so that the first sync scans every used index;
+//   - the batch holding the last used index of a key chain, the one before it and the one after it, so that
+//     the newest numIndexesToQueryForRecentAddresses addresses of each key chain, and the ones about to be
+//     handed out, are scanned on every sync, as they always were;
+//   - the batch starting at index 0 of a wallet with imported keys, which holds their addresses.
+//
+// The caller holds s.lock, and start is at most one batch above scanIndexLimit.
+func (s *server) recentBatchIsDue(start uint32) bool {
+	end := start + numIndexesToQueryForRecentAddresses
+	if end > s.nextSyncStartIndex {
+		return true
+	}
+	if start == 0 && len(s.importedAddresses) > 0 {
+		return true
+	}
+	external, internal := s.lastUsedIndexes()
+	for _, lastUsedIndex := range []uint32{external, internal} {
+		if end+numIndexesToQueryForRecentAddresses > lastUsedIndex &&
+			start < lastUsedIndex+numIndexesToQueryForRecentAddresses {
+			return true
+		}
+	}
+	return false
+}
+
+// collectOldAddresses rescans one batch of the used addresses collectRecentAddresses skips, and the next
+// sync the batch after it. An address that was empty when the daemon started can receive coins at any time,
+// so every used index has to be scanned again; taking one batch per sync keeps the work of a sync the same
+// however many addresses the wallet has used.
+//
+// The batches are rescanned in rounds from index 0. A round ends where the last used index + 1000 was when
+// it started (rescanRoundEnd); indexes used later wait for the next round. If the end moved with the last
+// used index, a wallet using more than 1000 new indexes per sync would keep the cursor from ever wrapping
+// back to the batches behind it. Coins reaching an address below the end of the round under way are found
+// within one round: at most one sync for each numIndexesToQueryForRecentAddresses indexes up to that end,
+// plus one - about two and a half minutes for 75,000. An address that has held a coin since the daemon
+// started is in s.addressSet and does not wait for this.
+//
+// The node answers GetUsableAddresses from a cache shared by all its clients for up to
+// usableAddressesCacheTTL, so the answer for a batch can predate a coin that arrived just before the scan,
+// and the next round may be much longer than this one. So each batch scanned here is scanned once more
+// oldBatchRecheckDelay later, unless the round comes back to it first; that answer is newer than the first
+// scan. Every sync runs all the re-checks that are due, so a burst of forced syncs leaves no backlog. At
+// most one is pending per batch, none is run for the cursor's batch or for a batch collectRecentAddresses
+// scans, so a sync never asks about more batches than collectRecentAddresses alone used to.
+func (s *server) collectOldAddresses() error {
+	scanned, err := s.collectNextOldBatch()
+	if err != nil || !scanned {
+		// A closed route: the due re-checks stay queued for the next sync.
+		return err
+	}
+	for {
+		rechecked, err := s.recheckOldBatch()
+		if err != nil || !rechecked {
+			return err
+		}
+	}
+}
+
+// collectNextOldBatch scans the batch at the rescan cursor and moves the cursor on, past the batches
+// collectRecentAddresses scans. It reports false only when a closed route skipped the scan.
+func (s *server) collectNextOldBatch() (scanned bool, err error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	roundStarted := false
+	for {
+		if s.nextRescanIndex >= s.rescanRoundEnd {
+			if roundStarted {
+				// Every batch of the round is one collectRecentAddresses scans, in a wallet with few addresses.
+				return true, nil
+			}
+			roundStarted = true
+			s.nextRescanIndex = 0
+			s.rescanRoundEnd = min(s.maxUsedIndex()+numIndexesToQueryForRecentAddresses, scanIndexLimit)
+		}
+		start := s.nextRescanIndex
+		if s.recentBatchIsDue(start) {
+			s.nextRescanIndex = start + numIndexesToQueryForRecentAddresses
+			continue
+		}
+		scanned, err := s.collectAddresses(start, start+numIndexesToQueryForRecentAddresses)
+		if err != nil || !scanned {
+			// A skipped scan is retried by the next sync; moving on would leave the batch a round late.
+			return false, err
+		}
+		s.nextRescanIndex = start + numIndexesToQueryForRecentAddresses
+		// This scan is newer than a re-check of the batch still pending from the round before.
+		s.oldBatchRechecks = slices.DeleteFunc(s.oldBatchRechecks, func(recheck oldBatchRecheck) bool {
+			return recheck.start == start
+		})
+		s.oldBatchRechecks = append(s.oldBatchRechecks, oldBatchRecheck{start: start, notBefore: s.clock().Add(oldBatchRecheckDelay)})
+		return true, nil
+	}
+}
+
+const (
+	// usableAddressesCacheTTL is how long the node may answer GetUsableAddresses from its cache
+	// (app/rpc/rpchandlers/get_usable_addresses.go). The re-check relies on it; a node caching longer
+	// would make the re-check's answer stale too.
+	usableAddressesCacheTTL = 30 * time.Second
+	// oldBatchRecheckDelay is when collectOldAddresses scans a batch again: past the node's cache, with a
+	// margin for the clocks of the wallet and the node differing.
+	oldBatchRecheckDelay = usableAddressesCacheTTL + 2*time.Second
+)
+
+type oldBatchRecheck struct {
+	start     uint32
+	notBefore time.Time
+}
+
+func (s *server) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
+// recheckOldBatch scans the first queued old batch whose re-check is due, dropping on the way the ones
+// collectRecentAddresses scans on every sync anyway. It reports whether it scanned one; after a closed
+// route it reports false and keeps the batch queued.
+func (s *server) recheckOldBatch() (scanned bool, err error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	for len(s.oldBatchRechecks) > 0 && !s.clock().Before(s.oldBatchRechecks[0].notBefore) {
+		start := s.oldBatchRechecks[0].start
+		if s.recentBatchIsDue(start) {
+			s.oldBatchRechecks = s.oldBatchRechecks[1:]
+			continue
+		}
+		scanned, err := s.collectAddresses(start, start+numIndexesToQueryForRecentAddresses)
+		if err != nil || !scanned {
+			return false, err
+		}
+		s.oldBatchRechecks = s.oldBatchRechecks[1:]
+		return true, nil
+	}
+	return false, nil
+}
+
 func (s *server) collectAddressesWithLock(start, end uint32) (scanned bool, err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -221,8 +426,13 @@ func (s *server) collectAddressesWithLock(start, end uint32) (scanned bool, err 
 }
 
 // collectAddresses scans the given index range and reports whether it did. A closed RPC route (the client
-// is reconnecting) skips the scan without an error; callers must then not treat the range as scanned.
+// is reconnecting) skips the scan without an error; callers must then not treat the range as scanned. The
+// part of the range at or above scanIndexLimit holds no addresses and is not asked about.
 func (s *server) collectAddresses(start, end uint32) (scanned bool, err error) {
+	end = min(end, scanIndexLimit)
+	if start >= end {
+		return true, nil
+	}
 	addressSet, err := s.addressesToQueryCached(start, end)
 	if err != nil {
 		return false, err
@@ -252,8 +462,10 @@ func (s *server) collectAddresses(start, end uint32) (scanned bool, err error) {
 func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAddressSet,
 	getUsableAddressesResponse *appmessage.GetUsableAddressesResponseMessage,
 ) error {
-	lastUsedExternalIndex := s.keysFile.LastUsedExternalIndex()
-	lastUsedInternalIndex := s.keysFile.LastUsedInternalIndex()
+	// From the values the scans use: a discovery must raise a key chain's last used index even when the keys
+	// file holds one no address can have, or that chain's recent window and rescan round never move.
+	scannedExternalIndex, scannedInternalIndex := s.lastUsedIndexes()
+	lastUsedExternalIndex, lastUsedInternalIndex := scannedExternalIndex, scannedInternalIndex
 
 	for _, address := range getUsableAddressesResponse.Addresses {
 		walletAddress, ok := requestedAddressSet[address]
@@ -280,12 +492,17 @@ func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAdd
 		}
 	}
 
-	err := s.keysFile.SetLastUsedExternalIndex(lastUsedExternalIndex)
-	if err != nil {
-		return err
+	// Only a discovery writes the keys file; an impossible recorded value stays until one replaces it.
+	if lastUsedExternalIndex != scannedExternalIndex {
+		err := s.keysFile.SetLastUsedExternalIndex(lastUsedExternalIndex)
+		if err != nil {
+			return err
+		}
 	}
-
-	return s.keysFile.SetLastUsedInternalIndex(lastUsedInternalIndex)
+	if lastUsedInternalIndex != scannedInternalIndex {
+		return s.keysFile.SetLastUsedInternalIndex(lastUsedInternalIndex)
+	}
+	return nil
 }
 
 func (s *server) usedOutpointHasExpired(outpointBroadcastTime time.Time) bool {
