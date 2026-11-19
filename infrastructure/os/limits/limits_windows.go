@@ -8,3 +8,8 @@ package limits
 func SetLimits(*DesiredLimits) error {
 	return nil
 }
+
+// FileLimit returns an unbounded allowance on platforms without RLIMIT_NOFILE.
+func FileLimit() (uint64, error) {
+	return ^uint64(0), nil
+}
