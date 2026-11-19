@@ -611,13 +611,20 @@ func (s *server) refreshUTXOs(limit uint32) error {
 	return nil
 }
 
+// newForceSyncChan makes the channel forceSync and syncLoop share. It holds one pending request: forceSync
+// drops a request only while one is pending, so with an unbuffered channel it would drop every request made
+// while syncLoop is busy.
+func newForceSyncChan() chan struct{} {
+	return make(chan struct{}, 1)
+}
+
+// forceSync asks syncLoop for a sync now. Requests made before syncLoop takes the pending one are one sync.
+// The channel used to be unbuffered, so its length was always 0 and every broadcast request queued a
+// goroutine and a sync of its own.
 func (s *server) forceSync() {
-	// Technically if two callers check the `if` simultaneously they will both spawn a
-	// goroutine, but we don't care about the small redundancy in such a rare case.
-	if len(s.forceSyncChan) == 0 {
-		go func() {
-			s.forceSyncChan <- struct{}{}
-		}()
+	select {
+	case s.forceSyncChan <- struct{}{}:
+	default: // A sync is already pending.
 	}
 }
 

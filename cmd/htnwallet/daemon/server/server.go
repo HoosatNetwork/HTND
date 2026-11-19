@@ -125,7 +125,7 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		nextSyncStartIndex:          0,
 		keysFile:                    keysFile,
 		shutdown:                    make(chan struct{}),
-		forceSyncChan:               make(chan struct{}),
+		forceSyncChan:               newForceSyncChan(),
 		addressSet:                  make(walletAddressSet),
 		txMassCalculator:            txmass.NewCalculator(params.MassPerTxByte, params.MassPerScriptPubKeyByte, params.MassPerSigOp),
 		usedOutpoints:               map[externalapi.DomainOutpoint]time.Time{},
