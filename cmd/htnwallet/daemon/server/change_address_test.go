@@ -36,7 +36,7 @@ func TestChangeAddressIsTrackedBeforeItHoldsACoin(t *testing.T) {
 	}
 	s := &server{params: params, keysFile: keysFile, addressSet: make(walletAddressSet)}
 
-	address, walletAddr, err := s.changeAddress(false, nil, false)
+	address, walletAddr, err := s.deriveChangeAddress(false, false)
 	if err != nil {
 		t.Fatalf("changeAddress: %+v", err)
 	}
@@ -97,7 +97,7 @@ func TestMLDSA44ChangeAddressWithExhaustedKeyPool(t *testing.T) {
 	}
 	s := &server{params: params, keysFile: keysFile}
 
-	_, walletAddr, err := s.changeAddress(true, nil, true)
+	_, walletAddr, err := s.deriveChangeAddress(true, true)
 	if err != nil {
 		t.Fatalf("an existing ML-DSA-44 change address was refused: %+v", err)
 	}
@@ -105,7 +105,7 @@ func TestMLDSA44ChangeAddressWithExhaustedKeyPool(t *testing.T) {
 		t.Fatalf("an existing ML-DSA-44 change address is %+v, want internal index 0", walletAddr)
 	}
 
-	_, _, err = s.changeAddress(false, nil, true)
+	_, _, err = s.deriveChangeAddress(false, true)
 	if err == nil {
 		t.Fatalf("a fresh ML-DSA-44 change address past the key pool was handed out")
 	}
@@ -114,10 +114,9 @@ func TestMLDSA44ChangeAddressWithExhaustedKeyPool(t *testing.T) {
 	}
 }
 
-// With no positive discovery, the next address on a chain with an unscannable counter is at index 1.
 // issueTestChangeAddress derives and commits change as the send handler does.
 func issueTestChangeAddress(s *server, mldsa44 bool) (util.Address, *walletAddress, error) {
-	address, walletAddr, err := s.changeAddress(false, nil, mldsa44)
+	address, walletAddr, err := s.deriveChangeAddress(false, mldsa44)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -127,6 +126,7 @@ func issueTestChangeAddress(s *server, mldsa44 bool) (util.Address, *walletAddre
 	return address, walletAddr, nil
 }
 
+// With no positive discovery, the next address on a chain with an unscannable counter is at index 1.
 func TestNewAddressesWithImpossibleLastUsedIndex(t *testing.T) {
 	params := &dagconfig.TestnetParams
 	mnemonic, err := libhtnwallet.CreateMnemonic()

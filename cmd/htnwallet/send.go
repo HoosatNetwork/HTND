@@ -62,6 +62,9 @@ retry:
 			Limit:                    &conf.Limit,
 		})
 		if err != nil {
+			if utils.IsMLDSA44ChangeKeyUnavailable(err) {
+				return err
+			}
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")
 				// Wait before asking again; retrying at once hammered the daemon in a tight loop.

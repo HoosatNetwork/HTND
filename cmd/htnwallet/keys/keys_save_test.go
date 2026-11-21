@@ -407,3 +407,46 @@ func TestALeftoverTempFileDoesNotBreakReadingOrSaving(t *testing.T) {
 			read.MinimumSignatures)
 	}
 }
+
+func TestSaveIndexKeepsMemoryAndDiskConsistent(t *testing.T) {
+	injected := errors.New("injected save failure")
+	for _, tc := range []struct {
+		name string
+		fail func()
+		want uint32
+	}{
+		{"rename", func() { renameFile = func(string, string) error { return injected } }, 2},
+		{"directory sync", func() {
+			openSyncDir = func(dir string) (syncDirectory, error) {
+				directory, err := openDirectoryForSync(dir)
+				if err != nil {
+					return nil, err
+				}
+				return failingDirectorySync{directory, injected}, nil
+			}
+		}, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "keys.json")
+			file := newTestFile(t, path, 1)
+			if err := file.SetLastUsedInternalIndex(2); err != nil {
+				t.Fatal(err)
+			}
+			tc.fail()
+			t.Cleanup(func() {
+				renameFile = os.Rename
+				openSyncDir = openDirectoryForSync
+			})
+			if err := file.SetLastUsedInternalIndex(3); !errors.Is(err, injected) {
+				t.Fatalf("got %v, want the save failure", err)
+			}
+			saved, err := ReadKeysFile(&dagconfig.MainnetParams, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if inMemory, onDisk := file.LastUsedInternalIndex(), saved.LastUsedInternalIndex(); inMemory != tc.want || onDisk != tc.want {
+				t.Fatalf("indexes in memory and on disk are %d and %d, want both %d", inMemory, onDisk, tc.want)
+			}
+		})
+	}
+}

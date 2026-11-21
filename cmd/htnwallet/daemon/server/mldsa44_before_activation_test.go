@@ -40,7 +40,8 @@ func TestMLDSA44CoinsWaitForActivation(t *testing.T) {
 	// The ML-DSA-44 coin is the wallet's largest.
 	w.fund(t, coinSpec{ml, 500_000_000}, coinSpec{schnorr, 300_000_000})
 	destination := w.address(t, &walletAddress{index: 3, keyChain: libhtnwallet.ExternalKeychain})
-	send := func(amount uint64, from []*walletAddress, virtualDAAScore uint64) (sentTransactionInputs, error) {
+	w.s.addressSet[w.address(t, ml).String()] = ml
+	send := func(amount uint64, from []string, virtualDAAScore uint64) (sentTransactionInputs, error) {
 		transactions, err := w.s.buildSendTransaction(destination, amount, false, from, true, nil, virtualDAAScore)
 		if err != nil {
 			return sentTransactionInputs{}, err
@@ -56,7 +57,7 @@ func TestMLDSA44CoinsWaitForActivation(t *testing.T) {
 	if _, err := send(400_000_000, nil, beforeActivation); err == nil || !strings.Contains(err.Error(), "Insufficient funds") {
 		t.Fatalf("before activation, a send that needs the ML-DSA-44 coin got %v, want insufficient funds", err)
 	}
-	if _, err := send(100_000_000, []*walletAddress{ml}, beforeActivation); err == nil {
+	if _, err := send(100_000_000, []string{w.address(t, ml).String()}, beforeActivation); err == nil {
 		t.Fatalf("before activation, a send from the ML-DSA-44 address was built")
 	}
 
@@ -65,7 +66,7 @@ func TestMLDSA44CoinsWaitForActivation(t *testing.T) {
 	if err != nil || inputs.mldsa44 != 1 {
 		t.Fatalf("after activation, a send that needs the ML-DSA-44 coin spends %+v (err %v)", inputs, err)
 	}
-	if inputs, err = send(100_000_000, []*walletAddress{ml}, afterActivation); err != nil || inputs.mldsa44 != 1 || inputs.other != 0 {
+	if inputs, err = send(100_000_000, []string{w.address(t, ml).String()}, afterActivation); err != nil || inputs.mldsa44 != 1 || inputs.other != 0 {
 		t.Fatalf("after activation, a send from the ML-DSA-44 address spends %+v (err %v)", inputs, err)
 	}
 
@@ -251,6 +252,8 @@ func TestSendExistingChangeSkipsInactiveMLDSA44Address(t *testing.T) {
 	schnorr := &walletAddress{index: 2, keyChain: libhtnwallet.ExternalKeychain}
 	w.fund(t, coinSpec{ml, 500_000_000}, coinSpec{schnorr, 300_000_000})
 	destination := w.address(t, &walletAddress{index: 3, keyChain: libhtnwallet.ExternalKeychain})
+	w.s.addressSet[w.address(t, ml).String()] = ml
+	w.s.addressSet[w.address(t, schnorr).String()] = schnorr
 	const activation = 258_000_000
 	for _, tc := range []struct {
 		name   string
@@ -263,7 +266,7 @@ func TestSendExistingChangeSkipsInactiveMLDSA44Address(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			txs, err := w.s.buildSendTransaction(destination, 200_000_000, false,
-				[]*walletAddress{ml, schnorr}, true, nil, tc.score)
+				[]string{w.address(t, ml).String(), w.address(t, schnorr).String()}, true, nil, tc.score)
 			if err != nil {
 				t.Fatalf("buildSendTransaction: %v", err)
 			}

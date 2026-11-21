@@ -77,15 +77,24 @@ func (s *server) requireStandardMass(transactionBytes []byte) (*serialization.Pa
 	if err != nil {
 		return nil, err
 	}
+	if err := checkStandardMass(len(transaction.Tx.Inputs), mass); err != nil {
+		return nil, err
+	}
+	return transaction, nil
+}
+
+type standardMassError struct{ error }
+
+func checkStandardMass(inputCount int, mass uint64) error {
 	if mass > mempool.MaximumStandardTransactionMass {
-		return nil, errors.Errorf("the transaction spends %d inputs and would have a mass of %d, over the "+
+		return standardMassError{errors.Errorf("the transaction spends %d inputs and would have a mass of %d, over the "+
 			"standard limit of %d. It cannot be split into chained transactions, because nodes do not "+
 			"accept inputs younger than %d DAA score units. Consolidate the wallet's coins first "+
 			"(for example with auto-compound), wait for the consolidated coins to reach that age, and "+
 			"send again, or send a smaller amount",
-			len(transaction.Tx.Inputs), mass, mempool.MaximumStandardTransactionMass, inputMinAgeDAAScore)
+			inputCount, mass, mempool.MaximumStandardTransactionMass, inputMinAgeDAAScore)}
 	}
-	return transaction, nil
+	return nil
 }
 
 func (s *server) estimateMassAfterSignatures(transaction *serialization.PartiallySignedTransaction) (uint64, error) {

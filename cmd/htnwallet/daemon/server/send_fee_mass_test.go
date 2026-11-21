@@ -498,6 +498,29 @@ func TestSendDustAndChange(t *testing.T) {
 			t.Errorf("internal index went from %d to %d, want one new address", before, got)
 		}
 	})
+
+	for _, test := range []struct {
+		name         string
+		coins        []uint64
+		wantOutputs  int
+		wantNewIndex uint32
+	}{
+		{"dust change reserves no address", append([]uint64{1_000_000}, repeat(11_677, 9)...), 1, 0},
+		{"spendable change reserves one address", []uint64{1_000_000, 20_000}, 2, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			w.t = t
+			w.fund(t, same(ml, test.coins...)...)
+			before := w.s.keysFile.LastUsedInternalIndex()
+			r := w.check(w.send(address, 989_000, false, nil, false, nil))
+			if r.inputs < 2 || len(r.outputs) != test.wantOutputs {
+				t.Fatalf("got %d inputs and outputs %v, want multiple inputs and %d outputs", r.inputs, r.outputs, test.wantOutputs)
+			}
+			if got := w.s.keysFile.LastUsedInternalIndex(); got != before+test.wantNewIndex {
+				t.Errorf("internal index went from %d to %d, want an advance of %d", before, got, test.wantNewIndex)
+			}
+		})
+	}
 }
 
 func TestSendWithUnscannableChangeIndex(t *testing.T) {

@@ -10,40 +10,33 @@ import (
 	"github.com/pkg/errors"
 )
 
-// changeAddress derives a candidate without issuing it. When all inputs are ML-DSA-44, it
-// selects the corresponding change address so that change stays under the same key type.
-func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress, mldsa44 bool) (util.Address, *walletAddress, error) {
+// deriveChangeAddress resolves wallet change without reserving or tracking it. The caller holds s.lock.
+func (s *server) deriveChangeAddress(useExisting, mldsa44 bool) (util.Address, *walletAddress, error) {
 	if s.keysFile.IsImported() {
-		return s.importedWalletChangeAddress(useExisting, fromAddresses)
+		return s.selectImportedWalletAddress(libhtnwallet.InternalKeychain)
 	}
 
-	var walletAddr *walletAddress
-	if len(fromAddresses) != 0 && useExisting {
-		walletAddr = fromAddresses[0]
-	} else {
-		internalIndex := uint32(0)
-		if !useExisting {
-			var err error
-			internalIndex, err = nextIndex(s.keysFile.LastUsedInternalIndex())
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-		walletAddr = &walletAddress{
-			index:         internalIndex,
-			cosignerIndex: s.walletAddressCosignerIndex(mldsa44),
-			keyChain:      libhtnwallet.InternalKeychain,
-			mldsa44:       mldsa44,
+	var index uint32
+	if !useExisting {
+		var err error
+		index, err = nextIndex(s.keysFile.LastUsedInternalIndex())
+		if err != nil {
+			return nil, nil, err
 		}
 	}
-
-	if walletAddr.mldsa44 {
+	walletAddr := &walletAddress{
+		index:         index,
+		cosignerIndex: s.walletAddressCosignerIndex(mldsa44),
+		keyChain:      libhtnwallet.InternalKeychain,
+		mldsa44:       mldsa44,
+	}
+	if mldsa44 {
 		address, err := s.mldsa44Address(walletAddr)
 		return address, walletAddr, err
 	}
 
-	path := s.walletAddressPath(walletAddr)
-	address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+	address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures,
+		s.walletAddressPath(walletAddr), s.keysFile.ECDSA)
 	return address, walletAddr, err
 }
 

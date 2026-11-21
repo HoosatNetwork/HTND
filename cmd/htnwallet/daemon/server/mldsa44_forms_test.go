@@ -75,7 +75,7 @@ func TestMLDSA44AddressFormsInTheDaemon(t *testing.T) {
 		if (coin.RedeemScript != nil) != (walletAddr.mldsa44Form == libhtnwallet.MLDSA44AddressFormP2SH) {
 			t.Fatalf("the %s coin carries redeem script %x", walletAddr.mldsa44Form, coin.RedeemScript)
 		}
-		if !allInputsAreMLDSA44([]*libhtnwallet.UTXO{coin}) {
+		if !anyInputIsMLDSA44([]*libhtnwallet.UTXO{coin}) {
 			t.Fatalf("a %s coin is not recognised as ML-DSA-44, so its change would go to a secp256k1 address",
 				walletAddr.mldsa44Form)
 		}

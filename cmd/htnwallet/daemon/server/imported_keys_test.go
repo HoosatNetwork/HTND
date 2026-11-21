@@ -13,8 +13,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/utxo"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/util/txmass"
 )
 
 // newImportedWalletServer returns a synced server for a keys file holding the given imported wallet.
@@ -168,7 +170,7 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 	}
 
 	for _, want := range []string{change0, change1, change0} {
-		address, walletAddr, err := s.changeAddress(false, nil, false)
+		address, walletAddr, err := s.deriveChangeAddress(false, false)
 		if err != nil {
 			t.Fatalf("changeAddress: %+v", err)
 		}
@@ -180,13 +182,29 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 		}
 	}
 
-	fromAddress := s.addressSet[receive1]
-	address, _, err := s.changeAddress(true, []*walletAddress{fromAddress}, false)
+	named, err := libhtnwallet.ImportedKeyAddress(s.params, importedKeys[1].ExtendedPublicKey,
+		libhtnwallet.SingleSigAddressTypeP2PKH)
 	if err != nil {
-		t.Fatalf("changeAddress: %+v", err)
+		t.Fatal(err)
 	}
-	if address.String() != receive1 {
-		t.Fatalf("change with --use-existing-change-address went to %s, not the from address %s", address, receive1)
+	script, err := txscript.PayToAddrScript(named)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.addressSet[named.String()] = s.importedAddresses[named.String()]
+	s.utxosSortedByAmount = []*walletUTXO{{
+		Outpoint:  &externalapi.DomainOutpoint{Index: 1},
+		UTXOEntry: utxo.NewUTXOEntry(1_000_000, script, false, 1),
+		address:   s.addressSet[named.String()],
+	}}
+	s.txMassCalculator = txmass.NewCalculator(s.params.MassPerTxByte, s.params.MassPerScriptPubKeyByte, s.params.MassPerSigOp)
+	txs, err := s.buildSendTransaction(named, 500_000, false, []string{named.String()}, true, nil, feeTestVirtualDAAScore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent := parseSent(t, &feeWallet{params: s.params}, [][]byte{txs.transaction}, nil)
+	if len(sent.outputs) != 2 || sent.outputs[1] != named.String() {
+		t.Fatalf("got %+v, want change to %s", sent, named)
 	}
 
 	s, rawKeyAddress := newPrivateKeyWalletServer(t)
@@ -198,9 +216,12 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 		if response.Address != rawKeyAddress {
 			t.Fatalf("a private key wallet handed out %s, not its address %s", response.Address, rawKeyAddress)
 		}
-		address, _, err := s.changeAddress(false, nil, false)
+		address, walletAddr, err := s.deriveChangeAddress(false, false)
 		if err != nil {
 			t.Fatalf("changeAddress: %+v", err)
+		}
+		if err := s.commitChange(&changeOutput{address: address, walletAddr: walletAddr, fresh: true}); err != nil {
+			t.Fatalf("commitChange: %+v", err)
 		}
 		if address.String() != rawKeyAddress {
 			t.Fatalf("a private key wallet's change went to %s, not its address %s", address, rawKeyAddress)

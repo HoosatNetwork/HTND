@@ -71,14 +71,14 @@ func (s *server) trackedImportedKeys() []*keys.ImportedKey {
 	return importedKeys
 }
 
-// nextImportedWalletAddress selects the first untracked key in keyChain for a web wallet, or
+// selectImportedWalletAddress selects the first untracked key in keyChain for a web wallet, or
 // the only key for a lone private key wallet. The caller holds s.lock and tracks the address
 // when issuing it.
 //
 // When every web wallet key in keyChain is in use, a receive address is refused - the wallet needs to be
 // imported again with more addresses - while change goes back to the key chain's first key, rather than
 // failing the send.
-func (s *server) nextImportedWalletAddress(keyChain uint8) (util.Address, *walletAddress, error) {
+func (s *server) selectImportedWalletAddress(keyChain uint8) (util.Address, *walletAddress, error) {
 	importedKeys := s.keysFile.ImportedKeys()
 	tracked := make(map[*keys.ImportedKey]struct{})
 	for _, importedKey := range s.trackedImportedKeys() {
@@ -126,25 +126,6 @@ func (s *server) nextImportedWalletAddress(keyChain uint8) (util.Address, *walle
 	return address, walletAddr, nil
 }
 
-// importedWalletChangeAddress is changeAddress for an imported wallet: the change goes back to the first
-// address it is sent from when useExisting is set, as for an htnwallet wallet, and otherwise to the
-// imported wallet's next change address. The caller holds s.lock.
-func (s *server) importedWalletChangeAddress(useExisting bool, fromAddresses []*walletAddress) (
-	util.Address, *walletAddress, error,
-) {
-	if len(fromAddresses) == 0 || !useExisting {
-		return s.nextImportedWalletAddress(libhtnwallet.InternalKeychain)
-	}
-
-	walletAddr := fromAddresses[0]
-	address, err := libhtnwallet.ImportedKeyAddress(s.params, walletAddr.imported.ExtendedPublicKey,
-		libhtnwallet.SingleSigAddressTypeP2PK)
-	if err != nil {
-		return nil, nil, err
-	}
-	return address, walletAddr, nil
-}
-
 // showImportedWalletAddresses is ShowAddresses for an imported wallet: the addresses of its keys the
 // daemon tracks - a lone private key's always, a web wallet's once they held coins or were handed out.
 // The caller holds s.lock.
@@ -173,9 +154,9 @@ func (s *server) showImportedWalletAddresses(request *pb.ShowAddressesRequest) (
 }
 
 // importedWalletNewAddress is NewAddress for an imported wallet: its next receive address
-// (nextImportedWalletAddress). The caller holds s.lock.
+// (selectImportedWalletAddress). The caller holds s.lock.
 func (s *server) importedWalletNewAddress(request *pb.NewAddressRequest) (*pb.NewAddressResponse, error) {
-	p2pkAddress, walletAddr, err := s.nextImportedWalletAddress(libhtnwallet.ExternalKeychain)
+	p2pkAddress, walletAddr, err := s.selectImportedWalletAddress(libhtnwallet.ExternalKeychain)
 	if err != nil {
 		return nil, err
 	}
