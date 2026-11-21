@@ -147,20 +147,17 @@ func TestSendOverStandardMassIsRefusedNotSplit(t *testing.T) {
 		return unsigned
 	}
 
-	small := unsignedWithInputs(1)
-	transactions, err := s.requireStandardMass(small)
+	transaction, err := s.requireStandardMass(unsignedWithInputs(1))
 	if err != nil {
 		t.Fatalf("a one-input transaction was refused: %s", err)
 	}
-	if len(transactions) != 1 || string(transactions[0]) != string(small) {
-		t.Fatalf("a one-input transaction came back as %d transactions", len(transactions))
+	if got := len(transaction.Tx.Inputs); got != 1 {
+		t.Fatalf("the parsed transaction has %d inputs, want 1", got)
 	}
 
-	transactions, err = s.requireStandardMass(unsignedWithInputs(500))
-	if err == nil {
-		t.Fatalf("a 500-input multisig transaction was accepted as %d transaction(s)", len(transactions))
-	}
-	if !strings.Contains(err.Error(), "over the standard limit") {
+	if _, err := s.requireStandardMass(unsignedWithInputs(500)); err == nil {
+		t.Fatal("a 500-input multisig transaction was accepted")
+	} else if !strings.Contains(err.Error(), "over the standard limit") {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
+	"github.com/HoosatNetwork/HTND/v2/util"
 )
 
 // TestChangeAddressIsTrackedBeforeItHoldsACoin pins that a new change address is read for balances and
@@ -41,6 +42,9 @@ func TestChangeAddressIsTrackedBeforeItHoldsACoin(t *testing.T) {
 	}
 	if walletAddr.keyChain != libhtnwallet.InternalKeychain || walletAddr.index != 1 {
 		t.Fatalf("got change address %+v, want internal index 1", walletAddr)
+	}
+	if err := s.commitChange(&changeOutput{address: address, walletAddr: walletAddr, fresh: true}); err != nil {
+		t.Fatalf("commitChange: %+v", err)
 	}
 	tracked, ok := s.addressSet[address.String()]
 	if !ok {
@@ -111,6 +115,18 @@ func TestMLDSA44ChangeAddressWithExhaustedKeyPool(t *testing.T) {
 }
 
 // With no positive discovery, the next address on a chain with an unscannable counter is at index 1.
+// issueTestChangeAddress derives and commits change as the send handler does.
+func issueTestChangeAddress(s *server, mldsa44 bool) (util.Address, *walletAddress, error) {
+	address, walletAddr, err := s.changeAddress(false, nil, mldsa44)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.commitChange(&changeOutput{address: address, walletAddr: walletAddr, fresh: true}); err != nil {
+		return nil, nil, err
+	}
+	return address, walletAddr, nil
+}
+
 func TestNewAddressesWithImpossibleLastUsedIndex(t *testing.T) {
 	params := &dagconfig.TestnetParams
 	mnemonic, err := libhtnwallet.CreateMnemonic()
@@ -137,7 +153,7 @@ func TestNewAddressesWithImpossibleLastUsedIndex(t *testing.T) {
 			nextSyncStartIndex: numIndexesToQueryForRecentAddresses}
 		s.firstSyncDone.Store(true)
 
-		_, walletAddr, err := s.changeAddress(false, nil, false)
+		_, walletAddr, err := issueTestChangeAddress(s, false)
 		if err != nil {
 			t.Fatalf("recorded %d: changeAddress: %+v", recorded, err)
 		}
@@ -183,7 +199,7 @@ func TestImportedWalletChangeAddressIgnoresLastUsedIndexes(t *testing.T) {
 	if err := s.keysFile.SetLastUsedInternalIndex(4294966296); err != nil {
 		t.Fatalf("SetLastUsedInternalIndex: %+v", err)
 	}
-	address, walletAddr, err := s.changeAddress(false, nil, false)
+	address, walletAddr, err := issueTestChangeAddress(s, false)
 	if err != nil {
 		t.Fatalf("changeAddress: %+v", err)
 	}
@@ -217,7 +233,7 @@ func TestMLDSA44AddressesWithImpossibleLastUsedIndex(t *testing.T) {
 		t.Fatalf("SetLastUsedInternalIndex: %+v", err)
 	}
 
-	_, walletAddr, err := s.changeAddress(false, nil, true)
+	_, walletAddr, err := issueTestChangeAddress(s, true)
 	if err != nil {
 		t.Fatalf("changeAddress: %+v", err)
 	}
@@ -325,7 +341,7 @@ func TestAddressIndexExhaustionDoesNotAdvanceCounters(t *testing.T) {
 				s.rpcClient = &dagInfoRPCClient{score: math.MaxUint64}
 			}
 			for attempt := 1; attempt <= 2; attempt++ {
-				_, _, err := s.changeAddress(false, nil, tc.mldsa44)
+				_, _, err := issueTestChangeAddress(s, tc.mldsa44)
 				if err == nil || err.Error() != wantError {
 					t.Errorf("attempt %d: changeAddress returned %v, want %q", attempt, err, wantError)
 				}
@@ -356,7 +372,7 @@ func TestAddressDerivationFailureDoesNotAdvanceCounters(t *testing.T) {
 	s.nextSyncStartIndex = numIndexesToQueryForRecentAddresses
 	s.firstSyncDone.Store(true)
 
-	if _, _, err := s.changeAddress(false, nil, false); err == nil {
+	if _, _, err := issueTestChangeAddress(s, false); err == nil {
 		t.Error("changeAddress succeeded with an invalid extended public key")
 	}
 	if _, err := s.NewAddress(context.Background(), &pb.NewAddressRequest{}); err == nil {
@@ -398,7 +414,7 @@ func TestAllocationUsesDiscoveredIndexOnEachChain(t *testing.T) {
 	if response.Address != want.String() {
 		t.Errorf("NewAddress returned %s, want %s at external index 1", response.Address, want)
 	}
-	_, change, err := s.changeAddress(false, nil, false)
+	_, change, err := issueTestChangeAddress(s, false)
 	if err != nil {
 		t.Fatalf("changeAddress: %+v", err)
 	}

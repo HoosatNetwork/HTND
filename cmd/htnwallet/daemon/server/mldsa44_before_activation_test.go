@@ -45,7 +45,7 @@ func TestMLDSA44CoinsWaitForActivation(t *testing.T) {
 		if err != nil {
 			return sentTransactionInputs{}, err
 		}
-		return countInputs(t, transactions), nil
+		return countInputs(t, [][]byte{transactions.transaction}), nil
 	}
 
 	// Before activation: the secp256k1 coin pays what it can, and the ML-DSA-44 coin is out of reach.
@@ -267,10 +267,10 @@ func TestSendExistingChangeSkipsInactiveMLDSA44Address(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildSendTransaction: %v", err)
 			}
-			if inputs := countInputs(t, txs); inputs != tc.inputs {
+			if inputs := countInputs(t, [][]byte{txs.transaction}); inputs != tc.inputs {
 				t.Fatalf("inputs: got %+v, want %+v", inputs, tc.inputs)
 			}
-			transaction, err := serialization.DeserializePartiallySignedTransaction(txs[0])
+			transaction, err := serialization.DeserializePartiallySignedTransaction(txs.transaction)
 			if err != nil {
 				t.Fatalf("DeserializePartiallySignedTransaction: %v", err)
 			}

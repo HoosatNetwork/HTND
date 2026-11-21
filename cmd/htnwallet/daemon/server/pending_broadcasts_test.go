@@ -288,7 +288,7 @@ func TestSlowTransactionStatusIsNotAskedAgain(t *testing.T) {
 	broadcastTime := time.Now()
 	node := &pendingBroadcastNode{statusUnanswered: true}
 	walletServer := newPendingBroadcastTestServer(t, node, transaction, broadcastTime)
-	walletServer.backgroundRPCClient.SetTimeout(200 * time.Millisecond)
+	walletServer.backgroundRPCClient.(*rpcclient.RPCClient).SetTimeout(200 * time.Millisecond)
 
 	checkTime := broadcastTime.Add(pendingBroadcastGracePeriod)
 	walletServer.checkPendingBroadcasts(checkTime)

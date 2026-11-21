@@ -2,18 +2,9 @@
 
 package keys
 
-import (
-	"os"
-)
+import "os"
 
-// syncDir flushes the directory itself, so that the rename Save just performed is durable and not
-// only the replacement file's contents.
-func syncDir(dir string) error {
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer dirFile.Close()
-
-	return dirFile.Sync()
+// Open before replacing the keys file so an open failure leaves the old file in place.
+func openDirectoryForSync(dir string) (syncDirectory, error) {
+	return os.Open(dir)
 }

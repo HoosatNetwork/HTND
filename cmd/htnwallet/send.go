@@ -35,11 +35,15 @@ func send(conf *sendConfig) error {
 		return err
 	}
 	defer tearDown()
+	return sendWithClient(conf, keysFile, daemonClient)
+}
 
+func sendWithClient(conf *sendConfig, keysFile *keys.File, daemonClient pb.HtnwalletdClient) error {
 	ctx, cancel := context.WithTimeout(context.Background(), daemonTimeout)
 	defer cancel()
 
 	var sendAmountSompi uint64
+	var err error
 	if !conf.IsSendAll {
 		sendAmountSompi, err = utils.KasToSompi(conf.SendAmount)
 		if err != nil {
@@ -86,9 +90,8 @@ retry:
 		for i, unsignedTransaction := range createUnsignedTransactionsResponse.UnsignedTransactions {
 			signedTransaction, err := libhtnwallet.SignWithImportedKeys(conf.NetParams(), mnemonics, importedKeys, unsignedTransaction, keysFile.ECDSA)
 			if err != nil {
-				fmt.Printf("Failed to sign unsigned transactions after %d attempts: %s\n", attempt, err)
-				time.Sleep(retryDelay)
-				continue retry
+				return errors.Wrap(err, "failed to sign the transaction. Make sure the keys file is the one the "+
+					"wallet daemon runs on")
 			}
 			signedTransactions[i] = signedTransaction
 		}

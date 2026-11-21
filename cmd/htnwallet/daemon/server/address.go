@@ -10,12 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// changeAddress returns the address change is sent to. mldsa44 asks for an ML-DSA-44 change address,
-// which the callers do when every input being spent is ML-DSA-44: sending change from quantum-safe
-// coins back to a secp256k1 address would quietly undo the point of holding them.
+// changeAddress derives a candidate without issuing it. When all inputs are ML-DSA-44, it
+// selects the corresponding change address so that change stays under the same key type.
 func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress, mldsa44 bool) (util.Address, *walletAddress, error) {
 	if s.keysFile.IsImported() {
-		// An imported wallet holds no ML-DSA-44 keys, so its coins are never ML-DSA-44.
 		return s.importedWalletChangeAddress(useExisting, fromAddresses)
 	}
 
@@ -31,7 +29,6 @@ func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress,
 				return nil, nil, err
 			}
 		}
-
 		walletAddr = &walletAddress{
 			index:         internalIndex,
 			cosignerIndex: s.walletAddressCosignerIndex(mldsa44),
@@ -40,25 +37,35 @@ func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress,
 		}
 	}
 
-	var address util.Address
-	var err error
 	if walletAddr.mldsa44 {
-		address, err = s.mldsa44Address(walletAddr)
-	} else {
-		path := s.walletAddressPath(walletAddr)
-		address, err = libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
-	}
-	if err != nil {
-		return nil, nil, err
+		address, err := s.mldsa44Address(walletAddr)
+		return address, walletAddr, err
 	}
 
-	if !useExisting {
-		if err := s.keysFile.SetLastUsedInternalIndex(walletAddr.index); err != nil {
-			return nil, nil, err
+	path := s.walletAddressPath(walletAddr)
+	address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+	return address, walletAddr, err
+}
+
+type changeOutput struct {
+	address    util.Address
+	walletAddr *walletAddress
+	fresh      bool
+}
+
+// commitChange tracks the change output and saves any new derivation index. Call it with
+// s.lock held before the transaction can leave the daemon.
+func (s *server) commitChange(change *changeOutput) error {
+	if change == nil {
+		return nil
+	}
+	if change.fresh && change.walletAddr.imported == nil {
+		if err := s.keysFile.ReserveInternalIndex(change.walletAddr.index); err != nil {
+			return err
 		}
 	}
-	s.trackChangeAddress(address, walletAddr)
-	return address, walletAddr, nil
+	s.trackChangeAddress(change.address, change.walletAddr)
+	return nil
 }
 
 // nextIndex uses the same effective last used index as the scan. A counter outside the scannable

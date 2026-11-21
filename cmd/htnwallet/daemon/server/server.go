@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/version"
 
@@ -15,11 +16,9 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 
-	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/rpcclient"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 	"github.com/HoosatNetwork/HTND/v2/util/panics"
 	"github.com/pkg/errors"
@@ -34,11 +33,21 @@ type walletRPCClient interface {
 	transactionSubmitter
 }
 
+type walletBackgroundNode interface {
+	transactionSubmitter
+	GetBalancesByAddresses(addresses []string) (*appmessage.GetBalancesByAddressesResponseMessage, error)
+	GetMempoolEntriesByAddresses(addresses []string, includeOrphanPool, filterTransactionPool bool) (*appmessage.GetMempoolEntriesByAddressesResponseMessage, error)
+	GetMempoolEntry(txID string, includeOrphanPool, filterTransactionPool bool) (*appmessage.GetMempoolEntryResponseMessage, error)
+	GetTransactionStatus(transactionID string) (*appmessage.GetTransactionStatusResponseMessage, error)
+	GetUsableAddresses(addresses []string) (*appmessage.GetUsableAddressesResponseMessage, error)
+	GetUTXOsByAddresses(addresses []string, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error)
+}
+
 type server struct {
 	pb.UnimplementedHtnwalletdServer
 
 	rpcClient             walletRPCClient      // RPC client for ongoing user requests
-	backgroundRPCClient   *rpcclient.RPCClient // RPC client dedicated for address and UTXO background fetching
+	backgroundRPCClient   walletBackgroundNode // RPC client dedicated for address and UTXO background fetching
 	dagInfoRequests       dagInfoRequests
 	addressListingTimeout time.Duration
 	params                *dagconfig.Params

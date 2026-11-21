@@ -221,28 +221,23 @@ func TestLastUsedIndexKeepsRenamedValueAfterDirectorySyncFailure(t *testing.T) {
 		t.Skip("saving does not sync the directory on Windows")
 	}
 	dir := filepath.Join(t.TempDir(), "wallet")
-	moved := dir + "-moved"
 	path := filepath.Join(dir, "keys.json")
 	file := newTestFile(t, path, 1)
 	if err := file.SetLastUsedExternalIndex(1 << 31); err != nil {
 		t.Fatalf("seed counter: %v", err)
 	}
 
-	originalRename := renameFile
-	renameFile = func(from, to string) error {
-		if err := originalRename(from, to); err != nil {
-			return err
+	injected := errors.New("injected directory sync failure")
+	openSyncDir = func(dir string) (syncDirectory, error) {
+		directory, err := openDirectoryForSync(dir)
+		if err != nil {
+			return nil, err
 		}
-		// Let the replacement succeed, then make opening the directory for sync fail.
-		return os.Rename(dir, moved)
+		return failingDirectorySync{directory, injected}, nil
 	}
-	t.Cleanup(func() { renameFile = originalRename })
-	saveErr := file.SetLastUsedExternalIndex(1)
-	if err := os.Rename(moved, dir); err != nil {
-		t.Fatalf("restore wallet directory (save returned %v): %v", saveErr, err)
-	}
-	if !errors.Is(saveErr, os.ErrNotExist) {
-		t.Fatalf("setting counter returned %v, want a missing-directory error", saveErr)
+	t.Cleanup(func() { openSyncDir = openDirectoryForSync })
+	if err := file.SetLastUsedExternalIndex(1); !errors.Is(err, injected) {
+		t.Fatalf("setting counter returned %v, want a directory sync error", err)
 	}
 	saved, err := ReadKeysFile(&dagconfig.MainnetParams, path)
 	if err != nil {
@@ -250,6 +245,93 @@ func TestLastUsedIndexKeepsRenamedValueAfterDirectorySyncFailure(t *testing.T) {
 	}
 	if memory, disk := file.LastUsedExternalIndex(), saved.LastUsedExternalIndex(); memory != 1 || disk != 1 {
 		t.Errorf("counter in memory = %d, on disk = %d, want 1 in both", memory, disk)
+	}
+}
+
+func TestInternalIndexSaveCanRetryAfterRenameFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keys.json")
+	before := seedKeysFile(t, path)
+	file, err := ReadKeysFile(&dagconfig.MainnetParams, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	injected := errors.New("injected rename failure")
+	renameFile = func(string, string) error { return injected }
+	t.Cleanup(func() { renameFile = os.Rename })
+	if err := file.SetLastUsedInternalIndex(1); !errors.Is(err, injected) {
+		t.Fatalf("setting the index returned %v, want the injected error", err)
+	}
+	if got := file.LastUsedInternalIndex(); got != 0 {
+		t.Errorf("failed save left the internal index at %d, want 0", got)
+	}
+	requireKeysFileUnchanged(t, path, before)
+
+	renameFile = os.Rename
+	if err := file.SetLastUsedInternalIndex(1); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := ReadKeysFile(&dagconfig.MainnetParams, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.LastUsedInternalIndex(); got != 1 {
+		t.Errorf("retry persisted internal index %d, want 1", got)
+	}
+}
+
+type failingDirectorySync struct {
+	syncDirectory
+	err error
+}
+
+func (d failingDirectorySync) Sync() error { return d.err }
+
+func TestInternalReservationRetriesAfterDirectorySyncFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keys.json")
+	seedKeysFile(t, path)
+	params := &dagconfig.MainnetParams
+	file, err := ReadKeysFile(params, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	injected := errors.New("injected directory sync failure")
+	openSyncDir = func(dir string) (syncDirectory, error) {
+		directory, err := openDirectoryForSync(dir)
+		if err != nil {
+			return nil, err
+		}
+		return failingDirectorySync{directory, injected}, nil
+	}
+	t.Cleanup(func() { openSyncDir = openDirectoryForSync })
+
+	for range 2 {
+		if err := file.ReserveInternalIndex(file.LastUsedInternalIndex() + 1); !errors.Is(err, injected) {
+			t.Fatalf("reservation returned %v, want the directory sync error", err)
+		}
+		if got := file.LastUsedInternalIndex(); got != 0 {
+			t.Errorf("last issued index is %d, want 0", got)
+		}
+		reloaded, err := ReadKeysFile(params, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := reloaded.LastUsedInternalIndex(); got != 1 {
+			t.Errorf("visible file has index %d, want 1 after rename", got)
+		}
+	}
+
+	openSyncDir = openDirectoryForSync
+	if err := file.ReserveInternalIndex(file.LastUsedInternalIndex() + 1); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := ReadKeysFile(params, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if memory, disk := file.LastUsedInternalIndex(), reloaded.LastUsedInternalIndex(); memory != 1 || disk != 1 {
+		t.Errorf("retry reserved index %d in memory and %d on disk, want index 1", memory, disk)
 	}
 }
 

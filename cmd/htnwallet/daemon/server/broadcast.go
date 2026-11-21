@@ -45,26 +45,34 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			}
 		}
 
-		txIDs[i], err = sendTransaction(s.rpcClient, tx, allowOrphan, isHighPriority)
+		txIDs[i], err = s.submitTransaction(tx, allowOrphan, isHighPriority)
 		if err != nil {
-			if shouldReleaseUsedOutpointsOnBroadcastError(err) {
-				s.releaseUsedOutpoints(tx)
-			}
-			if broadcastErrorMeansUTXOSetIsStale(err) {
-				s.utxoSetIsStale = true
-			}
 			return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 		}
-
-		broadcastTime := time.Now()
-		for _, input := range tx.Inputs {
-			s.usedOutpoints[input.PreviousOutpoint] = broadcastTime
-		}
-		s.trackBroadcast(tx, broadcastTime)
 	}
 
 	s.forceSync()
 	return txIDs, nil
+}
+
+func (s *server) submitTransaction(tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
+	txID, err := sendTransaction(s.rpcClient, tx, allowOrphan, isHighPriority)
+	if err != nil {
+		if shouldReleaseUsedOutpointsOnBroadcastError(err) {
+			s.releaseUsedOutpoints(tx)
+		}
+		if broadcastErrorMeansUTXOSetIsStale(err) {
+			s.utxoSetIsStale = true
+		}
+		return "", err
+	}
+
+	broadcastTime := time.Now()
+	for _, input := range tx.Inputs {
+		s.usedOutpoints[input.PreviousOutpoint] = broadcastTime
+	}
+	s.trackBroadcast(tx, broadcastTime)
+	return txID, nil
 }
 
 // withSubmittedTransactionIDs adds to a broadcast error the IDs of the transactions of the same request that were

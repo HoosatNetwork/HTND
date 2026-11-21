@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
@@ -231,7 +233,24 @@ func (w *feeWallet) check(transactions [][]byte, err error) result {
 func (w *feeWallet) send(address util.Address, amount uint64, sendAll bool, from []*walletAddress,
 	useExistingChange bool, payload []byte,
 ) ([][]byte, error) {
-	return w.s.buildSendTransaction(address, amount, sendAll, from, useExistingChange, payload, feeTestVirtualDAAScore)
+	attachSendTestNode(w.t, w)
+	request := &pb.CreateUnsignedTransactionsRequest{
+		Address:                  address.String(),
+		Amount:                   amount,
+		IsSendAll:                sendAll,
+		UseExistingChangeAddress: useExistingChange,
+		Payload:                  payload,
+	}
+	for _, walletAddr := range from {
+		addressString := w.address(w.t, walletAddr).String()
+		w.s.addressSet[addressString] = walletAddr
+		request.From = append(request.From, addressString)
+	}
+	response, err := w.s.CreateUnsignedTransactions(context.Background(), request)
+	if err != nil {
+		return nil, err
+	}
+	return response.UnsignedTransactions, nil
 }
 
 func wantOutputs(t *testing.T, r result, want ...uint64) {
@@ -470,9 +489,11 @@ func TestSendDustAndChange(t *testing.T) {
 
 	t.Run("a fresh change address is taken once across candidates", func(t *testing.T) {
 		w.t = t
-		w.fund(t, same(ml, append([]uint64{1_000_000}, repeat(11_677, 9)...)...)...)
+		// The first input cannot pay the fee. The second leaves spendable change.
+		w.fund(t, same(ml, 1_000_000, 12_000)...)
 		before := w.s.keysFile.LastUsedInternalIndex()
-		w.check(w.send(address, 989_000, false, nil, false, nil))
+		r := w.check(w.send(address, 989_000, false, nil, false, nil))
+		wantOutputs(t, r, 989_000, 724)
 		if got := w.s.keysFile.LastUsedInternalIndex(); got != before+1 {
 			t.Errorf("internal index went from %d to %d, want one new address", before, got)
 		}
@@ -492,7 +513,7 @@ func TestSendWithUnscannableChangeIndex(t *testing.T) {
 	}{
 		{name: "fresh change", recorded: firstUnscannable, amount: 900_000, wantIndex: 1, wantOutputValue: []uint64{900_000, 90_000}},
 		{name: "would wrap", recorded: math.MaxUint32, amount: 900_000, wantIndex: 1, wantOutputValue: []uint64{900_000, 90_000}},
-		{name: "dust change", recorded: firstUnscannable, amount: 989_999, wantIndex: 1, wantOutputValue: []uint64{989_999}},
+		{name: "dust change", recorded: firstUnscannable, amount: 989_999, wantIndex: firstUnscannable, wantOutputValue: []uint64{989_999}},
 		{name: "existing change", recorded: firstUnscannable, amount: 900_000, useExisting: true, wantIndex: firstUnscannable, wantOutputValue: []uint64{900_000, 90_000}},
 		{name: "send all", recorded: firstUnscannable, sendAll: true, wantIndex: firstUnscannable, wantOutputValue: []uint64{990_000}},
 	} {

@@ -57,8 +57,9 @@ func TestShowAddressesWithOccupiedNodeSlots(t *testing.T) {
 	setAddressListingState(t, s, 1)
 	foregroundClient := connectAddressTestNode(t, address)
 	s.rpcClient = foregroundClient
-	s.backgroundRPCClient = connectAddressTestNode(t, address)
-	for _, client := range []*rpcclient.RPCClient{foregroundClient, s.backgroundRPCClient} {
+	backgroundClient := connectAddressTestNode(t, address)
+	s.backgroundRPCClient = backgroundClient
+	for _, client := range []*rpcclient.RPCClient{foregroundClient, backgroundClient} {
 		if info, err := client.GetBlockDAGInfo(); err != nil || info.VirtualDAAScore != activation {
 			t.Fatalf("existing wallet stream could not fetch DAG info: %v, %v", info, err)
 		}

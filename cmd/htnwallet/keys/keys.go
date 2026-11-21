@@ -394,6 +394,18 @@ func (d *File) setLastUsedIndex(current *uint32, index uint32) error {
 	return err
 }
 
+// ReserveInternalIndex saves an index before issuing its address. If the save fails, the
+// address is still unissued and the daemon can retry the same index, even if the replacement
+// file is already visible after a failed directory sync.
+func (d *File) ReserveInternalIndex(index uint32) error {
+	previous := d.lastUsedInternalIndex
+	if err := d.SetLastUsedInternalIndex(index); err != nil {
+		d.lastUsedInternalIndex = previous
+		return err
+	}
+	return nil
+}
+
 // LastUsedInternalIndex returns the last used index in the internal key chain
 func (d *File) LastUsedInternalIndex() uint32 {
 	return d.lastUsedInternalIndex
@@ -539,13 +551,27 @@ func (d *File) save() (bool, error) {
 		return false, err
 	}
 
+	directory, err := openSyncDir(dir)
+	if err != nil {
+		return false, err
+	}
+	defer directory.Close()
+
 	err = renameFile(tempPath, d.path)
 	if err != nil {
 		return false, err
 	}
 
-	return true, syncDir(dir)
+	return true, directory.Sync()
 }
+
+type syncDirectory interface {
+	Sync() error
+	Close() error
+}
+
+// openSyncDir allows tests to inject a failure after the rename.
+var openSyncDir = openDirectoryForSync
 
 // renameFile is os.Rename, as a variable so tests can fail Save at its last step on every platform.
 var renameFile = os.Rename
