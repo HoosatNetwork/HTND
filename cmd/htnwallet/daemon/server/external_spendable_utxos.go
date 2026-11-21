@@ -13,7 +13,7 @@ func (s *server) GetExternalSpendableUTXOs(_ context.Context, request *pb.GetExt
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	_, err := util.DecodeAddress(request.Address, s.params.Prefix)
+	address, err := util.DecodeAddress(request.Address, s.params.Prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +21,7 @@ func (s *server) GetExternalSpendableUTXOs(_ context.Context, request *pb.GetExt
 	if err != nil {
 		return nil, err
 	}
-	selectedUTXOs, err := s.selectExternalSpendableUTXOs(externalUTXOs, request.Address)
+	selectedUTXOs, err := s.selectExternalSpendableUTXOs(externalUTXOs, address)
 	if err != nil {
 		return nil, err
 	}
@@ -30,13 +30,20 @@ func (s *server) GetExternalSpendableUTXOs(_ context.Context, request *pb.GetExt
 	}, nil
 }
 
-func (s *server) selectExternalSpendableUTXOs(externalUTXOs *appmessage.GetUTXOsByAddressesResponseMessage, _ string) ([]*pb.UtxosByAddressesEntry, error) {
+func (s *server) selectExternalSpendableUTXOs(externalUTXOs *appmessage.GetUTXOsByAddressesResponseMessage, address util.Address) ([]*pb.UtxosByAddressesEntry, error) {
 	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
 	daaScore := dagInfo.VirtualDAAScore
+	_, nativeMLDSA44 := address.(*util.AddressPublicKeyHashMLDSA44)
+	trackedAddress := s.addressSet[address.String()]
+	if (nativeMLDSA44 || (trackedAddress != nil && trackedAddress.mldsa44)) &&
+		!libhtnwallet.MLDSA44Active(s.params, daaScore) {
+		return nil, nil
+	}
+
 	maturity := s.coinbaseMaturity
 
 	// we do not make because we do not know size, because of unspendable utxos

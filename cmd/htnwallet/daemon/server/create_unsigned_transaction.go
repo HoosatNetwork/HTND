@@ -522,7 +522,12 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 		}
 
 		if changeAddress == nil {
-			changeAddress, _, err = s.changeAddress(useExistingChangeAddress, fromAddresses, allInputsAreMLDSA44(selectedUTXOs))
+			// Existing change goes to the first eligible source in request order.
+			changeFrom := fromAddresses
+			for useExistingChangeAddress && len(changeFrom) > 0 && !s.isAddressSpendableAt(changeFrom[0], virtualDAAScore) {
+				changeFrom = changeFrom[1:]
+			}
+			changeAddress, _, err = s.changeAddress(useExistingChangeAddress, changeFrom, allInputsAreMLDSA44(selectedUTXOs))
 			if err != nil {
 				return nil, err
 			}

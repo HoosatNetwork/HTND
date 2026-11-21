@@ -23,8 +23,9 @@ import (
 // (1 sompi per mass unit, 603 sompi dust for a P2SH output), not with the production helpers.
 
 const (
-	// feeTestVirtualDAAScore is past the coins' DAA score (1) plus the input minimum age and its slack.
-	feeTestVirtualDAAScore = 1 + inputMinAgeDAAScore + 100
+	// feeTestVirtualDAAScore is past the coins' DAA score (1) plus the input minimum age and its slack,
+	// and past the ML-DSA-44 activation of mainnet, whose parameters these tests use.
+	feeTestVirtualDAAScore = 300_000_000
 	// feeTestMaxMass is mempool.MaximumStandardTransactionMass.
 	feeTestMaxMass = 100_000
 	// feeTestP2SHDust is the smallest non-dust P2SH output: 3 * (8+2+8+35 + 148).

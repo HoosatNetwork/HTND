@@ -20,3 +20,20 @@ An activation refusal from `NewAddress` or `ShowAddresses` returns
 gRPC status `Unknown` with an activation message. A node application
 error can also return `Unknown`, so clients cannot distinguish those
 cases using the status code alone.
+
+## Spendable balances and outputs
+
+`GetBalance.pending` includes funds that the wallet cannot currently
+spend because of coin maturity or ML-DSA-44 activation. During
+pre-activation, the full balance of each tracked ML-DSA-44 address is
+pending. `GetUTXOs` continues to list tracked outputs for inspection.
+
+`GetExternalSpendableUTXOs` applies the activation gate to native
+ML-DSA-44 addresses and wallet-tracked ML-DSA-44 script hashes. For
+an arbitrary external P2SH address, the script hash alone cannot
+identify the redeem script. Its outputs are filtered by age and the
+existing coinbase rules.
+
+An explicitly chosen payment or compound destination can receive funds
+before ML-DSA-44 activation. Those funds become spendable at activation,
+subject to the usual maturity rules.
