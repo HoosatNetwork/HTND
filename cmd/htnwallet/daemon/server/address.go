@@ -64,7 +64,7 @@ func (s *server) commitChange(change *changeOutput) error {
 			return err
 		}
 	}
-	s.trackChangeAddress(change.address, change.walletAddr)
+	s.trackAddress(change.address.String(), change.walletAddr)
 	return nil
 }
 
@@ -78,20 +78,13 @@ func nextIndex(lastUsedIndex uint32) (uint32, error) {
 	return index, nil
 }
 
-// trackChangeAddress adds a change address to the addresses the wallet reads balances and UTXOs from,
-// before any coin reaches it. The caller holds s.lock.
-//
-// The address scan only adds an address once the node reports it usable, which means it holds a coin,
-// and the node caches that answer per address for 30 seconds - "not usable" answers included. The scan
-// asks about every recent address every two seconds, so a fresh change address is cached as not usable
-// when the change arrives. Once the payment was accepted, its input was gone while the change address
-// was still outside the set: the balance dropped by the whole input for up to half a minute, and the
-// change looked lost.
-func (s *server) trackChangeAddress(address util.Address, walletAddr *walletAddress) {
+// trackAddress adds an issued address to balance and UTXO queries so these reads
+// can see incoming coins without waiting for discovery. The caller holds s.lock.
+func (s *server) trackAddress(address string, walletAddr *walletAddress) {
 	if s.addressSet == nil {
 		s.addressSet = make(walletAddressSet)
 	}
-	s.addressSet[address.String()] = walletAddr
+	s.addressSet[address] = walletAddr
 }
 
 // mldsa44Address returns the ML-DSA-44 address at wAddr's index and key chain, from the key pool the
@@ -330,6 +323,13 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 	if err := s.keysFile.SetLastUsedExternalIndex(index); err != nil {
 		return nil, err
 	}
+	if s.isMultisig() {
+		s.trackAddress(response.Address, walletAddr)
+	} else {
+		s.trackAddress(response.P2PkAddress, walletAddr)
+		s.trackAddress(response.P2PkhAddress, walletAddr)
+		s.trackAddress(response.P2ShAddress, walletAddr)
+	}
 	return response, nil
 }
 
@@ -417,6 +417,7 @@ func (s *server) newMLDSA44Address(form libhtnwallet.MLDSA44AddressForm) (*pb.Ne
 		return nil, err
 	}
 
+	s.trackAddress(address.String(), walletAddr)
 	return &pb.NewAddressResponse{Address: address.String()}, nil
 }
 

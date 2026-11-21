@@ -179,7 +179,7 @@ func (s *server) importedWalletNewAddress(request *pb.NewAddressRequest) (*pb.Ne
 	if err != nil {
 		return nil, err
 	}
-	s.trackChangeAddress(p2pkAddress, walletAddr)
+	s.trackAddress(p2pkAddress.String(), walletAddr)
 
 	response := &pb.NewAddressResponse{}
 	for addressType, field := range map[libhtnwallet.SingleSigAddressType]*string{
