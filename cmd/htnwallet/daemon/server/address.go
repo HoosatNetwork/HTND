@@ -23,33 +23,13 @@ func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress,
 	if len(fromAddresses) != 0 && useExisting {
 		walletAddr = fromAddresses[0]
 	} else {
-		if mldsa44 && !useExisting {
-			// Check before consuming an internal index, so a wallet without enough ML-DSA-44 keys
-			// fails without advancing lastUsedInternalIndex. useExisting takes internal index 0
-			// instead, and never needs the next one.
-			_, err := s.mldsa44Address(&walletAddress{
-				index:    s.keysFile.LastUsedInternalIndex() + 1,
-				keyChain: libhtnwallet.InternalKeychain,
-				mldsa44:  true,
-			})
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-
 		internalIndex := uint32(0)
 		if !useExisting {
-			err := s.keysFile.SetLastUsedInternalIndex(s.keysFile.LastUsedInternalIndex() + 1)
+			var err error
+			internalIndex, err = nextIndex(s.keysFile.LastUsedInternalIndex())
 			if err != nil {
 				return nil, nil, err
 			}
-
-			err = s.keysFile.Save()
-			if err != nil {
-				return nil, nil, err
-			}
-
-			internalIndex = s.keysFile.LastUsedInternalIndex()
 		}
 
 		walletAddr = &walletAddress{
@@ -60,22 +40,35 @@ func (s *server) changeAddress(useExisting bool, fromAddresses []*walletAddress,
 		}
 	}
 
+	var address util.Address
+	var err error
 	if walletAddr.mldsa44 {
-		address, err := s.mldsa44Address(walletAddr)
-		if err != nil {
-			return nil, nil, err
-		}
-		s.trackChangeAddress(address, walletAddr)
-		return address, walletAddr, nil
+		address, err = s.mldsa44Address(walletAddr)
+	} else {
+		path := s.walletAddressPath(walletAddr)
+		address, err = libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
 	}
-
-	path := s.walletAddressPath(walletAddr)
-	address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	if !useExisting {
+		if err := s.keysFile.SetLastUsedInternalIndex(walletAddr.index); err != nil {
+			return nil, nil, err
+		}
+	}
 	s.trackChangeAddress(address, walletAddr)
 	return address, walletAddr, nil
+}
+
+// nextIndex uses the same effective last used index as the scan. A counter outside the scannable
+// range is treated as unknown. A key chain that has reached the last scannable index is exhausted.
+func nextIndex(lastUsedIndex uint32) (uint32, error) {
+	index := scannableLastUsedIndex(lastUsedIndex) + 1
+	if index >= scanIndexLimit {
+		return 0, errors.New("wallet address index range exhausted")
+	}
+	return index, nil
 }
 
 // trackChangeAddress adds a change address to the addresses the wallet reads balances and UTXOs from,
@@ -206,7 +199,8 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 	}
 
 	addresses := make([]string, 0)
-	for i := uint32(1); i <= s.keysFile.LastUsedExternalIndex(); i++ {
+	lastUsedExternalIndex := scannableLastUsedIndex(s.keysFile.LastUsedExternalIndex())
+	for i := uint32(1); i <= lastUsedExternalIndex; i++ {
 		walletAddr := &walletAddress{
 			index:         i,
 			cosignerIndex: s.keysFile.CosignerIndex,
@@ -278,6 +272,9 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		if s.keysFile.IsImported() {
 			return nil, errors.New("an imported wallet holds no ML-DSA-44 keys")
 		}
+		if err := s.ensureMLDSA44Active(); err != nil {
+			return nil, err
+		}
 		return s.newMLDSA44Address(form)
 	}
 
@@ -285,22 +282,27 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 		return s.importedWalletNewAddress(request)
 	}
 
-	err := s.keysFile.SetLastUsedExternalIndex(s.keysFile.LastUsedExternalIndex() + 1)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.keysFile.Save()
+	index, err := nextIndex(s.keysFile.LastUsedExternalIndex())
 	if err != nil {
 		return nil, err
 	}
 
 	walletAddr := &walletAddress{
-		index:         s.keysFile.LastUsedExternalIndex(),
+		index:         index,
 		cosignerIndex: s.keysFile.CosignerIndex,
 		keyChain:      libhtnwallet.ExternalKeychain,
 	}
-	path := s.walletAddressPath(walletAddr)
+	response, err := s.deriveSecp256k1AddressResponse(s.walletAddressPath(walletAddr), request.GetAddressType())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.keysFile.SetLastUsedExternalIndex(index); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (s *server) deriveSecp256k1AddressResponse(path string, addressType pb.AddressType) (*pb.NewAddressResponse, error) {
 	if s.isMultisig() {
 		address, err := libhtnwallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
 		if err != nil {
@@ -325,7 +327,7 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 	}
 
 	var primary string
-	switch request.GetAddressType() {
+	switch addressType {
 	case pb.AddressType_ADDRESS_TYPE_P2PK:
 		primary = addrP2PK.String()
 	case pb.AddressType_ADDRESS_TYPE_P2PKH:
@@ -357,16 +359,16 @@ func mldsa44AddressForm(addressType pb.AddressType) (libhtnwallet.MLDSA44Address
 	}
 }
 
-// newMLDSA44Address hands out the ML-DSA-44 address of form at the next external index. In a
-// multisig wallet both forms name its multisig P2SH.
+// newMLDSA44Address hands out the ML-DSA-44 address of form at the next external index. The caller
+// checks network activation first. In a multisig wallet both forms name its multisig P2SH.
 func (s *server) newMLDSA44Address(form libhtnwallet.MLDSA44AddressForm) (*pb.NewAddressResponse, error) {
-	err := s.ensureMLDSA44Active()
+	index, err := nextIndex(s.keysFile.LastUsedExternalIndex())
 	if err != nil {
 		return nil, err
 	}
 
 	walletAddr := &walletAddress{
-		index:         s.keysFile.LastUsedExternalIndex() + 1,
+		index:         index,
 		cosignerIndex: s.walletAddressCosignerIndex(true),
 		keyChain:      libhtnwallet.ExternalKeychain,
 		mldsa44:       true,
@@ -380,12 +382,7 @@ func (s *server) newMLDSA44Address(form libhtnwallet.MLDSA44AddressForm) (*pb.Ne
 		return nil, err
 	}
 
-	err = s.keysFile.SetLastUsedExternalIndex(walletAddr.index)
-	if err != nil {
-		return nil, err
-	}
-	err = s.keysFile.Save()
-	if err != nil {
+	if err := s.keysFile.SetLastUsedExternalIndex(index); err != nil {
 		return nil, err
 	}
 
