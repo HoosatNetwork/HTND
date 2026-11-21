@@ -200,6 +200,8 @@ type dagInfoRPCClient struct {
 	score uint64
 }
 
+func (c *dagInfoRPCClient) Reconnect() error { return nil }
+
 func (c *dagInfoRPCClient) GetBlockDAGInfo() (*appmessage.GetBlockDAGInfoResponseMessage, error) {
 	return &appmessage.GetBlockDAGInfoResponseMessage{VirtualDAAScore: c.score}, nil
 }
@@ -277,6 +279,8 @@ func TestShowAddressesWithUnscannableExternalIndex(t *testing.T) {
 		t.Run(request.name, func(t *testing.T) {
 			s := newMLWallet(t, 1, 1).s
 			s.nextSyncStartIndex = scanIndexLimit
+			s.addressListingTimeout = maxAddressListingRPCTimeout
+			s.rpcClient = &dagInfoRPCClient{score: math.MaxUint64}
 			s.firstSyncDone.Store(true)
 			for _, tc := range []struct {
 				recorded uint32

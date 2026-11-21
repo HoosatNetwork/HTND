@@ -174,11 +174,15 @@ func (s *server) walletAddressRedeemScript(wAddr *walletAddress) ([]byte, error)
 // ensureMLDSA44Active refuses to hand out ML-DSA-44 addresses before the network accepts ML-DSA-44
 // spends: coins sent to one earlier would sit unspendable until the activation block version.
 func (s *server) ensureMLDSA44Active() error {
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return err
 	}
-	if !libhtnwallet.MLDSA44Active(s.params, dagInfo.VirtualDAAScore) {
+	return s.checkMLDSA44Activation(dagInfo.VirtualDAAScore)
+}
+
+func (s *server) checkMLDSA44Activation(virtualDAAScore uint64) error {
+	if !libhtnwallet.MLDSA44Active(s.params, virtualDAAScore) {
 		return errors.Errorf("ML-DSA-44 is not active on %s yet: it activates at block version %d, "+
 			"and coins sent to an ML-DSA-44 address before then cannot be spent until it does",
 			s.params.Name, s.params.HardForkGates.MLDSA44SignaturesBlockVersion)
@@ -186,18 +190,45 @@ func (s *server) ensureMLDSA44Active() error {
 	return nil
 }
 
-func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesRequest) (*pb.ShowAddressesResponse, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+func (s *server) ShowAddresses(ctx context.Context, request *pb.ShowAddressesRequest) (*pb.ShowAddressesResponse, error) {
+	response, mldsa44, err := s.snapshotShownAddresses(request)
+	if err != nil {
+		return nil, err
+	}
+	if mldsa44 && len(response.Address) != 0 {
+		ctx, cancel := context.WithTimeout(ctx, s.addressListingTimeout)
+		defer cancel()
+		dagInfo, err := s.getBlockDAGInfo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.checkMLDSA44Activation(dagInfo.VirtualDAAScore); err != nil {
+			return nil, err
+		}
+	}
+	return response, nil
+}
+
+func (s *server) snapshotShownAddresses(request *pb.ShowAddressesRequest) (*pb.ShowAddressesResponse, bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	if !s.isSynced() {
-		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
+		return nil, false, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
 
 	if s.keysFile.IsImported() {
-		return s.showImportedWalletAddresses(request)
+		response, err := s.showImportedWalletAddresses(request)
+		return response, false, err
 	}
 
+	// includeAll lists the three secp256k1 forms of each of a single-sig wallet's addresses - P2PK,
+	// P2PKH and P2SH, in that order - and overrides the address type. ML-DSA-44 addresses are not
+	// among them: a caller that reads the answer three by three would take them for secp256k1
+	// addresses of other indexes, and they are listed by asking for their address type.
+	includeAll := request.GetIncludeAll() && !s.isMultisig()
+	mldsa44Form, mldsa44Requested := mldsa44AddressForm(request.GetAddressType())
+	mldsa44Requested = mldsa44Requested && !includeAll
 	addresses := make([]string, 0)
 	lastUsedExternalIndex := scannableLastUsedIndex(s.keysFile.LastUsedExternalIndex())
 	for i := uint32(1); i <= lastUsedExternalIndex; i++ {
@@ -206,30 +237,23 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 			cosignerIndex: s.keysFile.CosignerIndex,
 			keyChain:      libhtnwallet.ExternalKeychain,
 		}
-		if request.GetIncludeAll() && !s.isMultisig() {
+		if includeAll {
 			addressStrings, err := s.walletAddressStringsForScan(walletAddr)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			addresses = append(addresses, addressStrings...)
-			for _, mldsa44Addr := range s.mldsa44WalletAddressesForScan(walletAddr) {
-				address, err := s.mldsa44Address(mldsa44Addr)
-				if err != nil {
-					return nil, err
-				}
-				addresses = append(addresses, address.String())
-			}
 			continue
 		}
 
-		if form, ok := mldsa44AddressForm(request.GetAddressType()); ok {
+		if mldsa44Requested {
 			for _, mldsa44Addr := range s.mldsa44WalletAddressesForScan(walletAddr) {
-				if mldsa44Addr.mldsa44Form != form && !s.isMultisig() {
+				if mldsa44Addr.mldsa44Form != mldsa44Form && !s.isMultisig() {
 					continue
 				}
 				address, err := s.mldsa44Address(mldsa44Addr)
 				if err != nil {
-					return nil, err
+					return nil, false, err
 				}
 				addresses = append(addresses, address.String())
 			}
@@ -252,12 +276,12 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 
 		address, err := libhtnwallet.AddressWithSingleSigAddressType(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA, singleSigType)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		addresses = append(addresses, address.String())
 	}
 
-	return &pb.ShowAddressesResponse{Address: addresses}, nil
+	return &pb.ShowAddressesResponse{Address: addresses}, mldsa44Requested, nil
 }
 
 func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*pb.NewAddressResponse, error) {

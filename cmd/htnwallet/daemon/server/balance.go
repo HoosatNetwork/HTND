@@ -43,7 +43,7 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 	}
 
 	if len(balancesMap) > 0 {
-		dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+		dagInfo, err := s.getBlockDAGInfo(context.Background())
 		if err != nil {
 			return nil, err
 		}
