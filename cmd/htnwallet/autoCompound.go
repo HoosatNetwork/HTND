@@ -11,7 +11,10 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/bip32"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // sentinel error used to indicate a compound attempt hit the daemon rate limit
@@ -67,7 +70,7 @@ func autoCompound(conf *autoCompoundConfig) error {
 
 func compoundOnce(
 	conf *autoCompoundConfig,
-	client pb.HtnwalletdClient, // CORRECT TYPE
+	client pb.HtnwalletdClient,
 	mnemonics []string,
 	importedKeys map[string]*bip32.ExtendedKey,
 	ecdsa bool,
@@ -80,12 +83,13 @@ func compoundOnce(
 	// Always ask for an existing change address. A compound pays everything to the destination, so it
 	// has no use for a fresh one, and a daemon that allocated one per compound would walk the internal
 	// index past the ML-DSA-44 key pool after as many compounds as the pool has keys.
+	var trailers metadata.MD
 	resp, err := client.CreateUnsignedCompoundTransaction(ctx, &pb.CreateUnsignedCompoundTransactionRequest{
 		From:                     conf.FromAddresses,
 		Address:                  conf.ToAddress,
 		UseExistingChangeAddress: true,
 		Limit:                    &conf.Limit,
-	})
+	}, grpc.Trailer(&trailers))
 	if err != nil {
 		fmt.Printf("[%s] NOTHING TO COMPOUND → Error: %s, backing off for 5m\n", time.Now().Format("15:04:05"), err)
 		time.Sleep(5 * time.Minute)
@@ -144,6 +148,9 @@ func compoundOnce(
 	}
 
 	// 4. Success
+	for _, notice := range trailers.Get(utils.CompoundSkipTrailer) {
+		fmt.Printf("[%s] %s\n", time.Now().Format("15:04:05"), notice)
+	}
 	for _, txid := range bresp.TxIDs {
 		fmt.Printf("[%s] COMPOUNDED → https://explorer-eu.hoosat.network/txs/%s\n",
 			time.Now().Format("15:04:05"), txid)

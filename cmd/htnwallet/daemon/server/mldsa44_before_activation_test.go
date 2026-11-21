@@ -211,7 +211,7 @@ func TestCompoundLeavesMLDSA44CoinsUntilActivation(t *testing.T) {
 		t.Helper()
 		node.virtualDAAScore.Store(virtualDAAScore)
 		s.usedOutpoints = map[externalapi.DomainOutpoint]time.Time{}
-		transactions, err := s.createUnsignedCompoundTransaction(destination, nil, true, 10000)
+		transactions, err := s.createUnsignedCompoundTransaction(t.Context(), destination, nil, 10000)
 		if err != nil {
 			t.Fatalf("createUnsignedCompoundTransaction at DAA %d: %+v", virtualDAAScore, err)
 		}
