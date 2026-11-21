@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/netadapter/router"
 
@@ -98,7 +99,7 @@ const (
 // indexes (libhtnwallet/bip32), so no wallet address exists at or above it. Keeping every scanned range
 // below it also keeps the range arithmetic far from uint32 overflow. A variable only so that tests can use
 // a small index space.
-var scanIndexLimit uint32 = 1 << 31
+var scanIndexLimit uint32 = keys.MLDSA44AddressIndexLimit
 
 // scannableLastUsedIndex returns the recorded last used index of a key chain, or 0 for one no address can
 // have (see scanIndexLimit), which a damaged or hand-edited keys file can hold. Such a value would wrap the

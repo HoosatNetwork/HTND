@@ -126,14 +126,9 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 	}
 
 	log.Infof("Connected, reading keys file %s...", keysFilePath)
-	keysFile, err := keys.ReadKeysFile(params, keysFilePath)
+	keysFile, unlockKeysFile, err := keys.ReadLockedKeysFile(params, keysFilePath)
 	if err != nil {
 		return (errors.Wrapf(err, "Error reading keys file %s", keysFilePath))
-	}
-
-	err = keysFile.TryLock()
-	if err != nil {
-		return err
 	}
 
 	coinbaseMaturity := params.BlockCoinbaseMaturity
@@ -167,6 +162,7 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 
 	err = serverInstance.trackImportedKeys()
 	if err != nil {
+		_ = unlockKeysFile()
 		return errors.Wrap(err, "Error reading the imported keys")
 	}
 

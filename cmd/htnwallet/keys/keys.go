@@ -6,12 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gofrs/flock"
 
@@ -96,18 +98,90 @@ func (p *MLDSA44KeyPool) Size() uint32 {
 	return uint32(min(len(p.ExternalPublicKeyHashes), len(p.InternalPublicKeyHashes)))
 }
 
+// MLDSA44AddressIndexLimit is the exclusive upper bound on the wallet's address indexes.
+// The wallet's public address derivation and scans stop before the BIP32 hardened range.
+const MLDSA44AddressIndexLimit = 1 << 31
+
+// DefaultMLDSA44KeyCount returns the exclusive end of a default pool. A wallet with recorded
+// use gets up to DefaultMLDSA44KeyPoolSize future indexes. Without recorded use it gets the
+// same pool size as a new wallet. limited reports whether the address index limit cuts into
+// the future indexes.
+func (d *File) DefaultMLDSA44KeyCount() (count uint32, limited bool) {
+	highestUsedIndex := uint32(0)
+	for _, lastUsedIndex := range []uint32{d.lastUsedExternalIndex, d.lastUsedInternalIndex} {
+		if lastUsedIndex < MLDSA44AddressIndexLimit {
+			highestUsedIndex = max(highestUsedIndex, lastUsedIndex)
+		}
+	}
+	if highestUsedIndex == 0 {
+		return libhtnwallet.DefaultMLDSA44KeyPoolSize, false
+	}
+	end := highestUsedIndex + 1 + libhtnwallet.DefaultMLDSA44KeyPoolSize
+	return min(end, MLDSA44AddressIndexLimit), end > MLDSA44AddressIndexLimit
+}
+
 // NewMLDSA44KeyPool computes the ML-DSA-44 key pool for indexes [0, size) of both key chains.
 // multisig selects the mnemonic's multisig cosigner keys.
 func NewMLDSA44KeyPool(mnemonic string, size uint32, multisig bool) (*MLDSA44KeyPool, error) {
-	external, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, libhtnwallet.ExternalKeychain, 0, size, multisig)
+	return (&MLDSA44KeyPool{}).Extend(mnemonic, size, multisig)
+}
+
+// Extend returns a pool with at least size hashes on each chain, deriving only missing
+// suffixes. It preserves hashes already held, including on a longer chain.
+func (p *MLDSA44KeyPool) Extend(mnemonic string, size uint32, multisig bool) (*MLDSA44KeyPool, error) {
+	if size > MLDSA44AddressIndexLimit || uint64(size) > uint64(math.MaxInt) {
+		return nil, errors.Errorf("ML-DSA-44 key count %d exceeds the supported address range", size)
+	}
+	if p == nil {
+		p = &MLDSA44KeyPool{}
+	}
+	extend := func(existing [][]byte, chain uint8) ([][]byte, error) {
+		if len(existing) >= int(size) {
+			return existing, nil
+		}
+		start := uint32(len(existing))
+		suffix, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, chain, start, size-start, multisig)
+		if err != nil || start == 0 {
+			return suffix, err
+		}
+		return append(existing, suffix...), nil
+	}
+	external, err := extend(p.ExternalPublicKeyHashes, libhtnwallet.ExternalKeychain)
 	if err != nil {
 		return nil, err
 	}
-	internal, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, libhtnwallet.InternalKeychain, 0, size, multisig)
+	internal, err := extend(p.InternalPublicKeyHashes, libhtnwallet.InternalKeychain)
 	if err != nil {
 		return nil, err
 	}
 	return &MLDSA44KeyPool{ExternalPublicKeyHashes: external, InternalPublicKeyHashes: internal}, nil
+}
+
+// RebuildCosigner derives both chains of a local cosigner pool from the mnemonic, covering
+// size indexes or the stored range of a chain if that is longer.
+// matches reports whether the stored hashes equal the derived ones.
+func (p *MLDSA44KeyPool) RebuildCosigner(mnemonic string, size uint32) (rebuilt *MLDSA44KeyPool, matches bool, err error) {
+	if p == nil {
+		rebuilt, err = NewMLDSA44KeyPool(mnemonic, size, true)
+		return rebuilt, err == nil, err
+	}
+	derive := func(chain uint8, existing [][]byte) ([][]byte, error) {
+		count := max(uint64(size), uint64(len(existing)))
+		if count > MLDSA44AddressIndexLimit || count > uint64(math.MaxInt) {
+			return nil, errors.Errorf("ML-DSA-44 key count %d exceeds the supported address range", count)
+		}
+		return libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, chain, 0, uint32(count), true)
+	}
+	receive, err := derive(libhtnwallet.ExternalKeychain, p.ExternalPublicKeyHashes)
+	if err != nil {
+		return nil, false, err
+	}
+	change, err := derive(libhtnwallet.InternalKeychain, p.InternalPublicKeyHashes)
+	if err != nil {
+		return nil, false, err
+	}
+	rebuilt = &MLDSA44KeyPool{ExternalPublicKeyHashes: receive, InternalPublicKeyHashes: change}
+	return rebuilt, p.agreesWith(rebuilt), nil
 }
 
 // MLDSA44MultiSigPublicKeyHashes returns every cosigner's ML-DSA-44 public key hash at index of
@@ -429,8 +503,8 @@ func (d *File) LastUsedInternalIndex() uint32 {
 	return d.lastUsedInternalIndex
 }
 
-// DecryptMnemonics asks the user to enter the password for the private keys and
-// returns the decrypted private keys.
+// DecryptMnemonics returns the decrypted mnemonics without writing the keys file.
+// A caller that holds the lock may save the detected legacy thread count with its updates.
 func (d *File) DecryptMnemonics(password string) ([]string, error) {
 	passwordBytes := []byte(password)
 
@@ -484,6 +558,24 @@ func ReadKeysFile(netParams *dagconfig.Params, path string) (*File, error) {
 	}
 
 	return keysFile, nil
+}
+
+// ReadLockedKeysFile acquires the wallet's lock before opening the keys file.
+// The caller holds the returned lock until it calls unlock or the process exits.
+func ReadLockedKeysFile(netParams *dagconfig.Params, path string) (file *File, unlock func() error, err error) {
+	if path == "" {
+		path = defaultKeysFile(netParams)
+	}
+	unlock, err = tryLockKeysFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	file, err = ReadKeysFile(netParams, path)
+	if err != nil {
+		_ = unlock()
+		return nil, nil, err
+	}
+	return file, unlock, nil
 }
 
 func createFileDirectoryIfDoesntExist(path string) error {
@@ -601,8 +693,7 @@ func (d *File) numThreads(password []byte) (uint8, error) {
 	// was determined by the number of logical CPUs at the machine,
 	// which made the authentication non-deterministic across platforms.
 	// In order to solve it we introduce v1 where the number of threads
-	// is constant, and brute force the number of threads in v0. After we
-	// find the right amount via brute force we save the result to the file.
+	// is constant, and brute force the number of threads in v0.
 
 	if d.Version != 0 {
 		return defaultNumThreads, nil
@@ -614,11 +705,6 @@ func (d *File) numThreads(password []byte) (uint8, error) {
 	}
 
 	d.NumThreads = numThreads
-	err = d.Save()
-	if err != nil {
-		return 0, err
-	}
-
 	return numThreads, nil
 }
 
@@ -687,29 +773,45 @@ func decryptMnemonic(numThreads uint8, encryptedPrivateKey *EncryptedMnemonic, p
 // flockMap is a map that holds all lock file handlers. This map guarantees that
 // the associated locked file handler will never get cleaned by the GC, because
 // once they are cleaned the associated file will be unlocked.
-var flockMap = make(map[string]*flock.Flock)
+var (
+	flockMap = make(map[string]*flock.Flock)
+	flockMu  sync.Mutex
+)
 
 // TryLock tries to acquire an exclusive lock for the file.
 func (d *File) TryLock() error {
-	if _, ok := flockMap[d.path]; ok {
-		return errors.Errorf("file %s is already locked", d.path)
-	}
-
-	lockFile := flock.New(d.path + ".lock")
-	err := createFileDirectoryIfDoesntExist(lockFile.Path())
-	if err != nil {
+	if err := createFileDirectoryIfDoesntExist(d.path); err != nil {
 		return err
 	}
+	_, err := tryLockKeysFile(d.path)
+	return err
+}
 
-	flockMap[d.path] = lockFile
-
+func tryLockKeysFile(path string) (func() error, error) {
+	flockMu.Lock()
+	defer flockMu.Unlock()
+	if _, ok := flockMap[path]; ok {
+		return nil, errors.Errorf("file %s is already locked", path)
+	}
+	lockFile := flock.New(path + ".lock")
 	success, err := lockFile.TryLock()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	if !success {
-		return errors.Errorf("%s is locked and cannot be used; make sure that no other active wallet command is using it", d.path)
+		return nil, errors.Errorf("%s is locked and cannot be used; stop any active wallet command using it", path)
 	}
-	return nil
+	flockMap[path] = lockFile
+	return func() error {
+		flockMu.Lock()
+		defer flockMu.Unlock()
+		if flockMap[path] != lockFile {
+			return nil
+		}
+		if err := lockFile.Unlock(); err != nil {
+			return err
+		}
+		delete(flockMap, path)
+		return nil
+	}, nil
 }
