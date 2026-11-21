@@ -2,6 +2,7 @@ package libhtnwallet
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/pkg/errors"
@@ -166,6 +167,13 @@ func isMLDSA44SingleSigRedeemScript(redeemScript []byte) bool {
 	return txscript.GetScriptClass(redeemScript) == txscript.PubKeyHashMLDSA44Ty
 }
 
+// SupportsMLDSA44Multisig reports whether the wallet's key count and signature
+// threshold fit the ML-DSA-44 multisig script limits.
+func SupportsMLDSA44Multisig(keyCount int, minimumSignatures uint32) bool {
+	return keyCount >= 2 && keyCount <= txscript.MaxMLDSA44MultiSigKeys &&
+		minimumSignatures >= 1 && minimumSignatures <= txscript.MaxMLDSA44MultiSigSignatures
+}
+
 // MLDSA44MultiSigRedeemScript returns the redeem script of an ML-DSA-44 multisig address.
 // cosignerPublicKeyHashes maps each cosigner's master extended public key to its ML-DSA-44 public
 // key hash at the address's path; the keys enter the script in extended public key order, the same
@@ -176,7 +184,7 @@ func MLDSA44MultiSigRedeemScript(cosignerPublicKeyHashes map[string][]byte, mini
 	for extendedPublicKey := range cosignerPublicKeyHashes {
 		extendedPublicKeys = append(extendedPublicKeys, extendedPublicKey)
 	}
-	sortPublicKeys(extendedPublicKeys)
+	slices.Sort(extendedPublicKeys)
 
 	publicKeyHashes := make([][]byte, len(extendedPublicKeys))
 	for i, extendedPublicKey := range extendedPublicKeys {

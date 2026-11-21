@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
@@ -31,6 +32,9 @@ func (s *server) syncLoop() error {
 	defer ticker.Stop()
 
 	s.warnOfUnscannableLastUsedIndexes()
+	s.lock.Lock()
+	s.warnOfMLDSA44ScanGap()
+	s.lock.Unlock()
 	err := s.collectRecentAddresses(false)
 	if err != nil {
 		return err
@@ -541,6 +545,7 @@ func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAdd
 	// file holds one no address can have, or that chain's recent window and rescan round never move.
 	scannedExternalIndex, scannedInternalIndex := s.lastUsedIndexes()
 	lastUsedExternalIndex, lastUsedInternalIndex := scannedExternalIndex, scannedInternalIndex
+	var observedReceiveZero, observedChangeZero bool
 
 	for _, address := range getUsableAddressesResponse.Addresses {
 		walletAddress, ok := requestedAddressSet[address]
@@ -556,12 +561,14 @@ func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAdd
 		}
 
 		if walletAddress.keyChain == libhtnwallet.ExternalKeychain {
+			observedReceiveZero = observedReceiveZero || walletAddress.index == 0
 			if walletAddress.index > lastUsedExternalIndex {
 				lastUsedExternalIndex = walletAddress.index
 			}
 			continue
 		}
 
+		observedChangeZero = observedChangeZero || walletAddress.index == 0
 		if walletAddress.index > lastUsedInternalIndex {
 			lastUsedInternalIndex = walletAddress.index
 		}
@@ -575,9 +582,135 @@ func (s *server) updateAddressesAndLastUsedIndexes(requestedAddressSet walletAdd
 		}
 	}
 	if lastUsedInternalIndex != scannedInternalIndex {
-		return s.keysFile.SetLastUsedInternalIndex(lastUsedInternalIndex)
+		err := s.keysFile.SetLastUsedInternalIndex(lastUsedInternalIndex)
+		if err != nil {
+			return err
+		}
 	}
+	// Index zero is also the unset counter value. Keep actual discoveries in
+	// memory so the scan can report gaps there without changing the keys file.
+	s.observedReceiveZero = s.observedReceiveZero || observedReceiveZero
+	s.observedChangeZero = s.observedChangeZero || observedChangeZero
+	s.warnOfMLDSA44ScanGap()
 	return nil
+}
+
+// mldsa44ScanGap describes incomplete cosigner exchanges or recorded use beyond
+// the ML-DSA-44 hashes available to the scanner. Use beyond the pool can be entirely
+// secp256k1 activity. ML-DSA-44-only history outside the pools is invisible to the scan.
+// The caller holds s.lock.
+func (s *server) mldsa44ScanGap() (gap string, partialExchange bool) {
+	if s.keysFile.IsImported() {
+		return "", false
+	}
+
+	var receiveCoverage, changeCoverage uint32
+	addressType := "ML-DSA-44"
+	if !s.isMultisig() {
+		if pool := s.keysFile.MLDSA44; pool != nil {
+			receiveCoverage = uint32(len(pool.ExternalPublicKeyHashes))
+			changeCoverage = uint32(len(pool.InternalPublicKeyHashes))
+		}
+	} else {
+		if !libhtnwallet.SupportsMLDSA44Multisig(len(s.keysFile.ExtendedPublicKeys), s.keysFile.MinimumSignatures) {
+			return "", false
+		}
+		addressType = "ML-DSA-44 multisig"
+		if len(s.keysFile.MLDSA44Cosigners) != 0 {
+			var missing int
+			var endings []string
+			var missingLocal bool
+			localKeys, localKeysKnown := s.keysFile.KnownLocalCosignerKeys()
+			for i, publicKey := range s.keysFile.ExtendedPublicKeys {
+				local := slices.Contains(localKeys, publicKey)
+				pool := s.keysFile.MLDSA44Cosigners[publicKey]
+				if pool == nil {
+					missing++
+					missingLocal = missingLocal || local
+					// Never print a complete key, even if an invalid, short key was loaded.
+					if len(publicKey) > 8 {
+						endings = append(endings, "..."+publicKey[len(publicKey)-8:])
+					}
+					continue
+				}
+				partialExchange = partialExchange || (localKeysKnown && !local)
+				receive := uint32(len(pool.ExternalPublicKeyHashes))
+				change := uint32(len(pool.InternalPublicKeyHashes))
+				if i == 0 {
+					receiveCoverage, changeCoverage = receive, change
+				} else {
+					receiveCoverage, changeCoverage = min(receiveCoverage, receive), min(changeCoverage, change)
+				}
+			}
+			if missing != 0 {
+				details := ""
+				if len(endings) != 0 {
+					details = " (extended public key endings: " + strings.Join(endings, ", ") + ")"
+				}
+				gap = fmt.Sprintf("The ML-DSA-44 keys of %d of the wallet's %d cosigners are missing%s. "+
+					"ML-DSA-44 multisig addresses can be neither built nor scanned until every pool is available. "+
+					"Stop the daemon and use `htnwallet %s` for missing peer pools.",
+					missing, len(s.keysFile.ExtendedPublicKeys), details, importMLDSA44KeysSubCmdName)
+				if missingLocal {
+					gap += fmt.Sprintf(" Generate any missing local pools with `htnwallet %s --count <n>` "+
+						"using n above the highest index to recover.", generateMLDSA44KeysSubCmdName)
+				} else if !localKeysKnown {
+					gap += fmt.Sprintf(" If a local pool is missing, run `htnwallet %s --count <n>` "+
+						"using n above the highest index to recover.", generateMLDSA44KeysSubCmdName)
+				}
+				return gap, partialExchange
+			}
+		}
+	}
+
+	var gaps []string
+	lastReceive, lastChange := s.lastUsedIndexes()
+	for _, chain := range []struct {
+		name               string
+		lastUsed, coverage uint32
+		observedZero       bool
+	}{
+		{"receive", lastReceive, receiveCoverage, s.observedReceiveZero},
+		{"change", lastChange, changeCoverage, s.observedChangeZero},
+	} {
+		if (chain.lastUsed != 0 || chain.observedZero) && chain.lastUsed >= chain.coverage {
+			gaps = append(gaps, fmt.Sprintf("%s %s addresses from index %d on are not scanned (last used %s index %d)",
+				chain.name, addressType, chain.coverage, chain.name, chain.lastUsed))
+		}
+	}
+	if len(gaps) == 0 {
+		return "", false
+	}
+
+	gap = strings.Join(gaps, "; ") + ". Coins there are missed if those addresses were used. " +
+		"Recovery needs a known highest index or longer pools from backup."
+	if len(s.keysFile.EncryptedMnemonics) != 0 {
+		gap += fmt.Sprintf(" Stop the daemon and run `htnwallet %s --count <n>` with n above the highest index to recover.",
+			generateMLDSA44KeysSubCmdName)
+	}
+	if s.isMultisig() {
+		gap += fmt.Sprintf(" Import longer pools for the missing ranges with `htnwallet %s`.",
+			importMLDSA44KeysSubCmdName)
+	}
+	return gap, false
+}
+
+// warnOfMLDSA44ScanGap logs at most once per daemon run. A partial exchange is a warning
+// if ML-DSA-44 was active at startup. The caller holds s.lock.
+func (s *server) warnOfMLDSA44ScanGap() {
+	if s.warnedOfMLDSA44ScanGap {
+		return
+	}
+	gap, partialExchange := s.mldsa44ScanGap()
+	if gap == "" {
+		return
+	}
+	s.warnedOfMLDSA44ScanGap = true
+	if partialExchange && s.mldsa44ActiveAtStartup {
+		log.Warnf("%s", gap)
+		return
+	}
+	log.Infof("%s", gap)
 }
 
 func (s *server) usedOutpointHasExpired(outpointBroadcastTime time.Time) bool {

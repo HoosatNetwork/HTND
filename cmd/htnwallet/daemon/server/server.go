@@ -18,6 +18,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 	"github.com/HoosatNetwork/HTND/v2/util/panics"
@@ -75,6 +76,10 @@ type server struct {
 	usedOutpoints                   map[externalapi.DomainOutpoint]time.Time
 	pendingBroadcasts               map[externalapi.DomainTransactionID]*pendingBroadcast
 	firstSyncDone                   atomic.Bool
+	warnedOfMLDSA44ScanGap          bool // See warnOfMLDSA44ScanGap
+	mldsa44ActiveAtStartup          bool
+
+	observedReceiveZero, observedChangeZero bool
 
 	isLogFinalProgressLineShown bool
 	maxUsedAddressesForLog      uint32
@@ -154,6 +159,7 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		addressSet:                  make(walletAddressSet),
 		txMassCalculator:            txmass.NewCalculator(params.MassPerTxByte, params.MassPerScriptPubKeyByte, params.MassPerSigOp),
 		usedOutpoints:               map[externalapi.DomainOutpoint]time.Time{},
+		mldsa44ActiveAtStartup:      libhtnwallet.MLDSA44Active(params, dagInfo.VirtualDAAScore),
 		isLogFinalProgressLineShown: false,
 		maxUsedAddressesForLog:      0,
 		maxProcessedAddressesForLog: 0,

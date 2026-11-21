@@ -73,13 +73,16 @@ func create(conf *createConfig) error {
 		CosignerIndex:      cosignerIndex,
 		ECDSA:              conf.ECDSA,
 	}
+	supportsMLDSA44Multisig := libhtnwallet.SupportsMLDSA44Multisig(len(extendedPublicKeys), conf.MinimumSignatures)
 	if isMultisig {
 		file.MLDSA44Cosigners = mldsa44KeyPools
+	} else if len(signerExtendedPublicKeys) == 1 {
+		file.MLDSA44 = mldsa44KeyPools[signerExtendedPublicKeys[0]]
+	}
+	if supportsMLDSA44Multisig {
 		fmt.Printf("For ML-DSA-44 multisig addresses, every cosigner has to import the others' ML-DSA-44 keys: "+
 			"run \"htnwallet %s\" here and \"htnwallet %s\" with the other cosigners' files\n\n",
 			exportMLDSA44KeysSubCmd, importMLDSA44KeysSubCmd)
-	} else if len(signerExtendedPublicKeys) == 1 {
-		file.MLDSA44 = mldsa44KeyPools[signerExtendedPublicKeys[0]]
 	}
 
 	err = file.SetPath(conf.NetParams(), conf.KeysFile, conf.Yes)
@@ -98,5 +101,16 @@ func create(conf *createConfig) error {
 	}
 
 	fmt.Printf("Wrote the keys into %s\n", file.Path())
+	if conf.Import && supportsMLDSA44Multisig {
+		fmt.Printf("Newly generated cosigner pools initially cover address indexes below %d. ML-DSA-44-only history "+
+			"beyond the imported pools cannot reveal the missing indexes. Use longer pools from backup, or have "+
+			"each cosigner run \"htnwallet %s --count <n>\" with n above the highest index used and exchange the "+
+			"longer pools with \"htnwallet %s\" and \"htnwallet %s\".\n",
+			libhtnwallet.DefaultMLDSA44KeyPoolSize, generateMLDSA44KeysSubCmd, exportMLDSA44KeysSubCmd, importMLDSA44KeysSubCmd)
+	} else if conf.Import && file.MLDSA44 != nil {
+		fmt.Printf("The wallet holds ML-DSA-44 keys for address indexes below %d. If it used ML-DSA-44 addresses at "+
+			"higher indexes before, run \"htnwallet %s --count <n>\" with n above the highest index it used: coins "+
+			"on those addresses are not shown until then.\n", file.MLDSA44.Size(), generateMLDSA44KeysSubCmd)
+	}
 	return nil
 }

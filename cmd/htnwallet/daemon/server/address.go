@@ -125,8 +125,7 @@ const generateMLDSA44KeysSubCmdName = "generate-mldsa44-keys"
 // The cost is that two cosigners' daemons can hand out the same address - address reuse, not a loss
 // of funds.
 func (s *server) mldsa44MultiSigRedeemScript(wAddr *walletAddress) ([]byte, error) {
-	if len(s.keysFile.ExtendedPublicKeys) > txscript.MaxMLDSA44MultiSigKeys ||
-		s.keysFile.MinimumSignatures > txscript.MaxMLDSA44MultiSigSignatures {
+	if !libhtnwallet.SupportsMLDSA44Multisig(len(s.keysFile.ExtendedPublicKeys), s.keysFile.MinimumSignatures) {
 		return nil, errors.Errorf("ML-DSA-44 multisig supports up to %d-of-%d, and this wallet is %d-of-%d",
 			txscript.MaxMLDSA44MultiSigSignatures, txscript.MaxMLDSA44MultiSigKeys,
 			s.keysFile.MinimumSignatures, len(s.keysFile.ExtendedPublicKeys))

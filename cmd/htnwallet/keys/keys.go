@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -148,10 +149,10 @@ func mldsa44CosignersFromJSON(cosignersJSON mldsa44CosignersJSON) (map[string]*M
 	for extendedPublicKey, poolJSON := range cosignersJSON {
 		pool, err := mldsa44KeyPoolFromJSON(poolJSON)
 		if err != nil {
-			return nil, errors.Wrapf(err, "ML-DSA-44 keys of cosigner %s", extendedPublicKey)
+			return nil, errors.Wrap(err, "invalid ML-DSA-44 cosigner key pool")
 		}
 		if pool == nil {
-			return nil, errors.Errorf("ML-DSA-44 keys of cosigner %s are empty", extendedPublicKey)
+			return nil, errors.New("empty ML-DSA-44 cosigner key pool")
 		}
 		cosigners[extendedPublicKey] = pool
 	}
@@ -231,6 +232,23 @@ type File struct {
 	// ML-DSA-44 keys cannot be derived from an extended public key.
 	MLDSA44Cosigners map[string]*MLDSA44KeyPool
 	path             string
+}
+
+// KnownLocalCosignerKeys returns the mnemonic-backed extended public keys when
+// they can be identified without decrypting. CosignerIndex records the first
+// local key's position in sorted order, even if a daemon reordered the file.
+func (d *File) KnownLocalCosignerKeys() ([]string, bool) {
+	switch n := len(d.EncryptedMnemonics); {
+	case n == 0:
+		return nil, true
+	case n == len(d.ExtendedPublicKeys):
+		return d.ExtendedPublicKeys, true
+	case n == 1 && uint64(d.CosignerIndex) < uint64(len(d.ExtendedPublicKeys)):
+		sortedKeys := slices.Sorted(slices.Values(d.ExtendedPublicKeys))
+		return sortedKeys[d.CosignerIndex : d.CosignerIndex+1], true
+	default:
+		return nil, false
+	}
 }
 
 func (d *File) toJSON() *keysFileJSON {
