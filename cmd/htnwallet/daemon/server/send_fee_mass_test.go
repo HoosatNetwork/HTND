@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
@@ -23,8 +25,9 @@ import (
 // (1 sompi per mass unit, 603 sompi dust for a P2SH output), not with the production helpers.
 
 const (
-	// feeTestVirtualDAAScore is past the coins' DAA score (1) plus the input minimum age and its slack.
-	feeTestVirtualDAAScore = 1 + inputMinAgeDAAScore + 100
+	// feeTestVirtualDAAScore is past the coins' DAA score (1) plus the input minimum age and its slack,
+	// and past the ML-DSA-44 activation of mainnet, whose parameters these tests use.
+	feeTestVirtualDAAScore = 300_000_000
 	// feeTestMaxMass is mempool.MaximumStandardTransactionMass.
 	feeTestMaxMass = 100_000
 	// feeTestP2SHDust is the smallest non-dust P2SH output: 3 * (8+2+8+35 + 148).
@@ -165,7 +168,7 @@ func repeat(value uint64, n int) []uint64 {
 type result struct {
 	inputs    int
 	inputSum  uint64
-	outputs   []uint64
+	outputs   []*externalapi.DomainTransactionOutput
 	fee, mass uint64
 }
 
@@ -198,13 +201,12 @@ func (w *feeWallet) check(transactions [][]byte, err error) result {
 	if err != nil {
 		t.Fatalf("ExtractTransaction: %+v", err)
 	}
-	r := result{inputs: len(tx.Inputs), mass: w.s.txMassCalculator.CalculateTransactionMass(tx)}
+	r := result{inputs: len(tx.Inputs), outputs: tx.Outputs, mass: w.s.txMassCalculator.CalculateTransactionMass(tx)}
 	for _, input := range partiallySigned.PartiallySignedInputs {
 		r.inputSum += input.PrevOutput.Value
 	}
 	var outputSum uint64
 	for _, output := range tx.Outputs {
-		r.outputs = append(r.outputs, output.Value)
 		outputSum += output.Value
 		if output.Value < feeTestP2SHDust {
 			t.Errorf("output of %d sompi is dust", output.Value)
@@ -231,13 +233,34 @@ func (w *feeWallet) check(transactions [][]byte, err error) result {
 func (w *feeWallet) send(address util.Address, amount uint64, sendAll bool, from []*walletAddress,
 	useExistingChange bool, payload []byte,
 ) ([][]byte, error) {
-	return w.s.buildSendTransaction(address, amount, sendAll, from, useExistingChange, payload, feeTestVirtualDAAScore)
+	attachSendTestNode(w.t, w)
+	request := &pb.CreateUnsignedTransactionsRequest{
+		Address:                  address.String(),
+		Amount:                   amount,
+		IsSendAll:                sendAll,
+		UseExistingChangeAddress: useExistingChange,
+		Payload:                  payload,
+	}
+	for _, walletAddr := range from {
+		addressString := w.address(w.t, walletAddr).String()
+		w.s.addressSet[addressString] = walletAddr
+		request.From = append(request.From, addressString)
+	}
+	response, err := w.s.CreateUnsignedTransactions(context.Background(), request)
+	if err != nil {
+		return nil, err
+	}
+	return response.UnsignedTransactions, nil
 }
 
 func wantOutputs(t *testing.T, r result, want ...uint64) {
 	t.Helper()
-	if fmt.Sprint(r.outputs) != fmt.Sprint(want) {
-		t.Errorf("outputs %v, want %v", r.outputs, want)
+	values := make([]uint64, len(r.outputs))
+	for i, output := range r.outputs {
+		values[i] = output.Value
+	}
+	if fmt.Sprint(values) != fmt.Sprint(want) {
+		t.Errorf("outputs %v, want %v", values, want)
 	}
 }
 
@@ -466,13 +489,85 @@ func TestSendDustAndChange(t *testing.T) {
 
 	t.Run("a fresh change address is taken once across candidates", func(t *testing.T) {
 		w.t = t
-		w.fund(t, same(ml, append([]uint64{1_000_000}, repeat(11_677, 9)...)...)...)
+		// The first input cannot pay the fee. The second leaves spendable change.
+		w.fund(t, same(ml, 1_000_000, 12_000)...)
 		before := w.s.keysFile.LastUsedInternalIndex()
-		w.check(w.send(address, 989_000, false, nil, false, nil))
+		r := w.check(w.send(address, 989_000, false, nil, false, nil))
+		wantOutputs(t, r, 989_000, 724)
 		if got := w.s.keysFile.LastUsedInternalIndex(); got != before+1 {
 			t.Errorf("internal index went from %d to %d, want one new address", before, got)
 		}
 	})
+
+	for _, test := range []struct {
+		name         string
+		coins        []uint64
+		wantOutputs  int
+		wantNewIndex uint32
+	}{
+		{"dust change reserves no address", append([]uint64{1_000_000}, repeat(11_677, 9)...), 1, 0},
+		{"spendable change reserves one address", []uint64{1_000_000, 20_000}, 2, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			w.t = t
+			w.fund(t, same(ml, test.coins...)...)
+			before := w.s.keysFile.LastUsedInternalIndex()
+			r := w.check(w.send(address, 989_000, false, nil, false, nil))
+			if r.inputs < 2 || len(r.outputs) != test.wantOutputs {
+				t.Fatalf("got %d inputs and outputs %v, want multiple inputs and %d outputs", r.inputs, r.outputs, test.wantOutputs)
+			}
+			if got := w.s.keysFile.LastUsedInternalIndex(); got != before+test.wantNewIndex {
+				t.Errorf("internal index went from %d to %d, want an advance of %d", before, got, test.wantNewIndex)
+			}
+		})
+	}
+}
+
+func TestSendWithUnscannableChangeIndex(t *testing.T) {
+	const firstUnscannable = 1 << 31
+	for _, tc := range []struct {
+		name            string
+		recorded        uint32
+		amount          uint64
+		sendAll         bool
+		useExisting     bool
+		wantIndex       uint32
+		wantOutputValue []uint64
+	}{
+		{name: "fresh change", recorded: firstUnscannable, amount: 900_000, wantIndex: 1, wantOutputValue: []uint64{900_000, 90_000}},
+		{name: "would wrap", recorded: math.MaxUint32, amount: 900_000, wantIndex: 1, wantOutputValue: []uint64{900_000, 90_000}},
+		{name: "dust change", recorded: firstUnscannable, amount: 989_999, wantIndex: firstUnscannable, wantOutputValue: []uint64{989_999}},
+		{name: "existing change", recorded: firstUnscannable, amount: 900_000, useExisting: true, wantIndex: firstUnscannable, wantOutputValue: []uint64{900_000, 90_000}},
+		{name: "send all", recorded: firstUnscannable, sendAll: true, wantIndex: firstUnscannable, wantOutputValue: []uint64{990_000}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newSchnorrWallet(t)
+			if err := w.s.keysFile.SetLastUsedInternalIndex(tc.recorded); err != nil {
+				t.Fatalf("SetLastUsedInternalIndex: %+v", err)
+			}
+			source := &walletAddress{keyChain: external}
+			w.fund(t, coinSpec{source, 1_000_000})
+			to := w.address(t, &walletAddress{index: 1, keyChain: external})
+
+			result := w.check(w.send(to, tc.amount, tc.sendAll, nil, tc.useExisting, nil))
+			wantOutputs(t, result, tc.wantOutputValue...)
+			if !tc.useExisting && len(tc.wantOutputValue) == 2 {
+				wantChange := &walletAddress{index: 1, keyChain: internal}
+				address := w.address(t, wantChange)
+				wantScript, err := txscript.PayToAddrScript(address)
+				if err != nil {
+					t.Fatalf("PayToAddrScript: %+v", err)
+				}
+				if len(result.outputs) != 2 || !result.outputs[1].ScriptPublicKey.Equal(wantScript) {
+					t.Errorf("second output does not pay internal index 1 (%s)", address)
+				}
+				if tracked := w.s.addressSet[address.String()]; tracked == nil || *tracked != *wantChange {
+					t.Errorf("change address %s is tracked as %+v, want %+v", address, tracked, wantChange)
+				}
+			}
+			requireSavedAddressIndexes(t, w.s, 0, tc.wantIndex)
+		})
+	}
 }
 
 // TestSendMassLimitBoundary pins the standard mass limit at 100,000 versus 100,001, reached exactly

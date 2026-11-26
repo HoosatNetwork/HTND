@@ -93,7 +93,7 @@ func TestAddressScansSkippedOnClosedRouteAreRetried(t *testing.T) {
 		t.Fatalf("a skipped far scan advanced nextSyncStartIndex to %d", s.nextSyncStartIndex)
 	}
 
-	if err := s.collectRecentAddresses(); err != nil {
+	if err := s.collectRecentAddresses(false); err != nil {
 		t.Fatalf("collectRecentAddresses: %+v", err)
 	}
 	if s.nextSyncStartIndex != 0 {

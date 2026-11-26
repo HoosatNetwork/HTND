@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 	"time"
@@ -9,11 +10,15 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // TODO: Implement a better fee estimation mechanism
@@ -42,16 +47,22 @@ func (s *server) CreateUnsignedTransactions(_ context.Context, request *pb.Creat
 		limit = uint32(limit64)
 	}
 
-	unsignedTransactions, err := s.createUnsignedTransactions(request.Address, request.Amount, request.IsSendAll,
+	send, err := s.createUnsignedTransactions(request.Address, request.Amount, request.IsSendAll,
 		request.From, request.UseExistingChangeAddress, request.Payload, limit)
+	if _, ok := err.(changeKeyUnavailableError); ok {
+		return nil, utils.MLDSA44ChangeKeyRPCError(err)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.CreateUnsignedTransactionsResponse{UnsignedTransactions: unsignedTransactions}, nil
+	if err := s.commitChange(send.change); err != nil {
+		return nil, err
+	}
+	return &pb.CreateUnsignedTransactionsResponse{UnsignedTransactions: [][]byte{send.transaction}}, nil
 }
 
-func (s *server) CreateUnsignedCompoundTransaction(_ context.Context, request *pb.CreateUnsignedCompoundTransactionRequest) (
+func (s *server) CreateUnsignedCompoundTransaction(ctx context.Context, request *pb.CreateUnsignedCompoundTransactionRequest) (
 	*pb.CreateUnsignedCompoundTransactionResponse, error,
 ) {
 	s.lock.Lock()
@@ -66,7 +77,7 @@ func (s *server) CreateUnsignedCompoundTransaction(_ context.Context, request *p
 		limit = uint32(limit64)
 	}
 
-	unsignedTransactions, err := s.createUnsignedCompoundTransaction(request.Address, request.From, request.UseExistingChangeAddress, limit)
+	unsignedTransactions, err := s.createUnsignedCompoundTransaction(ctx, request.Address, request.From, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +85,7 @@ func (s *server) CreateUnsignedCompoundTransaction(_ context.Context, request *p
 	return &pb.CreateUnsignedCompoundTransactionResponse{UnsignedTransactions: unsignedTransactions}, nil
 }
 
-func (s *server) createUnsignedCompoundTransaction(address string, fromAddressesString []string, useExistingChangeAddress bool, limit uint32) ([][]byte, error) {
+func (s *server) createUnsignedCompoundTransaction(ctx context.Context, address string, fromAddressesString []string, limit uint32) ([][]byte, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
@@ -102,7 +113,7 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		refreshed = true
 	}
 
-	selectedUTXOs, _, _, err := s.selectUTXOsForCompounding(feePerInput, fromAddresses)
+	selectedUTXOs, skipped, err := s.selectUTXOsForCompounding(fromAddresses, toAddress)
 	if err != nil && !refreshed {
 		// The reused set may just have run out of coins this daemon has not already spent; only a
 		// fresh one can tell that apart from there being nothing left to compound.
@@ -110,33 +121,56 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		if err != nil {
 			return nil, err
 		}
-		selectedUTXOs, _, _, err = s.selectUTXOsForCompounding(feePerInput, fromAddresses)
+		selectedUTXOs, skipped, err = s.selectUTXOsForCompounding(fromAddresses, toAddress)
 	}
 	if err != nil {
-		return nil, err
+		return nil, compoundErrorWithSkips(err, toAddress, skipped)
 	}
 
-	if len(selectedUTXOs) < 2 {
-		return nil, errors.Errorf("nothing to compound")
-	}
+	return s.finishCompound(ctx, selectedUTXOs, toAddress, skipped)
+}
 
-	// For compounding we want to consolidate inputs into a single output.
-	// Send the net amount (after fees) to the requested address and avoid creating
-	// an additional change output to keep base mass low and prevent dust.
+func (s *server) finishCompound(ctx context.Context, selectedUTXOs []*libhtnwallet.UTXO, toAddress util.Address, skipped int) ([][]byte, error) {
 	unsignedTransaction, spentUTXOs, err := s.buildCompoundTransactionWithinStandardMass(selectedUTXOs, toAddress)
 	if err != nil {
-		return nil, err
+		return nil, compoundErrorWithSkips(err, toAddress, skipped)
+	}
+	if _, err := s.requireStandardMass(unsignedTransaction); err != nil {
+		return nil, compoundErrorWithSkips(err, toAddress, skipped)
 	}
 
-	// Mark the spent UTXOs as used to prevent respending in case of submission failure. Only the ones
-	// the transaction actually spends: buildCompoundTransactionWithinStandardMass may have dropped
-	// some to fit the mass limit, and marking those would sideline them until the used-outpoint
-	// expiry even though nothing ever spent them.
+	if err := s.trackCompoundDestination(toAddress); err != nil {
+		return nil, compoundErrorWithSkips(err, toAddress, skipped)
+	}
+
+	// Reserve only the inputs that survived the mass and dust checks.
 	for _, spentUTXO := range spentUTXOs {
 		s.usedOutpoints[*spentUTXO.Outpoint] = time.Now()
 	}
 
-	return s.requireStandardMass(unsignedTransaction)
+	if skipped > 0 {
+		notice := compoundSkipNotice(toAddress, skipped)
+		log.Info(notice)
+		// Older clients ignore this optional trailer.
+		_ = grpc.SetTrailer(ctx, metadata.Pairs(utils.CompoundSkipTrailer, notice))
+	}
+	return [][]byte{unsignedTransaction}, nil
+}
+
+func compoundErrorWithSkips(err error, destination util.Address, skipped int) error {
+	if skipped == 0 {
+		return err
+	}
+	return errors.Wrap(err, compoundSkipNotice(destination, skipped))
+}
+
+func compoundSkipNotice(destination util.Address, skipped int) string {
+	reason := fmt.Sprintf("%s is a classical address", destination)
+	if _, ok := destination.(*util.AddressScriptHash); ok {
+		reason = fmt.Sprintf("the P2SH destination %s could not be verified as an ML-DSA-44 address", destination)
+	}
+	return fmt.Sprintf("%d ML-DSA-44 coins were left out because %s; "+
+		"compound to an ML-DSA-44 address, or name the addresses to compound from, to include them", skipped, reason)
 }
 
 // compoundUTXOSetMaxAge is how long a compound reuses the wallet's UTXO set before fetching it again.
@@ -283,110 +317,145 @@ retrySubset:
 	}
 }
 
-func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*walletAddress) (
-	selectedUTXOs []*libhtnwallet.UTXO, totalReceived uint64, changeSompi uint64, err error,
-) {
-	selectedUTXOs = make([]*libhtnwallet.UTXO, 0, targetCompoundInputs)
-	var totalValue uint64
-
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+func (s *server) selectUTXOsForCompounding(fromAddresses []*walletAddress, toAddress util.Address) ([]*libhtnwallet.UTXO, int, error) {
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
-		return nil, 0, 0, errors.Wrap(err, "failed to get DAG info")
+		return nil, 0, errors.Wrap(err, "failed to get DAG info")
+	}
+	return s.selectUTXOsForCompoundingAt(dagInfo.VirtualDAAScore, fromAddresses, toAddress)
+}
+
+// indexCompoundP2SHAddresses derives the P2SH destinations covered by the wallet's public key
+// pools once, before starting sync or serving requests. The pools do not change while it runs.
+func (s *server) indexCompoundP2SHAddresses() {
+	s.compoundP2SHAddresses = make(map[[32]byte]walletAddress)
+	for _, keychain := range keyChains {
+		candidate := walletAddress{keyChain: keychain, mldsa44: true}
+		if !s.isMultisig() {
+			candidate.mldsa44Form = libhtnwallet.MLDSA44AddressFormP2SH
+		}
+		for candidate.index = 0; candidate.index < scanIndexLimit; candidate.index++ {
+			derived, err := s.mldsa44Address(&candidate)
+			if err != nil {
+				break // The shortest key pool determines the covered range.
+			}
+			s.compoundP2SHAddresses[[32]byte(derived.ScriptAddress())] = candidate
+		}
+	}
+}
+
+func (s *server) ownedCompoundP2SH(address util.Address) (walletAddress, bool) {
+	if p2sh, ok := address.(*util.AddressScriptHash); ok {
+		path, owned := s.compoundP2SHAddresses[[32]byte(p2sh.ScriptAddress())]
+		return path, owned
+	}
+	return walletAddress{}, false
+}
+
+func (s *server) trackCompoundDestination(address util.Address) error {
+	path, owned := s.ownedCompoundP2SH(address)
+	if !owned {
+		return nil
 	}
 
-	s.sortUTXOsByAmountDescending()
-	for _, highestUTXO := range s.utxosSortedByAmount {
-		if len(selectedUTXOs) >= 1 {
-			break
+	// A cosigner can supply an empty address past this daemon's last-used index. Record it
+	// now so recent or old address scans can find the output even after a restart.
+	external, internal := s.lastUsedIndexes()
+	if path.keyChain == libhtnwallet.ExternalKeychain && path.index > external {
+		if err := s.keysFile.SetLastUsedExternalIndex(path.index); err != nil {
+			return err
 		}
-		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, highestUTXO.address)) ||
-			!s.isUTXOSpendable(highestUTXO, dagInfo.VirtualDAAScore) {
-			continue
+	}
+	if path.keyChain == libhtnwallet.InternalKeychain && path.index > internal {
+		if err := s.keysFile.SetLastUsedInternalIndex(path.index); err != nil {
+			return err
 		}
+	}
+	s.trackAddress(address.String(), &path)
+	return nil
+}
 
-		if broadcastTime, ok := s.usedOutpoints[*highestUTXO.Outpoint]; ok {
-			if s.usedOutpointHasExpired(broadcastTime) {
-				delete(s.usedOutpoints, *highestUTXO.Outpoint)
-			} else {
-				continue
+// selectUTXOsForCompoundingAt includes ML-DSA-44 inputs when the destination is verified or the
+// caller explicitly named source addresses. It reports the number excluded by that policy alone.
+func (s *server) selectUTXOsForCompoundingAt(virtualDAAScore uint64, fromAddresses []*walletAddress,
+	toAddress util.Address,
+) ([]*libhtnwallet.UTXO, int, error) {
+	eligible := func(coin *walletUTXO) bool {
+		if (len(fromAddresses) != 0 && !walletAddressesContain(fromAddresses, coin.address)) ||
+			!s.isUTXOSpendable(coin, virtualDAAScore) {
+			return false
+		}
+		if broadcastTime, ok := s.usedOutpoints[*coin.Outpoint]; ok {
+			if !s.usedOutpointHasExpired(broadcastTime) {
+				return false
+			}
+			delete(s.usedOutpoints, *coin.Outpoint)
+		}
+		return true
+	}
+	var skipped int
+	_, nativeMLDSA44 := toAddress.(*util.AddressPublicKeyHashMLDSA44)
+	spendMLDSA44 := len(fromAddresses) != 0 || nativeMLDSA44
+	if !spendMLDSA44 {
+		for _, coin := range s.utxosSortedByAmount {
+			if coin.address.mldsa44 && eligible(coin) {
+				skipped++
 			}
 		}
-
-		selectedUTXO, err := s.libhtnwalletUTXO(highestUTXO.Outpoint, highestUTXO.UTXOEntry, highestUTXO.address)
-		if err != nil {
-			return nil, 0, 0, err
+		if skipped != 0 {
+			_, spendMLDSA44 = s.ownedCompoundP2SH(toAddress)
+			if spendMLDSA44 {
+				skipped = 0
+			}
 		}
-		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
-		totalValue += highestUTXO.UTXOEntry.Amount()
 	}
-	// log.Infof("Selected %d big UTXO for compound", totalValue/100_000_000)
 
-	s.sortUTXOsByAmountAscending()
-	// log.Infof("Found %d UTXO", len(s.utxosSortedByAmount))
-
-	// Collect up to targetCompoundInputs smallest spendable UTXOs for compounding
-	for _, utxo := range s.utxosSortedByAmount {
-		if selectedUTXOsContain(selectedUTXOs, utxo) { // Don't accidentally spend same UTXO.
+	selectedUTXOs := make([]*libhtnwallet.UTXO, 0, targetCompoundInputs)
+	var totalValue uint64
+	s.sortUTXOsByAmountDescending()
+	for _, coin := range s.utxosSortedByAmount {
+		if (!spendMLDSA44 && coin.address.mldsa44) || !eligible(coin) {
 			continue
 		}
+		selectedUTXO, err := s.libhtnwalletUTXO(coin.Outpoint, coin.UTXOEntry, coin.address)
+		if err != nil {
+			return nil, skipped, err
+		}
+		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
+		totalValue += coin.UTXOEntry.Amount()
+		break
+	}
+
+	s.sortUTXOsByAmountAscending()
+	for _, coin := range s.utxosSortedByAmount {
 		if len(selectedUTXOs) >= targetCompoundInputs {
 			break
 		}
-		if (fromAddresses != nil && !walletAddressesContain(fromAddresses, utxo.address)) ||
-			!s.isUTXOSpendable(utxo, dagInfo.VirtualDAAScore) {
+		if (!spendMLDSA44 && coin.address.mldsa44) || !eligible(coin) || selectedUTXOsContain(selectedUTXOs, coin) {
 			continue
 		}
-
-		if broadcastTime, ok := s.usedOutpoints[*utxo.Outpoint]; ok {
-			if s.usedOutpointHasExpired(broadcastTime) {
-				delete(s.usedOutpoints, *utxo.Outpoint)
-			} else {
-				continue
-			}
-		}
-
-		selectedUTXO, err := s.libhtnwalletUTXO(utxo.Outpoint, utxo.UTXOEntry, utxo.address)
+		selectedUTXO, err := s.libhtnwalletUTXO(coin.Outpoint, coin.UTXOEntry, coin.address)
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, skipped, err
 		}
 		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
-		totalValue += utxo.UTXOEntry.Amount()
+		totalValue += coin.UTXOEntry.Amount()
 	}
-	// log.Infof("Selected %d UTXO", len(s.utxosSortedByAmount))
 
 	if len(selectedUTXOs) == 0 {
-		return nil, 0, 0, errors.New("no spendable UTXOs for compounding")
+		return nil, skipped, errors.New("no spendable UTXOs for compounding")
 	}
-
-	// Require at least 2 UTXOs to make compounding worthwhile
 	if len(selectedUTXOs) < 2 {
-		return nil, 0, 0, errors.New("need at least 2 UTXOs to compound")
+		return nil, skipped, errors.New("need at least 2 UTXOs to compound")
 	}
-
-	// Calculate fees based on the actual number of selected inputs
-	selectedUTXOCount := len(selectedUTXOs)
-	if selectedUTXOCount < 0 {
-		return nil, 0, 0, errors.Errorf("selected UTXO count %d cannot be negative", selectedUTXOCount)
-	}
-	selectedUTXOCountUint64, err := checkedUint64FromInt(selectedUTXOCount)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	feePerInputUint64, err := checkedUint64FromInt(feePerInput)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	fee := selectedUTXOCountUint64 * feePerInputUint64
+	fee := uint64(len(selectedUTXOs)) * feePerInput
 	if totalValue <= fee {
-		return nil, 0, 0, errors.Errorf("not enough funds: total %d sompi < fee %d sompi", totalValue, fee)
+		return nil, skipped, errors.Errorf("not enough funds: total %d sompi < fee %d sompi", totalValue, fee)
 	}
-
-	changeSompi = totalValue - fee
-
-	return selectedUTXOs, totalValue, changeSompi, nil
+	return selectedUTXOs, skipped, nil
 }
 
-func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte, limit uint32) ([][]byte, error) {
+func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte, limit uint32) (*preparedSend, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
@@ -403,21 +472,12 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		return nil, err
 	}
 
-	var fromAddresses []*walletAddress
-	for _, from := range fromAddressesString {
-		fromAddress, exists := s.addressSet[from]
-		if !exists {
-			return nil, errors.Errorf("specified from address %s does not exists", from)
-		}
-		fromAddresses = append(fromAddresses, fromAddress)
-	}
-
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	return s.buildSendTransaction(toAddress, amount, isSendAll, fromAddresses, useExistingChangeAddress, payload,
+	return s.buildSendTransaction(toAddress, amount, isSendAll, fromAddressesString, useExistingChangeAddress, payload,
 		dagInfo.VirtualDAAScore)
 }
 
@@ -431,9 +491,14 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 // a dust output plus the fee the change output would have cost) goes to the fee. The requested amount
 // is never reduced, and no output is dust. If a non-dust change would push the transaction over the
 // standard mass, the send is refused rather than paying that remainder as fee.
+//
+// The change address is an ML-DSA-44 one as soon as any coin of the prefix is ML-DSA-44. The change
+// of such a send carries ML-DSA-44 value, and a secp256k1 change address would move it out of
+// post-quantum protection without the user having asked for that. The only exception is a change
+// address the user named: with useExistingChangeAddress, the first eligible address in from.
 func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isSendAll bool,
-	fromAddresses []*walletAddress, useExistingChangeAddress bool, payload []byte, virtualDAAScore uint64,
-) ([][]byte, error) {
+	from []string, useExistingChangeAddress bool, payload []byte, virtualDAAScore uint64,
+) (*preparedSend, error) {
 	// The amount comes unchecked from the request. Near the uint64 limit, amount + fee wrapped to a
 	// small number that the funds check accepted.
 	if !isSendAll && amount > constants.MaxSompi {
@@ -450,28 +515,101 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 		}
 	}
 
-	coins := s.spendableUTXOsLargestFirst(fromAddresses, virtualDAAScore)
-	if len(coins) == 0 {
-		return nil, errors.Errorf("couldn't find funds to spend")
+	var fromAddresses []*walletAddress
+	for _, source := range from {
+		fromAddress, exists := s.addressSet[source]
+		if !exists {
+			return nil, errors.Errorf("specified from address %s does not exists", source)
+		}
+		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	var changeAddress util.Address // taken once: each new one uses up an internal address index
+	var namedChange util.Address
+	var namedChangePath *walletAddress
+	if useExistingChangeAddress {
+		// Change follows the first eligible source and keeps the encoding the caller supplied.
+		for i, source := range fromAddresses {
+			if !s.isAddressSpendableAt(source, virtualDAAScore) {
+				continue
+			}
+			var err error
+			namedChange, err = util.DecodeAddress(from[i], s.params.Prefix)
+			if err != nil {
+				return nil, err
+			}
+			namedChangePath = source
+			break
+		}
+	}
+
+	coins := s.spendableUTXOsLargestFirst(fromAddresses, virtualDAAScore)
+	transactions, err := s.buildSendWithCoins(toAddress, amount, isSendAll, useExistingChangeAddress,
+		namedChange, namedChangePath, payload, coins)
+	if isSendAll || len(from) != 0 {
+		return transactions, err
+	}
+	switch err.(type) {
+	case changeKeyUnavailableError, standardMassError:
+	default:
+		return transactions, err
+	}
+
+	// A lighter, entirely classical payment may fit without needing an ML-DSA-44 change key.
+	var classical []*walletUTXO
+	for _, coin := range coins {
+		if !coin.address.mldsa44 {
+			classical = append(classical, coin)
+		}
+	}
+	if len(classical) != 0 && len(classical) < len(coins) {
+		retry, retryErr := s.buildSendWithCoins(toAddress, amount, false, useExistingChangeAddress,
+			nil, nil, payload, classical)
+		switch retryErr.(type) {
+		case sendFundingError, standardMassError:
+			// There is no standard payment using this selection. Keep the original diagnosis.
+		default:
+			return retry, retryErr
+		}
+	}
+
+	if keyErr, ok := err.(changeKeyUnavailableError); ok {
+		// Try one alternate prefix on key exhaustion. Swapping its smallest coin for the
+		// next smaller coin may cover the payment and fee without requiring change.
+		if keyErr.inputCount < len(coins) {
+			alternate := slices.Clone(coins[:keyErr.inputCount])
+			alternate[len(alternate)-1] = coins[keyErr.inputCount]
+			retry, retryErr := s.buildSendWithCoins(toAddress, amount, false, useExistingChangeAddress,
+				nil, nil, payload, alternate)
+			switch retryErr.(type) {
+			case sendFundingError, standardMassError, changeKeyUnavailableError:
+			default:
+				return retry, retryErr
+			}
+		}
+		keyErr.error = errors.Errorf("%s; to try a different set of inputs, specify source addresses with --from-address", keyErr.error)
+		return nil, keyErr
+	}
+	return transactions, err
+}
+
+type changeKeyUnavailableError struct {
+	error
+	inputCount int
+}
+
+type sendFundingError struct{ error }
+
+func (s *server) buildSendWithCoins(toAddress util.Address, amount uint64, isSendAll, useExistingChangeAddress bool,
+	namedChange util.Address, namedChangePath *walletAddress, payload []byte, coins []*walletUTXO,
+) (*preparedSend, error) {
+	if len(coins) == 0 {
+		return nil, sendFundingError{errors.New("couldn't find funds to spend")}
+	}
+	if isSendAll {
+		amount = 1 // Measure with a placeholder until the actual fee is known.
+	}
 	var selectedUTXOs []*libhtnwallet.UTXO
 	totalValue, required := uint64(0), uint64(0)
-	// measure builds the transaction for the coins selected so far and returns it with its signed mass.
-	measure := func(payments []*libhtnwallet.Payment) ([]byte, uint64, error) {
-		unsignedTransaction, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
-			s.keysFile.MinimumSignatures, payments, selectedUTXOs, payload)
-		if err != nil {
-			return nil, 0, err
-		}
-		partiallySignedTransaction, err := serialization.DeserializePartiallySignedTransaction(unsignedTransaction)
-		if err != nil {
-			return nil, 0, err
-		}
-		mass, err := s.estimateMassAfterSignatures(partiallySignedTransaction)
-		return unsignedTransaction, mass, err
-	}
 	feeFor := func(mass uint64) uint64 {
 		return max(feePerInput*uint64(len(selectedUTXOs)), s.minimumRelayFee(mass))
 	}
@@ -484,18 +622,32 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 		selectedUTXOs = append(selectedUTXOs, selectedUTXO)
 		totalValue += coin.UTXOEntry.Amount()
 
+		// Every fee is at least the flat one, so an unfunded prefix is not worth building.
+		required = amount + feePerInput*uint64(len(selectedUTXOs))
+		if (isSendAll && i < len(coins)-1) || (!isSendAll && totalValue < required) {
+			continue
+		}
+
+		payment := &libhtnwallet.Payment{Address: toAddress, Amount: amount}
+		unsignedTransaction, err := libhtnwallet.CreateUnsignedTransaction(s.keysFile.ExtendedPublicKeys,
+			s.keysFile.MinimumSignatures, []*libhtnwallet.Payment{payment}, selectedUTXOs, payload)
+		if err != nil {
+			return nil, err
+		}
+		transaction, err := serialization.DeserializePartiallySignedTransaction(unsignedTransaction)
+		if err != nil {
+			return nil, err
+		}
+		massWithoutChange, err := s.estimateMassAfterSignatures(transaction)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkStandardMass(len(selectedUTXOs), massWithoutChange); err != nil {
+			return nil, err
+		}
+
+		fee := feeFor(massWithoutChange)
 		if isSendAll {
-			if i < len(coins)-1 {
-				continue
-			}
-			unsignedTransaction, mass, err := measure([]*libhtnwallet.Payment{{Address: toAddress, Amount: 1}})
-			if err != nil {
-				return nil, err
-			}
-			if mass > mempool.MaximumStandardTransactionMass {
-				return s.requireStandardMass(unsignedTransaction)
-			}
-			fee := feeFor(mass)
 			if totalValue <= fee {
 				return nil, errors.Errorf("Insufficient funds for send all: %f available, while the fee is %f",
 					float64(totalValue)/constants.SompiPerHoosat, float64(fee)/constants.SompiPerHoosat)
@@ -508,71 +660,128 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 				return nil, errors.Errorf("send all would pay %d sompi after the fee of %d sompi, which is "+
 					"below the relay dust threshold", totalValue-fee, fee)
 			}
-			unsignedTransaction, _, err = measure([]*libhtnwallet.Payment{{Address: toAddress, Amount: totalValue - fee}})
-			if err != nil {
-				return nil, err
-			}
-			return s.requireStandardMass(unsignedTransaction)
+			transaction.Tx.Outputs[0].Value = totalValue - fee
+			return finalizeSend(transaction, nil)
 		}
 
-		// Every fee is at least the flat one, so a prefix that cannot pay that is not worth building.
-		required = amount + feePerInput*uint64(len(selectedUTXOs))
+		required = amount + fee
 		if totalValue < required {
 			continue
 		}
+		automaticMLDSA44 := namedChange == nil && anyInputIsMLDSA44(selectedUTXOs)
+		if totalValue == required {
+			return s.finalizePaymentOnly(transaction, namedChange, namedChangePath, useExistingChangeAddress, automaticMLDSA44)
+		}
 
-		if changeAddress == nil {
-			changeAddress, _, err = s.changeAddress(useExistingChangeAddress, fromAddresses, allInputsAreMLDSA44(selectedUTXOs))
+		changeAddress, changeWalletAddress := namedChange, namedChangePath
+		if automaticMLDSA44 {
+			// Measure the script type before deriving the real address from the public key pool.
+			var zeroHash [32]byte
+			if s.isMultisig() {
+				changeAddress, err = util.NewAddressScriptHashFromHash(zeroHash[:], s.params.Prefix)
+			} else {
+				changeAddress, err = libhtnwallet.MLDSA44Address(s.params, zeroHash[:])
+			}
+		} else if namedChange == nil {
+			changeAddress, changeWalletAddress, err = s.deriveChangeAddress(useExistingChangeAddress, false)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		changeScript, err := txscript.PayToAddrScript(changeAddress)
+		if err != nil {
+			return nil, err
+		}
+		changeTxOutput := &externalapi.DomainTransactionOutput{ScriptPublicKey: changeScript}
+		transaction.Tx.Outputs = append(transaction.Tx.Outputs, changeTxOutput)
+		massWithChange, err := s.estimateMassAfterSignatures(transaction)
+		if err != nil {
+			return nil, err
+		}
+		feeWithChange := feeFor(massWithChange)
+		if totalValue < amount+feeWithChange {
+			transaction.Tx.Outputs = transaction.Tx.Outputs[:1]
+			return s.finalizePaymentOnly(transaction, changeAddress, changeWalletAddress, useExistingChangeAddress, automaticMLDSA44)
+		}
+		change := totalValue - amount - feeWithChange
+		dust, err := s.isDust(changeAddress, change)
+		if err != nil {
+			return nil, err
+		}
+		if dust {
+			transaction.Tx.Outputs = transaction.Tx.Outputs[:1]
+			return s.finalizePaymentOnly(transaction, changeAddress, changeWalletAddress, useExistingChangeAddress, automaticMLDSA44)
+		}
+		if massWithChange > mempool.MaximumStandardTransactionMass {
+			// Never pay a spendable remainder as fee because its change output does not fit.
+			return nil, standardMassError{errors.Errorf("the change of %d sompi would take the transaction to a mass of %d, "+
+				"over the standard limit of %d. Send a smaller amount, or consolidate the wallet's coins "+
+				"first (for example with auto-compound)",
+				change, massWithChange, uint64(mempool.MaximumStandardTransactionMass))}
+		}
+		if automaticMLDSA44 {
+			changeAddress, changeWalletAddress, err = s.deriveChangeAddress(useExistingChangeAddress, true)
+			if err != nil {
+				return nil, changeKeyUnavailableError{
+					error: errors.Wrap(err, utils.MLDSA44ChangeKeyUnavailable), inputCount: len(selectedUTXOs),
+				}
+			}
+			// The derived script has the same size as the script just measured.
+			changeTxOutput.ScriptPublicKey, err = txscript.PayToAddrScript(changeAddress)
 			if err != nil {
 				return nil, err
 			}
 		}
-		payment := &libhtnwallet.Payment{Address: toAddress, Amount: amount}
-
-		// With change, if that leaves a coin worth sending.
-		_, massWithChange, err := measure([]*libhtnwallet.Payment{payment, {Address: changeAddress, Amount: 1}})
-		if err != nil {
-			return nil, err
-		}
-		if feeWithChange := feeFor(massWithChange); totalValue >= amount+feeWithChange {
-			change := totalValue - amount - feeWithChange
-			dust, err := s.isDust(changeAddress, change)
-			if err != nil {
-				return nil, err
-			}
-			if !dust {
-				if massWithChange > mempool.MaximumStandardTransactionMass {
-					// Never pay a spendable remainder as fee because its change output does not fit.
-					return nil, errors.Errorf("the change of %d sompi would take the transaction to a mass of %d, "+
-						"over the standard limit of %d. Send a smaller amount, or consolidate the wallet's coins "+
-						"first (for example with auto-compound)",
-						change, massWithChange, uint64(mempool.MaximumStandardTransactionMass))
-				}
-				unsignedTransaction, _, err := measure([]*libhtnwallet.Payment{payment, {Address: changeAddress, Amount: change}})
-				if err != nil {
-					return nil, err
-				}
-				return s.requireStandardMass(unsignedTransaction)
-			}
-		}
-
-		// Without change: the residual, if any, is the fee.
-		unsignedTransaction, massWithoutChange, err := measure([]*libhtnwallet.Payment{payment})
-		if err != nil {
-			return nil, err
-		}
-		if massWithoutChange > mempool.MaximumStandardTransactionMass {
-			// More coins only add mass.
-			return s.requireStandardMass(unsignedTransaction)
-		}
-		required = amount + feeFor(massWithoutChange)
-		if totalValue >= required {
-			return s.requireStandardMass(unsignedTransaction)
-		}
+		changeTxOutput.Value = change
+		return finalizeSend(transaction, &changeOutput{
+			address: changeAddress, walletAddr: changeWalletAddress, fresh: !useExistingChangeAddress,
+		})
 	}
 
-	return nil, errors.Errorf("Insufficient funds for send: %f required, while only %f available",
-		float64(required)/constants.SompiPerHoosat, float64(totalValue)/constants.SompiPerHoosat)
+	return nil, sendFundingError{errors.Errorf("Insufficient funds for send: %f required, while only %f available",
+		float64(required)/constants.SompiPerHoosat, float64(totalValue)/constants.SompiPerHoosat)}
+}
+
+// A recipient-only payment can still pay the candidate's script. Resolve it if
+// available, without requiring a change key for an exact or dust-remainder payment.
+func (s *server) finalizePaymentOnly(transaction *serialization.PartiallySignedTransaction,
+	address util.Address, walletAddr *walletAddress, useExisting, mldsa44 bool,
+) (*preparedSend, error) {
+	if walletAddr == nil {
+		var err error
+		address, walletAddr, err = s.deriveChangeAddress(useExisting, mldsa44)
+		if err != nil {
+			return finalizeSend(transaction, nil)
+		}
+	}
+	return finalizeSend(transaction, &changeOutput{address: address, walletAddr: walletAddr, fresh: !useExisting})
+}
+
+type preparedSend struct {
+	transaction []byte
+	change      *changeOutput
+}
+
+func finalizeSend(transaction *serialization.PartiallySignedTransaction, candidate *changeOutput) (*preparedSend, error) {
+	unsigned, err := serialization.SerializePartiallySignedTransaction(transaction)
+	if err != nil {
+		return nil, err
+	}
+	send := &preparedSend{transaction: unsigned}
+	if candidate != nil {
+		script, err := txscript.PayToAddrScript(candidate.address)
+		if err != nil {
+			return nil, err
+		}
+		// The payment itself can use the candidate's script, even when no change output was added.
+		if slices.ContainsFunc(transaction.Tx.Outputs, func(output *externalapi.DomainTransactionOutput) bool {
+			return output.ScriptPublicKey.Equal(script)
+		}) {
+			send.change = candidate
+		}
+	}
+	return send, nil
 }
 
 func (s *server) sortUTXOsByAmountAscending() {
@@ -652,19 +861,16 @@ func (s *server) libhtnwalletUTXO(outpoint *externalapi.DomainOutpoint, utxoEntr
 	}, nil
 }
 
-// allInputsAreMLDSA44 reports whether every selected coin is held by an ML-DSA-44 address, in which
-// case the change goes to one too (see changeAddress).
-func allInputsAreMLDSA44(selectedUTXOs []*libhtnwallet.UTXO) bool {
-	if len(selectedUTXOs) == 0 {
-		return false
-	}
+// anyInputIsMLDSA44 reports whether any selected coin is held by an ML-DSA-44 address, in which case
+// the change goes to one too.
+func anyInputIsMLDSA44(selectedUTXOs []*libhtnwallet.UTXO) bool {
 	for _, selectedUTXO := range selectedUTXOs {
 		// A P2SH output does not say what is behind it; the carried redeem script does.
-		if !libhtnwallet.IsMLDSA44Coin(selectedUTXO.UTXOEntry.ScriptPublicKey().Script, selectedUTXO.RedeemScript) {
-			return false
+		if libhtnwallet.IsMLDSA44Coin(selectedUTXO.UTXOEntry.ScriptPublicKey().Script, selectedUTXO.RedeemScript) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func walletAddressesContain(addresses []*walletAddress, contain *walletAddress) bool {

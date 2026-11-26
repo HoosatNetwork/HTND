@@ -7,6 +7,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 )
 
@@ -16,8 +17,10 @@ type (
 )
 
 // GetBalance reports each address's balance split into available coins, which the wallet will spend,
-// and pending ones, which are not old enough yet (see isInputSafelyAged). The total per address comes
-// from the node's balance index; the pending part is worked out from the address's UTXOs.
+// and pending ones, which are not old enough yet (see isInputSafelyAged) or sit on an ML-DSA-44
+// address before ML-DSA-44 is active (see isAddressSpendableAt). The total per address comes from the
+// node's balance index. The full balance of a locked address is pending; other addresses use their UTXOs
+// to account for coin maturity.
 func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.GetBalanceResponse, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -43,7 +46,7 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 	}
 
 	if len(balancesMap) > 0 {
-		dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+		dagInfo, err := s.getBlockDAGInfo(context.Background())
 		if err != nil {
 			return nil, err
 		}
@@ -85,16 +88,23 @@ func (s *server) GetBalance(_ context.Context, _ *pb.GetBalanceRequest) (*pb.Get
 func (s *server) movePendingOutOfAvailable(balancesMap balancesMapType, entries []*appmessage.UTXOsByAddressesEntry,
 	virtualDAAScore uint64,
 ) error {
+	// The separate UTXO reply may be capped, but activation locks the whole address.
+	for address, balances := range balancesMap {
+		if !s.isAddressSpendableAt(s.addressSet[address], virtualDAAScore) {
+			balances.pending += balances.available
+			balances.available = 0
+		}
+	}
 	for _, entry := range entries {
+		balances := balancesMap[entry.Address]
+		if balances == nil || balances.available == 0 {
+			continue
+		}
 		utxoEntry, err := appmessage.RPCUTXOEntryToUTXOEntry(entry.UTXOEntry)
 		if err != nil {
 			return err
 		}
 		if isInputSafelyAged(utxoEntry.BlockDAAScore(), utxoEntry.IsCoinbase(), s.coinbaseMaturity, virtualDAAScore) {
-			continue
-		}
-		balances, ok := balancesMap[entry.Address]
-		if !ok {
 			continue
 		}
 		moved := min(utxoEntry.Amount(), balances.available)
@@ -140,6 +150,13 @@ func isInputSafelyAged(blockDAAScore uint64, isCoinbase bool, coinbaseMaturity, 
 }
 
 func (s *server) isUTXOSpendable(entry *walletUTXO, virtualDAAScore uint64) bool {
-	return isInputSafelyAged(entry.UTXOEntry.BlockDAAScore(), entry.UTXOEntry.IsCoinbase(), s.coinbaseMaturity,
-		virtualDAAScore)
+	return s.isAddressSpendableAt(entry.address, virtualDAAScore) &&
+		isInputSafelyAged(entry.UTXOEntry.BlockDAAScore(), entry.UTXOEntry.IsCoinbase(), s.coinbaseMaturity,
+			virtualDAAScore)
+}
+
+// isAddressSpendableAt applies the network's ML-DSA-44 activation gate to a tracked address.
+// A nil address has no wallet metadata to identify it as ML-DSA-44.
+func (s *server) isAddressSpendableAt(address *walletAddress, virtualDAAScore uint64) bool {
+	return address == nil || !address.mldsa44 || libhtnwallet.MLDSA44Active(s.params, virtualDAAScore)
 }
