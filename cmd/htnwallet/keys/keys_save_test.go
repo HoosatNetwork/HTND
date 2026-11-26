@@ -171,6 +171,88 @@ func TestASaveFailingAtTheRenameLeavesTheExistingKeysFileIntact(t *testing.T) {
 	}
 }
 
+func TestLastUsedIndexCanBeRetriedAfterRenameFailure(t *testing.T) {
+	for _, chain := range []struct {
+		name string
+		set  func(*File, uint32) error
+		get  func(*File) uint32
+	}{
+		{"external", (*File).SetLastUsedExternalIndex, (*File).LastUsedExternalIndex},
+		{"internal", (*File).SetLastUsedInternalIndex, (*File).LastUsedInternalIndex},
+	} {
+		t.Run(chain.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "keys.json")
+			file := newTestFile(t, path, 1)
+			const recorded = 1 << 31
+			if err := chain.set(file, recorded); err != nil {
+				t.Fatalf("seed counter: %v", err)
+			}
+			checkCounter := func(want uint32) {
+				t.Helper()
+				saved, err := ReadKeysFile(&dagconfig.MainnetParams, path)
+				if err != nil {
+					t.Fatalf("ReadKeysFile: %v", err)
+				}
+				if memory, disk := chain.get(file), chain.get(saved); memory != want || disk != want {
+					t.Errorf("counter in memory = %d, on disk = %d, want %d in both", memory, disk, want)
+				}
+			}
+
+			injected := errors.New("injected rename failure")
+			originalRename := renameFile
+			renameFile = func(string, string) error { return injected }
+			t.Cleanup(func() { renameFile = originalRename })
+			if err := chain.set(file, 1); !errors.Is(err, injected) {
+				t.Fatalf("setting counter returned %v, want the injected rename failure", err)
+			}
+			checkCounter(recorded)
+
+			renameFile = originalRename
+			if err := chain.set(file, 1); err != nil {
+				t.Fatalf("retrying counter: %v", err)
+			}
+			checkCounter(1)
+		})
+	}
+}
+
+func TestLastUsedIndexKeepsRenamedValueAfterDirectorySyncFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("saving does not sync the directory on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "wallet")
+	moved := dir + "-moved"
+	path := filepath.Join(dir, "keys.json")
+	file := newTestFile(t, path, 1)
+	if err := file.SetLastUsedExternalIndex(1 << 31); err != nil {
+		t.Fatalf("seed counter: %v", err)
+	}
+
+	originalRename := renameFile
+	renameFile = func(from, to string) error {
+		if err := originalRename(from, to); err != nil {
+			return err
+		}
+		// Let the replacement succeed, then make opening the directory for sync fail.
+		return os.Rename(dir, moved)
+	}
+	t.Cleanup(func() { renameFile = originalRename })
+	saveErr := file.SetLastUsedExternalIndex(1)
+	if err := os.Rename(moved, dir); err != nil {
+		t.Fatalf("restore wallet directory (save returned %v): %v", saveErr, err)
+	}
+	if !errors.Is(saveErr, os.ErrNotExist) {
+		t.Fatalf("setting counter returned %v, want a missing-directory error", saveErr)
+	}
+	saved, err := ReadKeysFile(&dagconfig.MainnetParams, path)
+	if err != nil {
+		t.Fatalf("ReadKeysFile: %v", err)
+	}
+	if memory, disk := file.LastUsedExternalIndex(), saved.LastUsedExternalIndex(); memory != 1 || disk != 1 {
+		t.Errorf("counter in memory = %d, on disk = %d, want 1 in both", memory, disk)
+	}
+}
+
 // seedKeysFile saves a keys file with MinimumSignatures 1 at path and returns its bytes.
 func seedKeysFile(t *testing.T, path string) []byte {
 	t.Helper()
