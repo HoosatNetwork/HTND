@@ -11,7 +11,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/rpcclient"
 	"github.com/pkg/errors"
 )
 
@@ -46,26 +45,34 @@ func (s *server) broadcast(transactions [][]byte, isDomain bool, allowOrphan boo
 			}
 		}
 
-		txIDs[i], err = sendTransaction(s.rpcClient, tx, allowOrphan, isHighPriority)
+		txIDs[i], err = s.submitTransaction(tx, allowOrphan, isHighPriority)
 		if err != nil {
-			if shouldReleaseUsedOutpointsOnBroadcastError(err) {
-				s.releaseUsedOutpoints(tx)
-			}
-			if broadcastErrorMeansUTXOSetIsStale(err) {
-				s.utxoSetIsStale = true
-			}
 			return nil, withSubmittedTransactionIDs(err, txIDs[:i])
 		}
-
-		broadcastTime := time.Now()
-		for _, input := range tx.Inputs {
-			s.usedOutpoints[input.PreviousOutpoint] = broadcastTime
-		}
-		s.trackBroadcast(tx, broadcastTime)
 	}
 
 	s.forceSync()
 	return txIDs, nil
+}
+
+func (s *server) submitTransaction(tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
+	txID, err := sendTransaction(s.rpcClient, tx, allowOrphan, isHighPriority)
+	if err != nil {
+		if shouldReleaseUsedOutpointsOnBroadcastError(err) {
+			s.releaseUsedOutpoints(tx)
+		}
+		if broadcastErrorMeansUTXOSetIsStale(err) {
+			s.utxoSetIsStale = true
+		}
+		return "", err
+	}
+
+	broadcastTime := time.Now()
+	for _, input := range tx.Inputs {
+		s.usedOutpoints[input.PreviousOutpoint] = broadcastTime
+	}
+	s.trackBroadcast(tx, broadcastTime)
+	return txID, nil
 }
 
 // withSubmittedTransactionIDs adds to a broadcast error the IDs of the transactions of the same request that were
@@ -117,7 +124,12 @@ func (s *server) releaseUsedOutpoints(tx *externalapi.DomainTransaction) {
 	}
 }
 
-func sendTransaction(client *rpcclient.RPCClient, tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
+type transactionSubmitter interface {
+	SubmitTransactionWithPriority(transaction *appmessage.RPCTransaction, transactionID string, allowOrphan bool,
+		isHighPriority *bool) (*appmessage.SubmitTransactionResponseMessage, error)
+}
+
+func sendTransaction(client transactionSubmitter, tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
 	submitTransactionResponse, err := client.SubmitTransactionWithPriority(appmessage.DomainTransactionToRPCTransaction(tx), consensushashing.TransactionID(tx).String(), allowOrphan, isHighPriority)
 	if err != nil {
 		return "", errors.Wrapf(err, "error submitting transaction")

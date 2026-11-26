@@ -71,10 +71,9 @@ func (s *server) trackedImportedKeys() []*keys.ImportedKey {
 	return importedKeys
 }
 
-// nextImportedWalletAddress returns the address an imported wallet hands out next in keyChain: for a web
-// wallet, its first key in that key chain the daemon does not track yet, as the web wallet itself would;
-// for a lone private key, that key, since it is the wallet's only one. The address is tracked from then
-// on, so the next call moves on, and coins reaching it are seen at once. The caller holds s.lock.
+// nextImportedWalletAddress selects the first untracked key in keyChain for a web wallet, or
+// the only key for a lone private key wallet. The caller holds s.lock and tracks the address
+// when issuing it.
 //
 // When every web wallet key in keyChain is in use, a receive address is refused - the wallet needs to be
 // imported again with more addresses - while change goes back to the key chain's first key, rather than
@@ -124,7 +123,6 @@ func (s *server) nextImportedWalletAddress(keyChain uint8) (util.Address, *walle
 	if !ok {
 		return nil, nil, errors.Errorf("imported address %s is not among the imported wallet's addresses", address)
 	}
-	s.trackChangeAddress(address, walletAddr)
 	return address, walletAddr, nil
 }
 
@@ -144,7 +142,6 @@ func (s *server) importedWalletChangeAddress(useExisting bool, fromAddresses []*
 	if err != nil {
 		return nil, nil, err
 	}
-	s.trackChangeAddress(address, walletAddr)
 	return address, walletAddr, nil
 }
 
@@ -178,10 +175,11 @@ func (s *server) showImportedWalletAddresses(request *pb.ShowAddressesRequest) (
 // importedWalletNewAddress is NewAddress for an imported wallet: its next receive address
 // (nextImportedWalletAddress). The caller holds s.lock.
 func (s *server) importedWalletNewAddress(request *pb.NewAddressRequest) (*pb.NewAddressResponse, error) {
-	_, walletAddr, err := s.nextImportedWalletAddress(libhtnwallet.ExternalKeychain)
+	p2pkAddress, walletAddr, err := s.nextImportedWalletAddress(libhtnwallet.ExternalKeychain)
 	if err != nil {
 		return nil, err
 	}
+	s.trackChangeAddress(p2pkAddress, walletAddr)
 
 	response := &pb.NewAddressResponse{}
 	for addressType, field := range map[libhtnwallet.SingleSigAddressType]*string{
