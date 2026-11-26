@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -148,10 +149,10 @@ func mldsa44CosignersFromJSON(cosignersJSON mldsa44CosignersJSON) (map[string]*M
 	for extendedPublicKey, poolJSON := range cosignersJSON {
 		pool, err := mldsa44KeyPoolFromJSON(poolJSON)
 		if err != nil {
-			return nil, errors.Wrapf(err, "ML-DSA-44 keys of cosigner %s", extendedPublicKey)
+			return nil, errors.Wrap(err, "invalid ML-DSA-44 cosigner key pool")
 		}
 		if pool == nil {
-			return nil, errors.Errorf("ML-DSA-44 keys of cosigner %s are empty", extendedPublicKey)
+			return nil, errors.New("empty ML-DSA-44 cosigner key pool")
 		}
 		cosigners[extendedPublicKey] = pool
 	}
@@ -231,6 +232,23 @@ type File struct {
 	// ML-DSA-44 keys cannot be derived from an extended public key.
 	MLDSA44Cosigners map[string]*MLDSA44KeyPool
 	path             string
+}
+
+// KnownLocalCosignerKeys returns the mnemonic-backed extended public keys when
+// they can be identified without decrypting. CosignerIndex records the first
+// local key's position in sorted order, even if a daemon reordered the file.
+func (d *File) KnownLocalCosignerKeys() ([]string, bool) {
+	switch n := len(d.EncryptedMnemonics); {
+	case n == 0:
+		return nil, true
+	case n == len(d.ExtendedPublicKeys):
+		return d.ExtendedPublicKeys, true
+	case n == 1 && uint64(d.CosignerIndex) < uint64(len(d.ExtendedPublicKeys)):
+		sortedKeys := slices.Sorted(slices.Values(d.ExtendedPublicKeys))
+		return sortedKeys[d.CosignerIndex : d.CosignerIndex+1], true
+	default:
+		return nil, false
+	}
 }
 
 func (d *File) toJSON() *keysFileJSON {
@@ -365,12 +383,7 @@ func (d *File) Path() string {
 // SetLastUsedExternalIndex sets the last used index in the external key
 // chain, and saves the file with the updated data.
 func (d *File) SetLastUsedExternalIndex(index uint32) error {
-	if d.lastUsedExternalIndex == index {
-		return nil
-	}
-
-	d.lastUsedExternalIndex = index
-	return d.Save()
+	return d.setLastUsedIndex(&d.lastUsedExternalIndex, index)
 }
 
 // LastUsedExternalIndex returns the last used index in the external key
@@ -381,12 +394,34 @@ func (d *File) LastUsedExternalIndex() uint32 {
 
 // SetLastUsedInternalIndex sets the last used index in the internal key chain, and saves the file.
 func (d *File) SetLastUsedInternalIndex(index uint32) error {
-	if d.lastUsedInternalIndex == index {
+	return d.setLastUsedIndex(&d.lastUsedInternalIndex, index)
+}
+
+func (d *File) setLastUsedIndex(current *uint32, index uint32) error {
+	if *current == index {
 		return nil
 	}
 
-	d.lastUsedInternalIndex = index
-	return d.Save()
+	previous := *current
+	*current = index
+	renamed, err := d.save()
+	// After the rename, readers see the new index even if syncing the directory fails.
+	if !renamed {
+		*current = previous
+	}
+	return err
+}
+
+// ReserveInternalIndex saves an index before issuing its address. If the save fails, the
+// address is still unissued and the daemon can retry the same index, even if the replacement
+// file is already visible after a failed directory sync.
+func (d *File) ReserveInternalIndex(index uint32) error {
+	previous := d.lastUsedInternalIndex
+	if err := d.SetLastUsedInternalIndex(index); err != nil {
+		d.lastUsedInternalIndex = previous
+		return err
+	}
+	return nil
 }
 
 // LastUsedInternalIndex returns the last used index in the internal key chain
@@ -492,19 +527,25 @@ func pathExists(path string) (bool, error) {
 // a crash before the rename leaves the original file untouched, and POSIX guarantees the rename
 // itself is atomic - readers never see a partial file. The on-disk JSON format itself is unchanged.
 func (d *File) Save() error {
+	_, err := d.save()
+	return err
+}
+
+// save reports whether the replacement file was renamed into place.
+func (d *File) save() (bool, error) {
 	if d.path == "" {
-		return errors.New("cannot save a file with uninitialized path")
+		return false, errors.New("cannot save a file with uninitialized path")
 	}
 
 	err := createFileDirectoryIfDoesntExist(d.path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	dir := filepath.Dir(d.path)
 	tempFile, err := os.CreateTemp(dir, filepath.Base(d.path)+".tmp-*")
 	if err != nil {
-		return err
+		return false, err
 	}
 	tempPath := tempFile.Name()
 	// A no-op once the rename below has succeeded (the path no longer exists); only cleans up a
@@ -515,26 +556,40 @@ func (d *File) Save() error {
 	err = encoder.Encode(d.toJSON())
 	if err != nil {
 		tempFile.Close()
-		return err
+		return false, err
 	}
 
 	err = tempFile.Sync()
 	if err != nil {
 		tempFile.Close()
-		return err
+		return false, err
 	}
 	err = tempFile.Close()
 	if err != nil {
-		return err
+		return false, err
 	}
+
+	directory, err := openSyncDir(dir)
+	if err != nil {
+		return false, err
+	}
+	defer directory.Close()
 
 	err = renameFile(tempPath, d.path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return syncDir(dir)
+	return true, directory.Sync()
 }
+
+type syncDirectory interface {
+	Sync() error
+	Close() error
+}
+
+// openSyncDir allows tests to inject a failure after the rename.
+var openSyncDir = openDirectoryForSync
 
 // renameFile is os.Rename, as a variable so tests can fail Save at its last step on every platform.
 var renameFile = os.Rename

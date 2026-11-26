@@ -168,9 +168,12 @@ func TestImportedWalletHandsOutItsOwnAddresses(t *testing.T) {
 	}
 
 	for _, want := range []string{change0, change1, change0} {
-		address, _, err := s.changeAddress(false, nil, false)
+		address, walletAddr, err := s.changeAddress(false, nil, false)
 		if err != nil {
 			t.Fatalf("changeAddress: %+v", err)
+		}
+		if err := s.commitChange(&changeOutput{address: address, walletAddr: walletAddr, fresh: true}); err != nil {
+			t.Fatalf("commitChange: %+v", err)
 		}
 		if address.String() != want {
 			t.Fatalf("got change address %s, want %s", address, want)

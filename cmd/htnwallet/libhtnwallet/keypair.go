@@ -3,9 +3,9 @@ package libhtnwallet
 import (
 	"encoding/binary"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/bip32"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
@@ -101,7 +101,7 @@ func PublicKeyFromPrivateKey(privateKeyBytes []byte) ([]byte, error) {
 
 // Address returns the address associated with the given public keys and minimum signatures parameters.
 func Address(params *dagconfig.Params, extendedPublicKeys []string, minimumSignatures uint32, path string, ecdsa bool) (util.Address, error) {
-	sortPublicKeys(extendedPublicKeys)
+	extendedPublicKeys = sortedPublicKeys(extendedPublicKeys)
 	minimumSignaturesInt, err := checkedUint32ToInt(minimumSignatures)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func AddressWithSingleSigAddressType(
 	ecdsa bool,
 	singleSigType SingleSigAddressType,
 ) (util.Address, error) {
-	sortPublicKeys(extendedPublicKeys)
+	extendedPublicKeys = sortedPublicKeys(extendedPublicKeys)
 	minimumSignaturesInt, err := checkedUint32ToInt(minimumSignatures)
 	if err != nil {
 		return nil, err
@@ -196,7 +196,7 @@ func AddressWithMultiSigAddressType(
 	ecdsa bool,
 	multiSigType MultiSigAddressType,
 ) (util.Address, error) {
-	sortPublicKeys(extendedPublicKeys)
+	extendedPublicKeys = sortedPublicKeys(extendedPublicKeys)
 	minimumSignaturesInt, err := checkedUint32ToInt(minimumSignatures)
 	if err != nil {
 		return nil, err
@@ -325,10 +325,12 @@ func p2shAddressWrappingP2PKH(params *dagconfig.Params, addrP2PKH util.Address) 
 	return util.NewAddressScriptHash(redeemScriptPublicKey.Script, params.Prefix)
 }
 
-func sortPublicKeys(extendedPublicKeys []string) {
-	sort.Slice(extendedPublicKeys, func(i, j int) bool {
-		return strings.Compare(extendedPublicKeys[i], extendedPublicKeys[j]) < 0
-	})
+// sortedPublicKeys returns keys in script order without modifying the caller's slice.
+func sortedPublicKeys(extendedPublicKeys []string) []string {
+	if slices.IsSorted(extendedPublicKeys) {
+		return extendedPublicKeys
+	}
+	return slices.Sorted(slices.Values(extendedPublicKeys))
 }
 
 func cosignerIndex(extendedPublicKey string, sortedExtendedPublicKeys []string) (uint32, error) {
@@ -349,13 +351,11 @@ func cosignerIndex(extendedPublicKey string, sortedExtendedPublicKeys []string) 
 
 // MinimumCosignerIndex returns the minimum index for the cosigner from the set of all extended public keys.
 func MinimumCosignerIndex(cosignerExtendedPublicKeys, allExtendedPublicKeys []string) (uint32, error) {
-	allExtendedPublicKeysCopy := make([]string, len(allExtendedPublicKeys))
-	copy(allExtendedPublicKeysCopy, allExtendedPublicKeys)
-	sortPublicKeys(allExtendedPublicKeysCopy)
+	sortedKeys := sortedPublicKeys(allExtendedPublicKeys)
 
 	minIndex := uint32(math.MaxUint32)
 	for _, extendedPublicKey := range cosignerExtendedPublicKeys {
-		cosignerIndex, err := cosignerIndex(extendedPublicKey, allExtendedPublicKeysCopy)
+		cosignerIndex, err := cosignerIndex(extendedPublicKey, sortedKeys)
 		if err != nil {
 			return 0, err
 		}

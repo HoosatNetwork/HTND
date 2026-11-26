@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/version"
 
@@ -17,8 +18,8 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
-	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/rpcclient"
 	"github.com/HoosatNetwork/HTND/v2/infrastructure/os/signal"
 	"github.com/HoosatNetwork/HTND/v2/util/panics"
 	"github.com/pkg/errors"
@@ -26,13 +27,32 @@ import (
 	"google.golang.org/grpc"
 )
 
+type walletRPCClient interface {
+	Reconnect() error
+	GetBlockDAGInfo() (*appmessage.GetBlockDAGInfoResponseMessage, error)
+	GetUTXOsByAddresses(addresses []string, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error)
+	transactionSubmitter
+}
+
+type walletBackgroundNode interface {
+	transactionSubmitter
+	GetBalancesByAddresses(addresses []string) (*appmessage.GetBalancesByAddressesResponseMessage, error)
+	GetMempoolEntriesByAddresses(addresses []string, includeOrphanPool, filterTransactionPool bool) (*appmessage.GetMempoolEntriesByAddressesResponseMessage, error)
+	GetMempoolEntry(txID string, includeOrphanPool, filterTransactionPool bool) (*appmessage.GetMempoolEntryResponseMessage, error)
+	GetTransactionStatus(transactionID string) (*appmessage.GetTransactionStatusResponseMessage, error)
+	GetUsableAddresses(addresses []string) (*appmessage.GetUsableAddressesResponseMessage, error)
+	GetUTXOsByAddresses(addresses []string, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error)
+}
+
 type server struct {
 	pb.UnimplementedHtnwalletdServer
 
-	rpcClient           *rpcclient.RPCClient // RPC client for ongoing user requests
-	backgroundRPCClient *rpcclient.RPCClient // RPC client dedicated for address and UTXO background fetching
-	params              *dagconfig.Params
-	coinbaseMaturity    uint64 // Is different from default if we use testnet-11
+	rpcClient             walletRPCClient      // RPC client for ongoing user requests
+	backgroundRPCClient   walletBackgroundNode // RPC client dedicated for address and UTXO background fetching
+	dagInfoRequests       dagInfoRequests
+	addressListingTimeout time.Duration
+	params                *dagconfig.Params
+	coinbaseMaturity      uint64 // Is different from default if we use testnet-11
 
 	lock                            sync.RWMutex
 	utxosSortedByAmount             []*walletUTXO
@@ -51,10 +71,15 @@ type server struct {
 	addressSet                      walletAddressSet
 	importedAddresses               walletAddressSet            // Every address of an imported key; see trackImportedKeys
 	recentAddressBatches            map[uint32]walletAddressSet // Derived address batches by start index; see addressesToQueryCached
+	recentBatchPolls                map[uint32]recentBatchPoll  // Poll deadlines for batches in the recent window
 	txMassCalculator                *txmass.Calculator
 	usedOutpoints                   map[externalapi.DomainOutpoint]time.Time
 	pendingBroadcasts               map[externalapi.DomainTransactionID]*pendingBroadcast
 	firstSyncDone                   atomic.Bool
+	warnedOfMLDSA44ScanGap          bool // See warnOfMLDSA44ScanGap
+	mldsa44ActiveAtStartup          bool
+
+	observedReceiveZero, observedChangeZero bool
 
 	isLogFinalProgressLineShown bool
 	maxUsedAddressesForLog      uint32
@@ -116,7 +141,12 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		coinbaseMaturity = 1000
 	}
 
+	addressListingTimeout := maxAddressListingRPCTimeout
+	if timeout != 0 {
+		addressListingTimeout = min(time.Duration(timeout)*time.Second, addressListingTimeout)
+	}
 	serverInstance := &server{
+		addressListingTimeout:       addressListingTimeout,
 		rpcClient:                   rpcClient,
 		backgroundRPCClient:         backgroundRPCClient,
 		params:                      params,
@@ -129,6 +159,7 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		addressSet:                  make(walletAddressSet),
 		txMassCalculator:            txmass.NewCalculator(params.MassPerTxByte, params.MassPerScriptPubKeyByte, params.MassPerSigOp),
 		usedOutpoints:               map[externalapi.DomainOutpoint]time.Time{},
+		mldsa44ActiveAtStartup:      libhtnwallet.MLDSA44Active(params, dagInfo.VirtualDAAScore),
 		isLogFinalProgressLineShown: false,
 		maxUsedAddressesForLog:      0,
 		maxProcessedAddressesForLog: 0,
