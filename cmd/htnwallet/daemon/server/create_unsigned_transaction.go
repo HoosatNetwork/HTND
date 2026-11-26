@@ -289,7 +289,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 	selectedUTXOs = make([]*libhtnwallet.UTXO, 0, targetCompoundInputs)
 	var totalValue uint64
 
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return nil, 0, 0, errors.Wrap(err, "failed to get DAG info")
 	}
@@ -412,7 +412,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return nil, err
 	}

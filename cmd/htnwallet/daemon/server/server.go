@@ -15,6 +15,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
@@ -26,13 +27,22 @@ import (
 	"google.golang.org/grpc"
 )
 
+type walletRPCClient interface {
+	Reconnect() error
+	GetBlockDAGInfo() (*appmessage.GetBlockDAGInfoResponseMessage, error)
+	GetUTXOsByAddresses(addresses []string, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error)
+	transactionSubmitter
+}
+
 type server struct {
 	pb.UnimplementedHtnwalletdServer
 
-	rpcClient           *rpcclient.RPCClient // RPC client for ongoing user requests
-	backgroundRPCClient *rpcclient.RPCClient // RPC client dedicated for address and UTXO background fetching
-	params              *dagconfig.Params
-	coinbaseMaturity    uint64 // Is different from default if we use testnet-11
+	rpcClient             walletRPCClient      // RPC client for ongoing user requests
+	backgroundRPCClient   *rpcclient.RPCClient // RPC client dedicated for address and UTXO background fetching
+	dagInfoRequests       dagInfoRequests
+	addressListingTimeout time.Duration
+	params                *dagconfig.Params
+	coinbaseMaturity      uint64 // Is different from default if we use testnet-11
 
 	lock                            sync.RWMutex
 	utxosSortedByAmount             []*walletUTXO
@@ -116,7 +126,12 @@ func Start(params *dagconfig.Params, listen, rpcServer string, keysFilePath stri
 		coinbaseMaturity = 1000
 	}
 
+	addressListingTimeout := maxAddressListingRPCTimeout
+	if timeout != 0 {
+		addressListingTimeout = min(time.Duration(timeout)*time.Second, addressListingTimeout)
+	}
 	serverInstance := &server{
+		addressListingTimeout:       addressListingTimeout,
 		rpcClient:                   rpcClient,
 		backgroundRPCClient:         backgroundRPCClient,
 		params:                      params,
