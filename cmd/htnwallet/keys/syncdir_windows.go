@@ -2,10 +2,12 @@
 
 package keys
 
-// syncDir does nothing on Windows.
-// There is no way to flush a directory there: opening one and calling Sync on the handle fails with
-// "Access is denied". The rename in Save is still atomic - MoveFileEx replaces the destination in a
-// single step - so only the extra durability barrier is missing, not the crash-safety of the swap.
-func syncDir(_ string) error {
-	return nil
+// Windows cannot sync an open directory handle. The replacement still uses a single atomic rename.
+func openDirectoryForSync(_ string) (syncDirectory, error) {
+	return noDirectorySync{}, nil
 }
+
+type noDirectorySync struct{}
+
+func (noDirectorySync) Sync() error  { return nil }
+func (noDirectorySync) Close() error { return nil }

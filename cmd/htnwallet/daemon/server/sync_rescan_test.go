@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,10 +25,11 @@ import (
 type usableAddressesNode struct {
 	protowire.UnimplementedRPCServer
 
-	mu        sync.Mutex
-	usable    map[string]bool
-	calls     int
-	addresses int
+	mu          sync.Mutex
+	usable      map[string]bool
+	calls       int
+	addresses   int
+	failAddress string
 
 	// When cacheTTL is set, each address's answer is kept for cacheTTL as the node does, on the clock now.
 	cacheTTL time.Duration
@@ -44,13 +47,14 @@ func (n *usableAddressesNode) isUsable(address string) bool {
 	if n.cacheTTL == 0 {
 		return n.usable[address]
 	}
-	if entry, ok := n.cache[address]; ok && n.now().Sub(entry.checkedAt) <= n.cacheTTL {
+	now := n.now()
+	if entry, ok := n.cache[address]; ok && now.Sub(entry.checkedAt) <= n.cacheTTL {
 		return entry.usable
 	}
 	if n.cache == nil {
 		n.cache = make(map[string]usableAddressesNodeCacheEntry)
 	}
-	n.cache[address] = usableAddressesNodeCacheEntry{usable: n.usable[address], checkedAt: n.now()}
+	n.cache[address] = usableAddressesNodeCacheEntry{usable: n.usable[address], checkedAt: now}
 	return n.usable[address]
 }
 
@@ -59,6 +63,24 @@ func (n *usableAddressesNode) askAsAnotherClient(address string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.isUsable(address)
+}
+
+func (n *usableAddressesNode) setCheckTime(now time.Time) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.now = func() time.Time { return now }
+}
+
+func (n *usableAddressesNode) clearCache() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	clear(n.cache)
+}
+
+func (n *usableAddressesNode) failScanOf(address string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.failAddress = address
 }
 
 func (n *usableAddressesNode) MessageStream(stream protowire.RPC_MessageStreamServer) error {
@@ -75,11 +97,46 @@ func (n *usableAddressesNode) MessageStream(stream protowire.RPC_MessageStreamSe
 		switch message := appMessage.(type) {
 		case *appmessage.GetInfoRequestMessage:
 			response = appmessage.NewGetInfoResponseMessage("", 0, version.Version(), false, true, true, 0, 0, "")
+		case *appmessage.GetBlockDAGInfoRequestMessage:
+			response = &appmessage.GetBlockDAGInfoResponseMessage{VirtualDAAScore: 40_000_000_000}
+		case *appmessage.GetBalancesByAddressesRequestMessage:
+			var entries []*appmessage.BalancesByAddressesEntry
+			n.mu.Lock()
+			for _, address := range message.Addresses {
+				if n.usable[address] {
+					entries = append(entries, &appmessage.BalancesByAddressesEntry{Address: address, Balance: 1})
+				}
+			}
+			n.mu.Unlock()
+			response = appmessage.NewGetBalancesByAddressesResponse(entries)
+		case *appmessage.GetUTXOsByAddressesRequestMessage:
+			var entries []*appmessage.UTXOsByAddressesEntry
+			n.mu.Lock()
+			for index, address := range message.Addresses {
+				if n.usable[address] {
+					entries = append(entries, &appmessage.UTXOsByAddressesEntry{
+						Address:  address,
+						Outpoint: &appmessage.RPCOutpoint{TransactionID: strings.Repeat("ab", 32), Index: uint32(index)},
+						UTXOEntry: &appmessage.RPCUTXOEntry{
+							Amount:          1,
+							ScriptPublicKey: &appmessage.RPCScriptPublicKey{Script: "51"},
+							BlockDAAScore:   7,
+						},
+					})
+				}
+			}
+			n.mu.Unlock()
+			response = appmessage.NewGetUTXOsByAddressesResponseMessage(entries)
 		case *appmessage.GetUsableAddressesRequestMessage:
 			usable := []string{}
 			n.mu.Lock()
 			n.calls++
 			n.addresses += len(message.Addresses)
+			if n.failAddress != "" && slices.Contains(message.Addresses, n.failAddress) {
+				n.mu.Unlock()
+				response = &appmessage.GetUsableAddressesResponseMessage{Error: appmessage.RPCErrorf("test scan failure")}
+				break
+			}
 			for _, address := range message.Addresses {
 				if n.isUsable(address) {
 					usable = append(usable, address)
@@ -123,11 +180,9 @@ func rescanTestAddress(keyChain uint8, index uint32) string {
 	return fmt.Sprintf("test:%d/%d", keyChain, index)
 }
 
-// newRescanTestServer returns a wallet server whose key chains were used up to the given indexes, talking
-// to node. Its address batches hold one stand-in address per index and key chain instead of derived ones:
-// deriving 75,000 indexes takes minutes, and the scan only passes the strings to the node and back.
-func newRescanTestServer(t *testing.T, node *usableAddressesNode, lastUsedExternalIndex, lastUsedInternalIndex uint32,
-) *server {
+// usableAddressesNodeClient serves node over loopback gRPC and returns a client connected to it.
+func usableAddressesNodeClient(t *testing.T, node *usableAddressesNode) *rpcclient.RPCClient {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %+v", err)
@@ -143,6 +198,15 @@ func newRescanTestServer(t *testing.T, node *usableAddressesNode, lastUsedExtern
 	}
 	t.Cleanup(func() { _ = client.Close() })
 	client.SetTimeout(5 * time.Second)
+	return client
+}
+
+// newRescanTestServer returns a wallet server whose key chains were used up to the given indexes, talking
+// to node. Its address batches hold one stand-in address per index and key chain instead of derived ones:
+// deriving 75,000 indexes takes minutes, and the scan only passes the strings to the node and back.
+func newRescanTestServer(t *testing.T, node *usableAddressesNode, lastUsedExternalIndex, lastUsedInternalIndex uint32,
+) *server {
+	client := usableAddressesNodeClient(t, node)
 
 	// No extended public keys: the far scan, which is not cached, then derives nothing.
 	keysFile := &keys.File{MinimumSignatures: 1}
@@ -188,6 +252,16 @@ func mustSync(t *testing.T, sync func() error) {
 	}
 }
 
+func mustTick(t *testing.T, s *server) {
+	t.Helper()
+	mustSync(t, func() error { return s.sync(false) })
+}
+
+func mustCollectRecent(t *testing.T, s *server) {
+	t.Helper()
+	mustSync(t, func() error { return s.collectRecentAddresses(false) })
+}
+
 const (
 	external = libhtnwallet.ExternalKeychain
 	internal = libhtnwallet.InternalKeychain
@@ -199,8 +273,10 @@ const (
 func TestSyncOfLargeWalletScansFewBatches(t *testing.T) {
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 1500, 75000)
+	now := time.Unix(1_800_000_000, 0)
+	s.now = func() time.Time { return now }
 
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	firstCalls, firstAddresses := node.asked()
 	if firstCalls != 76 || firstAddresses != 152000 {
 		t.Fatalf("the first sync made %d calls with %d addresses, expected 76 with 152000", firstCalls, firstAddresses)
@@ -209,26 +285,30 @@ func TestSyncOfLargeWalletScansFewBatches(t *testing.T) {
 		t.Fatalf("the first sync left nextSyncStartIndex at %d", s.nextSyncStartIndex)
 	}
 
-	mustSync(t, s.sync)
+	// Finish the startup verification before checking steady-state traffic.
+	now = now.Add(32 * time.Second)
+	mustCollectRecent(t, s)
+	node.asked()
+	mustTick(t, s)
 	calls, addresses := node.asked()
-	// The far scan, the batches at 0, 1000 and 2000 around external index 1500, the batches at 74000 and
-	// 75000 around internal index 75000, and one old batch.
-	if calls != 7 || addresses != 12000 {
-		t.Fatalf("a sync made %d calls with %d addresses, expected 7 with 12000", calls, addresses)
+	// The far scan and one old batch: the recent batches are still on cooldown.
+	if calls != 2 || addresses != 2000 {
+		t.Fatalf("a sync made %d calls with %d addresses, expected 2 with 2000", calls, addresses)
 	}
 
-	// From oldBatchRecheckDelay on, every sync also re-checks the old batch scanned that long before.
-	now := time.Now().Add(oldBatchRecheckDelay)
-	s.now = func() time.Time { return now }
-	mustSync(t, s.sync)
+	// From oldBatchRecheckDelay on, every sync also re-checks the old batch scanned that long before; this
+	// one also rescans the recent batches: the batches at 0, 1000 and 2000 around external index 1500 and
+	// the batches at 74000 and 75000 around internal index 75000.
+	now = now.Add(32 * time.Second)
+	mustTick(t, s)
 	steadyCalls, steadyAddresses := node.asked()
 	if steadyCalls != 8 || steadyAddresses != 14000 {
 		t.Fatalf("a sync with a re-check made %d calls with %d addresses, expected 8 with 14000", steadyCalls,
 			steadyAddresses)
 	}
 	t.Logf("first sync (every sync before): %d calls, %d addresses; later syncs: %d calls, %d addresses; "+
-		"with the re-check: %d calls, %d addresses", firstCalls, firstAddresses, calls, addresses, steadyCalls,
-		steadyAddresses)
+		"with the recent batches and the re-check: %d calls, %d addresses", firstCalls, firstAddresses, calls,
+		addresses, steadyCalls, steadyAddresses)
 }
 
 // TestSyncOfSmallWalletScansWhatItDid pins that a wallet with few used addresses is not asked about any
@@ -237,12 +317,14 @@ func TestSyncOfSmallWalletScansWhatItDid(t *testing.T) {
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 500, 20)
 
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	if calls, addresses := node.asked(); calls != 2 || addresses != 4000 {
 		t.Fatalf("the first sync made %d calls with %d addresses, expected 2 with 4000", calls, addresses)
 	}
-	mustSync(t, s.sync)
-	// The far scan and the batches at 0 and 1000, as before.
+	now := time.Now().Add(recentBatchRescanInterval)
+	s.now = func() time.Time { return now }
+	mustTick(t, s)
+	// Once the recent batches are due again: the far scan and the batches at 0 and 1000, as before.
 	if calls, addresses := node.asked(); calls != 3 || addresses != 4000 {
 		t.Fatalf("a sync made %d calls with %d addresses, expected 3 with 4000", calls, addresses)
 	}
@@ -261,7 +343,7 @@ func TestFirstSyncFindsEveryUsedAddress(t *testing.T) {
 	node.pay(paid...)
 	s := newRescanTestServer(t, node, 1500, 75000)
 
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	for _, address := range paid {
 		if _, ok := s.addressSet[address]; !ok {
 			t.Fatalf("the first sync did not find %s", address)
@@ -273,15 +355,17 @@ func TestFirstSyncFindsEveryUsedAddress(t *testing.T) {
 }
 
 // TestCoinsAtOldAddressesAreFoundWithinARound pins the two delays of finding coins that reach an address
-// after the first sync: one sync for an address near the last used index of its key chain, and one round
-// of collectOldAddresses - a sync for each batch of used indexes - for any older one.
+// after the first sync: recentBatchRescanInterval for an address near the last used index of its key chain,
+// and one round of collectOldAddresses - a sync for each batch of used indexes - for any older one.
 func TestCoinsAtOldAddressesAreFoundWithinARound(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 1500, 75000)
-	mustSync(t, s.collectRecentAddresses)
+	s.now = func() time.Time { return now }
+	mustCollectRecent(t, s)
 	// This sync rescans the old batch at 3000, so the coin below at external index 3500 arrives just after
 	// its batch was scanned: the longest wait there is.
-	mustSync(t, s.sync)
+	mustTick(t, s)
 	if s.nextRescanIndex != 4000 {
 		t.Fatalf("the first old batch scanned left nextRescanIndex at %d", s.nextRescanIndex)
 	}
@@ -291,10 +375,13 @@ func TestCoinsAtOldAddressesAreFoundWithinARound(t *testing.T) {
 	node.pay(recent...)
 	node.pay(old...)
 
-	mustSync(t, s.sync)
+	// The recent batches were scanned when the first sync ended, just before the coins arrived.
+	now = now.Add(recentBatchRescanInterval)
+	mustTick(t, s)
 	for _, address := range recent {
 		if _, ok := s.addressSet[address]; !ok {
-			t.Fatalf("one sync did not find the coin at the recent address %s", address)
+			t.Fatalf("the sync %s after the last scan did not find the coin at the recent address %s",
+				recentBatchRescanInterval, address)
 		}
 	}
 
@@ -302,7 +389,8 @@ func TestCoinsAtOldAddressesAreFoundWithinARound(t *testing.T) {
 	foundAfter := map[string]int{}
 	for syncs := 1; syncs <= round && len(foundAfter) < len(old); syncs++ {
 		if syncs > 1 {
-			mustSync(t, s.sync)
+			now = now.Add(2 * time.Second)
+			mustTick(t, s)
 		}
 		for _, address := range old {
 			if _, ok := s.addressSet[address]; ok && foundAfter[address] == 0 {
@@ -323,13 +411,13 @@ func TestCoinsAtOldAddressesAreFoundWithinARound(t *testing.T) {
 func TestOldBatchSkippedOnClosedRouteIsRetried(t *testing.T) {
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 1500, 75000)
-	mustSync(t, s.collectRecentAddresses)
-	mustSync(t, s.sync)
+	mustCollectRecent(t, s)
+	mustTick(t, s)
 	nextSyncStartIndex, nextRescanIndex := s.nextSyncStartIndex, s.nextRescanIndex
 
 	client := s.backgroundRPCClient
 	s.backgroundRPCClient = closedRPCClient(t)
-	mustSync(t, s.sync)
+	mustTick(t, s)
 	if s.nextSyncStartIndex != nextSyncStartIndex || s.nextRescanIndex != nextRescanIndex {
 		t.Fatalf("a skipped sync moved nextSyncStartIndex from %d to %d and nextRescanIndex from %d to %d",
 			nextSyncStartIndex, s.nextSyncStartIndex, nextRescanIndex, s.nextRescanIndex)
@@ -338,7 +426,7 @@ func TestOldBatchSkippedOnClosedRouteIsRetried(t *testing.T) {
 	s.backgroundRPCClient = client
 	address := rescanTestAddress(internal, nextRescanIndex+500)
 	node.pay(address)
-	mustSync(t, s.sync)
+	mustTick(t, s)
 	if _, ok := s.addressSet[address]; !ok {
 		t.Fatalf("the sync after a skipped one did not scan the old batch at %d", nextRescanIndex)
 	}
@@ -350,8 +438,8 @@ func TestOldBatchSkippedOnClosedRouteIsRetried(t *testing.T) {
 func TestRescanRoundEndsWhereItStarted(t *testing.T) {
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 1500, 75000)
-	mustSync(t, s.collectRecentAddresses)
-	mustSync(t, s.sync)
+	mustCollectRecent(t, s)
+	mustTick(t, s)
 	if s.nextRescanIndex != 4000 {
 		t.Fatalf("the first old batch scanned left nextRescanIndex at %d", s.nextRescanIndex)
 	}
@@ -365,7 +453,7 @@ func TestRescanRoundEndsWhereItStarted(t *testing.T) {
 		if err := s.keysFile.SetLastUsedInternalIndex(s.keysFile.LastUsedInternalIndex() + 1000); err != nil {
 			t.Fatalf("SetLastUsedInternalIndex: %+v", err)
 		}
-		mustSync(t, s.sync)
+		mustTick(t, s)
 		if _, ok := s.addressSet[address]; ok {
 			t.Logf("found after %d syncs while the last used index grew by 1000 per sync; bound %d", syncs, bound)
 			return
@@ -387,7 +475,7 @@ func TestUnscannableLastUsedIndexIsIgnored(t *testing.T) {
 	// External: 4294966296, whose + 1000 wraps to 0 and would end the first sweep before batch 0.
 	s := newRescanTestServer(t, node, 4294966296, 9500)
 
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	if calls, addresses := node.asked(); calls != 10 || addresses != 20000 {
 		t.Fatalf("the first sync made %d calls with %d addresses, expected 10 with 20000", calls, addresses)
 	}
@@ -405,15 +493,16 @@ func TestUnscannableLastUsedIndexIsIgnored(t *testing.T) {
 		t.Fatalf("the recorded external last used index is %d, expected 5", got)
 	}
 
-	mustSync(t, s.sync)
-	// No far scan (the space is scanned), the batches at 0 and 1000 around external index 5, the batches
-	// at 8000 and 9000 around internal index 9500, and the old batch at 2000. The batch at 10000 is due but
-	// empty.
+	now := time.Now().Add(recentBatchRescanInterval)
+	s.now = func() time.Time { return now }
+	mustTick(t, s)
+	// The far scan has reached the limit. This polls the batches at 0 and 1000 around external
+	// index 5, at 8000 and 9000 around internal index 9500, and the old batch at 2000.
 	if calls, addresses := node.asked(); calls != 5 || addresses != 10000 {
 		t.Fatalf("a sync made %d calls with %d addresses, expected 5 with 10000", calls, addresses)
 	}
 	for range 50 {
-		mustSync(t, s.sync)
+		mustTick(t, s)
 		if calls, _ := node.asked(); calls > 5 {
 			t.Fatalf("a sync made %d calls; the index space holds no more batches", calls)
 		}
@@ -431,16 +520,18 @@ func TestUnscannableLastUsedIndexIsIgnored(t *testing.T) {
 func TestStaleNegativeAnswerIsRechecked(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	clock := func() time.Time { return now }
-	node := &usableAddressesNode{usable: map[string]bool{}, cacheTTL: usableAddressesCacheTTL, now: clock}
+	node := &usableAddressesNode{usable: map[string]bool{}, cacheTTL: 30 * time.Second}
+	node.setCheckTime(now)
 	s := newRescanTestServer(t, node, 1500, 75000)
 	s.now = clock
 	sync := func() {
 		t.Helper()
 		now = now.Add(2 * time.Second)
-		mustSync(t, s.sync)
+		node.setCheckTime(now)
+		mustTick(t, s)
 	}
 
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	sync() // Starts the round ending at 76000.
 	s.nextRescanIndex = 74000
 	// Its re-check of the batch at 3000 would come just as the cache below expires and find the coin by
@@ -505,8 +596,8 @@ func TestDiscoveryReplacesUnscannableLastUsedIndex(t *testing.T) {
 	for start := uint32(9000); start <= 12000; start += numIndexesToQueryForRecentAddresses {
 		addRescanTestBatch(s, start)
 	}
-	mustSync(t, s.collectRecentAddresses)
-	mustSync(t, s.sync)
+	mustCollectRecent(t, s)
+	mustTick(t, s)
 
 	// What the far scan does when it reaches 10500: it scans the range through collectAddresses, and the
 	// node reports the coin. (The fixture has no keys to derive the far scan's own 100-index range from.)
@@ -525,7 +616,9 @@ func TestDiscoveryReplacesUnscannableLastUsedIndex(t *testing.T) {
 
 	later := rescanTestAddress(external, 10550)
 	node.pay(later)
-	mustSync(t, s.sync)
+	now := time.Now().Add(recentBatchRescanInterval) // The batch at 10000 is due again.
+	s.now = func() time.Time { return now }
+	mustTick(t, s)
 	if _, ok := s.addressSet[later]; !ok {
 		t.Fatalf("the next sync did not find the coin at %s, behind the far scan", later)
 	}
@@ -547,13 +640,13 @@ func TestNoSyncAsksMoreThanBefore(t *testing.T) {
 		node := &usableAddressesNode{usable: map[string]bool{}}
 		s := newRescanTestServer(t, node, wallet.external, wallet.internal)
 		s.now = func() time.Time { return now }
-		mustSync(t, s.collectRecentAddresses)
+		mustCollectRecent(t, s)
 		node.asked()
 		baseCalls, baseAddresses := baseSyncCost(s)
 		var calls, addresses int
 		for range 60 {
 			now = now.Add(2 * time.Second)
-			mustSync(t, s.sync)
+			mustTick(t, s)
 			calls, addresses = node.asked()
 			if calls > baseCalls || addresses > baseAddresses {
 				t.Fatalf("wallet %d / %d: a sync made %d calls with %d addresses, more than the %d with %d before",
@@ -573,14 +666,14 @@ func TestForcedSyncsLeaveNoRecheckBacklog(t *testing.T) {
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 1500, 75000)
 	s.now = func() time.Time { return now }
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	node.asked()
 	baseCalls, _ := baseSyncCost(s)
 
-	syncAfter := func(interval time.Duration) {
+	syncAfter := func(interval time.Duration, forced bool) {
 		t.Helper()
 		now = now.Add(interval)
-		mustSync(t, s.sync)
+		mustSync(t, func() error { return s.sync(forced) })
 		if calls, _ := node.asked(); calls > baseCalls {
 			t.Fatalf("a sync made %d calls, more than the %d before", calls, baseCalls)
 		}
@@ -591,32 +684,86 @@ func TestForcedSyncsLeaveNoRecheckBacklog(t *testing.T) {
 		}
 	}
 	for range 30 {
-		syncAfter(2 * time.Second)
+		syncAfter(2*time.Second, false)
 	}
 	for range 60 { // One broadcast per second for a minute.
-		syncAfter(time.Second)
+		syncAfter(time.Second, true)
 	}
 	for range 60 {
-		syncAfter(2 * time.Second)
+		syncAfter(2*time.Second, false)
 	}
 	if queued := len(s.oldBatchRechecks); queued > 17 {
 		t.Fatalf("%d re-checks queued after the burst; the 2 s tick queues at most 17", queued)
 	}
 }
 
-// TestRecheckOfARecentBatchIsDropped pins that a re-check of a batch collectRecentAddresses scans on every
-// sync anyway is dropped rather than asked about a second time on the same sync.
+// TestRecheckOfARecentBatchIsDropped checks that a successful recent scan
+// satisfies a due re-check and avoids a duplicate request on the same sync.
 func TestRecheckOfARecentBatchIsDropped(t *testing.T) {
 	node := &usableAddressesNode{usable: map[string]bool{}}
 	s := newRescanTestServer(t, node, 1500, 75000)
-	mustSync(t, s.collectRecentAddresses)
+	mustCollectRecent(t, s)
 	node.asked()
 	s.oldBatchRechecks = []oldBatchRecheck{{start: 74000}} // Recent: around internal index 75000; due long ago.
-	mustSync(t, s.sync)
+	now := time.Now().Add(recentBatchRescanInterval)       // The recent batches are due again.
+	s.now = func() time.Time { return now }
+	mustTick(t, s)
 	if calls, addresses := node.asked(); calls != 7 || addresses != 12000 {
 		t.Fatalf("a sync made %d calls with %d addresses, expected 7 with 12000", calls, addresses)
 	}
 	if len(s.oldBatchRechecks) != 1 || s.oldBatchRechecks[0].start == 74000 {
 		t.Fatalf("the re-check of the recent batch was not dropped: %+v", s.oldBatchRechecks)
+	}
+}
+
+// With an instantaneous RPC and no competing queries, a stable batch uses the
+// 32-second cadence and the first due poll follows the node cache's expiry.
+func TestSteadyRecentPollsUse32SecondCadence(t *testing.T) {
+	node := newRecentTestNode()
+	s := newRescanTestServer(t, node, 0, 0)
+	collectRecentAt(t, s, node, -64*time.Second)
+	collectRecentAt(t, s, node, 0)
+	node.asked()
+
+	address := rescanTestAddress(external, 0)
+	node.pay(address)
+	for elapsed := 2 * time.Second; elapsed < 32*time.Second; elapsed += 2 * time.Second {
+		collectRecentAt(t, s, node, elapsed)
+		if calls, _ := node.asked(); calls != 0 {
+			t.Fatalf("made %d recent calls at %s, want none before 32s", calls, elapsed)
+		}
+	}
+	collectRecentAt(t, s, node, 31*time.Second)
+	if calls, _ := node.asked(); calls != 0 {
+		t.Fatalf("made %d recent calls at 31s, want none before 32s", calls)
+	}
+	collectRecentAt(t, s, node, 32*time.Second)
+	if calls, _ := node.asked(); calls != 1 || s.addressSet[address] == nil {
+		t.Fatalf("at 32s, made %d recent calls, found coin %t; want one call and the coin", calls, s.addressSet[address] != nil)
+	}
+}
+
+// TestNewlyReachedBatchIsScannedAtOnce pins that a batch which enters the recent window - here when the
+// wallet hands out an address past the last batch scanned - is scanned on the next sync, without waiting
+// for recentBatchRescanInterval.
+func TestNewlyReachedBatchIsScannedAtOnce(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	node := &usableAddressesNode{usable: map[string]bool{}}
+	s := newRescanTestServer(t, node, 1999, 20)
+	s.now = func() time.Time { return now }
+	mustCollectRecent(t, s) // Batches 0, 1000 and 2000.
+	now = now.Add(2 * time.Second)
+	mustTick(t, s) // The far scan passes index 3000.
+
+	// What NewAddress does when it hands out external index 2001: the batch at 3000 joins the window.
+	if err := s.keysFile.SetLastUsedExternalIndex(2001); err != nil {
+		t.Fatalf("SetLastUsedExternalIndex: %+v", err)
+	}
+	address := rescanTestAddress(external, 3500)
+	node.pay(address)
+	now = now.Add(2 * time.Second)
+	mustTick(t, s)
+	if _, ok := s.addressSet[address]; !ok {
+		t.Fatalf("the sync after the batch at 3000 joined the recent window did not scan it")
 	}
 }

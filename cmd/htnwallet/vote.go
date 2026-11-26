@@ -16,6 +16,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet"
+	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/utils"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
 	"github.com/pkg/errors"
 )
@@ -171,6 +172,9 @@ retry:
 			Payload:                  payloadBytes,
 		})
 		if err != nil {
+			if utils.IsMLDSA44ChangeKeyUnavailable(err) {
+				return err
+			}
 			if strings.Contains(err.Error(), "Insufficient funds for send") {
 				fmt.Printf("Waiting for spendable UTXO.\n")
 				// Wait before asking again; retrying at once hammered the daemon in a tight loop.
