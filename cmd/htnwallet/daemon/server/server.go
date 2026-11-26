@@ -15,6 +15,7 @@ import (
 
 	"github.com/HoosatNetwork/HTND/v2/util/profiling"
 
+	"github.com/HoosatNetwork/HTND/v2/app/appmessage"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/daemon/pb"
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/keys"
 	"github.com/HoosatNetwork/HTND/v2/domain/dagconfig"
@@ -26,10 +27,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+type walletRPCClient interface {
+	GetBlockDAGInfo() (*appmessage.GetBlockDAGInfoResponseMessage, error)
+	GetUTXOsByAddresses(addresses []string, limit uint32) (*appmessage.GetUTXOsByAddressesResponseMessage, error)
+	transactionSubmitter
+}
+
 type server struct {
 	pb.UnimplementedHtnwalletdServer
 
-	rpcClient           *rpcclient.RPCClient // RPC client for ongoing user requests
+	rpcClient           walletRPCClient      // RPC client for ongoing user requests
 	backgroundRPCClient *rpcclient.RPCClient // RPC client dedicated for address and UTXO background fetching
 	params              *dagconfig.Params
 	coinbaseMaturity    uint64 // Is different from default if we use testnet-11

@@ -11,7 +11,6 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/consensushashing"
-	"github.com/HoosatNetwork/HTND/v2/infrastructure/network/rpcclient"
 	"github.com/pkg/errors"
 )
 
@@ -117,7 +116,12 @@ func (s *server) releaseUsedOutpoints(tx *externalapi.DomainTransaction) {
 	}
 }
 
-func sendTransaction(client *rpcclient.RPCClient, tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
+type transactionSubmitter interface {
+	SubmitTransactionWithPriority(transaction *appmessage.RPCTransaction, transactionID string, allowOrphan bool,
+		isHighPriority *bool) (*appmessage.SubmitTransactionResponseMessage, error)
+}
+
+func sendTransaction(client transactionSubmitter, tx *externalapi.DomainTransaction, allowOrphan bool, isHighPriority *bool) (string, error) {
 	submitTransactionResponse, err := client.SubmitTransactionWithPriority(appmessage.DomainTransactionToRPCTransaction(tx), consensushashing.TransactionID(tx).String(), allowOrphan, isHighPriority)
 	if err != nil {
 		return "", errors.Wrapf(err, "error submitting transaction")

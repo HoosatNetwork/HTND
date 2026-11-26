@@ -118,12 +118,13 @@ func TestGetUTXOsLabelsEachCoinWithItsDerivationPath(t *testing.T) {
 	protowire.RegisterRPCServer(grpcServer, &utxosByAddressesNode{coins: coins})
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
-	s.rpcClient, err = rpcclient.NewRPCClient(listener.Addr().String())
+	client, err := rpcclient.NewRPCClient(listener.Addr().String())
 	if err != nil {
 		t.Fatalf("NewRPCClient: %+v", err)
 	}
-	t.Cleanup(func() { _ = s.rpcClient.Close() })
-	s.rpcClient.SetTimeout(5 * time.Second)
+	t.Cleanup(func() { _ = client.Close() })
+	client.SetTimeout(5 * time.Second)
+	s.rpcClient = client
 
 	response, err := s.GetUTXOs(context.Background(), &pb.GetUTXOsRequest{})
 	if err != nil {
