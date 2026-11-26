@@ -58,8 +58,8 @@ func (s *server) isDust(address util.Address, value uint64) (bool, error) {
 	return value*1000/(3*size) < uint64(mempool.DefaultConfig(s.params).MinimumRelayTransactionFee), nil
 }
 
-// requireStandardMass returns the transaction as the single transaction to sign and broadcast, or an
-// error if, once signed, it would exceed MaximumStandardTransactionMass.
+// requireStandardMass returns the parsed transaction or an error if, once signed, it would
+// exceed MaximumStandardTransactionMass.
 //
 // The wallet used to split such a transaction into several that each moved part of the inputs to the
 // change address, plus a merge transaction spending their outputs to pay the destination. The merge
@@ -68,7 +68,7 @@ func (s *server) isDust(address util.Address, value uint64) (bool, error) {
 // InputMinAgeDAAScore, 1000 DAA score units by default), let alone an unconfirmed one: the splits
 // would go out and the payment would not. A send that needs more inputs than fit in one standard
 // transaction is refused instead, before anything is broadcast.
-func (s *server) requireStandardMass(transactionBytes []byte) ([][]byte, error) {
+func (s *server) requireStandardMass(transactionBytes []byte) (*serialization.PartiallySignedTransaction, error) {
 	transaction, err := serialization.DeserializePartiallySignedTransaction(transactionBytes)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (s *server) requireStandardMass(transactionBytes []byte) ([][]byte, error) 
 			"send again, or send a smaller amount",
 			len(transaction.Tx.Inputs), mass, mempool.MaximumStandardTransactionMass, inputMinAgeDAAScore)
 	}
-	return [][]byte{transactionBytes}, nil
+	return transaction, nil
 }
 
 func (s *server) estimateMassAfterSignatures(transaction *serialization.PartiallySignedTransaction) (uint64, error) {
