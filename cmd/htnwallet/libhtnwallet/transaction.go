@@ -53,7 +53,7 @@ func CreateUnsignedTransaction(
 	selectedUTXOs []*UTXO,
 	payload []byte,
 ) ([]byte, error) {
-	sortPublicKeys(extendedPublicKeys)
+	extendedPublicKeys = sortedPublicKeys(extendedPublicKeys)
 	unsignedTransaction, err := createUnsignedTransaction(extendedPublicKeys, minimumSignatures, payments, selectedUTXOs, payload)
 	if err != nil {
 		return nil, err

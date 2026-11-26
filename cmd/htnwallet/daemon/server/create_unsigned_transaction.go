@@ -11,6 +11,7 @@ import (
 	"github.com/HoosatNetwork/HTND/v2/cmd/htnwallet/libhtnwallet/serialization"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/model/externalapi"
 	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/constants"
+	"github.com/HoosatNetwork/HTND/v2/domain/consensus/utils/txscript"
 	"github.com/HoosatNetwork/HTND/v2/domain/miningmanager/mempool"
 	"github.com/HoosatNetwork/HTND/v2/util"
 	"github.com/pkg/errors"
@@ -42,13 +43,16 @@ func (s *server) CreateUnsignedTransactions(_ context.Context, request *pb.Creat
 		limit = uint32(limit64)
 	}
 
-	unsignedTransactions, err := s.createUnsignedTransactions(request.Address, request.Amount, request.IsSendAll,
+	send, err := s.createUnsignedTransactions(request.Address, request.Amount, request.IsSendAll,
 		request.From, request.UseExistingChangeAddress, request.Payload, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.CreateUnsignedTransactionsResponse{UnsignedTransactions: unsignedTransactions}, nil
+	if err := s.commitChange(send.change); err != nil {
+		return nil, err
+	}
+	return &pb.CreateUnsignedTransactionsResponse{UnsignedTransactions: [][]byte{send.transaction}}, nil
 }
 
 func (s *server) CreateUnsignedCompoundTransaction(_ context.Context, request *pb.CreateUnsignedCompoundTransactionRequest) (
@@ -136,7 +140,10 @@ func (s *server) createUnsignedCompoundTransaction(address string, fromAddresses
 		s.usedOutpoints[*spentUTXO.Outpoint] = time.Now()
 	}
 
-	return s.requireStandardMass(unsignedTransaction)
+	if _, err := s.requireStandardMass(unsignedTransaction); err != nil {
+		return nil, err
+	}
+	return [][]byte{unsignedTransaction}, nil
 }
 
 // compoundUTXOSetMaxAge is how long a compound reuses the wallet's UTXO set before fetching it again.
@@ -289,7 +296,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 	selectedUTXOs = make([]*libhtnwallet.UTXO, 0, targetCompoundInputs)
 	var totalValue uint64
 
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return nil, 0, 0, errors.Wrap(err, "failed to get DAG info")
 	}
@@ -386,7 +393,7 @@ func (s *server) selectUTXOsForCompounding(feePerInput int, fromAddresses []*wal
 	return selectedUTXOs, totalValue, changeSompi, nil
 }
 
-func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte, limit uint32) ([][]byte, error) {
+func (s *server) createUnsignedTransactions(address string, amount uint64, isSendAll bool, fromAddressesString []string, useExistingChangeAddress bool, payload []byte, limit uint32) (*preparedSend, error) {
 	if !s.isSynced() {
 		return nil, errors.Errorf("wallet daemon is not synced yet, %s", s.formatSyncStateReport())
 	}
@@ -412,7 +419,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 		fromAddresses = append(fromAddresses, fromAddress)
 	}
 
-	dagInfo, err := s.rpcClient.GetBlockDAGInfo()
+	dagInfo, err := s.getBlockDAGInfo(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +440,7 @@ func (s *server) createUnsignedTransactions(address string, amount uint64, isSen
 // standard mass, the send is refused rather than paying that remainder as fee.
 func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isSendAll bool,
 	fromAddresses []*walletAddress, useExistingChangeAddress bool, payload []byte, virtualDAAScore uint64,
-) ([][]byte, error) {
+) (*preparedSend, error) {
 	// The amount comes unchecked from the request. Near the uint64 limit, amount + fee wrapped to a
 	// small number that the funds check accepted.
 	if !isSendAll && amount > constants.MaxSompi {
@@ -455,7 +462,7 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 		return nil, errors.Errorf("couldn't find funds to spend")
 	}
 
-	var changeAddress util.Address // taken once: each new one uses up an internal address index
+	var candidate *changeOutput
 	var selectedUTXOs []*libhtnwallet.UTXO
 	totalValue, required := uint64(0), uint64(0)
 	// measure builds the transaction for the coins selected so far and returns it with its signed mass.
@@ -493,7 +500,7 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 				return nil, err
 			}
 			if mass > mempool.MaximumStandardTransactionMass {
-				return s.requireStandardMass(unsignedTransaction)
+				return s.finalizeSend(unsignedTransaction, nil)
 			}
 			fee := feeFor(mass)
 			if totalValue <= fee {
@@ -512,7 +519,7 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 			if err != nil {
 				return nil, err
 			}
-			return s.requireStandardMass(unsignedTransaction)
+			return s.finalizeSend(unsignedTransaction, nil)
 		}
 
 		// Every fee is at least the flat one, so a prefix that cannot pay that is not worth building.
@@ -521,22 +528,28 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 			continue
 		}
 
-		if changeAddress == nil {
-			changeAddress, _, err = s.changeAddress(useExistingChangeAddress, fromAddresses, allInputsAreMLDSA44(selectedUTXOs))
+		if candidate == nil {
+			// Existing change goes to the first eligible source in request order.
+			changeFrom := fromAddresses
+			for useExistingChangeAddress && len(changeFrom) > 0 && !s.isAddressSpendableAt(changeFrom[0], virtualDAAScore) {
+				changeFrom = changeFrom[1:]
+			}
+			address, walletAddr, err := s.changeAddress(useExistingChangeAddress, changeFrom, allInputsAreMLDSA44(selectedUTXOs))
 			if err != nil {
 				return nil, err
 			}
+			candidate = &changeOutput{address: address, walletAddr: walletAddr, fresh: !useExistingChangeAddress}
 		}
 		payment := &libhtnwallet.Payment{Address: toAddress, Amount: amount}
 
 		// With change, if that leaves a coin worth sending.
-		_, massWithChange, err := measure([]*libhtnwallet.Payment{payment, {Address: changeAddress, Amount: 1}})
+		_, massWithChange, err := measure([]*libhtnwallet.Payment{payment, {Address: candidate.address, Amount: 1}})
 		if err != nil {
 			return nil, err
 		}
 		if feeWithChange := feeFor(massWithChange); totalValue >= amount+feeWithChange {
 			change := totalValue - amount - feeWithChange
-			dust, err := s.isDust(changeAddress, change)
+			dust, err := s.isDust(candidate.address, change)
 			if err != nil {
 				return nil, err
 			}
@@ -548,11 +561,11 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 						"first (for example with auto-compound)",
 						change, massWithChange, uint64(mempool.MaximumStandardTransactionMass))
 				}
-				unsignedTransaction, _, err := measure([]*libhtnwallet.Payment{payment, {Address: changeAddress, Amount: change}})
+				unsignedTransaction, _, err := measure([]*libhtnwallet.Payment{payment, {Address: candidate.address, Amount: change}})
 				if err != nil {
 					return nil, err
 				}
-				return s.requireStandardMass(unsignedTransaction)
+				return s.finalizeSend(unsignedTransaction, candidate)
 			}
 		}
 
@@ -563,16 +576,42 @@ func (s *server) buildSendTransaction(toAddress util.Address, amount uint64, isS
 		}
 		if massWithoutChange > mempool.MaximumStandardTransactionMass {
 			// More coins only add mass.
-			return s.requireStandardMass(unsignedTransaction)
+			return s.finalizeSend(unsignedTransaction, nil)
 		}
 		required = amount + feeFor(massWithoutChange)
 		if totalValue >= required {
-			return s.requireStandardMass(unsignedTransaction)
+			return s.finalizeSend(unsignedTransaction, candidate)
 		}
 	}
 
 	return nil, errors.Errorf("Insufficient funds for send: %f required, while only %f available",
 		float64(required)/constants.SompiPerHoosat, float64(totalValue)/constants.SompiPerHoosat)
+}
+
+type preparedSend struct {
+	transaction []byte
+	change      *changeOutput
+}
+
+func (s *server) finalizeSend(unsignedTransaction []byte, candidate *changeOutput) (*preparedSend, error) {
+	tx, err := s.requireStandardMass(unsignedTransaction)
+	if err != nil {
+		return nil, err
+	}
+	send := &preparedSend{transaction: unsignedTransaction}
+	if candidate != nil {
+		script, err := txscript.PayToAddrScript(candidate.address)
+		if err != nil {
+			return nil, err
+		}
+		// The payment itself can use the candidate's script, even when no change output was added.
+		if slices.ContainsFunc(tx.Tx.Outputs, func(output *externalapi.DomainTransactionOutput) bool {
+			return output.ScriptPublicKey.Equal(script)
+		}) {
+			send.change = candidate
+		}
+	}
+	return send, nil
 }
 
 func (s *server) sortUTXOsByAmountAscending() {

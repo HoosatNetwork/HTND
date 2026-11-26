@@ -6,11 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gofrs/flock"
 
@@ -95,18 +98,90 @@ func (p *MLDSA44KeyPool) Size() uint32 {
 	return uint32(min(len(p.ExternalPublicKeyHashes), len(p.InternalPublicKeyHashes)))
 }
 
+// MLDSA44AddressIndexLimit is the exclusive upper bound on the wallet's address indexes.
+// The wallet's public address derivation and scans stop before the BIP32 hardened range.
+const MLDSA44AddressIndexLimit = 1 << 31
+
+// DefaultMLDSA44KeyCount returns the exclusive end of a default pool. A wallet with recorded
+// use gets up to DefaultMLDSA44KeyPoolSize future indexes. Without recorded use it gets the
+// same pool size as a new wallet. limited reports whether the address index limit cuts into
+// the future indexes.
+func (d *File) DefaultMLDSA44KeyCount() (count uint32, limited bool) {
+	highestUsedIndex := uint32(0)
+	for _, lastUsedIndex := range []uint32{d.lastUsedExternalIndex, d.lastUsedInternalIndex} {
+		if lastUsedIndex < MLDSA44AddressIndexLimit {
+			highestUsedIndex = max(highestUsedIndex, lastUsedIndex)
+		}
+	}
+	if highestUsedIndex == 0 {
+		return libhtnwallet.DefaultMLDSA44KeyPoolSize, false
+	}
+	end := highestUsedIndex + 1 + libhtnwallet.DefaultMLDSA44KeyPoolSize
+	return min(end, MLDSA44AddressIndexLimit), end > MLDSA44AddressIndexLimit
+}
+
 // NewMLDSA44KeyPool computes the ML-DSA-44 key pool for indexes [0, size) of both key chains.
 // multisig selects the mnemonic's multisig cosigner keys.
 func NewMLDSA44KeyPool(mnemonic string, size uint32, multisig bool) (*MLDSA44KeyPool, error) {
-	external, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, libhtnwallet.ExternalKeychain, 0, size, multisig)
+	return (&MLDSA44KeyPool{}).Extend(mnemonic, size, multisig)
+}
+
+// Extend returns a pool with at least size hashes on each chain, deriving only missing
+// suffixes. It preserves hashes already held, including on a longer chain.
+func (p *MLDSA44KeyPool) Extend(mnemonic string, size uint32, multisig bool) (*MLDSA44KeyPool, error) {
+	if size > MLDSA44AddressIndexLimit || uint64(size) > uint64(math.MaxInt) {
+		return nil, errors.Errorf("ML-DSA-44 key count %d exceeds the supported address range", size)
+	}
+	if p == nil {
+		p = &MLDSA44KeyPool{}
+	}
+	extend := func(existing [][]byte, chain uint8) ([][]byte, error) {
+		if len(existing) >= int(size) {
+			return existing, nil
+		}
+		start := uint32(len(existing))
+		suffix, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, chain, start, size-start, multisig)
+		if err != nil || start == 0 {
+			return suffix, err
+		}
+		return append(existing, suffix...), nil
+	}
+	external, err := extend(p.ExternalPublicKeyHashes, libhtnwallet.ExternalKeychain)
 	if err != nil {
 		return nil, err
 	}
-	internal, err := libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, libhtnwallet.InternalKeychain, 0, size, multisig)
+	internal, err := extend(p.InternalPublicKeyHashes, libhtnwallet.InternalKeychain)
 	if err != nil {
 		return nil, err
 	}
 	return &MLDSA44KeyPool{ExternalPublicKeyHashes: external, InternalPublicKeyHashes: internal}, nil
+}
+
+// RebuildCosigner derives both chains of a local cosigner pool from the mnemonic, covering
+// size indexes or the stored range of a chain if that is longer.
+// matches reports whether the stored hashes equal the derived ones.
+func (p *MLDSA44KeyPool) RebuildCosigner(mnemonic string, size uint32) (rebuilt *MLDSA44KeyPool, matches bool, err error) {
+	if p == nil {
+		rebuilt, err = NewMLDSA44KeyPool(mnemonic, size, true)
+		return rebuilt, err == nil, err
+	}
+	derive := func(chain uint8, existing [][]byte) ([][]byte, error) {
+		count := max(uint64(size), uint64(len(existing)))
+		if count > MLDSA44AddressIndexLimit || count > uint64(math.MaxInt) {
+			return nil, errors.Errorf("ML-DSA-44 key count %d exceeds the supported address range", count)
+		}
+		return libhtnwallet.MLDSA44PublicKeyHashes(mnemonic, chain, 0, uint32(count), true)
+	}
+	receive, err := derive(libhtnwallet.ExternalKeychain, p.ExternalPublicKeyHashes)
+	if err != nil {
+		return nil, false, err
+	}
+	change, err := derive(libhtnwallet.InternalKeychain, p.InternalPublicKeyHashes)
+	if err != nil {
+		return nil, false, err
+	}
+	rebuilt = &MLDSA44KeyPool{ExternalPublicKeyHashes: receive, InternalPublicKeyHashes: change}
+	return rebuilt, p.agreesWith(rebuilt), nil
 }
 
 // MLDSA44MultiSigPublicKeyHashes returns every cosigner's ML-DSA-44 public key hash at index of
@@ -148,10 +223,10 @@ func mldsa44CosignersFromJSON(cosignersJSON mldsa44CosignersJSON) (map[string]*M
 	for extendedPublicKey, poolJSON := range cosignersJSON {
 		pool, err := mldsa44KeyPoolFromJSON(poolJSON)
 		if err != nil {
-			return nil, errors.Wrapf(err, "ML-DSA-44 keys of cosigner %s", extendedPublicKey)
+			return nil, errors.Wrap(err, "invalid ML-DSA-44 cosigner key pool")
 		}
 		if pool == nil {
-			return nil, errors.Errorf("ML-DSA-44 keys of cosigner %s are empty", extendedPublicKey)
+			return nil, errors.New("empty ML-DSA-44 cosigner key pool")
 		}
 		cosigners[extendedPublicKey] = pool
 	}
@@ -231,6 +306,23 @@ type File struct {
 	// ML-DSA-44 keys cannot be derived from an extended public key.
 	MLDSA44Cosigners map[string]*MLDSA44KeyPool
 	path             string
+}
+
+// KnownLocalCosignerKeys returns the mnemonic-backed extended public keys when
+// they can be identified without decrypting. CosignerIndex records the first
+// local key's position in sorted order, even if a daemon reordered the file.
+func (d *File) KnownLocalCosignerKeys() ([]string, bool) {
+	switch n := len(d.EncryptedMnemonics); {
+	case n == 0:
+		return nil, true
+	case n == len(d.ExtendedPublicKeys):
+		return d.ExtendedPublicKeys, true
+	case n == 1 && uint64(d.CosignerIndex) < uint64(len(d.ExtendedPublicKeys)):
+		sortedKeys := slices.Sorted(slices.Values(d.ExtendedPublicKeys))
+		return sortedKeys[d.CosignerIndex : d.CosignerIndex+1], true
+	default:
+		return nil, false
+	}
 }
 
 func (d *File) toJSON() *keysFileJSON {
@@ -365,12 +457,7 @@ func (d *File) Path() string {
 // SetLastUsedExternalIndex sets the last used index in the external key
 // chain, and saves the file with the updated data.
 func (d *File) SetLastUsedExternalIndex(index uint32) error {
-	if d.lastUsedExternalIndex == index {
-		return nil
-	}
-
-	d.lastUsedExternalIndex = index
-	return d.Save()
+	return d.setLastUsedIndex(&d.lastUsedExternalIndex, index)
 }
 
 // LastUsedExternalIndex returns the last used index in the external key
@@ -381,12 +468,34 @@ func (d *File) LastUsedExternalIndex() uint32 {
 
 // SetLastUsedInternalIndex sets the last used index in the internal key chain, and saves the file.
 func (d *File) SetLastUsedInternalIndex(index uint32) error {
-	if d.lastUsedInternalIndex == index {
+	return d.setLastUsedIndex(&d.lastUsedInternalIndex, index)
+}
+
+func (d *File) setLastUsedIndex(current *uint32, index uint32) error {
+	if *current == index {
 		return nil
 	}
 
-	d.lastUsedInternalIndex = index
-	return d.Save()
+	previous := *current
+	*current = index
+	renamed, err := d.save()
+	// After the rename, readers see the new index even if syncing the directory fails.
+	if !renamed {
+		*current = previous
+	}
+	return err
+}
+
+// ReserveInternalIndex saves an index before issuing its address. If the save fails, the
+// address is still unissued and the daemon can retry the same index, even if the replacement
+// file is already visible after a failed directory sync.
+func (d *File) ReserveInternalIndex(index uint32) error {
+	previous := d.lastUsedInternalIndex
+	if err := d.SetLastUsedInternalIndex(index); err != nil {
+		d.lastUsedInternalIndex = previous
+		return err
+	}
+	return nil
 }
 
 // LastUsedInternalIndex returns the last used index in the internal key chain
@@ -394,8 +503,8 @@ func (d *File) LastUsedInternalIndex() uint32 {
 	return d.lastUsedInternalIndex
 }
 
-// DecryptMnemonics asks the user to enter the password for the private keys and
-// returns the decrypted private keys.
+// DecryptMnemonics returns the decrypted mnemonics without writing the keys file.
+// A caller that holds the lock may save the detected legacy thread count with its updates.
 func (d *File) DecryptMnemonics(password string) ([]string, error) {
 	passwordBytes := []byte(password)
 
@@ -451,6 +560,24 @@ func ReadKeysFile(netParams *dagconfig.Params, path string) (*File, error) {
 	return keysFile, nil
 }
 
+// ReadLockedKeysFile acquires the wallet's lock before opening the keys file.
+// The caller holds the returned lock until it calls unlock or the process exits.
+func ReadLockedKeysFile(netParams *dagconfig.Params, path string) (file *File, unlock func() error, err error) {
+	if path == "" {
+		path = defaultKeysFile(netParams)
+	}
+	unlock, err = tryLockKeysFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	file, err = ReadKeysFile(netParams, path)
+	if err != nil {
+		_ = unlock()
+		return nil, nil, err
+	}
+	return file, unlock, nil
+}
+
 func createFileDirectoryIfDoesntExist(path string) error {
 	dir := filepath.Dir(path)
 	exists, err := pathExists(dir)
@@ -492,19 +619,25 @@ func pathExists(path string) (bool, error) {
 // a crash before the rename leaves the original file untouched, and POSIX guarantees the rename
 // itself is atomic - readers never see a partial file. The on-disk JSON format itself is unchanged.
 func (d *File) Save() error {
+	_, err := d.save()
+	return err
+}
+
+// save reports whether the replacement file was renamed into place.
+func (d *File) save() (bool, error) {
 	if d.path == "" {
-		return errors.New("cannot save a file with uninitialized path")
+		return false, errors.New("cannot save a file with uninitialized path")
 	}
 
 	err := createFileDirectoryIfDoesntExist(d.path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	dir := filepath.Dir(d.path)
 	tempFile, err := os.CreateTemp(dir, filepath.Base(d.path)+".tmp-*")
 	if err != nil {
-		return err
+		return false, err
 	}
 	tempPath := tempFile.Name()
 	// A no-op once the rename below has succeeded (the path no longer exists); only cleans up a
@@ -515,26 +648,40 @@ func (d *File) Save() error {
 	err = encoder.Encode(d.toJSON())
 	if err != nil {
 		tempFile.Close()
-		return err
+		return false, err
 	}
 
 	err = tempFile.Sync()
 	if err != nil {
 		tempFile.Close()
-		return err
+		return false, err
 	}
 	err = tempFile.Close()
 	if err != nil {
-		return err
+		return false, err
 	}
+
+	directory, err := openSyncDir(dir)
+	if err != nil {
+		return false, err
+	}
+	defer directory.Close()
 
 	err = renameFile(tempPath, d.path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return syncDir(dir)
+	return true, directory.Sync()
 }
+
+type syncDirectory interface {
+	Sync() error
+	Close() error
+}
+
+// openSyncDir allows tests to inject a failure after the rename.
+var openSyncDir = openDirectoryForSync
 
 // renameFile is os.Rename, as a variable so tests can fail Save at its last step on every platform.
 var renameFile = os.Rename
@@ -546,8 +693,7 @@ func (d *File) numThreads(password []byte) (uint8, error) {
 	// was determined by the number of logical CPUs at the machine,
 	// which made the authentication non-deterministic across platforms.
 	// In order to solve it we introduce v1 where the number of threads
-	// is constant, and brute force the number of threads in v0. After we
-	// find the right amount via brute force we save the result to the file.
+	// is constant, and brute force the number of threads in v0.
 
 	if d.Version != 0 {
 		return defaultNumThreads, nil
@@ -559,11 +705,6 @@ func (d *File) numThreads(password []byte) (uint8, error) {
 	}
 
 	d.NumThreads = numThreads
-	err = d.Save()
-	if err != nil {
-		return 0, err
-	}
-
 	return numThreads, nil
 }
 
@@ -632,29 +773,45 @@ func decryptMnemonic(numThreads uint8, encryptedPrivateKey *EncryptedMnemonic, p
 // flockMap is a map that holds all lock file handlers. This map guarantees that
 // the associated locked file handler will never get cleaned by the GC, because
 // once they are cleaned the associated file will be unlocked.
-var flockMap = make(map[string]*flock.Flock)
+var (
+	flockMap = make(map[string]*flock.Flock)
+	flockMu  sync.Mutex
+)
 
 // TryLock tries to acquire an exclusive lock for the file.
 func (d *File) TryLock() error {
-	if _, ok := flockMap[d.path]; ok {
-		return errors.Errorf("file %s is already locked", d.path)
-	}
-
-	lockFile := flock.New(d.path + ".lock")
-	err := createFileDirectoryIfDoesntExist(lockFile.Path())
-	if err != nil {
+	if err := createFileDirectoryIfDoesntExist(d.path); err != nil {
 		return err
 	}
+	_, err := tryLockKeysFile(d.path)
+	return err
+}
 
-	flockMap[d.path] = lockFile
-
+func tryLockKeysFile(path string) (func() error, error) {
+	flockMu.Lock()
+	defer flockMu.Unlock()
+	if _, ok := flockMap[path]; ok {
+		return nil, errors.Errorf("file %s is already locked", path)
+	}
+	lockFile := flock.New(path + ".lock")
 	success, err := lockFile.TryLock()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	if !success {
-		return errors.Errorf("%s is locked and cannot be used; make sure that no other active wallet command is using it", d.path)
+		return nil, errors.Errorf("%s is locked and cannot be used; stop any active wallet command using it", path)
 	}
-	return nil
+	flockMap[path] = lockFile
+	return func() error {
+		flockMu.Lock()
+		defer flockMu.Unlock()
+		if flockMap[path] != lockFile {
+			return nil
+		}
+		if err := lockFile.Unlock(); err != nil {
+			return err
+		}
+		delete(flockMap, path)
+		return nil
+	}, nil
 }

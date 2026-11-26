@@ -63,6 +63,8 @@ message CreateUnsignedCompoundTransactionResponse {
 
 message ShowAddressesRequest {
   AddressType addressType = 1;
+  // For single-sig wallets, overrides addressType and returns P2PK, P2PKH, then P2SH for each index.
+  // To list ML-DSA-44 after activation, set includeAll to false and request addressType 4 or 6.
   bool includeAll = 2;
 }
 

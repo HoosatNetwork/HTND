@@ -197,7 +197,8 @@ type importWebWalletConfig struct {
 type generateMLDSA44KeysConfig struct {
 	KeysFile string `long:"keys-file" short:"f" description:"Keys file location (default: ~/.htnwallet/keys.json (*nix), %USERPROFILE%\\AppData\\Local\\Hoosatwallet\\key.json (Windows))"`
 	Password string `long:"password" short:"p" description:"Wallet password"`
-	Count    uint32 `long:"count" short:"c" description:"Number of address indexes per key chain to hold ML-DSA-44 keys for" default:"500"`
+	Count    uint32 `long:"count" short:"c" description:"Number of address indexes per key chain (default: 500 for a fresh wallet, or up to 500 indexes beyond the last used index)"`
+	countSet bool
 	config.NetworkFlags
 }
 
@@ -300,7 +301,10 @@ func parseCommandLine() (subCommand string, config any) {
 	_, _ = parser.AddCommand(generateMLDSA44KeysSubCmd, "Generates the wallet's post-quantum ML-DSA-44 keys",
 		"Derives ML-DSA-44 keys from the wallet's mnemonic(s) and stores their public key hashes in the keys file, "+
 			"so the daemon can create and watch ML-DSA-44 addresses. New wallets get 500 per key chain "+
-			"automatically; run this for an older wallet, or to go beyond that. Stop the daemon first. "+
+			"automatically; run this for an older wallet, or to go beyond that. ML-DSA-44 addresses share their "+
+			"indexes with the wallet's other addresses, so without --count it covers 500 indexes past the highest "+
+			"one the wallet has used, up to the last addressable index. Use --count explicitly for large extensions. "+
+			"Stop the daemon first. "+
 			"Multisig cosigners must export and import the result again afterwards.", generateMLDSA44KeysConf)
 
 	exportMLDSA44KeysConf := &exportMLDSA44KeysConfig{}
@@ -459,6 +463,7 @@ func parseCommandLine() (subCommand string, config any) {
 		}
 		config = importWebWalletConf
 	case generateMLDSA44KeysSubCmd:
+		generateMLDSA44KeysConf.countSet = parser.Command.Active.FindOptionByLongName("count").IsSet()
 		combineNetworkFlags(&generateMLDSA44KeysConf.NetworkFlags, &cfg.NetworkFlags)
 		err := generateMLDSA44KeysConf.ResolveNetwork(parser)
 		if err != nil {
